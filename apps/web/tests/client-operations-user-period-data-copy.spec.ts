@@ -8,7 +8,6 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   buildCopyUserPeriodDataCommandBody,
-  clampClientOperationsContextMenuPosition,
   sourcePeriodsForUserPeriodDataCopy,
   targetPeriodHasConflictingUserEnteredData,
 } from '../src/lib/client-operations-user-period-data-copy.pure.js';
@@ -19,19 +18,24 @@ const viewSource = readFileSync(
   'utf8',
 );
 const cssSource = readFileSync(join(dir, '../src/styles/nx-client-operations-spreadsheet.css'), 'utf8');
+const pureSource = readFileSync(
+  join(dir, '../src/lib/client-operations-user-period-data-copy.pure.ts'),
+  'utf8',
+);
 
-test('1-2 right-click grid opens menu; chrome unrelated not wired', () => {
+test('1-2 right-click grid opens centered source modal; chrome unrelated not wired', () => {
   assert.match(viewSource, /onContextMenu=\{onGridContextMenu\}/);
   assert.match(viewSource, /data-testid="client-operations-grid-surface"/);
+  assert.match(viewSource, /setPeriodCopySourceOpen\(true\)/);
+  assert.match(viewSource, /data-testid="client-operations-period-copy-source-modal"/);
   assert.match(viewSource, /העתק מידע מחודש/);
-  assert.match(viewSource, /nx-co-sheet__context-menu/);
-  // Sidebar / route chrome are outside this component surface.
+  assert.doesNotMatch(viewSource, /nx-co-sheet__context-menu/);
   assert.doesNotMatch(viewSource, /AppSidebar[\s\S]{0,40}onContextMenu/);
 });
 
 test('3 view-only user does not get copy action', () => {
   assert.match(viewSource, /if \(!canEdit \|\| !onRegistryCommand\) return/);
-  assert.match(viewSource, /gridContextMenu && canEdit/);
+  assert.match(viewSource, /periodCopySourceOpen && canEdit/);
 });
 
 test('4-5 current period excluded; source selection works', () => {
@@ -40,8 +44,11 @@ test('4-5 current period excluded; source selection works', () => {
     '2026-07',
   ]);
   assert.match(viewSource, /onSelectCopySourcePeriod/);
+  assert.match(viewSource, /onConfirmPeriodCopySource/);
   assert.match(viewSource, /sourcePeriodsForUserPeriodDataCopy/);
   assert.match(viewSource, /userPeriodDataCopySourcePeriods/);
+  assert.match(viewSource, /setPeriodCopySelectedSource/);
+  assert.match(viewSource, /המשך/);
   assert.doesNotMatch(
     viewSource.slice(
       viewSource.indexOf('sourcePeriodsForCopy = useMemo'),
@@ -64,6 +71,7 @@ test('6-8 conflict UI + EMPTY_ONLY default + cancel', () => {
   assert.match(viewSource, /mode: 'empty_only'/);
   assert.match(viewSource, /setPeriodCopyDialog\(null\)/);
   assert.match(viewSource, /ביטול/);
+  assert.match(viewSource, /data-testid="client-operations-period-copy-dialog"/);
 });
 
 test('9-12 one named command; no per-cell FE writes; aggregate apply; no hidden GET', () => {
@@ -104,68 +112,29 @@ test('13-18 regressions retained for periods/search/folder/manual/custom', () =>
   assert.match(viewSource, /openClientModal|ClientOperationsFolderIcon|nx-co-sheet__folder/);
   assert.match(viewSource, /manualRows/);
   assert.match(viewSource, /set_client_operations_custom_column_value/);
-  assert.match(cssSource, /nx-co-sheet__context-menu/);
-  assert.match(cssSource, /#082447|#0a2d55|#7decf7/i);
+  assert.match(cssSource, /nx-co-period-copy-modal/);
+  assert.match(cssSource, /#082447|#0a2d55|#7decf7|#0b1f33|#268cff/i);
 });
 
-test('P0: context menu portals to body and clamps to viewport', () => {
+test('UX: centered viewport portal modals; old side menu removed', () => {
   assert.match(viewSource, /createPortal\(/);
   assert.match(viewSource, /document\.body/);
-  assert.match(viewSource, /clampClientOperationsContextMenuPosition/);
-  assert.match(viewSource, /gridContextMenuRef/);
-  assert.match(viewSource, /clientX/);
-  assert.match(viewSource, /clientY/);
-  assert.match(cssSource, /z-index:\s*1200/);
+  assert.match(viewSource, /nx-co-period-copy-backdrop/);
+  assert.match(cssSource, /\.nx-co-period-copy-backdrop\s*\{[\s\S]*?position:\s*fixed/);
+  assert.match(cssSource, /place-items:\s*center/);
+  assert.doesNotMatch(viewSource, /clampClientOperationsContextMenuPosition/);
+  assert.doesNotMatch(viewSource, /gridContextMenuRef|gridContextMenuPos|setGridContextMenu/);
+  assert.doesNotMatch(pureSource, /clampClientOperationsContextMenuPosition/);
+  assert.doesNotMatch(cssSource, /nx-co-sheet__context-menu/);
+  assert.doesNotMatch(viewSource, /nx-co-sheet__context-menu/);
+});
 
-  // Bottom-right corner — flip left + up.
-  const br = clampClientOperationsContextMenuPosition({
-    x: 1900,
-    y: 1000,
-    menuWidth: 200,
-    menuHeight: 240,
-    viewportWidth: 1920,
-    viewportHeight: 1080,
-    margin: 8,
-  });
-  assert.ok(br.left + 200 <= 1920 - 8);
-  assert.ok(br.top + 240 <= 1080 - 8);
-  assert.ok(br.left >= 8);
-  assert.ok(br.top >= 8);
-
-  // Right edge only.
-  const right = clampClientOperationsContextMenuPosition({
-    x: 1880,
-    y: 100,
-    menuWidth: 200,
-    menuHeight: 48,
-    viewportWidth: 1920,
-    viewportHeight: 1080,
-  });
-  assert.equal(right.left, 1920 - 200 - 8);
-  assert.equal(right.top, 100);
-
-  // Bottom edge only.
-  const bottom = clampClientOperationsContextMenuPosition({
-    x: 100,
-    y: 1050,
-    menuWidth: 200,
-    menuHeight: 80,
-    viewportWidth: 1920,
-    viewportHeight: 1080,
-  });
-  assert.equal(bottom.top, 1080 - 80 - 8);
-  assert.equal(bottom.left, 100);
-
-  // RTL prefers opening left of pointer when space allows.
-  const rtl = clampClientOperationsContextMenuPosition({
-    x: 400,
-    y: 200,
-    menuWidth: 200,
-    menuHeight: 48,
-    viewportWidth: 1920,
-    viewportHeight: 1080,
-    rtl: true,
-  });
-  assert.equal(rtl.left, 200);
-  assert.equal(rtl.top, 200);
+test('UX: readable dark text + primary/secondary period-copy buttons', () => {
+  assert.match(cssSource, /nx-co-period-copy-modal__title[\s\S]*?#0b1f33/i);
+  assert.match(cssSource, /nx-co-period-copy-modal__body[\s\S]*?#0b1f33/i);
+  assert.match(cssSource, /nx-co-period-copy-btn--primary/);
+  assert.match(cssSource, /nx-co-period-copy-btn--secondary/);
+  assert.match(cssSource, /min-height:\s*40px/);
+  assert.match(cssSource, /border-radius:\s*10px/);
+  assert.match(cssSource, /linear-gradient\(135deg,\s*rgba\(38,\s*140,\s*255/);
 });

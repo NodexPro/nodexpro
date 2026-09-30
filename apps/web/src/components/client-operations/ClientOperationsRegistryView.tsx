@@ -98,7 +98,6 @@ import {
 import { formatCustomExcelCellDisplay } from '../../lib/client-operations-custom-cell-display.pure';
 import {
   buildCopyUserPeriodDataCommandBody,
-  clampClientOperationsContextMenuPosition,
   sourcePeriodsForUserPeriodDataCopy,
   targetPeriodHasConflictingUserEnteredData,
   type UserPeriodDataCopyMode,
@@ -622,15 +621,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [statusPaintMode, setStatusPaintMode] = useState<
     'ready' | 'sent_for_approval' | 'completed' | 'clear' | null
   >(null);
-  const [gridContextMenu, setGridContextMenu] = useState<null | {
-    x: number;
-    y: number;
-    submenuOpen: boolean;
-  }>(null);
-  const [gridContextMenuPos, setGridContextMenuPos] = useState<{ left: number; top: number } | null>(
-    null,
-  );
-  const gridContextMenuRef = useRef<HTMLDivElement | null>(null);
+  /** Centered source-month modal for period copy (right-click entry). */
+  const [periodCopySourceOpen, setPeriodCopySourceOpen] = useState(false);
+  const [periodCopySelectedSource, setPeriodCopySelectedSource] = useState<string | null>(null);
   const [periodCopyDialog, setPeriodCopyDialog] = useState<null | {
     sourcePeriodKey: string;
     mode: UserPeriodDataCopyMode;
@@ -2228,7 +2221,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       if (!canEdit || !onRegistryCommand || !targetPeriodKeyForCopy) return;
       setPeriodCopyBusy(true);
       setCommandError('');
-      setGridContextMenu(null);
+      setPeriodCopySourceOpen(false);
+      setPeriodCopySelectedSource(null);
       try {
         await onRegistryCommand(
           buildCopyUserPeriodDataCommandBody({
@@ -2266,7 +2260,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     (sourcePeriodKey: string) => {
       if (!canEdit || !targetPeriodKeyForCopy || sourcePeriodKey === targetPeriodKeyForCopy) return;
       const hasConflict = targetPeriodHasConflictingUserEnteredData(collectTargetConflictSignals());
-      setGridContextMenu(null);
+      setPeriodCopySourceOpen(false);
+      setPeriodCopySelectedSource(null);
       if (hasConflict) {
         setPeriodCopyDialog({ sourcePeriodKey, mode: 'empty_only' });
         return;
@@ -2276,65 +2271,42 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     [canEdit, collectTargetConflictSignals, executePeriodDataCopy, targetPeriodKeyForCopy],
   );
 
+  const onConfirmPeriodCopySource = useCallback(() => {
+    if (!periodCopySelectedSource) return;
+    onSelectCopySourcePeriod(periodCopySelectedSource);
+  }, [onSelectCopySourcePeriod, periodCopySelectedSource]);
+
+  const closePeriodCopySourceModal = useCallback(() => {
+    setPeriodCopySourceOpen(false);
+    setPeriodCopySelectedSource(null);
+  }, []);
+
   const onGridContextMenu = useCallback(
     (event: ReactMouseEvent<HTMLElement>) => {
       if (!canEdit || !onRegistryCommand) return;
       event.preventDefault();
       event.stopPropagation();
       setPeriodCopyFeedback(null);
-      setGridContextMenuPos(null);
-      setGridContextMenu({
-        x: event.clientX,
-        y: event.clientY,
-        submenuOpen: false,
-      });
+      setPeriodCopyDialog(null);
+      setPeriodCopySelectedSource(null);
+      setPeriodCopySourceOpen(true);
     },
     [canEdit, onRegistryCommand],
   );
 
-  useLayoutEffect(() => {
-    if (!gridContextMenu) {
-      setGridContextMenuPos(null);
-      return;
-    }
-    const place = () => {
-      const el = gridContextMenuRef.current;
-      const menuWidth = el?.offsetWidth ?? 200;
-      const menuHeight = el?.offsetHeight ?? 48;
-      const rtl =
-        typeof document !== 'undefined' &&
-        (document.documentElement.dir === 'rtl' || document.body.dir === 'rtl');
-      setGridContextMenuPos(
-        clampClientOperationsContextMenuPosition({
-          x: gridContextMenu.x,
-          y: gridContextMenu.y,
-          menuWidth,
-          menuHeight,
-          viewportWidth: window.innerWidth,
-          viewportHeight: window.innerHeight,
-          margin: 8,
-          rtl,
-        }),
-      );
-    };
-    place();
-    window.addEventListener('resize', place);
-    return () => window.removeEventListener('resize', place);
-  }, [gridContextMenu]);
-
   useEffect(() => {
-    if (!gridContextMenu) return;
-    const close = () => setGridContextMenu(null);
+    if (!periodCopySourceOpen && !periodCopyDialog) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') close();
+      if (event.key !== 'Escape') return;
+      if (periodCopyDialog) {
+        setPeriodCopyDialog(null);
+        return;
+      }
+      closePeriodCopySourceModal();
     };
-    window.addEventListener('mousedown', close);
     window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('mousedown', close);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [gridContextMenu]);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [closePeriodCopySourceModal, periodCopyDialog, periodCopySourceOpen]);
 
   useEffect(() => {
     if (!periodCopyFeedback) return;
@@ -3898,128 +3870,158 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             {periodCopyFeedback}
           </div>
         ) : null}
-        {gridContextMenu && canEdit
+        {periodCopySourceOpen && canEdit
           ? createPortal(
               <div
-                ref={gridContextMenuRef}
-                className="nx-co-sheet__context-menu"
-                role="menu"
-                aria-label="תפריט גיליון"
-                data-testid="client-operations-period-copy-menu"
-                style={{
-                  left: gridContextMenuPos?.left ?? gridContextMenu.x,
-                  top: gridContextMenuPos?.top ?? gridContextMenu.y,
+                className="nx-co-period-copy-backdrop"
+                role="presentation"
+                data-testid="client-operations-period-copy-source-backdrop"
+                onMouseDown={(event) => {
+                  if (event.target === event.currentTarget) closePeriodCopySourceModal();
                 }}
-                onMouseDown={(event) => event.stopPropagation()}
               >
-                <button
-                  type="button"
-                  className="nx-co-sheet__context-menu-item"
-                  role="menuitem"
-                  aria-haspopup="true"
-                  aria-expanded={gridContextMenu.submenuOpen}
-                  disabled={sourcePeriodsForCopy.length === 0 || periodCopyBusy}
-                  onClick={() =>
-                    setGridContextMenu((current) =>
-                      current ? { ...current, submenuOpen: !current.submenuOpen } : current,
-                    )
-                  }
+                <div
+                  className="nx-co-period-copy-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="העתק מידע מחודש"
+                  data-testid="client-operations-period-copy-source-modal"
+                  onMouseDown={(event) => event.stopPropagation()}
                 >
-                  העתק מידע מחודש
-                </button>
-                {gridContextMenu.submenuOpen ? (
-                  <div
-                    className="nx-co-sheet__context-submenu"
-                    role="menu"
-                    aria-label="בחירת חודש מקור"
-                  >
-                    {sourcePeriodsForCopy.length === 0 ? (
-                      <div className="nx-co-sheet__context-menu-empty">אין חודשים זמינים</div>
-                    ) : (
-                      sourcePeriodsForCopy.map((key) => (
-                        <button
-                          key={key}
-                          type="button"
-                          className="nx-co-sheet__context-menu-item"
-                          role="menuitem"
-                          disabled={periodCopyBusy}
-                          onClick={() => onSelectCopySourcePeriod(key)}
-                        >
-                          {formatClientOperationsOperationalPeriodTabLabel(key)}
-                        </button>
-                      ))
-                    )}
+                  <h2 className="nx-co-period-copy-modal__title">העתק מידע מחודש</h2>
+                  <p className="nx-co-period-copy-modal__body">בחר חודש שממנו יועתק המידע:</p>
+                  {sourcePeriodsForCopy.length === 0 ? (
+                    <div className="nx-co-period-copy-modal__empty">אין חודשים זמינים</div>
+                  ) : (
+                    <div
+                      className="nx-co-period-copy-modal__period-list"
+                      role="listbox"
+                      aria-label="בחירת חודש מקור"
+                    >
+                      {sourcePeriodsForCopy.map((key) => {
+                        const selected = periodCopySelectedSource === key;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            role="option"
+                            aria-selected={selected}
+                            className={`nx-co-period-copy-modal__period-option${selected ? ' is-selected' : ''}`}
+                            disabled={periodCopyBusy}
+                            onClick={() => setPeriodCopySelectedSource(key)}
+                          >
+                            {formatClientOperationsOperationalPeriodTabLabel(key)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div className="nx-co-period-copy-modal__actions">
+                    <button
+                      type="button"
+                      className="nx-co-period-copy-btn nx-co-period-copy-btn--secondary"
+                      disabled={periodCopyBusy}
+                      onClick={closePeriodCopySourceModal}
+                    >
+                      ביטול
+                    </button>
+                    <button
+                      type="button"
+                      className="nx-co-period-copy-btn nx-co-period-copy-btn--primary"
+                      disabled={periodCopyBusy || !periodCopySelectedSource}
+                      onClick={onConfirmPeriodCopySource}
+                    >
+                      המשך
+                    </button>
                   </div>
-                ) : null}
+                </div>
               </div>,
               document.body,
             )
           : null}
-        {periodCopyDialog ? (
-          <div className="nx-co-sheet__dialog-backdrop" role="presentation">
-            <div
-              className="nx-co-sheet__dialog"
-              role="dialog"
-              aria-modal="true"
-              aria-label="העתקת מידע מחודש"
-              data-testid="client-operations-period-copy-dialog"
-            >
-              <h2>העתקת מידע מחודש</h2>
-              <p className="nx-co-sheet__dialog-subtitle">
-                {`כבר קיים מידע שהוזן ידנית בחודש ${formatClientOperationsOperationalPeriodTabLabel(targetPeriodKeyForCopy)}.`}
-              </p>
-              <p className="nx-co-sheet__dialog-subtitle">
-                {`בחר כיצד להעתיק את המידע מ־${formatClientOperationsOperationalPeriodTabLabel(periodCopyDialog.sourcePeriodKey)}:`}
-              </p>
-              <label className="nx-co-sheet__check">
-                <input
-                  type="radio"
-                  name="nx-co-period-copy-mode"
-                  checked={periodCopyDialog.mode === 'empty_only'}
-                  onChange={() =>
-                    setPeriodCopyDialog((current) =>
-                      current ? { ...current, mode: 'empty_only' } : current,
-                    )
-                  }
-                />
-                העתק רק לתאים ריקים
-              </label>
-              <label className="nx-co-sheet__check">
-                <input
-                  type="radio"
-                  name="nx-co-period-copy-mode"
-                  checked={periodCopyDialog.mode === 'replace_existing'}
-                  onChange={() =>
-                    setPeriodCopyDialog((current) =>
-                      current ? { ...current, mode: 'replace_existing' } : current,
-                    )
-                  }
-                />
-                החלף את הנתונים הקיימים
-              </label>
-              <div className="nx-co-sheet__dialog-actions">
-                <button
-                  type="button"
-                  className="nx-co-sheet__btn"
-                  disabled={periodCopyBusy}
-                  onClick={() => setPeriodCopyDialog(null)}
+        {periodCopyDialog
+          ? createPortal(
+              <div
+                className="nx-co-period-copy-backdrop"
+                role="presentation"
+                data-testid="client-operations-period-copy-conflict-backdrop"
+                onMouseDown={(event) => {
+                  if (event.target === event.currentTarget) setPeriodCopyDialog(null);
+                }}
+              >
+                <div
+                  className="nx-co-period-copy-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label="העתקת מידע מחודש"
+                  data-testid="client-operations-period-copy-dialog"
+                  onMouseDown={(event) => event.stopPropagation()}
                 >
-                  ביטול
-                </button>
-                <button
-                  type="button"
-                  className="nx-co-sheet__btn is-active"
-                  disabled={periodCopyBusy}
-                  onClick={() =>
-                    void executePeriodDataCopy(periodCopyDialog.sourcePeriodKey, periodCopyDialog.mode)
-                  }
-                >
-                  העתק
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
+                  <h2 className="nx-co-period-copy-modal__title">העתקת מידע מחודש</h2>
+                  <p className="nx-co-period-copy-modal__body">
+                    {`כבר קיים מידע שהוזן ידנית בחודש ${formatClientOperationsOperationalPeriodTabLabel(targetPeriodKeyForCopy)}.`}
+                  </p>
+                  <p className="nx-co-period-copy-modal__body">
+                    {`בחר כיצד להעתיק את המידע מ־${formatClientOperationsOperationalPeriodTabLabel(periodCopyDialog.sourcePeriodKey)}:`}
+                  </p>
+                  <label
+                    className={`nx-co-period-copy-modal__radio${periodCopyDialog.mode === 'empty_only' ? ' is-selected' : ''}`}
+                  >
+                    <input
+                      type="radio"
+                      name="nx-co-period-copy-mode"
+                      checked={periodCopyDialog.mode === 'empty_only'}
+                      onChange={() =>
+                        setPeriodCopyDialog((current) =>
+                          current ? { ...current, mode: 'empty_only' } : current,
+                        )
+                      }
+                    />
+                    <span>העתק רק לתאים ריקים</span>
+                  </label>
+                  <label
+                    className={`nx-co-period-copy-modal__radio${periodCopyDialog.mode === 'replace_existing' ? ' is-selected' : ''}`}
+                  >
+                    <input
+                      type="radio"
+                      name="nx-co-period-copy-mode"
+                      checked={periodCopyDialog.mode === 'replace_existing'}
+                      onChange={() =>
+                        setPeriodCopyDialog((current) =>
+                          current ? { ...current, mode: 'replace_existing' } : current,
+                        )
+                      }
+                    />
+                    <span>החלף את הנתונים הקיימים</span>
+                  </label>
+                  <div className="nx-co-period-copy-modal__actions">
+                    <button
+                      type="button"
+                      className="nx-co-period-copy-btn nx-co-period-copy-btn--secondary"
+                      disabled={periodCopyBusy}
+                      onClick={() => setPeriodCopyDialog(null)}
+                    >
+                      ביטול
+                    </button>
+                    <button
+                      type="button"
+                      className="nx-co-period-copy-btn nx-co-period-copy-btn--primary"
+                      disabled={periodCopyBusy}
+                      onClick={() =>
+                        void executePeriodDataCopy(
+                          periodCopyDialog.sourcePeriodKey,
+                          periodCopyDialog.mode,
+                        )
+                      }
+                    >
+                      העתק
+                    </button>
+                  </div>
+                </div>
+              </div>,
+              document.body,
+            )
+          : null}
         {userColumnPeriodSetup?.needed && (userColumnPeriodSetup.eligible_columns?.length ?? 0) > 0 && canEdit ? (
           <div className="nx-co-sheet__dialog-backdrop" role="presentation">
             <div className="nx-co-sheet__dialog" role="dialog" aria-modal="true" aria-label="עמודות לתקופה">
