@@ -3,7 +3,10 @@ import { useLocation } from 'react-router-dom';
 import { AppHeader } from './components/AppHeader';
 import { AppSidebar } from './components/AppSidebar';
 import { ClientOperationsAppHeader } from './components/ClientOperationsAppHeader';
-import { ClientOperationsHeaderSearchSlotContext } from '../../components/client-operations/ClientOperationsHeaderSearchSlot';
+import {
+  ClientOperationsHeaderSearchSlotContext,
+  ClientOperationsHeaderWorkspaceSlotContext,
+} from '../../components/client-operations/ClientOperationsHeaderSearchSlot';
 import type { SidebarAccountBlockModel } from '../../types/session';
 import type { UiLanguageCode } from '../../types/session';
 
@@ -45,11 +48,19 @@ export function TemplateLayout({
   // CO route only: header centre slot that receives the registry's existing search field (portal).
   const [coHeaderSearchSlot, setCoHeaderSearchSlot] = useState<HTMLElement | null>(null);
   const coHeaderSearchSlotRef = useCallback((el: HTMLDivElement | null) => setCoHeaderSearchSlot(el), []);
+  const [coHeaderWorkspaceSlot, setCoHeaderWorkspaceSlot] = useState<HTMLElement | null>(null);
+  const coHeaderWorkspaceSlotRef = useCallback(
+    (el: HTMLDivElement | null) => setCoHeaderWorkspaceSlot(el),
+    [],
+  );
 
   let header: React.ReactNode = null;
   if (!isWorkEngineQueuePage) {
     header = isClientOperationsModule ? (
-      <ClientOperationsAppHeader searchSlotRef={coHeaderSearchSlotRef} />
+      <ClientOperationsAppHeader
+        searchSlotRef={coHeaderSearchSlotRef}
+        workspaceSlotRef={coHeaderWorkspaceSlotRef}
+      />
     ) : (
       <AppHeader
         organizations={organizations}
@@ -95,7 +106,11 @@ export function TemplateLayout({
             <ClientOperationsHeaderSearchSlotContext.Provider
               value={isClientOperationsModule ? coHeaderSearchSlot : null}
             >
-              {children}
+              <ClientOperationsHeaderWorkspaceSlotContext.Provider
+                value={isClientOperationsModule ? coHeaderWorkspaceSlot : null}
+              >
+                {children}
+              </ClientOperationsHeaderWorkspaceSlotContext.Provider>
             </ClientOperationsHeaderSearchSlotContext.Provider>
           </div>
         </main>

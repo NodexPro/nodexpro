@@ -11,6 +11,12 @@ import type { RequestContext } from '../../shared/context.js';
 import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import { sendInvitationEmail } from '../../shared/email.service.js';
 import { updateUserStoredActiveOrganizationId } from '../auth/active-organization.service.js';
+import { syncLegacyOrganizationUserFromCanonical } from './organization-membership-access.js';
+import {
+  activateMembershipWithStaffSeatGuard,
+  changeMembershipRoleWithStaffSeatGuard,
+  roleConsumesStaffSeat,
+} from '../modules/staff-seat-entitlement.service.js';
 
 const INVITE_EXPIRY_DAYS = 7;
 
@@ -40,7 +46,15 @@ export async function listMembersRbac(ctx: RequestContext, orgId: string) {
     .eq('organization_id', orgId)
     .eq('status', 'active');
 
-  if (!data?.length) {
+  // Legacy OU fallback only when this org has ZERO canonical membership rows
+  // (including revoked). Never when canonical revoked members exist — that would
+  // re-surface stale organization_users as active.
+  const { count: canonicalAnyCount } = await supabaseAdmin
+    .from('organization_memberships')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', orgId);
+
+  if (!data?.length && (canonicalAnyCount ?? 0) === 0) {
     const { data: ouData } = await supabaseAdmin
       .from('organization_users')
       .select('id, user_id, membership_status, joined_at, users(id, email, full_name), roles(code, name)')
@@ -353,8 +367,24 @@ export async function changeUserRoleRbac(
   if (actorRole === 'admin' && targetRole === 'owner') throw forbidden('Admin cannot modify owner');
 
   if (member) {
-    await supabaseAdmin.from('organization_memberships').update({ role_code: roleCode, updated_at: new Date().toISOString() }).eq('id', memberId).eq('organization_id', orgId);
+    await changeMembershipRoleWithStaffSeatGuard({
+      organizationId: orgId,
+      membershipId: memberId,
+      newRoleCode: roleCode,
+      actorUserId: ctx.user.id,
+    });
+    await syncLegacyOrganizationUserFromCanonical({
+      organizationId: orgId,
+      userId: targetUserId,
+      roleCode,
+      membershipStatus: 'active',
+    });
   } else {
+    // Legacy OU-only member: enforce seat capacity in API before OU update.
+    if (roleConsumesStaffSeat(roleCode) && !roleConsumesStaffSeat(targetRole)) {
+      const { assertStaffSeatCapacity } = await import('../modules/staff-seat-entitlement.service.js');
+      await assertStaffSeatCapacity(orgId, { roleCode });
+    }
     const roleRow = (await supabaseAdmin.from('roles').select('id').eq('code', roleCode).single()).data;
     if (roleRow) {
       await supabaseAdmin.from('organization_users').update({ role_id: (roleRow as { id: string }).id, updated_at: new Date().toISOString() }).eq('id', memberId).eq('organization_id', orgId);
@@ -397,6 +427,12 @@ export async function revokeUserAccessRbac(ctx: RequestContext, orgId: string, m
   const now = new Date().toISOString();
   if (member) {
     await supabaseAdmin.from('organization_memberships').update({ status: 'revoked', revoked_at: now, updated_at: now }).eq('id', memberId).eq('organization_id', orgId);
+    await syncLegacyOrganizationUserFromCanonical({
+      organizationId: orgId,
+      userId: targetUserId,
+      roleCode: targetRole === 'owner' ? 'staff' : targetRole,
+      membershipStatus: 'removed',
+    });
   } else {
     await supabaseAdmin.from('organization_users').update({ membership_status: 'removed', updated_at: now }).eq('id', memberId).eq('organization_id', orgId);
   }
@@ -415,12 +451,19 @@ export async function revokeUserAccessRbac(ctx: RequestContext, orgId: string, m
 export async function acceptInviteRbac(ctx: RequestContext, token: string) {
   const { data: inv } = await supabaseAdmin
     .from('user_invitations')
-    .select('id, organization_id, email, role_code, status, expires_at')
+    .select('id, organization_id, email, role_code, status, expires_at, invited_by')
     .eq('token', token)
     .single();
 
   if (!inv) throw badRequest('Invalid invitation');
-  const invRow = inv as { status: string; expires_at: string; organization_id: string; email: string; role_code: string };
+  const invRow = inv as {
+    status: string;
+    expires_at: string;
+    organization_id: string;
+    email: string;
+    role_code: string;
+    invited_by: string | null;
+  };
   if (invRow.status !== 'pending') throw badRequest('Invitation already used or revoked');
   if (new Date(invRow.expires_at) < new Date()) throw badRequest('Invitation expired');
 
@@ -430,23 +473,34 @@ export async function acceptInviteRbac(ctx: RequestContext, token: string) {
 
   const existing = await supabaseAdmin
     .from('organization_memberships')
-    .select('id')
+    .select('id, status')
     .eq('organization_id', invRow.organization_id)
     .eq('user_id', ctx.user.id)
-    .eq('status', 'active')
     .maybeSingle();
-  if (existing.data) throw badRequest('Already a member');
+  if (existing.data && (existing.data as { status: string }).status === 'active') {
+    throw badRequest('Already a member');
+  }
 
   const now = new Date().toISOString();
-  await supabaseAdmin.from('organization_memberships').insert({
-    organization_id: invRow.organization_id,
-    user_id: ctx.user.id,
-    role_code: invRow.role_code,
-    status: 'active',
-    invited_by: null,
-    joined_at: now,
-    created_at: now,
-    updated_at: now,
+  const invitedBy = invRow.invited_by ?? null;
+
+  // Concurrent-safe activation: advisory lock + seat capacity invariant in DB RPC.
+  await activateMembershipWithStaffSeatGuard({
+    organizationId: invRow.organization_id,
+    userId: ctx.user.id,
+    roleCode: invRow.role_code,
+    invitedBy,
+    actorUserId: ctx.user.id,
+  });
+
+  // Temporary compatibility: keep organization_users aligned for legacy readers.
+  // Does not emit a second invitation_accepted event.
+  await syncLegacyOrganizationUserFromCanonical({
+    organizationId: invRow.organization_id,
+    userId: ctx.user.id,
+    roleCode: invRow.role_code,
+    membershipStatus: 'active',
+    invitedBy,
   });
 
   await supabaseAdmin

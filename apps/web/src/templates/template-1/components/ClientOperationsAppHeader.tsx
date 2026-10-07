@@ -1,4 +1,7 @@
-import { CLIENT_OPERATIONS_HEADER_SEARCH_SLOT_TEST_ID } from '../../../components/client-operations/ClientOperationsHeaderSearchSlot';
+import {
+  CLIENT_OPERATIONS_HEADER_SEARCH_SLOT_TEST_ID,
+  CLIENT_OPERATIONS_HEADER_WORKSPACE_SLOT_TEST_ID,
+} from '../../../components/client-operations/ClientOperationsHeaderSearchSlot';
 
 /** Route label for /m/client-operations — module chrome, not aggregate data. */
 export const CLIENT_OPERATIONS_HEADER_TITLE_HE = 'ניהול לקוחות';
@@ -10,13 +13,16 @@ export const CLIENT_OPERATIONS_HEADER_TITLE_HE = 'ניהול לקוחות';
  *  - no duplicated account / language chrome (already owned by the sidebar account block)
  *  - module title on the RIGHT (RTL)
  *  - centre slot that receives the registry view's existing search field via portal
+ *  - end slot for backend-owned workspace selector (Owner/Admin only when visible)
  *
  * Other modules keep the generic AppHeader untouched.
  */
 export function ClientOperationsAppHeader({
   searchSlotRef,
+  workspaceSlotRef,
 }: {
   searchSlotRef: (el: HTMLDivElement | null) => void;
+  workspaceSlotRef: (el: HTMLDivElement | null) => void;
 }) {
   return (
     <header className="nx-co-app-header" dir="rtl" data-testid="client-operations-app-header">
@@ -35,7 +41,11 @@ export function ClientOperationsAppHeader({
         className="nx-co-app-header__search-slot"
         data-testid={CLIENT_OPERATIONS_HEADER_SEARCH_SLOT_TEST_ID}
       />
-      <div className="nx-co-app-header__end" aria-hidden="true" />
+      <div
+        ref={workspaceSlotRef}
+        className="nx-co-app-header__end"
+        data-testid={CLIENT_OPERATIONS_HEADER_WORKSPACE_SLOT_TEST_ID}
+      />
     </header>
   );
 }

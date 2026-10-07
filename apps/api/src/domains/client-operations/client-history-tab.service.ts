@@ -522,25 +522,9 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
 }
 
 async function loadActorLabels(orgId: string, userIds: string[]): Promise<Map<string, string>> {
-  const uniq = [...new Set(userIds.filter(Boolean))];
-  const out = new Map<string, string>();
-  if (uniq.length === 0) return out;
-  const { data, error } = await supabaseAdmin
-    .from('organization_users')
-    .select('user_id, users!organization_users_user_id_fkey(email, full_name)')
-    .eq('organization_id', orgId)
-    .in('user_id', uniq);
-  if (error) return out;
-  type U = { email: string | null; full_name: string | null };
-  type Row = { user_id: string; users: U | U[] | null };
-  for (const r of (data ?? []) as Row[]) {
-    const uRaw = r.users;
-    const u = Array.isArray(uRaw) ? uRaw[0] : uRaw;
-    if (!u) continue;
-    const name = u.full_name?.trim() ? u.full_name.trim() : (u.email ?? '');
-    out.set(r.user_id, name || r.user_id);
-  }
-  return out;
+  void orgId;
+  const { loadMemberDisplayNamesByUserIds } = await import('../memberships/organization-membership-access.js');
+  return loadMemberDisplayNamesByUserIds(userIds);
 }
 
 async function fetchClientAuditRows(orgId: string, clientId: string, cutoffIso: string): Promise<AuditRow[]> {

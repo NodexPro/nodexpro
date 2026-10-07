@@ -77,6 +77,7 @@ type CountryPackCommandType =
   | 'create_pricing_adjustment'
   | 'cancel_pricing_adjustment'
   | 'set_module_global_activation'
+  | 'set_organization_staff_seat_quantity'
   | 'save_operational_reminder_workflow'
   | 'edit_operational_reminder_workflow'
   | 'disable_operational_reminder_workflow'
@@ -100,7 +101,8 @@ type CountryPackCommandResponse = {
       | 'owner_legal_control_panel_aggregate'
       | 'organization_country_settings_aggregate'
       | 'owner_modules_list_aggregate'
-      | 'owner_module_detail_aggregate';
+      | 'owner_module_detail_aggregate'
+      | 'owner_client_detail_aggregate';
     aggregate: Record<string, unknown>;
   };
 };
@@ -1787,6 +1789,22 @@ export async function executeCountryPackCommand(
         refreshed: {
           aggregate_key: out.refreshed.aggregate_key,
           aggregate: out.refreshed.aggregate,
+        },
+      };
+    }
+    case 'set_organization_staff_seat_quantity': {
+      const { setOrganizationStaffSeatQuantityCommand } = await import(
+        '../modules/staff-seat-entitlement.service.js'
+      );
+      const { loadOwnerClientDetailData } = await import('../owner-clients/owner-clients-detail.read.js');
+      const out = await setOrganizationStaffSeatQuantityCommand(ctx, command.payload);
+      const aggregate = await loadOwnerClientDetailData(out.organization_id);
+      return {
+        ok: true,
+        command: 'set_organization_staff_seat_quantity',
+        refreshed: {
+          aggregate_key: 'owner_client_detail_aggregate',
+          aggregate: aggregate as unknown as Record<string, unknown>,
         },
       };
     }

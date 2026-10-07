@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
 import { requirePermission } from '../../middleware/requirePermission.js';
+import { requireAuthorizedClientParam } from '../../middleware/requireAuthorizedClient.js';
 import * as clientsService from './clients.service.js';
 import * as contactsService from './client-contacts.service.js';
 import * as notesService from './client-notes.service.js';
@@ -14,6 +15,11 @@ import * as clientImportExport from './client-import-export.service.js';
 
 const router = Router();
 const ENTITY_TYPE_CLIENT = 'client';
+
+// Canonical client ACL for every nested :clientId route (contacts/notes/tags/files/…).
+router.param('clientId', (req, res, next) => {
+  void requireAuthorizedClientParam('clientId')(req, res, next);
+});
 
 router.get('/:id/clients', authMiddleware, requireOrg, requirePermission('clients:read', 'view_clients'), async (req, res, next) => {
   try {
@@ -56,13 +62,28 @@ router.get('/:id/clients/search', authMiddleware, requireOrg, requirePermission(
     const q = String(req.query.q ?? '').trim();
     const includeArchived = req.query.includeArchived === 'true';
     const full = req.query.full === 'true';
+    const {
+      resolveOrganizationClientAccessScopeFromContext,
+      filterAuthorizedClientIds,
+      clientIdIsAuthorized,
+    } = await import('../client-operations/organization-client-access.js');
+    const accessScope = await resolveOrganizationClientAccessScopeFromContext(req.context!);
     if (full && q) {
       const includeSensitive = req.context!.membership?.permissions?.includes('clients:view_sensitive');
       const clients = await searchClientsWithData(req.params.id, q, { includeArchived, includeSensitive });
-      return res.json({ results: clients });
+      const allowed = clients.filter((c) => clientIdIsAuthorized(accessScope, String((c as { id?: string }).id ?? '')));
+      return res.json({ results: allowed });
     }
     const results = await searchClients(req.params.id, q, { includeArchived });
-    return res.json({ results });
+    const allowedIds = new Set(
+      filterAuthorizedClientIds(
+        accessScope,
+        results.map((r) => String((r as { entityId?: string }).entityId ?? '')),
+      ),
+    );
+    return res.json({
+      results: results.filter((r) => allowedIds.has(String((r as { entityId?: string }).entityId ?? ''))),
+    });
   } catch (e) {
     next(e);
   }

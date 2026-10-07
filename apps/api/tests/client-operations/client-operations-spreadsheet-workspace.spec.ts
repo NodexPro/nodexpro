@@ -253,5 +253,7 @@ test('מה״כ shows reporting frequency (not כן/לא); width matches מע״מ
   assert.match(serviceSource, /snapshot\.income_tax_advance_frequency/);
   assert.match(serviceSource, /snapshot\.income_tax_advance_enabled/);
   assert.doesNotMatch(viewSource, /bi_monthly|income_tax_advance_frequency/);
-  assert.doesNotMatch(viewSource, /חודשי|דו-חודשי/);
+  // Frequency labels are backend-owned; FE must not hardcode them as cell values.
+  // Avoid bare /חודשי/ — it also matches UX copy like "אין חודשים זמינים".
+  assert.doesNotMatch(viewSource, /['"`]חודשי['"`]|['"`]דו-חודשי['"`]/);
 });

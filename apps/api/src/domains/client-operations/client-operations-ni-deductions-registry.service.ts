@@ -183,21 +183,28 @@ export async function loadEarliestNiDeductionsApplicablePeriodKeysForClients(inp
 }
 
 export function buildNiDeductionsRegistryCellForClient(input: {
-  applicable: boolean;
+  /** @deprecated prefer configured + due */
+  applicable?: boolean;
+  configured?: boolean;
+  due?: boolean;
   periodFlags: NiPeriodFlags | undefined;
   cycleFacts: NiDeductions126CycleFact[] | undefined;
   operationalPeriodKey: string;
   earliestApplicablePeriodKey: string | null;
 }): NiDeductionsRegistryCell {
-  const outstanding = input.applicable
-    ? resolveOutstandingNiDeductions126Cycles({
-        operationalPeriodKey: input.operationalPeriodKey,
-        storedFacts: input.cycleFacts ?? [],
-        earliestApplicablePeriodKey: input.earliestApplicablePeriodKey,
-      })
-    : [];
+  const configured = input.configured ?? Boolean(input.applicable);
+  const due = input.due ?? Boolean(input.applicable);
+  const outstanding =
+    configured && due
+      ? resolveOutstandingNiDeductions126Cycles({
+          operationalPeriodKey: input.operationalPeriodKey,
+          storedFacts: input.cycleFacts ?? [],
+          earliestApplicablePeriodKey: input.earliestApplicablePeriodKey,
+        })
+      : [];
   return buildNiDeductionsRegistryCell({
-    applicable: input.applicable,
+    configured,
+    due,
     reported102: input.periodFlags?.reported_102 ?? false,
     reported100: input.periodFlags?.reported_100 ?? false,
     outstanding126: outstanding,

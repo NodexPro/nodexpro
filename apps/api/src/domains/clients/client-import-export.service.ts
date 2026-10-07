@@ -388,7 +388,18 @@ export async function exportSelectedClientsCsv(
   assertOrg(ctx, orgId);
   assertClientsWrite(ctx);
 
-  const ids = clientIds.filter((id) => typeof id === 'string' && id.trim().length > 0).slice(0, BULK_EXPORT_MAX_IDS);
+  const idsRaw = clientIds.filter((id) => typeof id === 'string' && id.trim().length > 0).slice(0, BULK_EXPORT_MAX_IDS);
+  if (idsRaw.length === 0) {
+    const header = 'name,email,phone,company_name,tax_id,address,city,country,notes';
+    return header + '\r\n';
+  }
+
+  const {
+    resolveOrganizationClientAccessScopeFromContext,
+    filterAuthorizedClientIds,
+  } = await import('../client-operations/organization-client-access.js');
+  const accessScope = await resolveOrganizationClientAccessScopeFromContext(ctx);
+  const ids = filterAuthorizedClientIds(accessScope, idsRaw);
   if (ids.length === 0) {
     const header = 'name,email,phone,company_name,tax_id,address,city,country,notes';
     return header + '\r\n';

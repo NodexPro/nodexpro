@@ -47,6 +47,7 @@ import {
 } from './client-operations-user-columns-periods.service.js';
 import { setClientOperationsManualRowCellValue, initializeManualRowsForPeriod } from './client-operations-manual-rows.service.js';
 import { copyClientOperationsUserPeriodData } from './client-operations-user-period-data-copy.service.js';
+import { assertCanAccessClientFromContext } from './organization-client-access.js';
 import {
   isValidClientOperationsManualCellStatus,
   resolveAllowedManualStatusesForWrite,
@@ -340,6 +341,9 @@ function queryFrom(value: unknown): RegistryQueryInput {
     filter_business_type:
       typeof query.filter_business_type === 'string' ? query.filter_business_type : null,
     filter_handler: typeof query.filter_handler === 'string' ? query.filter_handler : null,
+    workspace_scope: typeof query.workspace_scope === 'string' ? query.workspace_scope : null,
+    workspace_subject_user_id:
+      typeof query.workspace_subject_user_id === 'string' ? query.workspace_subject_user_id : null,
   };
 }
 
@@ -435,6 +439,11 @@ export async function executeClientOperationsRegistryCommand(
   const orgId = assertOrg(ctx);
   assertEdit(ctx);
   const command = typeof body.command === 'string' ? body.command : '';
+
+  // Client-scoped registry commands must obey assignment ACL before any write.
+  if (body.client_id !== undefined && body.client_id !== null && String(body.client_id).trim() !== '') {
+    await assertCanAccessClientFromContext(ctx, idFrom(body.client_id, 'client_id'));
+  }
 
   if (command === 'create_client_operations_custom_column') {
     // Legacy create path: still max-10 + unique keys. Excel UX prefers ensure slots;

@@ -32,6 +32,94 @@ export type OperationalCellState<T> =
   | { applicable: false; completed: null; value: null }
   | { applicable: true; completed: boolean; value: T };
 
+/**
+ * Obligation checkbox cell — configured ≠ due.
+ * - not configured → dash (configured=false)
+ * - configured + not due → disabled square (configured=true, due=false, applicable=false)
+ * - configured + due → enabled square (applicable=true)
+ */
+export type ObligationCheckboxCell = {
+  configured: boolean;
+  due: boolean;
+  /** Interactive this period (= configured && due). */
+  applicable: boolean;
+  editable: boolean;
+  completed: boolean | null;
+  value: boolean | null;
+};
+
+export function buildObligationCheckboxCell(input: {
+  configured: boolean;
+  due: boolean;
+  completed: boolean | null | undefined;
+}): ObligationCheckboxCell {
+  if (!input.configured) {
+    return {
+      configured: false,
+      due: false,
+      applicable: false,
+      editable: false,
+      completed: null,
+      value: null,
+    };
+  }
+  if (!input.due) {
+    return {
+      configured: true,
+      due: false,
+      applicable: false,
+      editable: false,
+      completed: null,
+      value: null,
+    };
+  }
+  const done = Boolean(input.completed);
+  return {
+    configured: true,
+    due: true,
+    applicable: true,
+    editable: true,
+    completed: done,
+    value: done,
+  };
+}
+
+/** VAT obligation configured (independent of whether this month is a filing month). */
+export function resolveVatObligationConfigured(input: {
+  vat_type: string | null | undefined;
+  vat_frequency: string | null | undefined;
+}): boolean {
+  const vatType = norm(input.vat_type);
+  const frequency = norm(input.vat_frequency);
+  if (!vatType && !frequency) return false;
+  if (vatType === 'no' || vatType === 'not_relevant') return false;
+  if (frequency === 'not_relevant' && vatType !== 'patur') return false;
+  if (vatType === 'patur') return true;
+  if (frequency === 'monthly' || frequency === 'bi_monthly') return true;
+  // Explicit positive vat_type without frequency still counts as configured.
+  if (vatType === 'yes' || vatType === 'multiple' || vatType === 'mixed') return true;
+  return Boolean(vatType);
+}
+
+/** Income-tax advances configured (enabled flag). */
+export function resolveIncomeTaxAdvanceConfigured(
+  enabled: boolean | null | undefined,
+): boolean {
+  return enabled === true;
+}
+
+/** Payroll/שכר configured when canonical deductions file(s) exist. */
+export function resolvePayrollObligationConfigured(input: {
+  income_tax_deductions_file_number?: string | null | undefined;
+  national_insurance_deductions_file_number?: string | null | undefined;
+}): boolean {
+  return resolvePayrollApplicabilityFromDeductionsFiles({
+    income_tax_deductions_file_number: input.income_tax_deductions_file_number ?? null,
+    national_insurance_deductions_file_number:
+      input.national_insurance_deductions_file_number ?? null,
+  });
+}
+
 export type OperationalPeriodSnapshotInputs = {
   vat_type: string | null;
   vat_frequency: string | null;
@@ -440,11 +528,24 @@ export function buildOperationalCheckboxCell(
   return { applicable: true, completed: done, value: done };
 }
 
+function resolveMaterialCompletion(input: {
+  period_fact: boolean | null | undefined;
+  has_period_fact: boolean;
+  legacy_profile_flag: boolean | null | undefined;
+  operational_period_key: string;
+  default_period_key: string;
+}): boolean {
+  if (input.has_period_fact) return Boolean(input.period_fact);
+  if (input.operational_period_key === input.default_period_key) {
+    return Boolean(input.legacy_profile_flag);
+  }
+  return false;
+}
+
 /**
  * Compatibility read for חומר למע״מ:
- * - period fact wins when present
- * - else, only for the default/current period, legacy profile flag may be shown
- * - never invent historical values for other months
+ * configured (VAT obligation) ≠ due (filing month).
+ * Period fact wins for completion when due; configured+not-due → disabled square, not dash.
  */
 export function resolveMaterialBroughtForPeriod(input: {
   period_fact: boolean | null | undefined;
@@ -452,23 +553,23 @@ export function resolveMaterialBroughtForPeriod(input: {
   legacy_profile_flag: boolean | null | undefined;
   operational_period_key: string;
   default_period_key: string;
-  vat_applicable: boolean;
-}): OperationalCellState<boolean> {
-  if (!input.vat_applicable) {
-    return { applicable: false, completed: null, value: null };
-  }
-  if (input.has_period_fact) {
-    return buildOperationalCheckboxCell(true, Boolean(input.period_fact));
-  }
-  if (input.operational_period_key === input.default_period_key) {
-    return buildOperationalCheckboxCell(true, Boolean(input.legacy_profile_flag));
-  }
-  return buildOperationalCheckboxCell(true, false);
+  /** @deprecated use vat_configured + vat_due */
+  vat_applicable?: boolean;
+  vat_configured?: boolean;
+  vat_due?: boolean;
+}): ObligationCheckboxCell {
+  const configured =
+    input.vat_configured ??
+    // Legacy callers passed only vat_applicable (= due). Treat due as configured for compat.
+    Boolean(input.vat_due ?? input.vat_applicable);
+  const due = Boolean(input.vat_due ?? input.vat_applicable);
+  const completed = resolveMaterialCompletion(input);
+  return buildObligationCheckboxCell({ configured, due, completed });
 }
 
 /**
  * מה״כ = מקדמות מס הכנסה material only (not ניכויים).
- * Period fact wins; legacy income_data_received_flag only for default period.
+ * configured (enabled) ≠ due (frequency month).
  */
 export function resolveIncomeTaxAdvanceMaterialForPeriod(input: {
   period_fact: boolean | null | undefined;
@@ -476,38 +577,41 @@ export function resolveIncomeTaxAdvanceMaterialForPeriod(input: {
   legacy_profile_flag: boolean | null | undefined;
   operational_period_key: string;
   default_period_key: string;
-  income_tax_advance_applicable: boolean;
-}): OperationalCellState<boolean> {
-  if (!input.income_tax_advance_applicable) {
-    return { applicable: false, completed: null, value: null };
-  }
-  if (input.has_period_fact) {
-    return buildOperationalCheckboxCell(true, Boolean(input.period_fact));
-  }
-  if (input.operational_period_key === input.default_period_key) {
-    return buildOperationalCheckboxCell(true, Boolean(input.legacy_profile_flag));
-  }
-  return buildOperationalCheckboxCell(true, false);
+  /** @deprecated use advance_configured + advance_due */
+  income_tax_advance_applicable?: boolean;
+  advance_configured?: boolean;
+  advance_due?: boolean;
+}): ObligationCheckboxCell {
+  const configured =
+    input.advance_configured ?? Boolean(input.advance_due ?? input.income_tax_advance_applicable);
+  const due = Boolean(input.advance_due ?? input.income_tax_advance_applicable);
+  const completed = resolveMaterialCompletion(input);
+  return buildObligationCheckboxCell({ configured, due, completed });
 }
 
 /**
  * שכר material projects canonical payroll salary_data_received for the mapped period.
- * Mapping operational_period_key → payroll_period_key is identity (backend-owned).
+ * File present = configured; payroll is due every month when configured.
  */
 export function resolvePayrollMaterialForPeriod(input: {
-  payroll_applicable: boolean;
+  payroll_applicable?: boolean;
+  payroll_configured?: boolean;
+  payroll_due?: boolean;
   salary_data_received: boolean | null | undefined;
-}): OperationalCellState<boolean> {
-  if (!input.payroll_applicable) {
-    return { applicable: false, completed: null, value: null };
-  }
-  return buildOperationalCheckboxCell(true, Boolean(input.salary_data_received));
+}): ObligationCheckboxCell {
+  const configured = input.payroll_configured ?? Boolean(input.payroll_applicable);
+  const due = input.payroll_due ?? Boolean(input.payroll_applicable);
+  return buildObligationCheckboxCell({
+    configured,
+    due,
+    completed: Boolean(input.salary_data_received),
+  });
 }
 
 export type MaterialCells = {
-  vat: OperationalCellState<boolean>;
-  income_tax_advance: OperationalCellState<boolean>;
-  payroll: OperationalCellState<boolean>;
+  vat: ObligationCheckboxCell;
+  income_tax_advance: ObligationCheckboxCell;
+  payroll: ObligationCheckboxCell;
 };
 
 /** Backend-owned identity: payroll_period_key := operational_period_key. */
@@ -516,9 +620,9 @@ export function mapOperationalPeriodKeyToPayrollPeriodKey(operationalPeriodKey: 
 }
 
 export function buildMaterialCells(input: {
-  vat: OperationalCellState<boolean>;
-  income_tax_advance: OperationalCellState<boolean>;
-  payroll: OperationalCellState<boolean>;
+  vat: ObligationCheckboxCell;
+  income_tax_advance: ObligationCheckboxCell;
+  payroll: ObligationCheckboxCell;
 }): MaterialCells {
   return {
     vat: input.vat,

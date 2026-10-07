@@ -337,7 +337,8 @@ test('multiple outstanding cycles preserved; one click completes oldest only', (
 
 test('registry cell shape is backend-ready for 102/100/126', () => {
   const cell = buildNiDeductionsRegistryCell({
-    applicable: true,
+    configured: true,
+    due: true,
     reported102: true,
     reported100: false,
     outstanding126: [
@@ -345,22 +346,52 @@ test('registry cell shape is backend-ready for 102/100/126', () => {
       { reporting_year: 2026, cycle_type: 'h1' },
     ],
   });
+  assert.equal(cell.configured, true);
+  assert.equal(cell.due, true);
   assert.equal(cell.applicable, true);
-  assert.deepEqual(cell.items['102'], { applicable: true, completed: true });
-  assert.deepEqual(cell.items['100'], { applicable: true, completed: false });
+  assert.deepEqual(cell.items['102'], {
+    configured: true,
+    due: true,
+    applicable: true,
+    editable: true,
+    completed: true,
+  });
+  assert.deepEqual(cell.items['100'], {
+    configured: true,
+    due: true,
+    applicable: true,
+    editable: true,
+    completed: false,
+  });
   assert.equal(cell.items['126'].applicable, true);
   assert.equal(cell.items['126'].completed, false);
   assert.equal(cell.items['126'].outstanding_count, 2);
 
   const na = buildNiDeductionsRegistryCell({
-    applicable: false,
+    configured: false,
+    due: false,
     reported102: true,
     reported100: true,
     outstanding126: [{ reporting_year: 2025, cycle_type: 'annual' }],
   });
+  assert.equal(na.configured, false);
   assert.equal(na.applicable, false);
   assert.equal(na.items['126'].outstanding_count, 0);
   assert.equal(na.items['102'].completed, null);
+
+  const configuredNotDue = buildNiDeductionsRegistryCell({
+    configured: true,
+    due: false,
+    reported102: false,
+    reported100: false,
+    outstanding126: [],
+  });
+  assert.equal(configuredNotDue.configured, true);
+  assert.equal(configuredNotDue.due, false);
+  assert.equal(configuredNotDue.applicable, false);
+  assert.equal(configuredNotDue.items['102'].configured, true);
+  assert.equal(configuredNotDue.items['102'].applicable, false);
+  assert.equal(configuredNotDue.items['102'].completed, null);
 });
 
 test('horizon derivation stays bounded (no infinite historical invention)', () => {

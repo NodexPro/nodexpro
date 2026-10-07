@@ -5,9 +5,11 @@ import { authService } from './auth.service.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import {
   getUserStoredActiveOrganizationId,
+  listUserActiveOrganizationIds,
   loadOrgMembershipForUser,
   updateUserStoredActiveOrganizationId,
 } from './active-organization.service.js';
+import { mayUseLegacyOrganizationUsersAccessFallback } from '../memberships/organization-membership-access.js';
 import type {
   AuthSessionAggregateResponse,
   MeResponse,
@@ -75,24 +77,20 @@ async function buildMeResponse(
   ctx: RequestContext,
   opts?: { preferredActiveOrganizationId?: string | null }
 ): Promise<MeResponse> {
-  let orgs = await supabaseAdmin
-    .from('organization_memberships')
-    .select('organization_id, organizations(id, name)')
-    .eq('user_id', ctx.user.id)
-    .eq('status', 'active');
-  if (!orgs.data?.length) {
-    orgs = await supabaseAdmin
-      .from('organization_users')
-      .select('organization_id, organizations(id, name)')
-      .eq('user_id', ctx.user.id)
-      .eq('membership_status', 'active');
-  }
-  const orgList = (orgs.data ?? []).map((o) => {
-    const org = supabaseEmbedOne(
-      (o as { organizations: { id: string; name: string } | { id: string; name: string }[] | null }).organizations
+  const activeOrgIds = await listUserActiveOrganizationIds(ctx.user.id);
+  const orgList: Array<{ id: string; name: string }> = [];
+  if (activeOrgIds.length) {
+    const { data: orgRows } = await supabaseAdmin
+      .from('organizations')
+      .select('id, name')
+      .in('id', activeOrgIds);
+    const byId = new Map(
+      ((orgRows ?? []) as Array<{ id: string; name: string }>).map((o) => [o.id, o.name]),
     );
-    return { id: org?.id ?? '', name: org?.name ?? '' };
-  });
+    for (const id of activeOrgIds) {
+      orgList.push({ id, name: byId.get(id) ?? '' });
+    }
+  }
   const orgIdSet = new Set(orgList.map((o) => o.id).filter(Boolean));
   let activeOrgId = opts?.preferredActiveOrganizationId ?? ctx.organizationId ?? null;
   if (activeOrgId && !orgIdSet.has(activeOrgId)) activeOrgId = null;
@@ -101,7 +99,7 @@ async function buildMeResponse(
     const { loadMembershipWithPermissions } = await import('../rbac/rbac.service.js');
     const m = await loadMembershipWithPermissions(ctx.user.id, activeOrgId);
     if (m) permissions = m.permissions;
-    else {
+    else if (await mayUseLegacyOrganizationUsersAccessFallback(ctx.user.id, activeOrgId)) {
       const { data: ou } = await supabaseAdmin
         .from('organization_users')
         .select('roles(code, role_permissions(permissions(code)))')
@@ -296,9 +294,8 @@ router.put('/me/active-organization', authMiddleware, async (req, res, next) => 
   try {
     const { organizationId } = req.body ?? {};
     if (!organizationId) return res.status(400).json({ code: 'BAD_REQUEST', message: 'organizationId required' });
-    let data = (await supabaseAdmin.from('organization_memberships').select('organization_id').eq('user_id', req.context!.user.id).eq('organization_id', organizationId).eq('status', 'active').single()).data;
-    if (!data) data = (await supabaseAdmin.from('organization_users').select('organization_id').eq('user_id', req.context!.user.id).eq('organization_id', organizationId).eq('membership_status', 'active').single()).data;
-    if (!data) return res.status(403).json({ code: 'FORBIDDEN', message: 'Not a member of this organization' });
+    const membership = await loadOrgMembershipForUser(req.context!.user.id, organizationId);
+    if (!membership) return res.status(403).json({ code: 'FORBIDDEN', message: 'Not a member of this organization' });
     const userId = req.context!.user.id;
     const previousOrgId = await getUserStoredActiveOrganizationId(userId);
     await updateUserStoredActiveOrganizationId(userId, organizationId);
@@ -312,8 +309,7 @@ router.put('/me/active-organization', authMiddleware, async (req, res, next) => 
       ipAddress: typeof req.ip === 'string' && req.ip ? req.ip : null,
       userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
     });
-    const freshMembership = await loadOrgMembershipForUser(userId, organizationId);
-    const freshCtx: RequestContext = { ...req.context!, organizationId, membership: freshMembership };
+    const freshCtx: RequestContext = { ...req.context!, organizationId, membership };
     const me = await buildMeResponse(freshCtx, { preferredActiveOrganizationId: organizationId });
     return res.json(toAuthSessionAggregate(me));
   } catch (e) {
@@ -325,27 +321,8 @@ router.post('/commands/select_active_organization', authMiddleware, async (req, 
   try {
     const organizationId = String(req.body?.organization_id ?? '').trim();
     if (!organizationId) return res.status(400).json({ code: 'BAD_REQUEST', message: 'organization_id required' });
-    let data = (
-      await supabaseAdmin
-        .from('organization_memberships')
-        .select('organization_id')
-        .eq('user_id', req.context!.user.id)
-        .eq('organization_id', organizationId)
-        .eq('status', 'active')
-        .single()
-    ).data;
-    if (!data) {
-      data = (
-        await supabaseAdmin
-          .from('organization_users')
-          .select('organization_id')
-          .eq('user_id', req.context!.user.id)
-          .eq('organization_id', organizationId)
-          .eq('membership_status', 'active')
-          .single()
-      ).data;
-    }
-    if (!data) return res.status(403).json({ code: 'FORBIDDEN', message: 'Not a member of this organization' });
+    const membership = await loadOrgMembershipForUser(req.context!.user.id, organizationId);
+    if (!membership) return res.status(403).json({ code: 'FORBIDDEN', message: 'Not a member of this organization' });
     const userId = req.context!.user.id;
     const previousOrgId = await getUserStoredActiveOrganizationId(userId);
     await updateUserStoredActiveOrganizationId(userId, organizationId);
@@ -359,8 +336,7 @@ router.post('/commands/select_active_organization', authMiddleware, async (req, 
       ipAddress: typeof req.ip === 'string' && req.ip ? req.ip : null,
       userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
     });
-    const freshMembership = await loadOrgMembershipForUser(userId, organizationId);
-    const freshCtx: RequestContext = { ...req.context!, organizationId, membership: freshMembership };
+    const freshCtx: RequestContext = { ...req.context!, organizationId, membership };
     const me = await buildMeResponse(freshCtx, { preferredActiveOrganizationId: organizationId });
     return res.json(toAuthSessionAggregate(me));
   } catch (e) {

@@ -56,6 +56,25 @@ router.get('/:id/members', ...withViewUsers, async (req, res, next) => {
   }
 });
 
+/** Billing-owned staff seat entitlement truth for office UI (render-only). */
+router.get('/:id/staff-seat-entitlement', ...withViewUsers, async (req, res, next) => {
+  try {
+    if (req.params.id !== req.context!.organizationId) {
+      return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+    }
+    const { resolveStaffSeatEntitlement } = await import('../modules/staff-seat-entitlement.service.js');
+    const seats = await resolveStaffSeatEntitlement(req.params.id);
+    return res.json({
+      aggregate_key: 'organization_staff_seat_entitlement_aggregate',
+      organization_id: req.params.id,
+      staff_seats: seats,
+      seats_used_label: `${seats.active_consumed_staff_seats} / ${seats.entitled_staff_seats}`,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.post('/:id/members/invite', ...withInvite, async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });

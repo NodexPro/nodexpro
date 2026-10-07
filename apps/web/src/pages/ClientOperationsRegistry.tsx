@@ -3,6 +3,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../api/client';
 import { moduleClientOperationsRegistry, moduleClientOperationsRegistryCommands } from '../api/endpoints';
 import {
+  appendClientOperationsWorkspaceQuery,
+  decodeClientOperationsWorkspaceOptionValue,
+} from '../lib/client-operations-workspace-url.pure';
+import {
   ClientOperationsRegistryView,
   type ClientOperationsManualRegistryRow,
   type ClientOperationsNoteTypeRow,
@@ -22,6 +26,26 @@ import {
   type ClientOperationsRegistryCacheQuery,
   type PeriodAggregateCacheEntry,
 } from '../lib/client-operations-period-aggregate-cache.pure';
+
+type RegistryWorkspaceAggregate = {
+  scope_kind: 'OFFICE' | 'MY' | 'STAFF';
+  viewer_user_id: string;
+  workspace_subject_user_id: string | null;
+  access_scope_key: string;
+  label_he: string;
+  allowed_scopes: Array<{
+    scope_kind: 'OFFICE' | 'MY' | 'STAFF';
+    subject_user_id: string | null;
+    label_he: string;
+    role_code: string | null;
+  }>;
+  available_workspace_subjects: Array<{
+    user_id: string;
+    display_name: string;
+    role_code: string;
+  }>;
+  selector_visible: boolean;
+};
 
 type RegistryAggregate = {
   title_he?: string;
@@ -53,6 +77,7 @@ type RegistryAggregate = {
     label_he: string;
     presentation_token: 'ready' | 'sent_for_approval' | 'completed' | 'clear';
   }>;
+  workspace?: RegistryWorkspaceAggregate;
   query?: {
     q: string | null;
     sort_by: string | null;
@@ -64,6 +89,8 @@ type RegistryAggregate = {
     filter_reporting_type?: string | null;
     filter_business_type?: string | null;
     filter_handler?: string | null;
+    workspace_scope?: string | null;
+    workspace_subject_user_id?: string | null;
   };
   period?: { selected_period_key: string; default_period_key: string; available_periods: string[] };
   /** Backend-owned periods with meaningful user-entered custom/manual values (copy menu). */
@@ -125,6 +152,7 @@ export function ClientOperationsRegistry() {
     NonNullable<RegistryAggregate['manual_status_paint_modes']>
   >([]);
   const [filters, setFilters] = useState<RegistryAggregate['filters']>(undefined);
+  const [workspace, setWorkspace] = useState<RegistryWorkspaceAggregate | null>(null);
   const [query, setQuery] = useState<{
     q: string | null;
     sort_by: string | null;
@@ -136,6 +164,8 @@ export function ClientOperationsRegistry() {
     filter_reporting_type: string | null;
     filter_business_type: string | null;
     filter_handler: string | null;
+    workspace_scope: string | null;
+    workspace_subject_user_id: string | null;
   }>({
     q: null,
     sort_by: null,
@@ -147,6 +177,8 @@ export function ClientOperationsRegistry() {
     filter_reporting_type: null,
     filter_business_type: null,
     filter_handler: null,
+    workspace_scope: null,
+    workspace_subject_user_id: null,
   });
   const [period, setPeriod] = useState<{
     selected_period_key: string;
@@ -184,6 +216,44 @@ export function ClientOperationsRegistry() {
     setRenderedAggregatePeriodKey(null);
   }, [activeOrganizationId]);
 
+  const toCacheQuery = useCallback(
+    (src: {
+      q?: string | null;
+      filter_operational_reporting?: string | null;
+      filter_material?: string | null;
+      filter_payroll?: string | null;
+      filter_reporting_type?: string | null;
+      filter_business_type?: string | null;
+      filter_handler?: string | null;
+      workspace_scope?: string | null;
+      workspace_subject_user_id?: string | null;
+    }): ClientOperationsRegistryCacheQuery => ({
+      q: src.q ?? null,
+      filter_operational_reporting: src.filter_operational_reporting ?? null,
+      filter_material: src.filter_material ?? null,
+      filter_payroll: src.filter_payroll ?? null,
+      filter_reporting_type: src.filter_reporting_type ?? null,
+      filter_business_type: src.filter_business_type ?? null,
+      filter_handler: src.filter_handler ?? null,
+      workspace_scope: src.workspace_scope ?? null,
+      workspace_subject_user_id: src.workspace_subject_user_id ?? null,
+    }),
+    [],
+  );
+
+  const registryUrl = useCallback(
+    (params: Parameters<typeof moduleClientOperationsRegistry>[0] & {
+      workspace_scope?: string | null;
+      workspace_subject_user_id?: string | null;
+    }) =>
+      appendClientOperationsWorkspaceQuery(moduleClientOperationsRegistry(params), {
+        workspace_scope: params?.workspace_scope ?? query.workspace_scope,
+        workspace_subject_user_id:
+          params?.workspace_subject_user_id ?? query.workspace_subject_user_id,
+      }),
+    [query.workspace_scope, query.workspace_subject_user_id],
+  );
+
   const clearPeriodBoundPresentation = useCallback(() => {
     setRows([]);
     setManualRows([]);
@@ -191,7 +261,6 @@ export function ClientOperationsRegistry() {
     setUserColumnPeriodSetup(null);
     setManualRowsPeriodSetup(null);
   }, []);
-
   const applyAggregate = useCallback(
     (
       data: RegistryAggregate,
@@ -208,16 +277,22 @@ export function ClientOperationsRegistry() {
     ) {
       // Late / wrong / missing period never paints. Cache only when identity is explicit.
       if (responsePeriod) {
-        const cacheQuery: ClientOperationsRegistryCacheQuery = {
-          q: data.query?.q ?? null,
-          filter_operational_reporting: data.query?.filter_operational_reporting ?? null,
-          filter_material: data.query?.filter_material ?? null,
-          filter_payroll: data.query?.filter_payroll ?? null,
-          filter_reporting_type: data.query?.filter_reporting_type ?? null,
-          filter_business_type: data.query?.filter_business_type ?? null,
-          filter_handler: data.query?.filter_handler ?? null,
-        };
-        putPeriodAggregateCache(periodCacheRef.current, responsePeriod, data, cacheQuery);
+        putPeriodAggregateCache(
+          periodCacheRef.current,
+          responsePeriod,
+          data,
+          toCacheQuery({
+            q: data.query?.q ?? null,
+            filter_operational_reporting: data.query?.filter_operational_reporting ?? null,
+            filter_material: data.query?.filter_material ?? null,
+            filter_payroll: data.query?.filter_payroll ?? null,
+            filter_reporting_type: data.query?.filter_reporting_type ?? null,
+            filter_business_type: data.query?.filter_business_type ?? null,
+            filter_handler: data.query?.filter_handler ?? null,
+            workspace_scope: data.query?.workspace_scope ?? null,
+            workspace_subject_user_id: data.query?.workspace_subject_user_id ?? null,
+          }),
+        );
       }
       return false;
     }
@@ -241,6 +316,7 @@ export function ClientOperationsRegistry() {
       setManualStatusPaintModes(data.manual_status_paint_modes);
     }
     if (data?.filters) setFilters(data.filters);
+    if (data?.workspace) setWorkspace(data.workspace);
     if (typeof data?.title_he === 'string' && data.title_he.trim()) setTitleHe(data.title_he);
     if (data?.query) {
       setQuery({
@@ -255,6 +331,8 @@ export function ClientOperationsRegistry() {
         filter_reporting_type: data.query.filter_reporting_type ?? null,
         filter_business_type: data.query.filter_business_type ?? null,
         filter_handler: data.query.filter_handler ?? null,
+        workspace_scope: data.query.workspace_scope ?? null,
+        workspace_subject_user_id: data.query.workspace_subject_user_id ?? null,
       });
     } else if (data.period?.selected_period_key) {
       setQuery((current) => ({ ...current, operational_period_key: data.period!.selected_period_key }));
@@ -275,27 +353,28 @@ export function ClientOperationsRegistry() {
         : [],
     );
     if (data.period) {
-      const cacheQuery: ClientOperationsRegistryCacheQuery = {
-        q: data.query?.q ?? null,
-        filter_operational_reporting: data.query?.filter_operational_reporting ?? null,
-        filter_material: data.query?.filter_material ?? null,
-        filter_payroll: data.query?.filter_payroll ?? null,
-        filter_reporting_type: data.query?.filter_reporting_type ?? null,
-        filter_business_type: data.query?.filter_business_type ?? null,
-        filter_handler: data.query?.filter_handler ?? null,
-      };
       putPeriodAggregateCache(
         periodCacheRef.current,
         data.period.selected_period_key,
         data,
-        cacheQuery,
+        toCacheQuery({
+          q: data.query?.q ?? null,
+          filter_operational_reporting: data.query?.filter_operational_reporting ?? null,
+          filter_material: data.query?.filter_material ?? null,
+          filter_payroll: data.query?.filter_payroll ?? null,
+          filter_reporting_type: data.query?.filter_reporting_type ?? null,
+          filter_business_type: data.query?.filter_business_type ?? null,
+          filter_handler: data.query?.filter_handler ?? null,
+          workspace_scope: data.query?.workspace_scope ?? null,
+          workspace_subject_user_id: data.query?.workspace_subject_user_id ?? null,
+        }),
       );
       if (Array.isArray(data.period.available_periods)) {
         backendAvailablePeriodsRef.current = data.period.available_periods;
       }
     }
     return true;
-  }, []);
+  }, [toCacheQuery]);
 
   const prefetchPeriods = useCallback(
     (
@@ -309,6 +388,8 @@ export function ClientOperationsRegistry() {
         filter_reporting_type?: string | null;
         filter_business_type?: string | null;
         filter_handler?: string | null;
+        workspace_scope?: string | null;
+        workspace_subject_user_id?: string | null;
       },
       selectedPeriodKey: string,
       availablePeriods: string[],
@@ -316,22 +397,19 @@ export function ClientOperationsRegistry() {
       // Active search (`q`) or business filters: never fan-out adjacent-period prefetches
       // (each is a full registry GET). Resumes when q is empty and no filter is active.
       if (!shouldPrefetchAdjacentPeriods(baseQuery)) return;
-      const cacheQuery: ClientOperationsRegistryCacheQuery = {
-        q: baseQuery.q,
-        filter_operational_reporting: baseQuery.filter_operational_reporting ?? null,
-        filter_material: baseQuery.filter_material ?? null,
-        filter_payroll: baseQuery.filter_payroll ?? null,
-        filter_reporting_type: baseQuery.filter_reporting_type ?? null,
-        filter_business_type: baseQuery.filter_business_type ?? null,
-        filter_handler: baseQuery.filter_handler ?? null,
-      };
+      const cacheQuery = toCacheQuery(baseQuery);
       const keys = selectPeriodPrefetchKeys({ selectedPeriodKey, availablePeriods, max: 4 });
       for (const key of keys) {
         if (getPeriodAggregateCache(periodCacheRef.current, key, cacheQuery)) continue;
         if (prefetchInflightRef.current.has(key)) continue;
         prefetchInflightRef.current.add(key);
         void apiJson<RegistryAggregate>(
-          moduleClientOperationsRegistry({ ...baseQuery, operational_period_key: key }),
+          registryUrl({
+            ...baseQuery,
+            operational_period_key: key,
+            workspace_scope: baseQuery.workspace_scope ?? null,
+            workspace_subject_user_id: baseQuery.workspace_subject_user_id ?? null,
+          }),
         )
           .then((data) => {
             const responsePeriod = resolveRegistryAggregatePeriodKey(data);
@@ -351,7 +429,7 @@ export function ClientOperationsRegistry() {
           });
       }
     },
-    [],
+    [registryUrl, toCacheQuery],
   );
 
   const loadRegistry = useCallback(
@@ -367,19 +445,13 @@ export function ClientOperationsRegistry() {
         filter_reporting_type?: string | null;
         filter_business_type?: string | null;
         filter_handler?: string | null;
+        workspace_scope?: string | null;
+        workspace_subject_user_id?: string | null;
       },
       options?: { quiet?: boolean; preferCache?: boolean },
     ) => {
       const periodKey = nextQuery.operational_period_key ?? null;
-      const cacheQuery: ClientOperationsRegistryCacheQuery = {
-        q: nextQuery.q ?? null,
-        filter_operational_reporting: nextQuery.filter_operational_reporting ?? null,
-        filter_material: nextQuery.filter_material ?? null,
-        filter_payroll: nextQuery.filter_payroll ?? null,
-        filter_reporting_type: nextQuery.filter_reporting_type ?? null,
-        filter_business_type: nextQuery.filter_business_type ?? null,
-        filter_handler: nextQuery.filter_handler ?? null,
-      };
+      const cacheQuery = toCacheQuery(nextQuery);
       if (periodKey) {
         viewedPeriodKeyRef.current = periodKey;
         setQuery({
@@ -393,6 +465,8 @@ export function ClientOperationsRegistry() {
           filter_reporting_type: nextQuery.filter_reporting_type ?? null,
           filter_business_type: nextQuery.filter_business_type ?? null,
           filter_handler: nextQuery.filter_handler ?? null,
+          workspace_scope: nextQuery.workspace_scope ?? null,
+          workspace_subject_user_id: nextQuery.workspace_subject_user_id ?? null,
         });
         setPeriod((current) => {
           if (!current) {
@@ -434,6 +508,8 @@ export function ClientOperationsRegistry() {
           filter_reporting_type: nextQuery.filter_reporting_type ?? null,
           filter_business_type: nextQuery.filter_business_type ?? null,
           filter_handler: nextQuery.filter_handler ?? null,
+          workspace_scope: nextQuery.workspace_scope ?? null,
+          workspace_subject_user_id: nextQuery.workspace_subject_user_id ?? null,
         });
       }
 
@@ -444,9 +520,16 @@ export function ClientOperationsRegistry() {
       // Period switches / search must not dim; only true cold mount uses loading.
       if (!options?.quiet) setLoading(true);
       setError('');
-      return apiJson<RegistryAggregate>(moduleClientOperationsRegistry(nextQuery), {
-        signal: ac.signal,
-      })
+      return apiJson<RegistryAggregate>(
+        registryUrl({
+          ...nextQuery,
+          workspace_scope: nextQuery.workspace_scope ?? null,
+          workspace_subject_user_id: nextQuery.workspace_subject_user_id ?? null,
+        }),
+        {
+          signal: ac.signal,
+        },
+      )
         .then((data) => {
           if (seq !== loadSeqRef.current) {
             // Superseded by a newer load or authoritative mutation (e.g. status paint).
@@ -474,6 +557,8 @@ export function ClientOperationsRegistry() {
               filter_reporting_type: nextQuery.filter_reporting_type ?? null,
               filter_business_type: nextQuery.filter_business_type ?? null,
               filter_handler: nextQuery.filter_handler ?? null,
+              workspace_scope: nextQuery.workspace_scope ?? null,
+              workspace_subject_user_id: nextQuery.workspace_subject_user_id ?? null,
             },
             selected,
             available,
@@ -513,7 +598,7 @@ export function ClientOperationsRegistry() {
           setQueryRefreshPending(false);
         });
     },
-    [applyAggregate, clearPeriodBoundPresentation, prefetchPeriods],
+    [applyAggregate, clearPeriodBoundPresentation, prefetchPeriods, registryUrl, toCacheQuery],
   );
 
   const reloadRegistry = useCallback(() => {
@@ -554,11 +639,32 @@ export function ClientOperationsRegistry() {
           ...query,
           ...next,
           operational_period_key: query.operational_period_key,
+          workspace_scope: query.workspace_scope,
+          workspace_subject_user_id: query.workspace_subject_user_id,
         },
-        { quiet: options?.quiet === true, preferCache: false },
+        { quiet: options?.quiet !== false, preferCache: true },
       );
     },
     [loadRegistry, query],
+  );
+
+  const onWorkspaceChange = useCallback(
+    (optionValue: string) => {
+      const decoded = decodeClientOperationsWorkspaceOptionValue(optionValue);
+      // Workspace switch preserves operational period (independent dimensions).
+      periodCacheRef.current.clear();
+      prefetchInflightRef.current.clear();
+      clearPeriodBoundPresentation();
+      void loadRegistry(
+        {
+          ...query,
+          workspace_scope: decoded.workspace_scope,
+          workspace_subject_user_id: decoded.workspace_subject_user_id,
+        },
+        { quiet: false, preferCache: false },
+      );
+    },
+    [clearPeriodBoundPresentation, loadRegistry, query],
   );
 
   const onPeriodChange = useCallback(
@@ -696,6 +802,8 @@ export function ClientOperationsRegistry() {
       columnsNeedingLegacyBaseline={columnsNeedingLegacyBaseline}
       manualStatusPaintModes={manualStatusPaintModes}
       filters={filters}
+      workspace={workspace}
+      onWorkspaceChange={onWorkspaceChange}
       query={query}
       onQueryChange={onQueryChange}
       onRegistryCommand={onRegistryCommand}

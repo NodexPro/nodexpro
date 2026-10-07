@@ -27,6 +27,6 @@ export function notFound(message = 'Not found', code = 'NOT_FOUND') {
   return new AppError(404, message, code);
 }
 
-export function conflict(message: string, code = 'CONFLICT') {
-  return new AppError(409, message, code);
+export function conflict(message: string, code = 'CONFLICT', details?: Record<string, unknown>) {
+  return new AppError(409, message, code, details);
 }

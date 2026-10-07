@@ -4,6 +4,11 @@ import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
 import { addTimelineEvent, TIMELINE_SOURCE, TIMELINE_EVENTS } from './timeline.service.js';
 import { buildClientSearchText, upsertClientSearchIndex, refreshClientSearchIndexWithContacts, searchClients as searchClientsByIds } from './search-index.service.js';
+import {
+  assertCanAccessClientFromContext,
+  filterAuthorizedClientIds,
+  resolveOrganizationClientAccessScopeFromContext,
+} from '../client-operations/organization-client-access.js';
 
 const ENTITY_TYPE_CLIENT = 'client';
 const ALLOWED_CLIENT_TYPES = new Set([
@@ -106,6 +111,13 @@ export async function listClients(
   assertOrg(ctx, orgId);
   assertClientsRead(ctx);
 
+  const accessScope = await resolveOrganizationClientAccessScopeFromContext(ctx);
+  if (accessScope.kind === 'ASSIGNED_TO_SELF' && (accessScope.authorized_client_ids?.length ?? 0) === 0) {
+    const limit = Math.min(Math.max(1, Math.floor(Number(options.limit) || DEFAULT_LIMIT)), MAX_LIMIT);
+    const offset = Math.max(0, Math.floor(Number(options.offset) || 0));
+    return { items: [], total: 0, limit, offset, has_more: false };
+  }
+
   const view: ClientListView =
     typeof options.view === 'string' && (CLIENT_LIST_VIEWS as readonly string[]).includes(options.view)
       ? (options.view as ClientListView)
@@ -128,10 +140,15 @@ export async function listClients(
   let clientIdsFilter: string[] | null = null;
   if (searchQ) {
     const searchResults = await searchClientsByIds(orgId, searchQ, { includeArchived });
-    clientIdsFilter = searchResults.map((r) => r.entityId);
+    clientIdsFilter = filterAuthorizedClientIds(
+      accessScope,
+      searchResults.map((r) => r.entityId),
+    );
     if (clientIdsFilter.length === 0) {
       return { items: [], total: 0, limit, offset, has_more: false };
     }
+  } else if (accessScope.kind === 'ASSIGNED_TO_SELF') {
+    clientIdsFilter = [...(accessScope.authorized_client_ids ?? [])];
   }
 
   let countQ = supabaseAdmin
@@ -246,6 +263,7 @@ export async function listClients(
 export async function getClientById(ctx: RequestContext, orgId: string, clientId: string, _options?: { includeSensitive?: boolean }) {
   assertOrg(ctx, orgId);
   assertClientsRead(ctx);
+  await assertCanAccessClientFromContext(ctx, clientId);
 
   const { data: client, error } = await supabaseAdmin
     .from('clients')
@@ -398,6 +416,7 @@ export async function updateClient(
 ) {
   assertOrg(ctx, orgId);
   assertClientsWrite(ctx);
+  await assertCanAccessClientFromContext(ctx, clientId);
 
   const { data: existing } = await supabaseAdmin
     .from('clients')
@@ -487,6 +506,7 @@ export async function updateClient(
 export async function archiveClient(ctx: RequestContext, orgId: string, clientId: string) {
   assertOrg(ctx, orgId);
   assertClientsArchive(ctx);
+  await assertCanAccessClientFromContext(ctx, clientId);
 
   const { data: client, error } = await supabaseAdmin
     .from('clients')
@@ -574,14 +594,21 @@ function parseBulkClientIds(body: unknown): string[] {
     .slice(0, BULK_MAX_IDS);
 }
 
-/** Ensure all client ids belong to org; return only those that do. */
-async function resolveBulkClientsInOrg(orgId: string, clientIds: string[]): Promise<string[]> {
+/** Ensure all client ids belong to org AND are within the actor's client access scope. */
+async function resolveBulkClientsInOrg(
+  ctx: RequestContext,
+  orgId: string,
+  clientIds: string[],
+): Promise<string[]> {
   if (clientIds.length === 0) return [];
+  const accessScope = await resolveOrganizationClientAccessScopeFromContext(ctx);
+  const scopedIds = filterAuthorizedClientIds(accessScope, clientIds);
+  if (scopedIds.length === 0) return [];
   const { data } = await supabaseAdmin
     .from('clients')
     .select('id')
     .eq('organization_id', orgId)
-    .in('id', clientIds);
+    .in('id', scopedIds);
   return ((data ?? []) as unknown as Array<{ id: string }>).map((r) => r.id);
 }
 
@@ -594,7 +621,7 @@ export async function bulkMarkActive(ctx: RequestContext, orgId: string, body: u
   assertOrg(ctx, orgId);
   assertClientsWrite(ctx);
   const clientIds = parseBulkClientIds(body);
-  const inOrg = await resolveBulkClientsInOrg(orgId, clientIds);
+  const inOrg = await resolveBulkClientsInOrg(ctx, orgId, clientIds);
   if (inOrg.length === 0) return { updated: 0, clientIds: [] };
   const { data } = await supabaseAdmin
     .from('clients')
@@ -618,7 +645,7 @@ export async function bulkMarkInactive(ctx: RequestContext, orgId: string, body:
   assertOrg(ctx, orgId);
   assertClientsWrite(ctx);
   const clientIds = parseBulkClientIds(body);
-  const inOrg = await resolveBulkClientsInOrg(orgId, clientIds);
+  const inOrg = await resolveBulkClientsInOrg(ctx, orgId, clientIds);
   if (inOrg.length === 0) return { updated: 0, clientIds: [] };
   const { data } = await supabaseAdmin
     .from('clients')
@@ -642,7 +669,7 @@ export async function bulkArchive(ctx: RequestContext, orgId: string, body: unkn
   assertOrg(ctx, orgId);
   assertClientsArchive(ctx);
   const clientIds = parseBulkClientIds(body);
-  const inOrg = await resolveBulkClientsInOrg(orgId, clientIds);
+  const inOrg = await resolveBulkClientsInOrg(ctx, orgId, clientIds);
   if (inOrg.length === 0) return { updated: 0, clientIds: [] };
   const { data } = await supabaseAdmin
     .from('clients')
@@ -681,7 +708,7 @@ export async function bulkRestore(ctx: RequestContext, orgId: string, body: unkn
   assertOrg(ctx, orgId);
   assertClientsArchive(ctx);
   const clientIds = parseBulkClientIds(body);
-  const inOrg = await resolveBulkClientsInOrg(orgId, clientIds);
+  const inOrg = await resolveBulkClientsInOrg(ctx, orgId, clientIds);
   if (inOrg.length === 0) return { updated: 0, clientIds: [] };
   const { data: clients } = await supabaseAdmin
     .from('clients')

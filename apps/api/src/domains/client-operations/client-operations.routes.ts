@@ -3,6 +3,7 @@ import { authMiddleware } from '../../middleware/auth.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
 import { requirePermission } from '../../middleware/requirePermission.js';
 import { requireModuleActive } from '../../middleware/requireModuleActive.js';
+import { requireAuthorizedClientParam } from '../../middleware/requireAuthorizedClient.js';
 import type { RequestContext } from '../../shared/context.js';
 import {
   listClientOperationsRegistry,
@@ -15,9 +16,18 @@ import {
   type ClientOperationsRegistryCommandBody,
 } from './client-operations-registry-custom-columns.service.js';
 import {
+  executeBulkAssignClientHandlerCommand,
   executeClientOperationsProfileCommand,
   executeClientOperationsTaxSettingsCommand,
 } from './client-operations-commands.service.js';
+import {
+  executeClientOperationsTodoCommand,
+  getClientOperationsTodoArchive,
+  getClientOperationsTodoBoard,
+  listClientOperationsTodoAssigneeOptions,
+  searchClientOperationsTodoClientOptions,
+  type ClientOperationsTodoCommandBody,
+} from './client-operations-todo.service.js';
 import {
   executeClientHistoryTabCommand,
   exportClientHistoryReport,
@@ -119,6 +129,11 @@ function parseAnnualTabScope(v: unknown): AnnualTabScope {
 const withClientDocumentsView = [requirePermission('client_documents_tab.view', 'client_operations.view')];
 const withClientDocumentsEdit = [requirePermission('client_documents_tab.edit', 'client_operations.edit')];
 
+/** Canonical client ACL for every `:clientId` route — before handler / case load. */
+router.param('clientId', (req, res, next) => {
+  void requireAuthorizedClientParam('clientId')(req, res, next);
+});
+
 /**
  * Registry pre-search materialization cache — write safety net.
  * Any non-GET request in this module may change registry rows (notes, profile, tax settings,
@@ -159,6 +174,12 @@ router.get('/registry', ...withView, async (req, res, next) => {
       typeof req.query.filter_business_type === 'string' ? req.query.filter_business_type : null;
     const filterHandlerRaw =
       typeof req.query.filter_handler === 'string' ? req.query.filter_handler : null;
+    const workspaceScopeRaw =
+      typeof req.query.workspace_scope === 'string' ? req.query.workspace_scope : null;
+    const workspaceSubjectUserIdRaw =
+      typeof req.query.workspace_subject_user_id === 'string'
+        ? req.query.workspace_subject_user_id
+        : null;
     const sort_dir =
       sortDirRaw === 'asc' || sortDirRaw === 'desc' ? (sortDirRaw as 'asc' | 'desc') : null;
     const result = await listClientOperationsRegistry(
@@ -174,9 +195,11 @@ router.get('/registry', ...withView, async (req, res, next) => {
         filter_reporting_type: filterReportingTypeRaw,
         filter_business_type: filterBusinessTypeRaw,
         filter_handler: filterHandlerRaw,
+        workspace_scope: workspaceScopeRaw,
+        workspace_subject_user_id: workspaceSubjectUserIdRaw,
       },
       // READ path only: repeated search (`q`) over the same org/period/filters reuses the
-      // short-TTL pre-search materialization. Auth/org/RBAC middleware already ran above.
+      // short-TTL pre-search materialization. Auth/org/RBAC + Stage4 workspace resolve before cache.
       { materializationCache: true },
     );
     return res.json(result);
@@ -189,6 +212,95 @@ router.post('/registry/commands', ...withEdit, async (req, res, next) => {
   try {
     const ctx = req.context as RequestContext;
     const out = await executeClientOperationsRegistryCommand(ctx, (req.body ?? {}) as ClientOperationsRegistryCommandBody);
+    return res.json(out);
+  } catch (e) {
+    next(e);
+  }
+});
+
+// ── Stage 5A — Client Operations ToDo (board / archive / commands) ──────────
+router.get('/todo/board', ...withView, async (req, res, next) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const result = await getClientOperationsTodoBoard(ctx, {
+      page: typeof req.query.page === 'string' ? req.query.page : null,
+      q: typeof req.query.q === 'string' ? req.query.q : null,
+      workspace_scope: typeof req.query.workspace_scope === 'string' ? req.query.workspace_scope : null,
+      workspace_subject_user_id:
+        typeof req.query.workspace_subject_user_id === 'string'
+          ? req.query.workspace_subject_user_id
+          : null,
+    });
+    return res.json(result);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/todo/archive', ...withView, async (req, res, next) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const result = await getClientOperationsTodoArchive(ctx, {
+      page: typeof req.query.page === 'string' ? req.query.page : null,
+      q: typeof req.query.q === 'string' ? req.query.q : null,
+      filter_priority:
+        typeof req.query.filter_priority === 'string' ? req.query.filter_priority : null,
+      filter_assignee:
+        typeof req.query.filter_assignee === 'string' ? req.query.filter_assignee : null,
+      workspace_scope: typeof req.query.workspace_scope === 'string' ? req.query.workspace_scope : null,
+      workspace_subject_user_id:
+        typeof req.query.workspace_subject_user_id === 'string'
+          ? req.query.workspace_subject_user_id
+          : null,
+    });
+    return res.json(result);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/todo/client-options', ...withView, async (req, res, next) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const result = await searchClientOperationsTodoClientOptions(ctx, {
+      q: typeof req.query.q === 'string' ? req.query.q : null,
+      limit: typeof req.query.limit === 'string' ? req.query.limit : null,
+      workspace_scope: typeof req.query.workspace_scope === 'string' ? req.query.workspace_scope : null,
+      workspace_subject_user_id:
+        typeof req.query.workspace_subject_user_id === 'string'
+          ? req.query.workspace_subject_user_id
+          : null,
+    });
+    return res.json(result);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/todo/assignee-options', ...withView, async (req, res, next) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const result = await listClientOperationsTodoAssigneeOptions(ctx, {
+      client_id: typeof req.query.client_id === 'string' ? req.query.client_id : null,
+      workspace_scope: typeof req.query.workspace_scope === 'string' ? req.query.workspace_scope : null,
+      workspace_subject_user_id:
+        typeof req.query.workspace_subject_user_id === 'string'
+          ? req.query.workspace_subject_user_id
+          : null,
+    });
+    return res.json(result);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/todo/commands', ...withEdit, async (req, res, next) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const out = await executeClientOperationsTodoCommand(
+      ctx,
+      (req.body ?? {}) as ClientOperationsTodoCommandBody,
+    );
     return res.json(out);
   } catch (e) {
     next(e);
@@ -279,6 +391,28 @@ router.post('/clients/:clientId/profile/commands/update_profile', ...withEdit, a
     const clientId = String(req.params.clientId ?? '');
     if (!clientId) return res.status(400).json({ code: 'BAD_REQUEST', message: 'clientId required' });
     const out = await executeClientOperationsProfileCommand(ctx, clientId, 'update_profile', req.body ?? {});
+    return res.json(out);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/clients/:clientId/profile/commands/assign_client_handler', ...withEdit, async (req, res, next) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const clientId = String(req.params.clientId ?? '');
+    if (!clientId) return res.status(400).json({ code: 'BAD_REQUEST', message: 'clientId required' });
+    const out = await executeClientOperationsProfileCommand(ctx, clientId, 'assign_client_handler', req.body ?? {});
+    return res.json(out);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/registry/commands/bulk_assign_client_handler', ...withEdit, async (req, res, next) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const out = await executeBulkAssignClientHandlerCommand(ctx, req.body ?? {});
     return res.json(out);
   } catch (e) {
     next(e);

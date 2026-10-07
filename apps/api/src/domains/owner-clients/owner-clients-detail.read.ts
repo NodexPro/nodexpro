@@ -145,6 +145,13 @@ export async function loadOwnerClientDetailData(organizationId: string): Promise
     };
   });
 
+  const {
+    resolveStaffSeatEntitlement,
+    buildOwnerCommercialSeatsSection,
+  } = await import('../modules/staff-seat-entitlement.service.js');
+  const seatTruth = await resolveStaffSeatEntitlement(organizationId);
+  const staff_seats = buildOwnerCommercialSeatsSection(seatTruth);
+
   return buildOwnerClientDetailAggregate({
     organization_id: organizationId,
     organization_name: org.name,
@@ -168,13 +175,18 @@ export async function loadOwnerClientDetailData(organizationId: string): Promise
       time_spent_label: NOT_MEASURED_LABEL,
       next_step_label: health.next_step_label,
       primary_issue_label: health.primary_issue_label,
+      staff_seats_used_label: String(staff_seats.seats_used_label),
     },
     modules: moduleRows,
     billing: {
       mrr_label,
       subscriptions: billingSubscriptions,
       note: billingSubscriptions.length ? null : NO_DATA_LABEL,
+      commercial_recurring_total_label: String(staff_seats.commercial_recurring_total_label),
+      commercial_recurring_total_amount: seatTruth.commercial_recurring_total_amount,
+      seats: staff_seats,
     },
+    staff_seats,
     users: users.length ? users : [],
     usage: {
       tenant_clients_count,

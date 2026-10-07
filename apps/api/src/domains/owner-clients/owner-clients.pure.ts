@@ -133,7 +133,8 @@ export type OwnerClientDetailAggregate = {
   tabs: OwnerClientDetailTab[];
   overview: Record<string, string | number | null>;
   modules: Array<Record<string, string | null>>;
-  billing: Record<string, string | number | null | Array<Record<string, string | null>>>;
+  billing: Record<string, string | number | null | Array<Record<string, string | null>> | Record<string, string | number | null>>;
+  staff_seats: Record<string, string | number | null>;
   users: Array<Record<string, string | null>>;
   usage: Record<string, string | number | null>;
   health: Record<string, string | number | null | Array<Record<string, string | null>>>;
@@ -575,7 +576,8 @@ export function buildOwnerClientDetailAggregate(params: {
   health_status_label: string;
   overview: Record<string, string | number | null>;
   modules: Array<Record<string, string | null>>;
-  billing: Record<string, string | number | null | Array<Record<string, string | null>>>;
+  billing: Record<string, string | number | null | Array<Record<string, string | null>> | Record<string, string | number | null>>;
+  staff_seats: Record<string, string | number | null>;
   users: Array<Record<string, string | null>>;
   usage: Record<string, string | number | null>;
   health: Record<string, string | number | null | Array<Record<string, string | null>>>;
@@ -595,6 +597,7 @@ export function buildOwnerClientDetailAggregate(params: {
     overview: params.overview,
     modules: params.modules,
     billing: params.billing,
+    staff_seats: params.staff_seats,
     users: params.users,
     usage: params.usage,
     health: params.health,

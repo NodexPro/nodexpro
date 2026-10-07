@@ -2,6 +2,10 @@ import { supabaseAdmin } from '../../db/client.js';
 import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import type { OrgMembership } from '../../shared/context.js';
 import { loadMembershipWithPermissions, mergeLegacyOrganizationUserPermissions } from '../rbac/rbac.service.js';
+import {
+  getCanonicalMembershipStatus,
+  mayUseLegacyOrganizationUsersAccessFallback,
+} from '../memberships/organization-membership-access.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -20,16 +24,37 @@ export async function updateUserStoredActiveOrganizationId(userId: string, organ
     .eq('id', userId);
 }
 
+/**
+ * Active org ids for a user.
+ * Canonical `organization_memberships` wins. Legacy `organization_users` is only consulted
+ * for orgs with NO memberships row (never when canonical status is revoked).
+ */
 export async function listUserActiveOrganizationIds(userId: string): Promise<string[]> {
-  let { data } = await supabaseAdmin.from('organization_memberships').select('organization_id').eq('user_id', userId).eq('status', 'active');
-  const ids = new Set<string>((data ?? []).map((r: { organization_id: string }) => r.organization_id).filter(Boolean));
-  if (!ids.size) {
-    const ou = await supabaseAdmin
-      .from('organization_users')
-      .select('organization_id')
-      .eq('user_id', userId)
-      .eq('membership_status', 'active');
-    for (const r of ou.data ?? []) ids.add((r as { organization_id: string }).organization_id);
+  const { data: membershipRows } = await supabaseAdmin
+    .from('organization_memberships')
+    .select('organization_id, status')
+    .eq('user_id', userId);
+
+  const ids = new Set<string>();
+  const canonicalOrgIds = new Set<string>();
+  for (const r of membershipRows ?? []) {
+    const orgId = String((r as { organization_id: string }).organization_id ?? '');
+    if (!orgId) continue;
+    canonicalOrgIds.add(orgId);
+    if ((r as { status: string }).status === 'active') ids.add(orgId);
+  }
+
+  const ou = await supabaseAdmin
+    .from('organization_users')
+    .select('organization_id')
+    .eq('user_id', userId)
+    .eq('membership_status', 'active');
+  for (const r of ou.data ?? []) {
+    const orgId = String((r as { organization_id: string }).organization_id ?? '');
+    if (!orgId) continue;
+    // P0: never restore access via legacy row when canonical membership exists.
+    if (canonicalOrgIds.has(orgId)) continue;
+    ids.add(orgId);
   }
   return [...ids];
 }
@@ -45,6 +70,17 @@ export async function loadOrgMembershipForUser(userId: string, organizationId: s
       permissions: m.permissions,
     };
   }
+
+  // Canonical row exists but is not active (e.g. revoked) → deny. Do NOT fall back to OU.
+  const canonical = await getCanonicalMembershipStatus(userId, organizationId);
+  if (canonical.status !== 'absent') {
+    return null;
+  }
+
+  if (!(await mayUseLegacyOrganizationUsersAccessFallback(userId, organizationId))) {
+    return null;
+  }
+
   const { data: ou } = await supabaseAdmin
     .from('organization_users')
     .select('organization_id, user_id, role_id, roles(code, role_permissions(permissions(code)))')

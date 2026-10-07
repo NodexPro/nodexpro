@@ -1,11 +1,15 @@
 import { supabaseAdmin } from '../../db/client.js';
-import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import { forbidden } from '../../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
-import { updateUserStoredActiveOrganizationId } from '../auth/active-organization.service.js';
+import {
+  listUserActiveOrganizationIds,
+  loadOrgMembershipForUser,
+  updateUserStoredActiveOrganizationId,
+} from '../auth/active-organization.service.js';
 import type { RequestContext } from '../../shared/context.js';
 import type { CreateOrganizationResponse } from '../../types/api.js';
 import { syncIncomeIssuerProfileFromOrganization } from '../income/income-issuer-profile-sync.service.js';
+import { syncLegacyOrganizationUserFromCanonical } from '../memberships/organization-membership-access.js';
 
 async function seedOrganizationSettingsOnCreate(
   orgId: string,
@@ -62,6 +66,15 @@ export async function createOrganization(ctx: RequestContext, params: { name: st
     updated_at: now,
   }).then((r) => { if (r.error) console.warn('[org] organization_memberships insert:', r.error); });
 
+  // Keep legacy organization_users aligned (already inserted above); ensure role remains owner.
+  await syncLegacyOrganizationUserFromCanonical({
+    organizationId: org.id,
+    userId: ctx.user.id,
+    roleCode: 'owner',
+    membershipStatus: 'active',
+    invitedBy: null,
+  });
+
   await updateUserStoredActiveOrganizationId(ctx.user.id, org.id);
 
   /* Legacy onboarding: optional starter plan + subscriptions + plan_modules. Not used for module entitlement.
@@ -112,28 +125,24 @@ export async function createOrganization(ctx: RequestContext, params: { name: st
 }
 
 export async function listMyOrganizations(userId: string) {
+  const orgIds = await listUserActiveOrganizationIds(userId);
+  if (!orgIds.length) return [];
   const { data } = await supabaseAdmin
-    .from('organization_users')
-    .select('organization_id, organizations(id, name, country_code, timezone, status)')
-    .eq('user_id', userId)
-    .eq('membership_status', 'active');
-  return (data ?? []).flatMap((o) => {
-    const org = supabaseEmbedOne(
-      (o as unknown as {
-        organizations:
-          | { id: string; name: string; country_code: string; timezone: string; status: string }
-          | { id: string; name: string; country_code: string; timezone: string; status: string }[]
-          | null;
-      }).organizations
-    );
-    return org ? [org] : [];
-  });
+    .from('organizations')
+    .select('id, name, country_code, timezone, status')
+    .in('id', orgIds);
+  const byId = new Map(
+    ((data ?? []) as Array<{ id: string; name: string; country_code: string; timezone: string; status: string }>).map(
+      (o) => [o.id, o],
+    ),
+  );
+  return orgIds.map((id) => byId.get(id)).filter((o): o is NonNullable<typeof o> => Boolean(o));
 }
 
 export async function getOrganization(ctx: RequestContext, orgId: string) {
   if (ctx.organizationId !== orgId && !(ctx.membership?.organizationId === orgId)) {
-    const { data } = await supabaseAdmin.from('organization_users').select('organization_id').eq('user_id', ctx.user.id).eq('organization_id', orgId).eq('membership_status', 'active').single();
-    if (!data) throw forbidden('Not a member of this organization');
+    const membership = await loadOrgMembershipForUser(ctx.user.id, orgId);
+    if (!membership) throw forbidden('Not a member of this organization');
   }
   const { data, error } = await supabaseAdmin.from('organizations').select('*').eq('id', orgId).single();
   if (error || !data) throw forbidden('Organization not found');

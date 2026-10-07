@@ -39,11 +39,17 @@ const AuthContext = createContext<
   | null
 >(null);
 
+function sortedStringArrayKey(values: readonly string[] | null | undefined): string {
+  return [...(values ?? [])].sort().join('\0');
+}
+
 function isMeEqual(a: MeData, b: MeData): boolean {
   return (
     a.user.id === b.user.id &&
     a.activeOrganizationId === b.activeOrganizationId &&
-    a.organizations.length === b.organizations.length
+    a.organizations.length === b.organizations.length &&
+    sortedStringArrayKey(a.permissions) === sortedStringArrayKey(b.permissions) &&
+    sortedStringArrayKey(a.enabledModules) === sortedStringArrayKey(b.enabledModules)
   );
 }
 

@@ -143,8 +143,22 @@ test('6 — period material facts coexist (Aug true / Sep false)', () => {
     default_period_key: '2026-09',
     vat_applicable: true,
   });
-  assert.deepEqual(august, { applicable: true, completed: true, value: true });
-  assert.deepEqual(september, { applicable: true, completed: false, value: false });
+  assert.deepEqual(august, {
+    configured: true,
+    due: true,
+    applicable: true,
+    editable: true,
+    completed: true,
+    value: true,
+  });
+  assert.deepEqual(september, {
+    configured: true,
+    due: true,
+    applicable: true,
+    editable: true,
+    completed: false,
+    value: false,
+  });
 });
 
 test('7 — non-default period without fact does not use legacy profile flag', () => {
@@ -156,19 +170,34 @@ test('7 — non-default period without fact does not use legacy profile flag', (
     default_period_key: '2026-09',
     vat_applicable: true,
   });
-  assert.deepEqual(cell, { applicable: true, completed: false, value: false });
+  assert.deepEqual(cell, {
+    configured: true,
+    due: true,
+    applicable: true,
+    editable: true,
+    completed: false,
+    value: false,
+  });
 });
 
-test('8 — NOT APPLICABLE material is not encoded as false', () => {
+test('8 — NOT CONFIGURED material is dash-shaped (not false)', () => {
   const cell = resolveMaterialBroughtForPeriod({
     period_fact: false,
     has_period_fact: true,
     legacy_profile_flag: false,
     operational_period_key: '2026-09',
     default_period_key: '2026-09',
-    vat_applicable: false,
+    vat_configured: false,
+    vat_due: false,
   });
-  assert.deepEqual(cell, { applicable: false, completed: null, value: null });
+  assert.deepEqual(cell, {
+    configured: false,
+    due: false,
+    applicable: false,
+    editable: false,
+    completed: null,
+    value: null,
+  });
 });
 
 test('9 — frozen snapshot inputs: Sep monthly vs bi diverge (historical stability model)', () => {
@@ -490,8 +519,22 @@ test('D5 — material 2026-08 and 2026-09 remain independent facts', () => {
     default_period_key: '2026-08',
     vat_applicable: true,
   });
-  assert.deepEqual(aug, { applicable: true, completed: true, value: true });
-  assert.deepEqual(sep, { applicable: true, completed: false, value: false });
+  assert.deepEqual(aug, {
+    configured: true,
+    due: true,
+    applicable: true,
+    editable: true,
+    completed: true,
+    value: true,
+  });
+  assert.deepEqual(sep, {
+    configured: true,
+    due: true,
+    applicable: true,
+    editable: true,
+    completed: false,
+    value: false,
+  });
 });
 
 test('D6 — registry resolver: omitted key uses default; explicit 2026-09 preserved (source)', () => {
@@ -606,16 +649,42 @@ test('M4 — created-after-period excluded; archived needs frozen evidence', () 
   );
 });
 
-test('M5 — material N/A when VAT not applicable; independent of row emission', () => {
+test('M5 — material not configured → dash shape; independent of row emission', () => {
   const cell = resolveMaterialBroughtForPeriod({
     period_fact: true,
     has_period_fact: true,
     legacy_profile_flag: true,
     operational_period_key: '2026-09',
     default_period_key: '2026-08',
-    vat_applicable: false,
+    vat_configured: false,
+    vat_due: false,
   });
-  assert.deepEqual(cell, { applicable: false, completed: null, value: null });
+  assert.deepEqual(cell, {
+    configured: false,
+    due: false,
+    applicable: false,
+    editable: false,
+    completed: null,
+    value: null,
+  });
+});
+
+test('M5b — bi-monthly VAT configured but not due → disabled square NOT dash', () => {
+  const cell = resolveMaterialBroughtForPeriod({
+    period_fact: false,
+    has_period_fact: true,
+    legacy_profile_flag: false,
+    operational_period_key: '2026-09',
+    default_period_key: '2026-09',
+    vat_configured: true,
+    vat_due: false,
+  });
+  assert.equal(cell.configured, true);
+  assert.equal(cell.due, false);
+  assert.equal(cell.applicable, false);
+  assert.equal(cell.editable, false);
+  assert.equal(cell.completed, null);
+  assert.equal(cell.value, null);
 });
 
 test('M6 — service no longer gates membership on snapshot.row_visible (source)', () => {
@@ -641,9 +710,38 @@ test('M7 — default vs explicit same period: resolver does not branch membershi
   );
 });
 
-const naCell = { applicable: false, completed: null, value: null };
-const trueCell = { applicable: true, completed: true, value: true };
-const falseCell = { applicable: true, completed: false, value: false };
+const naCell = {
+  configured: false,
+  due: false,
+  applicable: false,
+  editable: false,
+  completed: null,
+  value: null,
+};
+const trueCell = {
+  configured: true,
+  due: true,
+  applicable: true,
+  editable: true,
+  completed: true,
+  value: true,
+};
+const falseCell = {
+  configured: true,
+  due: true,
+  applicable: true,
+  editable: true,
+  completed: false,
+  value: false,
+};
+const configuredNotDueCell = {
+  configured: true,
+  due: false,
+  applicable: false,
+  editable: false,
+  completed: null,
+  value: null,
+};
 
 test('MC1 — income-tax-advance material: period fact wins; N/A not encoded as false', () => {
   const factWins = resolveIncomeTaxAdvanceMaterialForPeriod({
@@ -704,6 +802,21 @@ test('MC3 — payroll material projects salary_data_received; N/A when not appli
   );
 });
 
+test('MC3b — advances configured but not due → disabled square NOT dash', () => {
+  assert.deepEqual(
+    resolveIncomeTaxAdvanceMaterialForPeriod({
+      period_fact: false,
+      has_period_fact: true,
+      legacy_profile_flag: false,
+      operational_period_key: '2026-09',
+      default_period_key: '2026-09',
+      advance_configured: true,
+      advance_due: false,
+    }),
+    configuredNotDueCell,
+  );
+});
+
 test('MC4 — payroll_period_key mapping is identity; material_cells shape is backend-owned', () => {
   assert.equal(mapOperationalPeriodKeyToPayrollPeriodKey('2026-08'), '2026-08');
   const cells = buildMaterialCells({
@@ -733,7 +846,7 @@ test('MC5 — registry aggregate builds material_cells; VAT period_fact is boole
   assert.match(service, /income_data_received_flag/);
   assert.match(service, /resolveIncomeTaxAdvanceMaterialForPeriod/);
   assert.match(service, /resolvePayrollMaterialForPeriod/);
-  assert.match(service, /material_cells:\s*buildMaterialCells\(/);
+  assert.match(service, /material_cells\s*=\s*buildMaterialCells\(/);
   assert.match(service, /material_brought_cell:\s*materialBroughtCell/);
   assert.doesNotMatch(service, /period_fact:\s*materialFacts\.get\(c\.id\)[,\n]/);
   // Membership remains independent of material cells / row_visible.

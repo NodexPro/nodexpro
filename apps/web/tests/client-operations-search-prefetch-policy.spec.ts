@@ -53,8 +53,14 @@ test('page: prefetchPeriods guards on the pure policy before any adjacent GET', 
   const guardIdx = prefetch.indexOf('shouldPrefetchAdjacentPeriods(baseQuery)');
   const getIdx = prefetch.indexOf('apiJson<RegistryAggregate>(');
   assert.ok(guardIdx > 0 && getIdx > guardIdx, 'guard precedes the prefetch GET');
-  // Prefetch still passes the same base query (q included) — no FE-side query shaping.
-  assert.match(prefetch, /moduleClientOperationsRegistry\(\{ \.\.\.baseQuery, operational_period_key: key \}\)/);
+  // Workspace-aware registryUrl: intended period + workspace_scope/subject preserved.
+  assert.match(prefetch, /registryUrl\(\{[\s\S]*?operational_period_key:\s*key/);
+  assert.match(prefetch, /workspace_scope:\s*baseQuery\.workspace_scope/);
+  assert.match(prefetch, /workspace_subject_user_id:\s*baseQuery\.workspace_subject_user_id/);
+  assert.match(pageSource, /appendClientOperationsWorkspaceQuery\(moduleClientOperationsRegistry\(params\)/);
+  // Cache key path includes workspace dimensions (no cross-workspace leakage).
+  assert.match(pageSource, /workspace_scope/);
+  assert.match(pageSource, /toCacheQuery/);
 });
 
 test('page: period / load guards untouched', () => {

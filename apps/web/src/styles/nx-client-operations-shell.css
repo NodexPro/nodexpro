@@ -196,7 +196,42 @@
 }
 
 .nx-co-app-header__end {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
   min-width: 0;
+}
+
+.nx-co-app-header__workspace {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.nx-co-app-header__workspace-select {
+  max-width: min(240px, 100%);
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(38, 140, 255, 0.55);
+  background: linear-gradient(180deg, rgba(13, 55, 100, 0.78), rgba(8, 36, 71, 0.88));
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.nx-co-app-header__workspace-select:focus-visible {
+  outline: none;
+  border-color: #00cfef;
+  box-shadow: 0 0 0 1px rgba(0, 207, 239, 0.2);
+}
+
+.nx-co-app-header__workspace-select option {
+  color: #0a2d55;
+  background: #ffffff;
 }
 
 /* Header search — dark blue glass pill (same field renderer as the toolbar, header placement). */

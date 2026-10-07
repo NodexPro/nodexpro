@@ -885,6 +885,12 @@
   user-select: none;
 }
 
+/* Configured but not due this period — square visible, non-interactive. */
+.nx-co-sheet__material-slot.is-inactive,
+.nx-co-sheet__itd-slot.is-inactive {
+  opacity: 0.45;
+}
+
 /* Integrated spreadsheet date control (annual / capital operational targets). */
 .nx-co-sheet__date-field {
   position: relative;

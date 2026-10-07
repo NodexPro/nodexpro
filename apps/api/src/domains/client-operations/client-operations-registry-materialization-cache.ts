@@ -9,8 +9,11 @@
  *
  * Safety contract:
  * - Auth / org / RBAC middleware runs on EVERY request before any cache lookup; auth success is
- *   never cached. The cache key is scoped by organization + every dimension that changes the
- *   pre-search rows (period, default period, editor capability, normalized business filters).
+ *   never cached. The cache key is scoped by organization + client access scope + every dimension
+ *   that changes the pre-search rows (period, default period, editor capability, normalized
+ *   business filters).
+ * - Access scope (OFFICE vs ASSIGNED:<userId>) is resolved from authenticated membership BEFORE
+ *   cache lookup — Staff can never select or reuse an OFFICE cache entry.
  * - The key MUST NOT include `q`, `sort_by`, `sort_dir` (post-materialization concerns).
  * - Commands never read this cache (they always rebuild) and invalidate the org scope so a later
  *   GET cannot serve pre-mutation rows.
@@ -22,13 +25,15 @@ import type { ClientOperationsRegistryFiltersActive } from './client-operations-
 import type { ClientOperationsRegistryPreSearchMaterialization } from './client-operations.service.js';
 
 export const CLIENT_OPERATIONS_REGISTRY_MATERIALIZATION_TTL_MS = 10_000;
-/** (org × period × filters × capability) tuples alive at once; oldest evicted first. */
+/** (org × access-scope × period × filters × capability) tuples alive at once; oldest evicted first. */
 export const CLIENT_OPERATIONS_REGISTRY_MATERIALIZATION_MAX_ENTRIES = 128;
 
 const KEY_SEP = '\u001f';
 
 export type ClientOperationsRegistryMaterializationCacheKeyInput = {
   organizationId: string;
+  /** Canonical access scope identity from resolveOrganizationClientAccessScope (never FE-supplied). */
+  accessScopeKey: string;
   selectedPeriodKey: string;
   defaultPeriodKey: string;
   canEditRegistry: boolean;
@@ -43,9 +48,9 @@ export function clientOperationsRegistryMaterializationCacheOrgPrefix(organizati
 
 /**
  * Every dimension that changes PRE-SEARCH rows, in a fixed order. Never `q` / sort.
- * Derived from `listClientOperationsRegistry` inputs: org scoping, selected + default period
- * (current-vs-historical branch), `client_operations.edit` (editable cells / setup blocks),
- * and the six business filters (early facet filtering).
+ * Derived from `listClientOperationsRegistry` inputs: org scoping, access scope, selected +
+ * default period (current-vs-historical branch), `client_operations.edit` (editable cells /
+ * setup blocks), and the six business filters (early facet filtering).
  */
 export function buildClientOperationsRegistryMaterializationCacheKey(
   input: ClientOperationsRegistryMaterializationCacheKeyInput,
@@ -53,7 +58,8 @@ export function buildClientOperationsRegistryMaterializationCacheKey(
   const f = input.filters;
   return [
     input.organizationId,
-    'v1',
+    'v2',
+    input.accessScopeKey,
     input.selectedPeriodKey,
     input.defaultPeriodKey,
     input.canEditRegistry ? 'edit' : 'view',

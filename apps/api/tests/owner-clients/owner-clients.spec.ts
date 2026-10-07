@@ -193,6 +193,7 @@ test('detail route returns modal-ready aggregate shape', () => {
     overview: { organization_display: 'Acme' },
     modules: [{ module_key: 'client-operations', module_label: 'Client Operations' }],
     billing: { mrr_label: '99 ILS', subscriptions: [] },
+    staff_seats: { seats_used_label: '0 / 0' },
     users: [{ email: 'owner@test.local' }],
     usage: { time_spent_label: NOT_MEASURED_LABEL },
     health: { health_status_label: 'Healthy', issues: [] },
@@ -335,11 +336,14 @@ test('P11.6B UI: actions render descriptor kinds modal, mailto, disabled', () =>
   assert.match(clientsSectionSource, /disabled=\{!action\.enabled\}/);
 });
 
-test('P11.6B UI: no owner commands are called from Clients UI', () => {
+test('P11.6B UI: Clients list has no owner commands; detail modal only seat quantity command', () => {
   assert.doesNotMatch(clientsSectionSource, /OWNER\.command/);
-  assert.doesNotMatch(clientsModalSource, /OWNER\.command/);
   assert.doesNotMatch(clientsSectionSource, /onSubmit/);
   assert.doesNotMatch(legalControlUiSource, /OWNER\.clients/);
+  // Stage 2: Platform Owner may adjust purchased staff seats from client detail billing.
+  assert.match(clientsModalSource, /OWNER\.command/);
+  assert.match(clientsModalSource, /set_organization_staff_seat_quantity/);
+  assert.doesNotMatch(clientsModalSource, /activate_org_module_access|create_pricing_adjustment|update_module_price/);
 });
 
 test('P11.6 fix: list returns exactly one row per organization', () => {
@@ -441,6 +445,7 @@ test('P11.6 fix: detail modal still contains full module list', () => {
       { module_key: 'client-operations', module_label: 'Client Operations', entitlement_status: 'trial' },
     ],
     billing: { subscriptions: [] },
+    staff_seats: { seats_used_label: '0 / 3', purchased_additional_staff_seats: 3 },
     users: [],
     usage: {},
     health: { issues: [] },

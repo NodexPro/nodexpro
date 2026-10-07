@@ -158,13 +158,24 @@ export async function copyClientOperationsUserPeriodData(input: {
     targetRows: targetCustom,
     eligibleColumnIds,
   });
+  // Staff/Viewer: only copy custom values for authorized clients (manual rows stay org-wide).
+  const { resolveOrganizationClientAccessScopeFromContext, filterAuthorizedClientIds } = await import(
+    './organization-client-access.js'
+  );
+  const accessScope = await resolveOrganizationClientAccessScopeFromContext(input.ctx);
+  const authorizedCustomPlan =
+    accessScope.kind === 'OFFICE'
+      ? customPlan
+      : customPlan.filter((row) =>
+          filterAuthorizedClientIds(accessScope, [row.client_id]).includes(row.client_id),
+        );
   const manualPlan = planManualRowPeriodValueCopies({
     mode,
     sourceRows: sourceManual,
     targetRows: targetManual,
   });
 
-  const columnIdsNeedingVisibility = new Set(customPlan.map((row) => row.column_id));
+  const columnIdsNeedingVisibility = new Set(authorizedCustomPlan.map((row) => row.column_id));
   for (const columnId of columnIdsNeedingVisibility) {
     await ensureVisibilityRowForPeriod({
       organizationId: input.organizationId,
@@ -182,7 +193,7 @@ export async function copyClientOperationsUserPeriodData(input: {
     });
   }
 
-  for (const row of customPlan) {
+  for (const row of authorizedCustomPlan) {
     await upsertPeriodCustomColumnValueRow({
       organizationId: input.organizationId,
       clientId: row.client_id,
@@ -203,7 +214,7 @@ export async function copyClientOperationsUserPeriodData(input: {
     });
   }
 
-  if (customPlan.length > 0 || columnIdsNeedingVisibility.size > 0) {
+  if (authorizedCustomPlan.length > 0 || columnIdsNeedingVisibility.size > 0) {
     await markUserColumnsPeriodSetup({
       organizationId: input.organizationId,
       operationalPeriodKey: targetPeriod,
@@ -215,7 +226,7 @@ export async function copyClientOperationsUserPeriodData(input: {
     source_period: sourcePeriod,
     target_period: targetPeriod,
     mode,
-    custom_values_copied_count: customPlan.length,
+    custom_values_copied_count: authorizedCustomPlan.length,
     manual_values_copied_count: manualPlan.length,
   };
 

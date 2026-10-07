@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { apiFetch, apiJson } from '../../api/client';
-import { useClientOperationsHeaderSearchSlot } from './ClientOperationsHeaderSearchSlot';
+import { useClientOperationsHeaderSearchSlot, useClientOperationsHeaderWorkspaceSlot } from './ClientOperationsHeaderSearchSlot';
+import { encodeClientOperationsWorkspaceOptionValue } from '../../lib/client-operations-workspace-url.pure';
 import {
   moduleClientOperationsCase,
   moduleClientOperationsClientQuickProfile,
@@ -113,10 +114,18 @@ import {
 } from '../ClientWorkspacePanel';
 import '../../styles/nx-modal.css';
 import '../../styles/nx-client-operations-spreadsheet.css';
+import '../../styles/nx-client-operations-todo.css';
 import { ClientOperationsPeriodSheetTabs } from './ClientOperationsPeriodSheetTabs';
+import { ClientOperationsTodoBoardModal } from './ClientOperationsTodoBoardModal';
 
 export type ClientOperationsMaterialCell = {
+  /** Obligation exists in tax settings (independent of filing month). */
+  configured?: boolean;
+  /** Due / interactive in the selected period. */
+  due?: boolean;
+  /** Interactive this period (= configured && due). */
   applicable: boolean;
+  editable?: boolean;
   completed: boolean | null;
   value: boolean | null;
 };
@@ -145,7 +154,10 @@ export type ClientOperationsCapitalDeclarationCell = {
 };
 
 export type ClientOperationsNiDeductionsFormItem = {
+  configured?: boolean;
+  due?: boolean;
   applicable: boolean;
+  editable?: boolean;
   completed: boolean | null;
 };
 
@@ -154,6 +166,8 @@ export type ClientOperationsNiDeductions126Item = ClientOperationsNiDeductionsFo
 };
 
 export type ClientOperationsNiDeductionsCell = {
+  configured?: boolean;
+  due?: boolean;
   applicable: boolean;
   items: {
     '102': ClientOperationsNiDeductionsFormItem;
@@ -461,6 +475,27 @@ export type ClientOperationsRegistryViewProps = {
     any_business_filter_active: boolean;
     clear_action: { id: string; label_he: string; available: boolean };
   };
+  /** Stage 4 — backend-owned workspace projection (selector from allowed_scopes only). */
+  workspace?: {
+    scope_kind: 'OFFICE' | 'MY' | 'STAFF';
+    viewer_user_id: string;
+    workspace_subject_user_id: string | null;
+    access_scope_key: string;
+    label_he: string;
+    allowed_scopes: Array<{
+      scope_kind: 'OFFICE' | 'MY' | 'STAFF';
+      subject_user_id: string | null;
+      label_he: string;
+      role_code: string | null;
+    }>;
+    available_workspace_subjects: Array<{
+      user_id: string;
+      display_name: string;
+      role_code: string;
+    }>;
+    selector_visible: boolean;
+  } | null;
+  onWorkspaceChange?: (optionValue: string) => void;
   query?: {
     q: string | null;
     sort_by: string | null;
@@ -472,6 +507,8 @@ export type ClientOperationsRegistryViewProps = {
     filter_reporting_type?: string | null;
     filter_business_type?: string | null;
     filter_handler?: string | null;
+    workspace_scope?: string | null;
+    workspace_subject_user_id?: string | null;
   };
   onQueryChange?: (
     next: {
@@ -526,6 +563,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     columnsNeedingLegacyBaseline: _columnsNeedingLegacyBaseline = [],
     manualStatusPaintModes = [],
     filters,
+    workspace = null,
+    onWorkspaceChange,
     query,
     onQueryChange,
     onRegistryCommand,
@@ -542,6 +581,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const columns = columnsProp ?? [];
   /** Route header centre slot (CO route). null → search renders inline in the toolbar. */
   const headerSearchSlot = useClientOperationsHeaderSearchSlot();
+  const headerWorkspaceSlot = useClientOperationsHeaderWorkspaceSlot();
+  const [todoBoardOpen, setTodoBoardOpen] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
@@ -3166,32 +3207,42 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       return (
         <div className="nx-co-sheet__material" role="group" aria-label={`חומר — ${clientLabel}`}>
           {streams.map((stream) => {
-            const applicable = stream.cell?.applicable ?? false;
-            if (!applicable) {
+            // Backend owns configured/due. Not configured → —. Configured+not-due → disabled square.
+            const configured = Boolean(
+              stream.cell?.configured ?? stream.cell?.applicable,
+            );
+            if (!configured) {
               return (
                 <span
                   key={stream.key}
                   className="nx-co-sheet__material-slot is-na"
-                  title={`${stream.labelHe} לא רלוונטי לתקופה זו`}
-                  aria-label={`חומר ${stream.labelHe} — ${clientLabel} — ${periodLabel} — לא רלוונטי`}
+                  title={`${stream.labelHe} לא מוגדר`}
+                  aria-label={`חומר ${stream.labelHe} — ${clientLabel} — ${periodLabel} — לא מוגדר`}
                 >
                   —
                 </span>
               );
             }
+            const active = Boolean(
+              stream.cell?.due && stream.cell?.applicable && (stream.cell?.editable ?? true),
+            );
             const checked = Boolean(
               stream.key === 'vat'
                 ? stream.cell?.value ?? r.material_brought_flag
                 : stream.cell?.value,
             );
             return (
-              <label key={stream.key} className="nx-co-sheet__material-slot">
+              <label
+                key={stream.key}
+                className={`nx-co-sheet__material-slot${active ? '' : ' is-inactive'}`}
+                title={active ? undefined : `${stream.labelHe} מוגדר — אין דיווח בחודש זה`}
+              >
                 <input
                   type="checkbox"
                   className="nx-co-sheet__checkbox"
                   checked={checked}
-                  disabled={!canEdit || !col.editable || !onRegistryCommand}
-                  aria-label={`חומר ${stream.labelHe} — ${clientLabel} — ${periodLabel}`}
+                  disabled={!active || !canEdit || !col.editable || !onRegistryCommand}
+                  aria-label={`חומר ${stream.labelHe} — ${clientLabel} — ${periodLabel}${active ? '' : ' — לא נדרש החודש'}`}
                   onChange={() => {
                     if (statusPaintMode) return;
                     void toggleMaterialStream(r, stream.key);
@@ -3217,9 +3268,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       const periodLabel = query?.operational_period_key ?? '';
       const clientLabel = r.client_name ?? r.client_id;
       const niCell = r.national_insurance_deductions_cell;
-      if (!niCell?.applicable) {
+      const niConfigured = Boolean(niCell?.configured ?? niCell?.applicable);
+      if (!niConfigured) {
         return (
-          <span className="nx-co-sheet__na" title="לא רלוונטי לתקופה זו" aria-label={`${col.label} לא רלוונטי`}>
+          <span className="nx-co-sheet__na" title="אין תיק ניכויים" aria-label={`${col.label} —`}>
             —
           </span>
         );
@@ -3232,28 +3284,40 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       return (
         <div className="nx-co-sheet__material" role="group" aria-label={`ב״ל ניכויים — ${clientLabel}`}>
           {forms.map((form) => {
-            const item = niCell.items[form.key];
-            if (!item?.applicable) {
+            const item = niCell!.items[form.key];
+            const itemConfigured = Boolean(item?.configured ?? item?.applicable ?? niConfigured);
+            if (!itemConfigured) {
               return (
                 <span
                   key={form.key}
                   className="nx-co-sheet__material-slot is-na"
-                  title={`${form.labelHe} לא רלוונטי`}
-                  aria-label={`ב״ל ניכויים ${form.labelHe} — ${clientLabel} — ${periodLabel} — לא רלוונטי`}
+                  title={`${form.labelHe} לא מוגדר`}
+                  aria-label={`ב״ל ניכויים ${form.labelHe} — ${clientLabel} — ${periodLabel} — לא מוגדר`}
                 >
                   —
                 </span>
               );
             }
-            const checked = Boolean(item.completed);
+            const active = Boolean(item?.due && item?.applicable && (item?.editable ?? true));
+            const checked = Boolean(item?.completed);
             return (
-              <label key={form.key} className="nx-co-sheet__material-slot">
+              <label
+                key={form.key}
+                className={`nx-co-sheet__material-slot${active ? '' : ' is-inactive'}`}
+                title={active ? undefined : `${form.labelHe} מוגדר — אין דיווח בחודש זה`}
+              >
                 <input
                   type="checkbox"
                   className="nx-co-sheet__checkbox"
                   checked={checked}
-                  disabled={!canEdit || !col.editable || !onRegistryCommand || (form.key === '126' && checked)}
-                  aria-label={`ב״ל ניכויים ${form.labelHe} — ${clientLabel} — ${periodLabel}`}
+                  disabled={
+                    !active ||
+                    !canEdit ||
+                    !col.editable ||
+                    !onRegistryCommand ||
+                    (form.key === '126' && checked)
+                  }
+                  aria-label={`ב״ל ניכויים ${form.labelHe} — ${clientLabel} — ${periodLabel}${active ? '' : ' — לא נדרש החודש'}`}
                   onChange={() => {
                     if (statusPaintMode) return;
                     void toggleNiDeductionsItem(r, form.key);
@@ -3839,12 +3903,65 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   );
 
   if (isSpreadsheet) {
+    const workspaceSelectorVisible =
+      Boolean(workspace?.selector_visible) && (workspace?.allowed_scopes?.length ?? 0) > 1;
+    const workspaceSelectValue = workspace
+      ? encodeClientOperationsWorkspaceOptionValue({
+          scope_kind: workspace.scope_kind,
+          subject_user_id: workspace.workspace_subject_user_id,
+        })
+      : 'OFFICE';
+    const workspaceSelector = workspaceSelectorVisible ? (
+      <div className="nx-co-app-header__workspace" data-testid="client-operations-workspace-selector">
+        <label className="nx-co-sheet__sr-only" htmlFor="client-operations-workspace-select">
+          מרחב עבודה
+        </label>
+        <select
+          id="client-operations-workspace-select"
+          className="nx-co-app-header__workspace-select"
+          value={workspaceSelectValue}
+          disabled={loading || !onWorkspaceChange}
+          onChange={(event) => onWorkspaceChange?.(event.target.value)}
+          aria-label="מרחב עבודה"
+        >
+          {(workspace?.allowed_scopes ?? []).map((opt) => {
+            const value = encodeClientOperationsWorkspaceOptionValue({
+              scope_kind: opt.scope_kind,
+              subject_user_id: opt.subject_user_id,
+            });
+            return (
+              <option key={value} value={value}>
+                {opt.label_he}
+              </option>
+            );
+          })}
+        </select>
+      </div>
+    ) : null;
+
+    const headerEndCluster = (
+      <div className="nx-co-app-header__end-cluster">
+        <button
+          type="button"
+          className="nx-co-app-header__todo-btn"
+          data-testid="client-operations-todo-list-button"
+          onClick={() => setTodoBoardOpen(true)}
+        >
+          ToDo List
+        </button>
+        {workspaceSelector}
+      </div>
+    );
+
     return (
       <div
         className={`nx-co-sheet${fullscreenOpen ? ' nx-co-sheet--app-fullscreen' : ''}`}
         data-testid="client-operations-spreadsheet"
         data-fullscreen={fullscreenOpen ? 'true' : 'false'}
       >
+        {headerWorkspaceSlot
+          ? createPortal(headerEndCluster, headerWorkspaceSlot)
+          : headerEndCluster}
         {/* Inner sheet title removed — module title renders once in the route header. */}
         {renderSpreadsheetToolbar()}
         {renderFilterBar()}
@@ -4126,6 +4243,16 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           </div>
         ) : null}
         {modals}
+        <ClientOperationsTodoBoardModal
+          open={todoBoardOpen}
+          onClose={() => setTodoBoardOpen(false)}
+          workspaceQuery={{
+            workspace_scope: query?.workspace_scope ?? null,
+            workspace_subject_user_id: query?.workspace_subject_user_id ?? null,
+          }}
+          workspaceLabelHe={workspace?.label_he ?? null}
+          canEdit={canEdit}
+        />
       </div>
     );
   }

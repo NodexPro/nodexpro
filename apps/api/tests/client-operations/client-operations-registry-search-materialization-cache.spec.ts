@@ -58,6 +58,7 @@ const noFilters = () => normalizeClientOperationsRegistryBusinessFilterQuery({})
 
 const baseKeyInput = (overrides: Partial<Parameters<typeof buildClientOperationsRegistryMaterializationCacheKey>[0]> = {}) => ({
   organizationId: 'org-A',
+  accessScopeKey: 'OFFICE',
   selectedPeriodKey: '2026-09',
   defaultPeriodKey: '2026-09',
   canEditRegistry: true,
@@ -90,6 +91,7 @@ test('key: org / period / default period / capability / each business filter cha
   const base = buildClientOperationsRegistryMaterializationCacheKey(baseKeyInput());
   const variants = [
     baseKeyInput({ organizationId: 'org-B' }),
+    baseKeyInput({ accessScopeKey: 'ASSIGNED:user-A' }),
     baseKeyInput({ selectedPeriodKey: '2026-08' }),
     baseKeyInput({ defaultPeriodKey: '2026-10' }),
     baseKeyInput({ canEditRegistry: false }),
@@ -103,6 +105,20 @@ test('key: org / period / default period / capability / each business filter cha
   const keys = variants.map((v) => buildClientOperationsRegistryMaterializationCacheKey(v));
   for (const k of keys) assert.notEqual(k, base);
   assert.equal(new Set(keys).size, keys.length, 'each dimension yields a distinct key');
+});
+
+test('key: Staff ASSIGNED scope never equals OFFICE for same org/period/filters', () => {
+  const office = buildClientOperationsRegistryMaterializationCacheKey(baseKeyInput({ accessScopeKey: 'OFFICE' }));
+  const staffA = buildClientOperationsRegistryMaterializationCacheKey(
+    baseKeyInput({ accessScopeKey: 'ASSIGNED:staff-a' }),
+  );
+  const staffB = buildClientOperationsRegistryMaterializationCacheKey(
+    baseKeyInput({ accessScopeKey: 'ASSIGNED:staff-b' }),
+  );
+  assert.notEqual(office, staffA);
+  assert.notEqual(staffA, staffB);
+  assert.match(office, /\u001fOFFICE\u001f/);
+  assert.match(staffA, /\u001fASSIGNED:staff-a\u001f/);
 });
 
 test('key: org prefix is a strict scope (no cross-tenant prefix collision)', () => {
@@ -408,16 +424,24 @@ test('service: tenant + RBAC + period + filters resolved BEFORE cache lookup; q 
     return m!.index;
   };
   const org = idx(/const orgId = assertOrg\(ctx\)/);
+  const accessScope = idx(/resolveClientOperationsWorkspaceScopeFromContext\(ctx/);
   const period = idx(/resolveRegistryOperationalPeriodKey\(query\.operational_period_key\)/);
   const rbac = idx(/client_operations\.edit/);
   const filters = idx(/normalizeClientOperationsRegistryBusinessFilterQuery\(query\)/);
   const cacheLookup = idx(/clientOperationsRegistryMaterializationCache\.getOrBuild\(/);
   const search = idx(/applyRegistryQueryToRows\(materialization\.built_rows, \{ q, sort_by, sort_dir \}\)/);
   const manual = idx(/materializeClientOperationsManualRows\(\{[\s\S]*?searchQ: q/);
-  assert.ok(org < cacheLookup && period < cacheLookup && rbac < cacheLookup && filters < cacheLookup);
+  assert.ok(
+    org < cacheLookup &&
+      accessScope < cacheLookup &&
+      period < cacheLookup &&
+      rbac < cacheLookup &&
+      filters < cacheLookup,
+  );
   assert.ok(cacheLookup < search && cacheLookup < manual);
   // Same aggregate contract (query echo + allowed_actions per request, never cached).
-  assert.match(list, /query: registryQueryEcho\(query, selectedPeriodKey\)/);
+  assert.match(list, /query:\s*registryQueryEcho\(/);
+  assert.match(list, /selectedPeriodKey/);
   assert.match(list, /allowed_actions: buildRegistryAllowedActions\(ctx\)/);
   assert.match(list, /materialization_cache_hit/);
 });
@@ -425,7 +449,7 @@ test('service: tenant + RBAC + period + filters resolved BEFORE cache lookup; q 
 test('service: cache key derives from every pre-search dimension; opt-in flag defaults to bypass', () => {
   assert.match(
     serviceSource,
-    /buildClientOperationsRegistryMaterializationCacheKey\(\{\s*organizationId: orgId,\s*selectedPeriodKey,\s*defaultPeriodKey,\s*canEditRegistry,\s*filters: filterActive,\s*\}\)/,
+    /buildClientOperationsRegistryMaterializationCacheKey\(\{\s*organizationId: orgId,\s*accessScopeKey: materializationAccess\.access_scope_key,\s*selectedPeriodKey,\s*defaultPeriodKey,\s*canEditRegistry,\s*filters: filterActive,\s*\}\)/,
   );
   assert.match(serviceSource, /if \(options\?\.materializationCache === true\)/);
   assert.match(serviceSource, /materializationSource = 'bypass'/);

@@ -54,10 +54,20 @@ test('1b title sits on the RIGHT (RTL header, title at inline-start)', () => {
 test('2 duplicate inner title תפעול לקוחות is not rendered in the sheet', () => {
   assert.doesNotMatch(viewSource, /<h1 className="nx-co-sheet__title">/);
   assert.doesNotMatch(viewSource, /\{titleHe \?\? 'תפעול לקוחות'\}/);
-  // Toolbar is now the first child of the sheet root — no empty title gap.
+  // Sheet root: fullscreen marker, then optional Stage 4/5B header-end cluster
+  // (workspace selector + ToDo) — portaled when slot exists — then toolbar.
+  assert.match(viewSource, /data-fullscreen=\{fullscreenOpen \? 'true' : 'false'\}/);
   assert.match(
     viewSource,
-    /data-fullscreen=\{fullscreenOpen \? 'true' : 'false'\}\s*>\s*\{\/\*[^*]*\*\/\}\s*\{renderSpreadsheetToolbar\(\)\}/,
+    /headerWorkspaceSlot\s*\?\s*createPortal\(headerEndCluster, headerWorkspaceSlot\)\s*:\s*headerEndCluster/,
+  );
+  assert.match(viewSource, /\{renderSpreadsheetToolbar\(\)\}/);
+  const fullscreenIdx = viewSource.indexOf("data-fullscreen={fullscreenOpen ? 'true' : 'false'}");
+  const portalIdx = viewSource.indexOf('createPortal(headerEndCluster, headerWorkspaceSlot)');
+  const toolbarIdx = viewSource.indexOf('{renderSpreadsheetToolbar()}');
+  assert.ok(
+    fullscreenIdx > 0 && portalIdx > fullscreenIdx && toolbarIdx > portalIdx,
+    'fullscreen → header cluster → toolbar order',
   );
   // Print HTML keeps its own document heading (separate print renderer, unchanged).
   assert.match(viewSource, /<h1>תפעול לקוחות — \$\{periodHeading\}<\/h1>/);
@@ -65,16 +75,19 @@ test('2 duplicate inner title תפעול לקוחות is not rendered in the she
 
 test('3 CO header hides duplicated account / language chrome', () => {
   assert.doesNotMatch(coHeaderSource, /topBar\.language/);
-  assert.doesNotMatch(coHeaderSource, /<select/);
+  // CO header has workspace <select> (Stage 4) — not account/language chrome.
   assert.doesNotMatch(coHeaderSource, /onSelectOrg|onSignOut|user\.fullName|user\.email|activeOrg/);
   assert.doesNotMatch(coHeaderSource, /useI18n/);
   // No fake chrome either.
   assert.doesNotMatch(coHeaderSource, /Add Client|הוסף לקוח|notification|התראות|help|עזרה|settings|הגדרות/i);
-  // Layout never renders the generic AppHeader on the CO route.
+  // Layout: CO header gets search + workspace slots; never generic AppHeader on CO route.
+  assert.match(coHeaderSource, /workspaceSlotRef/);
   assert.match(
     layoutSource,
-    /header = isClientOperationsModule \? \(\s*<ClientOperationsAppHeader searchSlotRef=\{coHeaderSearchSlotRef\} \/>\s*\) : \(\s*<AppHeader/,
+    /<ClientOperationsAppHeader\s+searchSlotRef=\{coHeaderSearchSlotRef\}\s+workspaceSlotRef=\{coHeaderWorkspaceSlotRef\}/,
   );
+  assert.match(layoutSource, /isClientOperationsModule \? \(\s*<ClientOperationsAppHeader/);
+  assert.match(layoutSource, /ClientOperationsHeaderWorkspaceSlotContext\.Provider/);
 });
 
 test('4 search field renderer exists exactly once (single renderSearchField)', () => {

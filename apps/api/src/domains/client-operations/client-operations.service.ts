@@ -81,17 +81,25 @@ import {
   clientExistsInOperationalPeriod,
   mapOperationalPeriodKeyToPayrollPeriodKey,
   resolveDefaultOperationalPeriodKey,
+  isIncomeTaxFrequencyApplicableForOperationalPeriod,
+  resolveIncomeTaxAdvanceConfigured,
   resolveIncomeTaxAdvanceMaterialForPeriod,
   resolveIncomeTaxDeductionsApplicability,
   resolveIncomeTaxDeductionsConfigured,
   resolveMaterialBroughtForPeriod,
+  resolveNationalInsuranceApplicability,
+  resolveNationalInsuranceDeductionsApplicability,
   resolvePayrollApplicabilityFromDeductionsFiles,
   resolvePayrollApplicabilityFromFrozenSnapshot,
   resolvePayrollMaterialForPeriod,
+  resolvePayrollObligationConfigured,
+  resolveVatApplicabilityForOperationalPeriod,
+  resolveVatObligationConfigured,
   shouldIncludeArchivedClientInOperationalPeriodRegistry,
   shouldEmitOperationalPeriodRegistryRow,
   type IncomeTaxDeductionsRegistryCell,
   type MaterialCells,
+  type ObligationCheckboxCell,
 } from './client-operations-operational-period.pure.js';
 import {
   formatOperationalDateDisplayHe,
@@ -130,6 +138,23 @@ import {
 } from './client-operations-registry-filters.pure.js';
 import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-metrics.js';
 import {
+  assertUserIsActiveHandlerEligible,
+  listActiveHandlerEligibleMembers,
+  loadMemberDisplayNamesByUserIds,
+} from '../memberships/organization-membership-access.js';
+import {
+  assertCanAccessClientFromContext,
+  canManageClientHandlerAssignment,
+  filterAuthorizedClientIds,
+  resolveOrganizationClientAccessScopeFromContext,
+  type OrganizationClientAccessScope,
+} from './organization-client-access.js';
+import {
+  resolveClientOperationsWorkspaceScopeFromContext,
+  workspaceAggregateContract,
+} from './client-operations-workspace.service.js';
+import { invalidateClientOperationsRegistryMaterializationCache } from './client-operations-registry-materialization-cache.js';
+import {
   buildNiDeductionsRegistryCellForClient,
   loadEarliestNiDeductionsApplicablePeriodKeysForClients,
   loadNiDeductions126CycleFactsForClients,
@@ -153,7 +178,7 @@ export type ClientOperationsRegistryRow = {
     national_insurance_deductions_applicable: boolean;
     row_visible: boolean;
   };
-  material_brought_cell?: { applicable: boolean; completed: boolean | null; value: boolean | null };
+  material_brought_cell?: ObligationCheckboxCell;
   material_cells?: MaterialCells;
   annual_report_cell?: AnnualReportOperationalDateCell;
   capital_declaration_cell?: CapitalDeclarationOperationalDateCell;
@@ -246,6 +271,29 @@ export type ClientOperationsRegistryResponse = {
   }>;
   /** Backend-owned filter bar contract (definitions + active + options). */
   filters?: ClientOperationsRegistryFiltersContract;
+  /**
+   * Stage 4 workspace projection metadata (viewer ≠ subject).
+   * Frontend renders selector from allowed_scopes only — no role auth.
+   */
+  workspace?: {
+    scope_kind: 'OFFICE' | 'MY' | 'STAFF';
+    viewer_user_id: string;
+    workspace_subject_user_id: string | null;
+    access_scope_key: string;
+    label_he: string;
+    allowed_scopes: Array<{
+      scope_kind: 'OFFICE' | 'MY' | 'STAFF';
+      subject_user_id: string | null;
+      label_he: string;
+      role_code: string | null;
+    }>;
+    available_workspace_subjects: Array<{
+      user_id: string;
+      display_name: string;
+      role_code: string;
+    }>;
+    selector_visible: boolean;
+  };
   query: {
     q: string | null;
     sort_by: string | null;
@@ -257,6 +305,8 @@ export type ClientOperationsRegistryResponse = {
     filter_reporting_type: string | null;
     filter_business_type: string | null;
     filter_handler: string | null;
+    workspace_scope: string | null;
+    workspace_subject_user_id: string | null;
   };
   allowed_actions: string[];
 };
@@ -443,65 +493,19 @@ export type ClientOperationsRegistryReadOptions = {
 };
 
 async function loadHandlerDisplayNamesByUserIds(
-  orgId: string,
+  _orgId: string,
   userIds: string[],
 ): Promise<Map<string, string>> {
-  const map = new Map<string, string>();
-  const unique = [...new Set(userIds.filter(Boolean))];
-  if (!unique.length) return map;
-  const { data, error } = await supabaseAdmin
-    .from('organization_users')
-    .select('user_id, users!organization_users_user_id_fkey(full_name, email)')
-    .eq('organization_id', orgId)
-    .in('user_id', unique)
-    .eq('membership_status', 'active')
-    .not('invited_by', 'is', null);
-  if (error) {
-    throw new AppError(500, error.message ?? 'organization_users (handlers) query failed', 'SUPABASE_ERROR');
-  }
-  type HandlerUser = { full_name: string | null; email: string | null };
-  type HandlerRow = { user_id: string; users: HandlerUser | HandlerUser[] | null };
-  for (const row of (data ?? []) as unknown as HandlerRow[]) {
-    const raw = row.users;
-    const u = Array.isArray(raw) ? raw[0] : raw;
-    if (!u || !row.user_id) continue;
-    const display = u.full_name?.trim() ? u.full_name.trim() : (u.email ?? '');
-    if (display) map.set(row.user_id, display);
-  }
-  return map;
+  // Attribution display for current/historical handlers — includes revoked users.
+  return loadMemberDisplayNamesByUserIds(userIds);
 }
 
 /** Org handler options for the מטפל בתיק filter dropdown (stable user_id + display_name). */
 async function loadOrgHandlerFilterOptions(
   orgId: string,
 ): Promise<Array<{ user_id: string; display_name: string }>> {
-  const { data, error } = await supabaseAdmin
-    .from('organization_users')
-    .select('user_id, users!organization_users_user_id_fkey(id, email, full_name)')
-    .eq('organization_id', orgId)
-    .eq('membership_status', 'active')
-    .not('invited_by', 'is', null);
-  if (error) {
-    throw new AppError(
-      500,
-      error.message ?? 'organization_users (handler options) query failed',
-      'SUPABASE_ERROR',
-    );
-  }
-  type HandlerOptUser = { id: string; email: string | null; full_name: string | null };
-  type HandlerOptRow = { user_id: string; users: HandlerOptUser | HandlerOptUser[] | null };
-  return ((data ?? []) as unknown as HandlerOptRow[])
-    .map((r) => {
-      const uRaw = r.users;
-      const u = Array.isArray(uRaw) ? uRaw[0] : uRaw;
-      if (!u || !r.user_id) return null;
-      const email = u.email ?? '';
-      const display_name = u.full_name?.trim() ? u.full_name.trim() : email;
-      if (!r.user_id || !display_name) return null;
-      return { user_id: r.user_id, display_name };
-    })
-    .filter((x): x is { user_id: string; display_name: string } => x != null)
-    .sort((a, b) => a.display_name.localeCompare(b.display_name, 'he'));
+  const members = await listActiveHandlerEligibleMembers(orgId);
+  return members.map((m) => ({ user_id: m.user_id, display_name: m.display_name }));
 }
 
 function registryQueryEcho(
@@ -524,6 +528,8 @@ function registryQueryEcho(
     filter_reporting_type: active.reporting_type === 'all' ? null : active.reporting_type,
     filter_business_type: active.business_type === 'all' ? null : active.business_type,
     filter_handler: active.handler === 'all' ? null : active.handler,
+    workspace_scope: query.workspace_scope?.trim() || null,
+    workspace_subject_user_id: query.workspace_subject_user_id?.trim() || null,
   };
 }
 
@@ -534,8 +540,12 @@ export async function listClientOperationsRegistry(
 ): Promise<ClientOperationsRegistryResponse> {
   const aggregateStartMs = Date.now();
 
-  // Tenant + RBAC are resolved on EVERY request before any cache lookup (auth is never cached).
+  // Tenant + RBAC + Stage 3 ACL + Stage 4 workspace BEFORE any cache lookup.
   const orgId = assertOrg(ctx);
+  const { workspace, materializationAccess } = await resolveClientOperationsWorkspaceScopeFromContext(ctx, {
+    workspace_scope: query.workspace_scope,
+    workspace_subject_user_id: query.workspace_subject_user_id,
+  });
   const selectedPeriodKey = resolveRegistryOperationalPeriodKey(query.operational_period_key);
   const defaultPeriodKey = resolveDefaultOperationalPeriodKey();
   const canEditRegistry =
@@ -544,9 +554,12 @@ export async function listClientOperationsRegistry(
   const anyBusinessFilter = isAnyClientOperationsBusinessFilterActive(filterActive);
 
   // PRE-SEARCH materialization: expensive; keyed by every dimension that changes base rows (never q/sort).
+  // accessScopeKey = workspace projection (OFFICE / ASSIGNED:<subject>). canEditRegistry separates
+  // viewer action capability so Owner editability cannot leak into Staff view-only caches.
   const buildMaterialization = () =>
     buildClientOperationsRegistryPreSearchMaterialization({
       orgId,
+      accessScope: materializationAccess,
       selectedPeriodKey,
       defaultPeriodKey,
       canEditRegistry,
@@ -558,6 +571,7 @@ export async function listClientOperationsRegistry(
   if (options?.materializationCache === true) {
     const cacheKey = buildClientOperationsRegistryMaterializationCacheKey({
       organizationId: orgId,
+      accessScopeKey: materializationAccess.access_scope_key,
       selectedPeriodKey,
       defaultPeriodKey,
       canEditRegistry,
@@ -607,7 +621,20 @@ export async function listClientOperationsRegistry(
     columns_needing_legacy_baseline: materialization.columns_needing_legacy_baseline,
     manual_status_paint_modes: manualStatusPaintModesForAggregate(),
     filters: materialization.filters,
-    query: registryQueryEcho(query, selectedPeriodKey),
+    workspace: workspaceAggregateContract(workspace),
+    query: registryQueryEcho(
+      {
+        ...query,
+        workspace_scope:
+          workspace.scope_kind === 'OFFICE'
+            ? 'office'
+            : workspace.scope_kind === 'MY'
+              ? 'my'
+              : 'staff',
+        workspace_subject_user_id: workspace.workspace_subject_user_id,
+      },
+      selectedPeriodKey,
+    ),
     allowed_actions: buildRegistryAllowedActions(ctx),
   };
   const reusedMaterialization =
@@ -635,14 +662,22 @@ export async function listClientOperationsRegistry(
  */
 async function buildClientOperationsRegistryPreSearchMaterialization(input: {
   orgId: string;
+  accessScope: OrganizationClientAccessScope;
   selectedPeriodKey: string;
   defaultPeriodKey: string;
   canEditRegistry: boolean;
   filterActive: ReturnType<typeof normalizeClientOperationsRegistryBusinessFilterQuery>;
   anyBusinessFilter: boolean;
 }): Promise<ClientOperationsRegistryPreSearchMaterialization> {
-  const { orgId, selectedPeriodKey, defaultPeriodKey, canEditRegistry, filterActive, anyBusinessFilter } =
-    input;
+  const {
+    orgId,
+    accessScope,
+    selectedPeriodKey,
+    defaultPeriodKey,
+    canEditRegistry,
+    filterActive,
+    anyBusinessFilter,
+  } = input;
   const stageTimings: Record<string, number> = {};
   const markStage = (name: string, startedMs: number) => {
     stageTimings[name] = Date.now() - startedMs;
@@ -671,7 +706,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     active: filterActive,
     handlerOptions: handlerFilterOptions,
   });
-  // Reuse org handler options for row display names — no second organization_users round-trip.
+  // Reuse org handler options for row display names — no second membership round-trip.
   const handlerDisplayByUserId = new Map(
     handlerFilterOptions.map((h) => [h.user_id, h.display_name] as const),
   );
@@ -685,6 +720,74 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
   };
 
   const setupMs = Date.now();
+  // Assigned-only scope: empty authorized set ⇒ empty client rows (no org-wide leak).
+  const assignedOnlyIds =
+    accessScope.kind === 'ASSIGNED_TO_SELF' ? (accessScope.authorized_client_ids ?? []) : null;
+  if (assignedOnlyIds && assignedOnlyIds.length === 0) {
+    const userColumnsPeriodExtras = await buildUserColumnsPeriodAggregateExtras({
+      organizationId: orgId,
+      columns: customColumnsExtended,
+      selectedPeriodKey,
+      availablePeriods,
+      canEdit: canEditRegistry,
+    });
+    const visibleCustomColumns = userColumnsPeriodExtras.visibleColumns;
+    const customColumnsCapability = buildCustomColumnsCapability({
+      current: customColumns.length,
+      canEdit: canEditRegistry,
+    });
+    const toolbarCapabilities = buildClientOperationsToolbarCapabilities({
+      can_create_custom_column: customColumnsCapability.can_create,
+      can_create_reason_he:
+        customColumnsCapability.current >= customColumnsCapability.max
+          ? 'הגעת למגבלת 10 עמודות מותאמות אישית'
+          : null,
+    });
+    const columns = buildRegistryColumnsForAggregate({
+      visibleCustomColumns,
+      canEdit: canEditRegistry,
+      visibilityByColumn: userColumnsPeriodExtras.visibilityByColumn,
+      columnsNeedingLegacyBaseline: userColumnsPeriodExtras.columns_needing_legacy_baseline,
+    });
+    const manualRowsPeriodSetup = await buildManualRowsPeriodSetupForAggregate({
+      organizationId: orgId,
+      operationalPeriodKey: selectedPeriodKey,
+      canEdit: canEditRegistry,
+    });
+    markStage('assigned_scope_empty', setupMs);
+    return {
+      period,
+      user_period_data_copy_source_periods: userPeriodDataCopySourcePeriods,
+      built_rows: [],
+      columns,
+      note_types: noteTypes,
+      filters: filtersContract,
+      toolbar_capabilities: toolbarCapabilities,
+      custom_columns_capability: customColumnsCapability,
+      user_column_period_setup: userColumnsPeriodExtras.user_column_period_setup,
+      manual_rows_period_setup: manualRowsPeriodSetup,
+      columns_needing_legacy_baseline: userColumnsPeriodExtras.columns_needing_legacy_baseline,
+      manual_row_values_by_slot_column: anyBusinessFilter
+        ? null
+        : await loadManualRowValuesBySlotColumnForRegistryAggregate({
+            organizationId: orgId,
+            operationalPeriodKey: selectedPeriodKey,
+          }),
+      stage_timings: stageTimings,
+      materialized_at_ms: Date.now(),
+    };
+  }
+
+  let activeClientsQuery = supabaseAdmin
+    .from('clients')
+    .select('id, display_name, tax_id, created_at, is_archived')
+    .eq('organization_id', orgId)
+    .eq('is_archived', false)
+    .order('display_name', { ascending: true });
+  if (assignedOnlyIds) {
+    activeClientsQuery = activeClientsQuery.in('id', assignedOnlyIds);
+  }
+
   const [
     userColumnsPeriodExtras,
     manualRowsPeriodSetup,
@@ -703,13 +806,9 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       operationalPeriodKey: selectedPeriodKey,
       canEdit: canEditRegistry,
     }),
-    supabaseAdmin
-      .from('clients')
-      .select('id, display_name, tax_id, created_at, is_archived')
-      .eq('organization_id', orgId)
-      .eq('is_archived', false)
-      .order('display_name', { ascending: true }),
-    // Manual rows are hidden under any business filter (they cannot match client facets).
+    activeClientsQuery,
+    // Manual rows are organization-wide free-text slots (not client records). Keep for all scopes;
+    // they cannot leak canonical client identity. Hidden under business filters as before.
     anyBusinessFilter
       ? Promise.resolve(null)
       : loadManualRowValuesBySlotColumnForRegistryAggregate({
@@ -763,10 +862,13 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
   if (!isCurrentOrDefaultPeriod) {
     // Historical period: keep live active clients, and re-include archived clients
     // that already have frozen membership (snapshot and/or material fact) for this period.
-    const membershipIds = await loadPeriodMembershipClientIds({
-      organizationId: orgId,
-      operationalPeriodKey: selectedPeriodKey,
-    });
+    const membershipIds = filterAuthorizedClientIds(
+      accessScope,
+      await loadPeriodMembershipClientIds({
+        organizationId: orgId,
+        operationalPeriodKey: selectedPeriodKey,
+      }),
+    );
     const activeIdSet = new Set(activeSafe.map((c) => c.id));
     const archivedMembershipIds = membershipIds.filter((id) => !activeIdSet.has(id));
     if (archivedMembershipIds.length) {
@@ -955,6 +1057,9 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     filter_facets: ClientOperationsRegistryRowFilterFacets;
     hasPayroll: boolean;
     vatApplicable: boolean;
+    advanceDue: boolean;
+    niConfigured: boolean;
+    niDeductionsConfigured: boolean;
     incomeTaxDeductionsDue: boolean;
     incomeTaxDeductionsConfigured: boolean;
     materialBroughtCell: ReturnType<typeof resolveMaterialBroughtForPeriod>;
@@ -977,7 +1082,26 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     }
     const p = profilesByClientId.get(c.id);
     const tax = taxByClient.get(c.id);
-    const vatApplicable = snapshot?.vat_applicable ?? true;
+    // Current/open period: live tax is canonical (empty pre-setup snapshot must not shadow).
+    // Historical periods: frozen snapshot inputs win.
+    const vatTypeLiveOrFrozen = isCurrentOpenPeriod
+      ? (tax?.vat_type ?? null)
+      : (snapshot?.vat_type ?? tax?.vat_type ?? null);
+    const vatFrequencyLiveOrFrozen = isCurrentOpenPeriod
+      ? (tax?.vat_frequency ?? null)
+      : (snapshot?.vat_frequency ?? tax?.vat_frequency ?? null);
+    const vatConfigured = resolveVatObligationConfigured({
+      vat_type: vatTypeLiveOrFrozen,
+      vat_frequency: vatFrequencyLiveOrFrozen,
+    });
+    const vatDue = isCurrentOpenPeriod
+      ? resolveVatApplicabilityForOperationalPeriod({
+          vat_type: vatTypeLiveOrFrozen,
+          vat_frequency: vatFrequencyLiveOrFrozen,
+          operational_period_key: selectedPeriodKey,
+        })
+      : Boolean(snapshot?.vat_applicable);
+    const vatApplicable = vatDue;
     const hasPayroll = isCurrentOpenPeriod
       ? resolvePayrollApplicabilityFromDeductionsFiles({
           income_tax_deductions_file_number: tax?.income_tax_deductions_file_number ?? null,
@@ -990,6 +1114,35 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
           national_insurance_deductions_file_number:
             snapshot?.national_insurance_deductions_file_number,
         });
+    const payrollConfigured = isCurrentOpenPeriod
+      ? resolvePayrollObligationConfigured({
+          income_tax_deductions_file_number: tax?.income_tax_deductions_file_number ?? null,
+          national_insurance_deductions_file_number:
+            tax?.national_insurance_deductions_file_number ?? null,
+        })
+      : hasPayroll || Boolean(snapshot?.payroll_applicable);
+    const advanceEnabledLiveOrFrozen = isCurrentOpenPeriod
+      ? (tax?.income_tax_advance_enabled ?? null)
+      : (snapshot?.income_tax_advance_enabled ?? tax?.income_tax_advance_enabled ?? null);
+    const advanceFrequencyLiveOrFrozen = isCurrentOpenPeriod
+      ? (tax?.income_tax_advance_frequency ?? null)
+      : (snapshot?.income_tax_advance_frequency ?? tax?.income_tax_advance_frequency ?? null);
+    const advanceConfigured = resolveIncomeTaxAdvanceConfigured(advanceEnabledLiveOrFrozen);
+    const advanceDue = isCurrentOpenPeriod
+      ? advanceConfigured &&
+        isIncomeTaxFrequencyApplicableForOperationalPeriod(
+          advanceFrequencyLiveOrFrozen,
+          selectedPeriodKey,
+        )
+      : Boolean(snapshot?.income_tax_advance_applicable);
+    const niConfigured = isCurrentOpenPeriod
+      ? resolveNationalInsuranceApplicability(tax?.national_insurance_type ?? null)
+      : Boolean(snapshot?.national_insurance_applicable);
+    const niDeductionsConfigured = isCurrentOpenPeriod
+      ? resolveNationalInsuranceDeductionsApplicability(
+          tax?.national_insurance_deductions_file_number ?? null,
+        )
+      : Boolean(snapshot?.national_insurance_deductions_applicable);
     const periodFact = materialFacts.get(c.id);
     const materialBroughtCell = resolveMaterialBroughtForPeriod({
       period_fact: periodFact?.material_brought,
@@ -997,7 +1150,8 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       legacy_profile_flag: (p?.material_brought_flag as boolean | null) ?? null,
       operational_period_key: selectedPeriodKey,
       default_period_key: defaultPeriodKey,
-      vat_applicable: vatApplicable,
+      vat_configured: vatConfigured,
+      vat_due: vatDue,
     });
     const incomeTaxAdvanceCell = resolveIncomeTaxAdvanceMaterialForPeriod({
       period_fact: periodFact?.income_tax_advance_material_brought,
@@ -1005,10 +1159,12 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       legacy_profile_flag: (p?.income_data_received_flag as boolean | null) ?? null,
       operational_period_key: selectedPeriodKey,
       default_period_key: defaultPeriodKey,
-      income_tax_advance_applicable: snapshot?.income_tax_advance_applicable ?? false,
+      advance_configured: advanceConfigured,
+      advance_due: advanceDue,
     });
     const payrollCell = resolvePayrollMaterialForPeriod({
-      payroll_applicable: hasPayroll,
+      payroll_configured: payrollConfigured,
+      payroll_due: hasPayroll,
       salary_data_received: payrollSalaryByClient.get(c.id),
     });
     const incomeTaxDeductionsDue = isCurrentOpenPeriod
@@ -1035,15 +1191,13 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       income_tax_advance: incomeTaxAdvanceCell,
       payroll: payrollCell,
     });
-    // material_cells: buildMaterialCells(...) — VAT period_fact is boolean flag on the fact row, not the row itself.
     const period_applicability = {
       vat_applicable: vatApplicable,
       payroll_applicable: hasPayroll,
-      income_tax_advance_applicable: snapshot?.income_tax_advance_applicable ?? false,
+      income_tax_advance_applicable: advanceDue,
       income_tax_deductions_applicable: incomeTaxDeductionsDue,
-      national_insurance_applicable: snapshot?.national_insurance_applicable ?? false,
-      national_insurance_deductions_applicable:
-        snapshot?.national_insurance_deductions_applicable ?? false,
+      national_insurance_applicable: niConfigured,
+      national_insurance_deductions_applicable: niDeductionsConfigured,
       row_visible: snapshot?.row_visible ?? true,
     };
     const manual_cell_statuses = buildManualStatusCapabilitiesForRow({
@@ -1052,24 +1206,17 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       customColumnKeys,
       statuses: manualStatusesByClientColumn,
       materialSquareCount: countMaterialOperationalSquares({
-        vatApplicable: materialBroughtCell.applicable,
-        incomeTaxAdvanceApplicable: incomeTaxAdvanceCell.applicable,
-        payrollApplicable: payrollCell.applicable,
+        vatApplicable: materialBroughtCell.configured,
+        incomeTaxAdvanceApplicable: incomeTaxAdvanceCell.configured,
+        payrollApplicable: payrollCell.configured,
       }),
       niDeductionsSquareCount: 0,
       incomeTaxDeductionsSquareCount: incomeTaxDeductionsConfigured ? 1 : 0,
     });
-    const advanceEnabledForFacet =
-      snapshot != null
-        ? snapshot.income_tax_advance_enabled
-        : (tax?.income_tax_advance_enabled ?? null);
-    const advanceFrequencyForFacet =
-      snapshot != null
-        ? snapshot.income_tax_advance_frequency
-        : (tax?.income_tax_advance_frequency ?? null);
-    const vatTypeForFacet = snapshot != null ? snapshot.vat_type : (tax?.vat_type ?? null);
-    const vatFrequencyForFacet =
-      snapshot != null ? snapshot.vat_frequency : (tax?.vat_frequency ?? null);
+    const advanceEnabledForFacet = advanceEnabledLiveOrFrozen;
+    const advanceFrequencyForFacet = advanceFrequencyLiveOrFrozen;
+    const vatTypeForFacet = vatTypeLiveOrFrozen;
+    const vatFrequencyForFacet = vatFrequencyLiveOrFrozen;
     const itdFrequencyForFacet = isCurrentOpenPeriod
       ? (tax?.income_tax_deductions_frequency ?? null)
       : (snapshot?.income_tax_deductions_frequency ?? tax?.income_tax_deductions_frequency ?? null);
@@ -1096,6 +1243,9 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       filter_facets,
       hasPayroll,
       vatApplicable,
+      advanceDue,
+      niConfigured,
+      niDeductionsConfigured,
       incomeTaxDeductionsDue,
       incomeTaxDeductionsConfigured,
       materialBroughtCell,
@@ -1189,10 +1339,17 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     const noteAgg = buildNotesCellDisplayHe(notesByClient.get(c.id) ?? []);
     const tax = taxByClient.get(c.id);
     const bt = (p?.business_type as string | null) ?? null;
-    // מע״מ frequency: frozen snapshot when present; never erase by period non-due.
-    const vatTypeForDisplay = snapshot != null ? snapshot.vat_type : (tax?.vat_type ?? null);
-    const vatFrequencyForDisplay =
-      snapshot != null ? snapshot.vat_frequency : (tax?.vat_frequency ?? null);
+    // Current/open: live tax for display labels. Historical: frozen snapshot inputs.
+    const vatTypeForDisplay = isCurrentOpenPeriod
+      ? (tax?.vat_type ?? null)
+      : snapshot != null
+        ? snapshot.vat_type
+        : (tax?.vat_type ?? null);
+    const vatFrequencyForDisplay = isCurrentOpenPeriod
+      ? (tax?.vat_frequency ?? null)
+      : snapshot != null
+        ? snapshot.vat_frequency
+        : (tax?.vat_frequency ?? null);
     const vat_due_registry_display_he = tax
       ? computeVatDueRegistryDisplayHe(tax.vat_due_type, tax.vat_frequency)
       : null;
@@ -1216,8 +1373,16 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
             incomeDedProfile
           )
         : computeNationalInsuranceDeductionsRegistryDisplayHe(null, incomeDedProfile);
-    const { hasPayroll, vatApplicable, materialBroughtCell, incomeTaxAdvanceCell, payrollCell } =
-      seed;
+    const {
+      hasPayroll,
+      vatApplicable,
+      advanceDue,
+      niConfigured,
+      niDeductionsConfigured,
+      materialBroughtCell,
+      incomeTaxAdvanceCell,
+      payrollCell,
+    } = seed;
     const material_brought_flag = materialBroughtCell.applicable ? materialBroughtCell.value : null;
     const payroll_flag: boolean | null = hasPayroll ? true : null;
     const annual_report_cell = annualReportCells.get(c.id) ?? {
@@ -1235,10 +1400,10 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       operational_target_date: null,
       can_open: canEditRegistry,
     };
-    const national_insurance_deductions_applicable =
-      snapshot?.national_insurance_deductions_applicable ?? false;
+    // NI deductions: configured (= file) is due every month when configured (no separate cadence).
     const national_insurance_deductions_cell = buildNiDeductionsRegistryCellForClient({
-      applicable: national_insurance_deductions_applicable,
+      configured: niDeductionsConfigured,
+      due: niDeductionsConfigured,
       periodFlags: niDeductionsPeriodFlagsByClient.get(c.id),
       cycleFacts: niDeductions126FactsByClient.get(c.id),
       operationalPeriodKey: selectedPeriodKey,
@@ -1252,12 +1417,14 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     const pcn_display = formatPcnRegistryDisplay(tax?.vat_due_type ?? null);
     const vat_status = vatFromTax ?? (p?.vat_status as string | null) ?? null;
     const income_tax_advance_status = formatIncomeTaxAdvanceRegistryFrequencyDisplayHe({
-      enabled:
-        snapshot != null
+      enabled: isCurrentOpenPeriod
+        ? (tax?.income_tax_advance_enabled ?? null)
+        : snapshot != null
           ? snapshot.income_tax_advance_enabled
           : (tax?.income_tax_advance_enabled ?? null),
-      frequency:
-        snapshot != null
+      frequency: isCurrentOpenPeriod
+        ? (tax?.income_tax_advance_frequency ?? null)
+        : snapshot != null
           ? snapshot.income_tax_advance_frequency
           : (tax?.income_tax_advance_frequency ?? null),
     });
@@ -1277,15 +1444,24 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       customColumnKeys,
       statuses: manualStatusesByClientColumn,
       materialSquareCount: countMaterialOperationalSquares({
-        vatApplicable: materialBroughtCell.applicable,
-        incomeTaxAdvanceApplicable: incomeTaxAdvanceCell.applicable,
-        payrollApplicable: payrollCell.applicable,
+        vatApplicable: materialBroughtCell.configured,
+        incomeTaxAdvanceApplicable: incomeTaxAdvanceCell.configured,
+        payrollApplicable: payrollCell.configured,
       }),
       niDeductionsSquareCount: countNiDeductionsOperationalSquares({
-        applicable: Boolean(national_insurance_deductions_cell.applicable),
-        form102Applicable: Boolean(national_insurance_deductions_cell.items?.['102']?.applicable),
-        form100Applicable: Boolean(national_insurance_deductions_cell.items?.['100']?.applicable),
-        form126Applicable: Boolean(national_insurance_deductions_cell.items?.['126']?.applicable),
+        applicable: Boolean(national_insurance_deductions_cell.configured),
+        form102Applicable: Boolean(
+          national_insurance_deductions_cell.items?.['102']?.configured ??
+            national_insurance_deductions_cell.items?.['102']?.applicable,
+        ),
+        form100Applicable: Boolean(
+          national_insurance_deductions_cell.items?.['100']?.configured ??
+            national_insurance_deductions_cell.items?.['100']?.applicable,
+        ),
+        form126Applicable: Boolean(
+          national_insurance_deductions_cell.items?.['126']?.configured ??
+            national_insurance_deductions_cell.items?.['126']?.applicable,
+        ),
       }),
       incomeTaxDeductionsSquareCount: income_tax_deductions_cell.configured ? 1 : 0,
     });
@@ -1299,10 +1475,10 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       period_applicability: {
         vat_applicable: vatApplicable,
         payroll_applicable: hasPayroll,
-        income_tax_advance_applicable: snapshot?.income_tax_advance_applicable ?? false,
+        income_tax_advance_applicable: advanceDue,
         income_tax_deductions_applicable: seed.incomeTaxDeductionsDue,
-        national_insurance_applicable: snapshot?.national_insurance_applicable ?? false,
-        national_insurance_deductions_applicable,
+        national_insurance_applicable: niConfigured,
+        national_insurance_deductions_applicable: niDeductionsConfigured,
         row_visible: snapshot?.row_visible ?? true,
       },
       material_brought_cell: materialBroughtCell,
@@ -1361,6 +1537,7 @@ export async function getClientOperationsCase(
   options?: ClientOperationsCaseReadOptions
 ): Promise<ClientOperationsCaseResponse> {
   const orgId = assertOrg(ctx);
+  await assertCanAccessClientFromContext(ctx, clientId);
 
   const [{ data: client, error: clientErr }, { data: primaryContact }, { data: profile }] = await Promise.all([
     supabaseAdmin
@@ -1389,59 +1566,21 @@ export async function getClientOperationsCase(
   let assignedHandlerFullName: string | null = null;
   const handlerId = (profile as { assigned_handler_user_id?: string | null } | null)?.assigned_handler_user_id ?? null;
 
-  const handlerMemQuery = handlerId
-    ? supabaseAdmin
-        .from('organization_users')
-        .select('user_id, users!organization_users_user_id_fkey(full_name, email)')
-        .eq('organization_id', orgId)
-        .eq('user_id', handlerId)
-        .eq('membership_status', 'active')
-        .not('invited_by', 'is', null)
-        .maybeSingle()
-    : Promise.resolve({ data: null as { users?: unknown } | null });
-
-  const handlerListQuery = supabaseAdmin
-    .from('organization_users')
-    .select('user_id, users!organization_users_user_id_fkey(id, email, full_name)')
-    .eq('organization_id', orgId)
-    .eq('membership_status', 'active')
-    .not('invited_by', 'is', null);
-
-  const [handlerMemRes, handlerOrgRes] = await Promise.all([handlerMemQuery, handlerListQuery]);
-
-  const handlerMem = handlerMemRes.data;
-  const handlerUserRaw = (handlerMem as { users?: unknown } | null)?.users;
-  const handlerUser = Array.isArray(handlerUserRaw)
-    ? (handlerUserRaw[0] as { full_name: string | null; email: string | null } | undefined)
-    : (handlerUserRaw as { full_name: string | null; email: string | null } | null);
-  if (handlerUser) {
-    const fullName = handlerUser.full_name ?? null;
-    const email = handlerUser.email ?? null;
-    assignedHandlerFullName = fullName?.trim() ? fullName : email;
+  const [handlerDisplayMap, handlerEligible] = await Promise.all([
+    handlerId ? loadMemberDisplayNamesByUserIds([handlerId]) : Promise.resolve(new Map<string, string>()),
+    listActiveHandlerEligibleMembers(orgId),
+  ]);
+  if (handlerId) {
+    assignedHandlerFullName = handlerDisplayMap.get(handlerId) ?? null;
   }
 
-  const { data: handlerOrgRows, error: handlerOptsErr } = handlerOrgRes;
-
-  if (handlerOptsErr) {
-    throw new AppError(500, handlerOptsErr.message ?? 'organization_users (handlers) query failed', 'SUPABASE_ERROR');
-  }
-
-  type HandlerOptUser = { id: string; email: string | null; full_name: string | null };
-  type HandlerOptRow = { user_id: string; users: HandlerOptUser | HandlerOptUser[] | null };
-  const handler_user_options: Array<{ user_id: string; email: string; display_name: string }> = (
-    (handlerOrgRows ?? []) as unknown as HandlerOptRow[]
-  )
-    .map((r) => {
-      const uRaw = r.users;
-      const u = Array.isArray(uRaw) ? uRaw[0] : uRaw;
-      if (!u || !r.user_id) return null;
-      const email = u.email ?? '';
-      const display_name = u.full_name?.trim() ? u.full_name.trim() : email;
-      return { user_id: r.user_id, email, display_name };
-    })
-    .filter((x): x is { user_id: string; email: string; display_name: string } => x != null && Boolean(x.user_id && x.email))
-    .sort((a, b) => (a.display_name || '').localeCompare(b.display_name || '', 'he'));
-
+  const handler_user_options: Array<{ user_id: string; email: string; display_name: string }> = handlerEligible.map(
+    (m) => ({
+      user_id: m.user_id,
+      email: m.email,
+      display_name: m.display_name,
+    }),
+  );
   const chartView: FeesPriceChartViewMode = options?.feesPriceChartView ?? 'last_15';
   const historyOpen = options?.historyOpenSection ?? null;
   await recomputeClientObligationsAndTasks(ctx, clientId, new Date());
@@ -1603,6 +1742,7 @@ function parseEndedAtDate(dateValue: unknown): string | null {
 /**
  * Save only the "פרטי לקוח" first-tab fields (clients + client_operational_profiles + primary client contact).
  * Backend owns all validations and uniqueness rules.
+ * Security: assigned_handler_user_id is NOT writable here for Staff — use assign_client_handler.
  */
 export async function updateClientOperationsClientProfile(
   ctx: RequestContext,
@@ -1610,6 +1750,7 @@ export async function updateClientOperationsClientProfile(
   body: UpdateClientOperationsClientProfileRequest
 ): Promise<ClientOperationsCaseResponse> {
   const orgId = assertOrg(ctx);
+  await assertCanAccessClientFromContext(ctx, clientId);
 
   const clientName = String(body.client_name ?? '').trim();
   const taxId = String(body.government_id ?? '').trim();
@@ -1660,23 +1801,29 @@ export async function updateClientOperationsClientProfile(
 
   const endedAt = body.ended_at !== undefined ? parseEndedAtDate(body.ended_at) : (existingClient.ended_at ?? null);
 
-  // Assigned handler validation (must be an active invited member of the same org).
-  const assigned_handler_user_id =
-    body.assigned_handler_user_id !== undefined
-      ? body.assigned_handler_user_id
-        ? String(body.assigned_handler_user_id)
-        : null
-      : (existingProfile?.assigned_handler_user_id ?? null);
-  if (assigned_handler_user_id) {
-    const { data: ou } = await supabaseAdmin
-      .from('organization_users')
-      .select('id, invited_by')
-      .eq('organization_id', orgId)
-      .eq('user_id', assigned_handler_user_id)
-      .eq('membership_status', 'active')
-      .not('invited_by', 'is', null)
-      .maybeSingle();
-    if (!ou) throw forbidden('Assigned accountant must be a confirmed invited member of this organization');
+  // Privilege escalation guard: Staff/Viewer cannot change responsible handler via update_profile.
+  const previousHandler = (existingProfile?.assigned_handler_user_id as string | null) ?? null;
+  let assigned_handler_user_id = previousHandler;
+  if (body.assigned_handler_user_id !== undefined) {
+    const requested = body.assigned_handler_user_id ? String(body.assigned_handler_user_id) : null;
+    if (requested !== previousHandler) {
+      if (!canManageClientHandlerAssignment(ctx.membership?.roleCode)) {
+        throw forbidden(
+          'Only Owner or Admin may change assigned handler',
+          'CLIENT_HANDLER_ASSIGNMENT_FORBIDDEN',
+        );
+      }
+      if (requested) await assertUserIsActiveHandlerEligible(orgId, requested);
+      const { assertNoIncompatibleActiveTodosForHandlerChange } = await import(
+        './client-operations-todo.service.js'
+      );
+      await assertNoIncompatibleActiveTodosForHandlerChange({
+        organizationId: orgId,
+        clientId,
+        afterHandlerUserId: requested,
+      });
+      assigned_handler_user_id = requested;
+    }
   }
 
   const addressCombined = body.address !== undefined ? body.address : null;
@@ -1812,5 +1959,206 @@ export async function updateClientOperationsClientProfile(
   }
 
   return getClientOperationsCase(ctx, clientId);
+}
+
+async function upsertAssignedHandler(params: {
+  organizationId: string;
+  clientId: string;
+  assignedHandlerUserId: string | null;
+}): Promise<{ before: string | null; after: string | null }> {
+  const { data: existing } = await supabaseAdmin
+    .from('client_operational_profiles')
+    .select('assigned_handler_user_id, business_type')
+    .eq('organization_id', params.organizationId)
+    .eq('client_id', params.clientId)
+    .maybeSingle();
+  const before = (existing as { assigned_handler_user_id?: string | null } | null)?.assigned_handler_user_id ?? null;
+  const after = params.assignedHandlerUserId;
+  if (before === after) return { before, after };
+
+  const now = new Date().toISOString();
+  if (existing) {
+    const { error } = await supabaseAdmin
+      .from('client_operational_profiles')
+      .update({ assigned_handler_user_id: after, updated_at: now })
+      .eq('organization_id', params.organizationId)
+      .eq('client_id', params.clientId);
+    if (error) throw new AppError(500, error.message || 'Failed to update handler', 'SUPABASE_ERROR');
+  } else {
+    const { error } = await supabaseAdmin.from('client_operational_profiles').insert({
+      organization_id: params.organizationId,
+      client_id: params.clientId,
+      assigned_handler_user_id: after,
+      business_type: null,
+      created_at: now,
+      updated_at: now,
+    });
+    if (error) throw new AppError(500, error.message || 'Failed to create profile for handler', 'SUPABASE_ERROR');
+  }
+  return { before, after };
+}
+
+/**
+ * Named security-sensitive command: assign / reassign / unassign responsible handler.
+ * Owner/Admin only. Immediately changes Staff access scope.
+ */
+export async function assignClientHandler(
+  ctx: RequestContext,
+  params: { client_id: string; assigned_handler_user_id: string | null },
+): Promise<ClientOperationsCaseResponse> {
+  const orgId = assertOrg(ctx);
+  if (!canManageClientHandlerAssignment(ctx.membership?.roleCode)) {
+    throw forbidden('Only Owner or Admin may assign client handlers', 'CLIENT_HANDLER_ASSIGNMENT_FORBIDDEN');
+  }
+  const clientId = String(params.client_id ?? '').trim();
+  if (!clientId) throw badRequest('client_id required');
+
+  const { data: client } = await supabaseAdmin
+    .from('clients')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('id', clientId)
+    .maybeSingle();
+  if (!client) throw forbidden('Client not found');
+
+  const handlerId =
+    params.assigned_handler_user_id == null || String(params.assigned_handler_user_id).trim() === ''
+      ? null
+      : String(params.assigned_handler_user_id).trim();
+  if (handlerId) await assertUserIsActiveHandlerEligible(orgId, handlerId);
+
+  // Peek current handler to know if change is needed; block before write when ToDos conflict.
+  const { data: existingProfile } = await supabaseAdmin
+    .from('client_operational_profiles')
+    .select('assigned_handler_user_id')
+    .eq('organization_id', orgId)
+    .eq('client_id', clientId)
+    .maybeSingle();
+  const before =
+    (existingProfile as { assigned_handler_user_id?: string | null } | null)?.assigned_handler_user_id ??
+    null;
+  if (before !== handlerId) {
+    const { assertNoIncompatibleActiveTodosForHandlerChange } = await import(
+      './client-operations-todo.service.js'
+    );
+    await assertNoIncompatibleActiveTodosForHandlerChange({
+      organizationId: orgId,
+      clientId,
+      afterHandlerUserId: handlerId,
+    });
+  }
+
+  const { before: beforeWritten, after } = await upsertAssignedHandler({
+    organizationId: orgId,
+    clientId,
+    assignedHandlerUserId: handlerId,
+  });
+
+  if (beforeWritten !== after) {
+    await writeAudit({
+      organizationId: orgId,
+      actorUserId: ctx.user.id,
+      moduleCode: 'client-operations',
+      entityType: 'client_operational_profile',
+      entityId: clientId,
+      action: AUDIT_ACTIONS.CLIENT_OPERATIONS_CLIENT_HANDLER_ASSIGNED,
+      payload: {
+        client_id: clientId,
+        before_handler_user_id: beforeWritten,
+        after_handler_user_id: after,
+      },
+    });
+  }
+
+  invalidateClientOperationsRegistryMaterializationCache(orgId);
+  return getClientOperationsCase(ctx, clientId);
+}
+
+/**
+ * Named Owner/Admin bulk assignment. Validates all clients, applies handler, one audit event.
+ */
+export async function bulkAssignClientHandler(
+  ctx: RequestContext,
+  params: { client_ids: string[]; assigned_handler_user_id: string | null },
+): Promise<{
+  organization_id: string;
+  assigned_handler_user_id: string | null;
+  updated_client_ids: string[];
+  unchanged_client_ids: string[];
+}> {
+  const orgId = assertOrg(ctx);
+  if (!canManageClientHandlerAssignment(ctx.membership?.roleCode)) {
+    throw forbidden('Only Owner or Admin may assign client handlers', 'CLIENT_HANDLER_ASSIGNMENT_FORBIDDEN');
+  }
+
+  const rawIds = Array.isArray(params.client_ids) ? params.client_ids : [];
+  const clientIds = [...new Set(rawIds.map((id) => String(id ?? '').trim()).filter(Boolean))];
+  if (!clientIds.length) throw badRequest('client_ids required');
+  if (clientIds.length > 500) throw badRequest('client_ids exceeds maximum of 500');
+
+  const handlerId =
+    params.assigned_handler_user_id == null || String(params.assigned_handler_user_id).trim() === ''
+      ? null
+      : String(params.assigned_handler_user_id).trim();
+  if (handlerId) await assertUserIsActiveHandlerEligible(orgId, handlerId);
+
+  const { data: owned } = await supabaseAdmin
+    .from('clients')
+    .select('id')
+    .eq('organization_id', orgId)
+    .in('id', clientIds);
+  const ownedIds = new Set((owned ?? []).map((r) => String((r as { id: string }).id)));
+  if (ownedIds.size !== clientIds.length) {
+    throw forbidden('One or more clients were not found in this organization');
+  }
+
+  const { assertNoIncompatibleActiveTodosForHandlerChange } = await import(
+    './client-operations-todo.service.js'
+  );
+  for (const clientId of clientIds) {
+    await assertNoIncompatibleActiveTodosForHandlerChange({
+      organizationId: orgId,
+      clientId,
+      afterHandlerUserId: handlerId,
+    });
+  }
+
+  const updated: string[] = [];
+  const unchanged: string[] = [];
+  const details: Array<{ client_id: string; before: string | null; after: string | null }> = [];
+
+  for (const clientId of clientIds) {
+    const { before, after } = await upsertAssignedHandler({
+      organizationId: orgId,
+      clientId,
+      assignedHandlerUserId: handlerId,
+    });
+    details.push({ client_id: clientId, before, after });
+    if (before === after) unchanged.push(clientId);
+    else updated.push(clientId);
+  }
+
+  await writeAudit({
+    organizationId: orgId,
+    actorUserId: ctx.user.id,
+    moduleCode: 'client-operations',
+    entityType: 'client_operational_profile',
+    entityId: orgId,
+    action: AUDIT_ACTIONS.CLIENT_OPERATIONS_CLIENT_HANDLER_BULK_ASSIGNED,
+    payload: {
+      assigned_handler_user_id: handlerId,
+      updated_client_ids: updated,
+      unchanged_client_ids: unchanged,
+      changes: details.filter((d) => d.before !== d.after),
+    },
+  });
+
+  invalidateClientOperationsRegistryMaterializationCache(orgId);
+  return {
+    organization_id: orgId,
+    assigned_handler_user_id: handlerId,
+    updated_client_ids: updated,
+    unchanged_client_ids: unchanged,
+  };
 }
 

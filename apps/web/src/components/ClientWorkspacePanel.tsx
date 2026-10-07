@@ -523,7 +523,13 @@ export function ClientWorkspacePanel({
         return;
       }
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : 'Failed to save');
+      const todoConflict =
+        e instanceof ApiError && e.code === 'CLIENT_HANDLER_TODO_CONFLICT'
+          ? typeof e.details?.conflicting_todo_count === 'number'
+            ? `לא ניתן לשנות מטפל בתיק — קיימות ${e.details.conflicting_todo_count} משימות ToDo פעילות שאינן תואמות. יש להשלים או להעביר את המשימות תחילה.`
+            : 'לא ניתן לשנות מטפל בתיק — קיימות משימות ToDo פעילות. יש להשלים או להעביר את המשימות תחילה.'
+          : null;
+      setSaveError(todoConflict ?? (e instanceof Error ? e.message : 'Failed to save'));
     } finally {
       setIsSaving(false);
     }

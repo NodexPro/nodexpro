@@ -28,8 +28,13 @@ export type NiDeductions126CycleFact = NiDeductions126CycleRef & {
 };
 
 export type NiDeductionsFormItemCell = {
+  /** Interactive for this form in the selected period. */
   applicable: boolean;
   completed: boolean | null;
+  /** Form shown (configured obligation) even when not interactive this period. */
+  configured?: boolean;
+  due?: boolean;
+  editable?: boolean;
 };
 
 export type NiDeductions126ItemCell = NiDeductionsFormItemCell & {
@@ -37,6 +42,11 @@ export type NiDeductions126ItemCell = NiDeductionsFormItemCell & {
 };
 
 export type NiDeductionsRegistryCell = {
+  /** File/תיק configured (independent of period interactivity). */
+  configured: boolean;
+  /** Forms are due/interactive this period. */
+  due: boolean;
+  /** Interactive this period (= configured && due). Kept for compatibility. */
   applicable: boolean;
   items: {
     '102': NiDeductionsFormItemCell;
@@ -177,29 +187,80 @@ export function selectNextNiDeductions126CycleToComplete(
 }
 
 export function buildNiDeductionsRegistryCell(input: {
-  applicable: boolean;
+  /** @deprecated prefer configured + due */
+  applicable?: boolean;
+  configured?: boolean;
+  due?: boolean;
   reported102: boolean | null | undefined;
   reported100: boolean | null | undefined;
   outstanding126: NiDeductions126CycleRef[];
 }): NiDeductionsRegistryCell {
-  if (!input.applicable) {
+  const configured = input.configured ?? Boolean(input.applicable);
+  const due = input.due ?? Boolean(input.applicable);
+  if (!configured) {
     return {
+      configured: false,
+      due: false,
       applicable: false,
       items: {
-        '102': { applicable: false, completed: null },
-        '100': { applicable: false, completed: null },
-        '126': { applicable: false, completed: null, outstanding_count: 0 },
+        '102': { configured: false, due: false, applicable: false, editable: false, completed: null },
+        '100': { configured: false, due: false, applicable: false, editable: false, completed: null },
+        '126': {
+          configured: false,
+          due: false,
+          applicable: false,
+          editable: false,
+          completed: null,
+          outstanding_count: 0,
+        },
+      },
+    };
+  }
+  if (!due) {
+    // Configured obligation exists — disabled squares, not dash.
+    return {
+      configured: true,
+      due: false,
+      applicable: false,
+      items: {
+        '102': { configured: true, due: false, applicable: false, editable: false, completed: null },
+        '100': { configured: true, due: false, applicable: false, editable: false, completed: null },
+        '126': {
+          configured: true,
+          due: false,
+          applicable: false,
+          editable: false,
+          completed: null,
+          outstanding_count: 0,
+        },
       },
     };
   }
   const outstandingCount = input.outstanding126.length;
   return {
+    configured: true,
+    due: true,
     applicable: true,
     items: {
-      '102': { applicable: true, completed: Boolean(input.reported102) },
-      '100': { applicable: true, completed: Boolean(input.reported100) },
-      '126': {
+      '102': {
+        configured: true,
+        due: true,
         applicable: true,
+        editable: true,
+        completed: Boolean(input.reported102),
+      },
+      '100': {
+        configured: true,
+        due: true,
+        applicable: true,
+        editable: true,
+        completed: Boolean(input.reported100),
+      },
+      '126': {
+        configured: true,
+        due: true,
+        applicable: true,
+        editable: true,
         completed: outstandingCount === 0,
         outstanding_count: outstandingCount,
       },

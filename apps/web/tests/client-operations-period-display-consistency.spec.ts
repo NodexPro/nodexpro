@@ -67,10 +67,16 @@ test('prefetch targets adjacent keys; GET uses TARGET period', () => {
     }),
     ['2026-08', '2026-10'],
   );
-  assert.match(
-    pageSource,
-    /moduleClientOperationsRegistry\(\{ \.\.\.baseQuery, operational_period_key: key \}\)/,
+  // Prefetch GETs go through workspace-aware registryUrl (Stage 4), not a bare
+  // moduleClientOperationsRegistry spread — period key + workspace scope preserved.
+  const prefetch = pageSource.slice(
+    pageSource.indexOf('const prefetchPeriods = useCallback('),
+    pageSource.indexOf('const loadRegistry = useCallback('),
   );
+  assert.match(prefetch, /registryUrl\(\{[\s\S]*?operational_period_key:\s*key/);
+  assert.match(prefetch, /workspace_scope:\s*baseQuery\.workspace_scope/);
+  assert.match(prefetch, /workspace_subject_user_id:\s*baseQuery\.workspace_subject_user_id/);
+  assert.match(pageSource, /appendClientOperationsWorkspaceQuery\(moduleClientOperationsRegistry\(params\)/);
 });
 
 test('FE does not blank configured labels via obligationApplicable', () => {

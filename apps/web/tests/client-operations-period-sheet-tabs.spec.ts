@@ -77,9 +77,10 @@ test('NOT APPLICABLE material is visually distinct from unchecked', () => {
     join(dir, '../src/components/client-operations/ClientOperationsRegistryView.tsx'),
     'utf8',
   );
-  assert.match(view, /nx-co-sheet__na/);
-  assert.match(view, /material_brought_cell\?\.applicable/);
-  assert.match(view, /לא רלוונטי לתקופה זו/);
+  assert.match(view, /nx-co-sheet__material-slot is-na/);
+  assert.match(view, /stream\.cell\?\.configured \?\? stream\.cell\?\.applicable/);
+  assert.match(view, /is-inactive/);
+  assert.match(view, /מוגדר — אין דיווח בחודש זה/);
   assert.match(view, /obligationApplicable/);
 });
 

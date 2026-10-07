@@ -8,6 +8,7 @@ import { forbidden } from '../../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
 import * as documentsService from '../documents/documents.service.js';
+import { assertCanAccessClientFromContext } from '../client-operations/organization-client-access.js';
 
 const ENTITY_TYPE_CLIENT = 'client';
 
@@ -29,7 +30,7 @@ export async function getClientCardData(
   if (ctx.organizationId !== orgId) throw forbidden('Organization context required');
   const perms = ctx.membership?.permissions ?? [];
   if (!perms.includes('clients:read')) throw forbidden('Insufficient permission');
-
+  await assertCanAccessClientFromContext(ctx, clientId);
   const includeDocuments = perms.includes('documents:read');
 
   // All client profile fields (tax_id, phone, email, website, address) are visible to anyone with clients:read.

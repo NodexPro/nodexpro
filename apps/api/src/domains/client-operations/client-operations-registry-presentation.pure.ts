@@ -604,6 +604,9 @@ export type RegistryQueryInput = {
   filter_reporting_type?: string | null;
   filter_business_type?: string | null;
   filter_handler?: string | null;
+  /** Stage 4 workspace projection — authorized by backend (never trust raw). */
+  workspace_scope?: string | null;
+  workspace_subject_user_id?: string | null;
 };
 
 export function applyRegistryQueryToRows<

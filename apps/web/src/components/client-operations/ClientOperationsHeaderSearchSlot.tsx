@@ -18,3 +18,16 @@ export function useClientOperationsHeaderSearchSlot(): HTMLElement | null {
 }
 
 export const CLIENT_OPERATIONS_HEADER_SEARCH_SLOT_TEST_ID = 'client-operations-header-search-slot';
+
+/**
+ * Client Operations — header workspace selector slot (presentation only).
+ * Registry portals the backend-owned workspace `<select>` into the header end area.
+ */
+export const ClientOperationsHeaderWorkspaceSlotContext = createContext<HTMLElement | null>(null);
+
+export function useClientOperationsHeaderWorkspaceSlot(): HTMLElement | null {
+  return useContext(ClientOperationsHeaderWorkspaceSlotContext);
+}
+
+export const CLIENT_OPERATIONS_HEADER_WORKSPACE_SLOT_TEST_ID =
+  'client-operations-header-workspace-slot';

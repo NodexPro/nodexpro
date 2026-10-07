@@ -188,6 +188,8 @@ export async function getClientOperationsClientQuickProfile(
   const orgId = assertOrg(ctx);
   const id = String(clientId ?? '').trim();
   if (!id) throw forbidden('Client not found');
+  const { assertCanAccessClientFromContext } = await import('./organization-client-access.js');
+  await assertCanAccessClientFromContext(ctx, id);
 
   const reportingPeriodKey = resolveOperationalReportingPeriodKey();
   const asOf = new Date().toISOString().slice(0, 10);
