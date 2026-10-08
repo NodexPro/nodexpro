@@ -149,20 +149,20 @@ test('10 — other frozen snapshot fields remain unchanged (freeze restored)', (
   assert.match(restored, /NEW\.income_tax_deductions_applicable is distinct from OLD\.income_tax_deductions_applicable/);
 });
 
-test('11 — historical runtime still reads frozen snapshot (no live recompute)', () => {
+test('11 — historical runtime uses pinned inputs, not the stored applicable boolean', () => {
+  assert.match(registryService, /resolveRegistryObligationSemantics/);
+  assert.doesNotMatch(registryService, /Boolean\(snapshot\?\.income_tax_deductions_applicable\)/);
+  assert.doesNotMatch(registryService, /resolveIncomeTaxDeductionsApplicableFromFrozenSnapshot/);
+  assert.match(pureSource, /itdPinned/);
   assert.match(
-    registryService,
-    /incomeTaxDeductionsDue = isCurrentOpenPeriod[\s\S]*\? resolveIncomeTaxDeductionsApplicability[\s\S]*: Boolean\(snapshot\?\.income_tax_deductions_applicable\)/,
-  );
-  assert.doesNotMatch(
-    registryService,
-    /resolveIncomeTaxDeductionsApplicableFromFrozenSnapshot/,
+    pureSource,
+    /isIncomeTaxDeductionsFrequencyApplicableForOperationalPeriod\(itdFrequency, input\.periodKey\)/,
   );
 });
 
 test('12 — current/open runtime still uses live file+frequency formula', () => {
-  assert.match(registryService, /resolveIncomeTaxDeductionsApplicability/);
-  assert.match(registryService, /income_tax_deductions_file_number/);
+  assert.match(registryService, /income_tax_deductions_file_number: tax\?\.income_tax_deductions_file_number/);
+  assert.match(pureSource, /isIncomeTaxDeductionsFrequencyApplicableForOperationalPeriod/);
   assert.match(
     pureSource,
     /NOT used by registry runtime[\s\S]*resolveIncomeTaxDeductionsApplicableFromFrozenSnapshot|resolveIncomeTaxDeductionsApplicableFromFrozenSnapshot[\s\S]*NOT used by registry runtime/,

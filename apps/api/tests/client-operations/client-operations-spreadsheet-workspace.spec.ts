@@ -25,6 +25,10 @@ const serviceSource = readFileSync(
   join(dir, '../../src/domains/client-operations/client-operations.service.ts'),
   'utf8',
 );
+const obligationPureSource = readFileSync(
+  join(dir, '../../src/domains/client-operations/client-operations-operational-period.pure.ts'),
+  'utf8',
+);
 const presentationSource = readFileSync(
   join(dir, '../../src/domains/client-operations/client-operations-registry-presentation.pure.ts'),
   'utf8',
@@ -250,8 +254,9 @@ test('מה״כ shows reporting frequency (not כן/לא); width matches מע״מ
 
   // Backend projects period-frozen frequency; React must not derive it.
   assert.match(serviceSource, /formatIncomeTaxAdvanceRegistryFrequencyDisplayHe/);
-  assert.match(serviceSource, /snapshot\.income_tax_advance_frequency/);
-  assert.match(serviceSource, /snapshot\.income_tax_advance_enabled/);
+  assert.match(serviceSource, /frequency: seed\.obligation\.income_tax_advance\.frequency/);
+  assert.match(obligationPureSource, /snap\?\.income_tax_advance_frequency/);
+  assert.match(obligationPureSource, /snap\?\.income_tax_advance_enabled/);
   assert.doesNotMatch(viewSource, /bi_monthly|income_tax_advance_frequency/);
   // Frequency labels are backend-owned; FE must not hardcode them as cell values.
   // Avoid bare /חודשי/ — it also matches UX copy like "אין חודשים זמינים".

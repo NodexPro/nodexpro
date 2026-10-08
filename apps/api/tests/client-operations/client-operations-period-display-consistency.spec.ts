@@ -157,18 +157,17 @@ test('G — historical payroll from frozen evidence; not live files', () => {
     }),
     false,
   );
-  assert.match(serviceSource, /resolvePayrollApplicabilityFromFrozenSnapshot/);
-  assert.doesNotMatch(
-    serviceSource,
-    /isCurrentOpenPeriod\s*\?[\s\S]{0,200}Boolean\(snapshot\?\.payroll_applicable\)/,
-  );
+  assert.match(periodPureSource, /resolvePayrollApplicabilityFromFrozenSnapshot/);
+  assert.doesNotMatch(serviceSource, /Boolean\(snapshot\?\.payroll_applicable\)/);
 });
 
-test('I — historical VAT display uses snapshot vat_type/frequency', () => {
-  assert.match(serviceSource, /vatTypeForDisplay/);
-  assert.match(serviceSource, /vatFrequencyForDisplay/);
-  assert.match(serviceSource, /snapshot\.vat_type/);
-  assert.match(serviceSource, /snapshot\.vat_frequency/);
+test('I — historical VAT display uses pinned snapshot vat_type/frequency', () => {
+  assert.match(serviceSource, /vatTypeForDisplay = seed\.obligation\.vat\.vat_type/);
+  assert.match(serviceSource, /vatFrequencyForDisplay = seed\.obligation\.vat\.vat_frequency/);
+  assert.match(serviceSource, /resolveRegistryObligationSemantics/);
+  assert.match(periodPureSource, /const vatPinned =/);
+  assert.match(periodPureSource, /snap\?\.vat_type/);
+  assert.match(periodPureSource, /snap\?\.vat_frequency/);
   assert.match(
     serviceSource,
     /computeVatRegistryColumnDisplayHe\(\s*bt,\s*vatTypeForDisplay,\s*vatFrequencyForDisplay/,

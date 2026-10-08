@@ -81,20 +81,11 @@ import {
   clientExistsInOperationalPeriod,
   mapOperationalPeriodKeyToPayrollPeriodKey,
   resolveDefaultOperationalPeriodKey,
-  isIncomeTaxFrequencyApplicableForOperationalPeriod,
-  resolveIncomeTaxAdvanceConfigured,
   resolveIncomeTaxAdvanceMaterialForPeriod,
-  resolveIncomeTaxDeductionsApplicability,
-  resolveIncomeTaxDeductionsConfigured,
   resolveMaterialBroughtForPeriod,
-  resolveNationalInsuranceApplicability,
-  resolveNationalInsuranceDeductionsApplicability,
-  resolvePayrollApplicabilityFromDeductionsFiles,
-  resolvePayrollApplicabilityFromFrozenSnapshot,
   resolvePayrollMaterialForPeriod,
-  resolvePayrollObligationConfigured,
-  resolveVatApplicabilityForOperationalPeriod,
-  resolveVatObligationConfigured,
+  resolveRegistryObligationSemantics,
+  type RegistryObligationSemantics,
   shouldIncludeArchivedClientInOperationalPeriodRegistry,
   shouldEmitOperationalPeriodRegistryRow,
   type IncomeTaxDeductionsRegistryCell,
@@ -1047,8 +1038,6 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     selectedPeriodKey,
   });
 
-  const isCurrentOpenPeriod = selectedPeriodKey === defaultPeriodKey;
-
   // Early membership + filter facets (before expensive presentation loads).
   // Registry membership != cell applicability — shouldEmitOperationalPeriodRegistryRow owns row visibility.
   const facetBuildMs = Date.now();
@@ -1065,6 +1054,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     materialBroughtCell: ReturnType<typeof resolveMaterialBroughtForPeriod>;
     incomeTaxAdvanceCell: ReturnType<typeof resolveIncomeTaxAdvanceMaterialForPeriod>;
     payrollCell: ReturnType<typeof resolvePayrollMaterialForPeriod>;
+    obligation: RegistryObligationSemantics;
   };
   const facetSeeds: FacetSeed[] = [];
   for (const c of safeClients) {
@@ -1083,66 +1073,37 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     const p = profilesByClientId.get(c.id);
     const tax = taxByClient.get(c.id);
     // Current/open period: live tax is canonical (empty pre-setup snapshot must not shadow).
-    // Historical periods: frozen snapshot inputs win.
-    const vatTypeLiveOrFrozen = isCurrentOpenPeriod
-      ? (tax?.vat_type ?? null)
-      : (snapshot?.vat_type ?? tax?.vat_type ?? null);
-    const vatFrequencyLiveOrFrozen = isCurrentOpenPeriod
-      ? (tax?.vat_frequency ?? null)
-      : (snapshot?.vat_frequency ?? tax?.vat_frequency ?? null);
-    const vatConfigured = resolveVatObligationConfigured({
-      vat_type: vatTypeLiveOrFrozen,
-      vat_frequency: vatFrequencyLiveOrFrozen,
-    });
-    const vatDue = isCurrentOpenPeriod
-      ? resolveVatApplicabilityForOperationalPeriod({
-          vat_type: vatTypeLiveOrFrozen,
-          vat_frequency: vatFrequencyLiveOrFrozen,
-          operational_period_key: selectedPeriodKey,
-        })
-      : Boolean(snapshot?.vat_applicable);
-    const vatApplicable = vatDue;
-    const hasPayroll = isCurrentOpenPeriod
-      ? resolvePayrollApplicabilityFromDeductionsFiles({
-          income_tax_deductions_file_number: tax?.income_tax_deductions_file_number ?? null,
-          national_insurance_deductions_file_number:
-            tax?.national_insurance_deductions_file_number ?? null,
-        })
-      : resolvePayrollApplicabilityFromFrozenSnapshot({
-          payroll_applicable: snapshot?.payroll_applicable,
-          income_tax_deductions_enabled: snapshot?.income_tax_deductions_enabled,
-          national_insurance_deductions_file_number:
-            snapshot?.national_insurance_deductions_file_number,
-        });
-    const payrollConfigured = isCurrentOpenPeriod
-      ? resolvePayrollObligationConfigured({
-          income_tax_deductions_file_number: tax?.income_tax_deductions_file_number ?? null,
-          national_insurance_deductions_file_number:
-            tax?.national_insurance_deductions_file_number ?? null,
-        })
-      : hasPayroll || Boolean(snapshot?.payroll_applicable);
-    const advanceEnabledLiveOrFrozen = isCurrentOpenPeriod
-      ? (tax?.income_tax_advance_enabled ?? null)
-      : (snapshot?.income_tax_advance_enabled ?? tax?.income_tax_advance_enabled ?? null);
-    const advanceFrequencyLiveOrFrozen = isCurrentOpenPeriod
-      ? (tax?.income_tax_advance_frequency ?? null)
-      : (snapshot?.income_tax_advance_frequency ?? tax?.income_tax_advance_frequency ?? null);
-    const advanceConfigured = resolveIncomeTaxAdvanceConfigured(advanceEnabledLiveOrFrozen);
-    const advanceDue = isCurrentOpenPeriod
-      ? advanceConfigured &&
-        isIncomeTaxFrequencyApplicableForOperationalPeriod(
-          advanceFrequencyLiveOrFrozen,
-          selectedPeriodKey,
-        )
-      : Boolean(snapshot?.income_tax_advance_applicable);
-    const niConfigured = isCurrentOpenPeriod
-      ? resolveNationalInsuranceApplicability(tax?.national_insurance_type ?? null)
-      : Boolean(snapshot?.national_insurance_applicable);
-    const niDeductionsConfigured = isCurrentOpenPeriod
-      ? resolveNationalInsuranceDeductionsApplicability(
+    // Later months and unpinned historical periods use the same live tax.
+    // Only a historical period with pinned inputs keeps frozen configuration.
+    // Due is recomputed from that source's frequency — never snapshot.*_applicable.
+    const obligation = resolveRegistryObligationSemantics({
+      periodKey: selectedPeriodKey,
+      openPeriodKey: defaultPeriodKey,
+      live: {
+        vat_type: tax?.vat_type ?? null,
+        vat_frequency: tax?.vat_frequency ?? null,
+        payroll_flag: (p?.payroll_flag as boolean | null) ?? null,
+        income_tax_advance_enabled: tax?.income_tax_advance_enabled ?? null,
+        income_tax_advance_frequency: tax?.income_tax_advance_frequency ?? null,
+        income_tax_deductions_enabled: tax?.income_tax_deductions_enabled ?? null,
+        income_tax_deductions_file_number: tax?.income_tax_deductions_file_number ?? null,
+        income_tax_deductions_frequency: tax?.income_tax_deductions_frequency ?? null,
+        national_insurance_type: tax?.national_insurance_type ?? null,
+        national_insurance_monthly_amount: tax?.national_insurance_monthly_amount ?? null,
+        national_insurance_deductions_file_number:
           tax?.national_insurance_deductions_file_number ?? null,
-        )
-      : Boolean(snapshot?.national_insurance_deductions_applicable);
+      },
+      snapshot,
+    });
+    const vatConfigured = obligation.vat.configured;
+    const vatDue = obligation.vat.due;
+    const vatApplicable = vatDue;
+    const hasPayroll = obligation.payroll.due;
+    const payrollConfigured = obligation.payroll.configured;
+    const advanceConfigured = obligation.income_tax_advance.configured;
+    const advanceDue = obligation.income_tax_advance.due;
+    const niConfigured = obligation.national_insurance.configured;
+    const niDeductionsConfigured = obligation.national_insurance_deductions.configured;
     const periodFact = materialFacts.get(c.id);
     const materialBroughtCell = resolveMaterialBroughtForPeriod({
       period_fact: periodFact?.material_brought,
@@ -1167,25 +1128,8 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       payroll_due: hasPayroll,
       salary_data_received: payrollSalaryByClient.get(c.id),
     });
-    const incomeTaxDeductionsDue = isCurrentOpenPeriod
-      ? resolveIncomeTaxDeductionsApplicability({
-          file_number: tax?.income_tax_deductions_file_number ?? null,
-          frequency: tax?.income_tax_deductions_frequency ?? null,
-          operational_period_key: selectedPeriodKey,
-        })
-      : Boolean(snapshot?.income_tax_deductions_applicable);
-    const incomeTaxDeductionsConfigured =
-      incomeTaxDeductionsDue ||
-      (isCurrentOpenPeriod
-        ? resolveIncomeTaxDeductionsConfigured({
-            file_number: tax?.income_tax_deductions_file_number ?? null,
-            income_tax_deductions_enabled: tax?.income_tax_deductions_enabled ?? null,
-            income_tax_deductions_frequency: tax?.income_tax_deductions_frequency ?? null,
-          })
-        : resolveIncomeTaxDeductionsConfigured({
-            income_tax_deductions_enabled: snapshot?.income_tax_deductions_enabled ?? null,
-            income_tax_deductions_frequency: snapshot?.income_tax_deductions_frequency ?? null,
-          }));
+    const incomeTaxDeductionsDue = obligation.income_tax_deductions.due;
+    const incomeTaxDeductionsConfigured = obligation.income_tax_deductions.configured;
     const material_cells = buildMaterialCells({
       vat: materialBroughtCell,
       income_tax_advance: incomeTaxAdvanceCell,
@@ -1213,13 +1157,11 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       niDeductionsSquareCount: 0,
       incomeTaxDeductionsSquareCount: incomeTaxDeductionsConfigured ? 1 : 0,
     });
-    const advanceEnabledForFacet = advanceEnabledLiveOrFrozen;
-    const advanceFrequencyForFacet = advanceFrequencyLiveOrFrozen;
-    const vatTypeForFacet = vatTypeLiveOrFrozen;
-    const vatFrequencyForFacet = vatFrequencyLiveOrFrozen;
-    const itdFrequencyForFacet = isCurrentOpenPeriod
-      ? (tax?.income_tax_deductions_frequency ?? null)
-      : (snapshot?.income_tax_deductions_frequency ?? tax?.income_tax_deductions_frequency ?? null);
+    const advanceEnabledForFacet = obligation.income_tax_advance.enabled;
+    const advanceFrequencyForFacet = obligation.income_tax_advance.frequency;
+    const vatTypeForFacet = obligation.vat.vat_type;
+    const vatFrequencyForFacet = obligation.vat.vat_frequency;
+    const itdFrequencyForFacet = obligation.income_tax_deductions.frequency;
     const filter_facets = buildClientOperationsRegistryRowFilterFacets({
       period_applicability,
       manual_cell_statuses,
@@ -1251,6 +1193,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       materialBroughtCell,
       incomeTaxAdvanceCell,
       payrollCell,
+      obligation,
     });
   }
   markStage('facet_build_and_early_filter', facetBuildMs);
@@ -1339,17 +1282,8 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     const noteAgg = buildNotesCellDisplayHe(notesByClient.get(c.id) ?? []);
     const tax = taxByClient.get(c.id);
     const bt = (p?.business_type as string | null) ?? null;
-    // Current/open: live tax for display labels. Historical: frozen snapshot inputs.
-    const vatTypeForDisplay = isCurrentOpenPeriod
-      ? (tax?.vat_type ?? null)
-      : snapshot != null
-        ? snapshot.vat_type
-        : (tax?.vat_type ?? null);
-    const vatFrequencyForDisplay = isCurrentOpenPeriod
-      ? (tax?.vat_frequency ?? null)
-      : snapshot != null
-        ? snapshot.vat_frequency
-        : (tax?.vat_frequency ?? null);
+    const vatTypeForDisplay = seed.obligation.vat.vat_type;
+    const vatFrequencyForDisplay = seed.obligation.vat.vat_frequency;
     const vat_due_registry_display_he = tax
       ? computeVatDueRegistryDisplayHe(tax.vat_due_type, tax.vat_frequency)
       : null;
@@ -1417,16 +1351,8 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     const pcn_display = formatPcnRegistryDisplay(tax?.vat_due_type ?? null);
     const vat_status = vatFromTax ?? (p?.vat_status as string | null) ?? null;
     const income_tax_advance_status = formatIncomeTaxAdvanceRegistryFrequencyDisplayHe({
-      enabled: isCurrentOpenPeriod
-        ? (tax?.income_tax_advance_enabled ?? null)
-        : snapshot != null
-          ? snapshot.income_tax_advance_enabled
-          : (tax?.income_tax_advance_enabled ?? null),
-      frequency: isCurrentOpenPeriod
-        ? (tax?.income_tax_advance_frequency ?? null)
-        : snapshot != null
-          ? snapshot.income_tax_advance_frequency
-          : (tax?.income_tax_advance_frequency ?? null),
+      enabled: seed.obligation.income_tax_advance.enabled,
+      frequency: seed.obligation.income_tax_advance.frequency,
     });
     const national_insurance_status = niFromTax ?? (p?.national_insurance_status as string | null) ?? null;
     const national_insurance_deductions_status =

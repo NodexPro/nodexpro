@@ -18,8 +18,10 @@ import {
   resolveNationalInsuranceDeductionsApplicability,
   resolvePayrollMaterialForPeriod,
   resolvePayrollObligationConfigured,
+  resolveRegistryObligationSemantics,
   resolveVatApplicabilityForOperationalPeriod,
   resolveVatObligationConfigured,
+  type OperationalPeriodSnapshotInputs,
 } from '../../src/domains/client-operations/client-operations-operational-period.pure.js';
 import { buildNiDeductionsRegistryCell } from '../../src/domains/client-operations/client-operations-ni-deductions-126.pure.js';
 
@@ -152,9 +154,10 @@ test('D — VAT not configured → dash shape', () => {
 /** E — empty pre-setup snapshot must not shadow live tax on current/open (source contract). */
 test('E — current/open period prefers live tax; tax save reconciles + cache invalidates', () => {
   assert.match(serviceSrc, /Current\/open period: live tax is canonical/);
-  assert.match(serviceSrc, /isCurrentOpenPeriod/);
+  assert.match(serviceSrc, /resolveRegistryObligationSemantics/);
   assert.match(serviceSrc, /tax\?\.vat_type \?\? null/);
-  assert.match(serviceSrc, /resolveVatObligationConfigured/);
+  assert.doesNotMatch(serviceSrc, /Boolean\(snapshot\?\.vat_applicable\)/);
+  assert.doesNotMatch(serviceSrc, /Boolean\(snapshot\?\.income_tax_advance_applicable\)/);
   assert.match(taxSettingsSrc, /reconcileCurrentOpenPeriodApplicabilitySnapshotForClient/);
   assert.match(routesSrc, /invalidateClientOperationsRegistryMaterializationCache/);
   // No duplicate reconcile machinery outside tax-settings + existing service.
@@ -286,4 +289,191 @@ test('service wires configured+due into material/NI cells (source)', () => {
   assert.match(serviceSrc, /advance_due:\s*advanceDue/);
   assert.match(serviceSrc, /payroll_configured:\s*payrollConfigured/);
   assert.match(serviceSrc, /buildNiDeductionsRegistryCellForClient\(\{[\s\S]*?configured:\s*niDeductionsConfigured/);
+});
+
+const BRAND_NEW_PERIODS = ['2026-08', '2026-09', '2026-10', '2026-11', '2026-12'] as const;
+const OPEN_PERIOD = '2026-09';
+
+function blankTax(over: Partial<OperationalPeriodSnapshotInputs> = {}): OperationalPeriodSnapshotInputs {
+  return {
+    vat_type: null,
+    vat_frequency: null,
+    payroll_flag: null,
+    income_tax_advance_enabled: null,
+    income_tax_advance_frequency: null,
+    income_tax_deductions_enabled: null,
+    income_tax_deductions_file_number: null,
+    income_tax_deductions_frequency: null,
+    national_insurance_type: null,
+    national_insurance_monthly_amount: null,
+    national_insurance_deductions_file_number: null,
+    ...over,
+  };
+}
+
+function square(cell: { configured: boolean; due: boolean }): 'enabled' | 'disabled' | 'dash' {
+  if (!cell.configured) return 'dash';
+  return cell.due ? 'enabled' : 'disabled';
+}
+
+test('brand-new A — monthly obligations enabled in every month 08–12.26', () => {
+  const live = blankTax({
+    vat_type: 'yes',
+    vat_frequency: 'monthly',
+    income_tax_advance_enabled: true,
+    income_tax_advance_frequency: 'monthly',
+    income_tax_deductions_enabled: true,
+    income_tax_deductions_file_number: '935',
+    income_tax_deductions_frequency: 'monthly',
+    national_insurance_type: 'yes',
+    national_insurance_deductions_file_number: 'NI-1',
+  });
+  for (const period of BRAND_NEW_PERIODS) {
+    const cells = resolveRegistryObligationSemantics({
+      periodKey: period,
+      openPeriodKey: OPEN_PERIOD,
+      live,
+      snapshot: null,
+    });
+    assert.equal(square(cells.vat), 'enabled', period);
+    assert.equal(square(cells.income_tax_advance), 'enabled', period);
+    assert.equal(square(cells.payroll), 'enabled', period);
+    assert.equal(square(cells.national_insurance), 'enabled', period);
+    assert.equal(square(cells.national_insurance_deductions), 'enabled', period);
+    assert.equal(square(cells.income_tax_deductions), 'enabled', period);
+  }
+});
+
+test('brand-new B — both bimonthly anchors: even VAT/ITD, odd advances', () => {
+  const live = blankTax({
+    vat_type: 'yes',
+    vat_frequency: 'bi_monthly',
+    income_tax_advance_enabled: true,
+    income_tax_advance_frequency: 'bi_monthly',
+    income_tax_deductions_enabled: true,
+    income_tax_deductions_file_number: '935',
+    income_tax_deductions_frequency: 'bi_monthly',
+  });
+  const even = new Set(['2026-08', '2026-10', '2026-12']);
+  for (const period of BRAND_NEW_PERIODS) {
+    const cells = resolveRegistryObligationSemantics({
+      periodKey: period,
+      openPeriodKey: OPEN_PERIOD,
+      live,
+      snapshot: {},
+    });
+    const reporting = even.has(period);
+    assert.equal(square(cells.vat), reporting ? 'enabled' : 'disabled', `vat ${period}`);
+    assert.equal(square(cells.income_tax_deductions), reporting ? 'enabled' : 'disabled', `itd ${period}`);
+    assert.equal(square(cells.income_tax_advance), reporting ? 'disabled' : 'enabled', `advance ${period}`);
+    assert.equal(cells.vat.configured, true);
+    assert.equal(cells.income_tax_advance.configured, true);
+  }
+});
+
+test('brand-new C — not configured is dash in every period', () => {
+  for (const period of BRAND_NEW_PERIODS) {
+    const cells = resolveRegistryObligationSemantics({
+      periodKey: period,
+      openPeriodKey: OPEN_PERIOD,
+      live: blankTax(),
+      snapshot: null,
+    });
+    assert.equal(square(cells.vat), 'dash', period);
+    assert.equal(square(cells.income_tax_advance), 'dash', period);
+    assert.equal(square(cells.payroll), 'dash', period);
+    assert.equal(square(cells.national_insurance), 'dash', period);
+    assert.equal(square(cells.national_insurance_deductions), 'dash', period);
+    assert.equal(square(cells.income_tax_deductions), 'dash', period);
+  }
+});
+
+test('brand-new D — period tab order does not change applicability', () => {
+  const live = blankTax({ vat_type: 'yes', vat_frequency: 'monthly' });
+  const forward = [...BRAND_NEW_PERIODS];
+  const reverse = [...BRAND_NEW_PERIODS].reverse();
+  for (const period of forward) {
+    const a = resolveRegistryObligationSemantics({
+      periodKey: period,
+      openPeriodKey: OPEN_PERIOD,
+      live,
+      snapshot: null,
+    });
+    const b = resolveRegistryObligationSemantics({
+      periodKey: period,
+      openPeriodKey: OPEN_PERIOD,
+      live,
+      snapshot: null,
+    });
+    assert.deepEqual(a.vat, b.vat);
+    assert.equal(square(a.vat), 'enabled');
+  }
+  for (const period of reverse) {
+    const cells = resolveRegistryObligationSemantics({
+      periodKey: period,
+      openPeriodKey: OPEN_PERIOD,
+      live,
+      snapshot: null,
+    });
+    assert.equal(square(cells.vat), 'enabled', period);
+  }
+});
+
+test('brand-new E — first open in a later month matches every other month', () => {
+  const live = blankTax({
+    vat_type: 'yes',
+    vat_frequency: 'bi_monthly',
+    income_tax_advance_enabled: true,
+    income_tax_advance_frequency: 'monthly',
+  });
+  const laterFirst = resolveRegistryObligationSemantics({
+    periodKey: '2026-12',
+    openPeriodKey: OPEN_PERIOD,
+    live,
+    snapshot: null,
+  });
+  const earlier = resolveRegistryObligationSemantics({
+    periodKey: '2026-08',
+    openPeriodKey: OPEN_PERIOD,
+    live,
+    snapshot: null,
+  });
+  assert.equal(square(laterFirst.vat), 'enabled');
+  assert.equal(square(earlier.vat), 'enabled');
+  assert.equal(square(laterFirst.income_tax_advance), 'enabled');
+  assert.equal(square(earlier.income_tax_advance), 'enabled');
+  const oddLater = resolveRegistryObligationSemantics({
+    periodKey: '2026-11',
+    openPeriodKey: OPEN_PERIOD,
+    live,
+    snapshot: null,
+  });
+  assert.equal(square(oddLater.vat), 'disabled');
+  assert.equal(oddLater.vat.configured, true);
+});
+
+test('brand-new F — pinned historical month stays when live tax later changes', () => {
+  const liveNow = blankTax({ vat_type: 'no', vat_frequency: 'not_relevant' });
+  const january = resolveRegistryObligationSemantics({
+    periodKey: '2026-01',
+    openPeriodKey: OPEN_PERIOD,
+    live: liveNow,
+    snapshot: {
+      vat_type: 'yes',
+      vat_frequency: 'monthly',
+      vat_applicable: false,
+    },
+  });
+  assert.equal(square(january.vat), 'enabled');
+  const open = resolveRegistryObligationSemantics({
+    periodKey: OPEN_PERIOD,
+    openPeriodKey: OPEN_PERIOD,
+    live: liveNow,
+    snapshot: {
+      vat_type: 'yes',
+      vat_frequency: 'monthly',
+      vat_applicable: true,
+    },
+  });
+  assert.equal(square(open.vat), 'dash');
 });

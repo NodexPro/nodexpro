@@ -374,6 +374,180 @@ export function resolvePayrollApplicabilityFromDeductionsFiles(input: {
  * evidence remains, restore true. If no frozen evidence of files, stay false
  * (data-repair candidate — do not invent from live tax).
  */
+/**
+ * Snapshot inputs that can pin one obligation family.
+ * `*_applicable` booleans are derived and are not configuration.
+ */
+export type ObligationSnapshotConfiguration = {
+  vat_type?: string | null;
+  vat_frequency?: string | null;
+  payroll_flag?: boolean | null;
+  payroll_applicable?: boolean | null;
+  income_tax_advance_enabled?: boolean | null;
+  income_tax_advance_frequency?: string | null;
+  income_tax_deductions_enabled?: boolean | null;
+  income_tax_deductions_frequency?: string | null;
+  national_insurance_type?: string | null;
+  national_insurance_deductions_file_number?: string | null;
+};
+
+export type RegistryObligationSemantics = {
+  vat: {
+    configured: boolean;
+    due: boolean;
+    vat_type: string | null;
+    vat_frequency: string | null;
+  };
+  income_tax_advance: {
+    configured: boolean;
+    due: boolean;
+    enabled: boolean | null;
+    frequency: string | null;
+  };
+  payroll: { configured: boolean; due: boolean };
+  national_insurance: { configured: boolean; due: boolean };
+  national_insurance_deductions: { configured: boolean; due: boolean };
+  income_tax_deductions: {
+    configured: boolean;
+    due: boolean;
+    frequency: string | null;
+  };
+};
+
+function hasText(value: string | null | undefined): boolean {
+  return Boolean(String(value ?? '').trim());
+}
+
+/**
+ * Canonical obligation squares for one operational period.
+ *
+ * Source of configured + frequency:
+ * - current/open period, a later period, or a historical period with no pinned
+ *   inputs for that family → live client tax settings
+ * - historical period (before the open period) with pinned inputs → those frozen
+ *   inputs, never today's settings and never the stored `*_applicable` boolean
+ *
+ * Due is always recomputed from that source's frequency for this period.
+ * An empty pre-setup snapshot does not pin a family and cannot shadow a new client.
+ */
+export function resolveRegistryObligationSemantics(input: {
+  periodKey: string;
+  openPeriodKey: string;
+  live: OperationalPeriodSnapshotInputs;
+  snapshot?: ObligationSnapshotConfiguration | null;
+}): RegistryObligationSemantics {
+  const historical = input.periodKey < input.openPeriodKey && input.snapshot != null;
+  const snap = input.snapshot ?? null;
+
+  const vatPinned =
+    historical && (snap?.vat_type != null || snap?.vat_frequency != null);
+  const vatType = vatPinned ? (snap?.vat_type ?? null) : input.live.vat_type;
+  const vatFrequency = vatPinned ? (snap?.vat_frequency ?? null) : input.live.vat_frequency;
+  const vatConfigured = resolveVatObligationConfigured({
+    vat_type: vatType,
+    vat_frequency: vatFrequency,
+  });
+  const vatDue =
+    vatConfigured &&
+    resolveVatApplicabilityForOperationalPeriod({
+      vat_type: vatType,
+      vat_frequency: vatFrequency,
+      operational_period_key: input.periodKey,
+    });
+
+  const advancePinned =
+    historical &&
+    (snap?.income_tax_advance_enabled === true ||
+      hasText(snap?.income_tax_advance_frequency));
+  const advanceEnabled = advancePinned
+    ? (snap?.income_tax_advance_enabled ?? null)
+    : input.live.income_tax_advance_enabled;
+  const advanceFrequency = advancePinned
+    ? (snap?.income_tax_advance_frequency ?? null)
+    : input.live.income_tax_advance_frequency;
+  const advanceConfigured = resolveIncomeTaxAdvanceConfigured(advanceEnabled);
+  const advanceDue =
+    advanceConfigured &&
+    isIncomeTaxFrequencyApplicableForOperationalPeriod(advanceFrequency, input.periodKey);
+
+  const itdPinned =
+    historical &&
+    (snap?.income_tax_deductions_enabled === true ||
+      hasText(snap?.income_tax_deductions_frequency));
+  const itdFile = itdPinned ? null : input.live.income_tax_deductions_file_number;
+  const itdEnabled = itdPinned
+    ? (snap?.income_tax_deductions_enabled ?? null)
+    : input.live.income_tax_deductions_enabled;
+  const itdFrequency = itdPinned
+    ? (snap?.income_tax_deductions_frequency ?? null)
+    : input.live.income_tax_deductions_frequency;
+  const itdConfigured = resolveIncomeTaxDeductionsConfigured({
+    file_number: itdFile,
+    income_tax_deductions_enabled: itdEnabled,
+    income_tax_deductions_frequency: itdFrequency,
+  });
+  const itdDue =
+    itdConfigured &&
+    isIncomeTaxDeductionsFrequencyApplicableForOperationalPeriod(itdFrequency, input.periodKey);
+
+  const niPinned = historical && snap?.national_insurance_type != null;
+  const niType = niPinned
+    ? (snap?.national_insurance_type ?? null)
+    : input.live.national_insurance_type;
+  const niConfigured = resolveNationalInsuranceApplicability(niType);
+
+  const niDedPinned =
+    historical && snap?.national_insurance_deductions_file_number != null;
+  const niDedFile = niDedPinned
+    ? snap?.national_insurance_deductions_file_number
+    : input.live.national_insurance_deductions_file_number;
+  const niDedConfigured = resolveNationalInsuranceDeductionsApplicability(niDedFile);
+
+  const payrollPinned =
+    historical &&
+    (snap?.payroll_flag === true ||
+      snap?.payroll_applicable === true ||
+      resolveNationalInsuranceDeductionsApplicability(
+        snap?.national_insurance_deductions_file_number,
+      ) ||
+      snap?.income_tax_deductions_enabled === true);
+  const payrollOn = payrollPinned
+    ? resolvePayrollApplicabilityFromFrozenSnapshot({
+        payroll_applicable: snap?.payroll_applicable,
+        income_tax_deductions_enabled: snap?.income_tax_deductions_enabled,
+        national_insurance_deductions_file_number:
+          snap?.national_insurance_deductions_file_number,
+      })
+    : resolvePayrollApplicabilityFromDeductionsFiles({
+        income_tax_deductions_file_number: input.live.income_tax_deductions_file_number,
+        national_insurance_deductions_file_number:
+          input.live.national_insurance_deductions_file_number,
+      });
+
+  return {
+    vat: {
+      configured: vatConfigured,
+      due: vatDue,
+      vat_type: vatType,
+      vat_frequency: vatFrequency,
+    },
+    income_tax_advance: {
+      configured: advanceConfigured,
+      due: advanceDue,
+      enabled: advanceEnabled,
+      frequency: advanceFrequency,
+    },
+    payroll: { configured: payrollOn, due: payrollOn },
+    national_insurance: { configured: niConfigured, due: niConfigured },
+    national_insurance_deductions: { configured: niDedConfigured, due: niDedConfigured },
+    income_tax_deductions: {
+      configured: itdConfigured,
+      due: itdDue,
+      frequency: itdFrequency,
+    },
+  };
+}
+
 export function resolvePayrollApplicabilityFromFrozenSnapshot(input: {
   payroll_applicable: boolean | null | undefined;
   income_tax_deductions_enabled: boolean | null | undefined;
