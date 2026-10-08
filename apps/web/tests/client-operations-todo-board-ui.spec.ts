@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import {
   encodeTodoPriorityForSubmit,
   groupTodosByPriorityLane,
+  TODO_BOARD_DESKTOP_CARDS_PER_ROW,
   TODO_PRIORITY_LANES,
   todoPriorityToLaneId,
 } from '../src/lib/client-operations-todo-board.pure.js';
@@ -162,4 +163,30 @@ test('Board sticky yellow + priority lane accents', () => {
   assert.match(css, /nx-co-todo-lane--gold/);
   assert.match(css, /nx-co-todo-lane--green/);
   assert.match(css, /nx-co-todo-lane--blue/);
+});
+
+test('visual board — five compact rows, fixed cards, null is visual 5', () => {
+  assert.equal(TODO_PRIORITY_LANES.length, 5);
+  assert.equal(TODO_BOARD_DESKTOP_CARDS_PER_ROW, 5);
+  assert.deepEqual(
+    TODO_PRIORITY_LANES.map((lane) => `${lane.visual_number} ${lane.label_he}`),
+    ['1 דחוף', '2 גבוה', '3 בינוני', '4 נמוך', '5 ללא עדיפות'],
+  );
+  assert.deepEqual(
+    TODO_PRIORITY_LANES.map((lane) => lane.accent),
+    ['red', 'orange', 'gold', 'green', 'blue'],
+  );
+  assert.equal(TODO_PRIORITY_LANES[4]?.priority, null);
+  assert.equal(encodeTodoPriorityForSubmit('none'), null);
+  assert.match(modal, /nx-co-todo-lane__rail/);
+  assert.match(modal, /nx-co-todo-priority/);
+  assert.match(modal, /created_at/);
+  assert.match(css, /flex:\s*0\s+0\s+168px/);
+  assert.match(css, /flex-wrap:\s*nowrap/);
+  assert.match(css, /5 priority rows × 5 fixed cards = 25/);
+  assert.doesNotMatch(modal, /value="5"/);
+  assert.doesNotMatch(modal, /priority:\s*5/);
+  assert.match(modal, /complete_client_operations_todo/);
+  assert.match(modal, /reopen_client_operations_todo/);
+  assert.match(modal, /onDoubleClick/);
 });

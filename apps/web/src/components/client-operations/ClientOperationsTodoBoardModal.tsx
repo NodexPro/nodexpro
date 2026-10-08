@@ -20,6 +20,7 @@ import {
   formatTodoPriorityLabelHe,
   groupTodosByPriorityLane,
   TODO_PRIORITY_LANES,
+  todoPriorityToLaneId,
 } from '../../lib/client-operations-todo-board.pure';
 import {
   moduleClientOperationsTodoArchive,
@@ -386,13 +387,16 @@ export function ClientOperationsTodoBoardModal({
       >
         <div className="nx-co-todo-board__topbar">
           <div className="nx-co-todo-board__topbar-start">
+            <span className="nx-co-todo-board__mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
+                <path
+                  fill="currentColor"
+                  d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zm7 1.5V9h4.5L14 4.5zM8 12h8v1.5H8V12zm0 3h8v1.5H8V15z"
+                />
+              </svg>
+            </span>
             <h2 className="nx-co-todo-board__title">ToDo List</h2>
             {label ? <span className="nx-co-todo-board__workspace">{label}</span> : null}
-            <span className="nx-co-todo-board__count" aria-live="polite">
-              {activeTotal} משימות
-            </span>
-          </div>
-          <div className="nx-co-todo-board__topbar-actions">
             {canCreate ? (
               <button
                 type="button"
@@ -423,6 +427,11 @@ export function ClientOperationsTodoBoardModal({
             >
               ארכיון
             </button>
+          </div>
+          <div className="nx-co-todo-board__topbar-end">
+            <span className="nx-co-todo-board__count" aria-live="polite">
+              {activeTotal}
+            </span>
             <div className="nx-co-todo-board__pager">
               <button
                 type="button"
@@ -479,38 +488,30 @@ export function ClientOperationsTodoBoardModal({
               <div className="nx-co-todo-board__skeleton-line" />
               <div className="nx-co-todo-board__skeleton-line" />
             </div>
-          ) : activeTotal === 0 && !searchQ ? (
-            <div className="nx-co-todo-board__empty" data-testid="client-operations-todo-empty">
-              <p>אין משימות פתוחות</p>
-              {canCreate ? (
-                <button
-                  type="button"
-                  className="nx-btn nx-btn-taxes-compact nx-btn-primary nx-co-todo-btn"
-                  onClick={() => setCreateOpen(true)}
-                >
-                  + משימה חדשה
-                </button>
-              ) : null}
-            </div>
           ) : (
             <div className="nx-co-todo-lanes" data-testid="client-operations-todo-lanes">
+              {activeTotal === 0 && !searchQ ? (
+                <p className="nx-co-todo-board__empty-note" data-testid="client-operations-todo-empty">
+                  אין משימות פתוחות
+                </p>
+              ) : null}
               {TODO_PRIORITY_LANES.map((lane) => (
                 <section
                   key={lane.id}
                   className={`nx-co-todo-lane nx-co-todo-lane--${lane.accent}`}
                   data-lane={lane.id}
-                  aria-label={lane.label_he}
+                  aria-label={`${lane.visual_number} ${lane.label_he}`}
                 >
-                  <header className="nx-co-todo-lane__header">
-                    <span className="nx-co-todo-lane__dot" aria-hidden="true" />
+                  <div className="nx-co-todo-lane__rail">
+                    <span className="nx-co-todo-lane__num">{lane.visual_number}</span>
                     <span className="nx-co-todo-lane__label">{lane.label_he}</span>
-                    <span className="nx-co-todo-lane__count">{lanes[lane.id].length}</span>
-                  </header>
+                  </div>
                   <div className="nx-co-todo-lane__cards">
                     {lanes[lane.id].map((task) => (
                       <TodoStickyCard
                         key={task.id}
                         task={task}
+                        accent={lane.accent}
                         showAssignee={board?.workspace?.scope_kind === 'OFFICE'}
                         busy={busyTodoId === task.id}
                         onDoubleClick={() => setEditTask(task)}
@@ -639,7 +640,11 @@ export function ClientOperationsTodoBoardModal({
                         <td>{t.client.display_name ?? '—'}</td>
                         <td>{t.client.tax_id ?? '—'}</td>
                         <td>{t.task_text}</td>
-                        <td>{formatTodoPriorityLabelHe(t.priority)}</td>
+                        <td>
+                          <span className={`nx-co-todo-archive__pri nx-co-todo-archive__pri--${todoPriorityToLaneId(t.priority)}`}>
+                            {formatTodoPriorityLabelHe(t.priority)}
+                          </span>
+                        </td>
                         <td>{t.assigned_to.display_name}</td>
                         <td>{formatDateHe(t.created_at)}</td>
                         <td>{formatDateHe(t.completed_at)}</td>
@@ -695,12 +700,13 @@ export function ClientOperationsTodoBoardModal({
 
 function TodoStickyCard(props: {
   task: ClientOperationsTodoCard;
+  accent: 'red' | 'orange' | 'gold' | 'green' | 'blue';
   showAssignee: boolean;
   busy: boolean;
   onDoubleClick: () => void;
   onComplete: () => void;
 }) {
-  const { task, showAssignee, busy, onDoubleClick, onComplete } = props;
+  const { task, accent, showAssignee, busy, onDoubleClick, onComplete } = props;
   const canComplete = task.allowed_actions.includes('complete_client_operations_todo');
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -715,7 +721,7 @@ function TodoStickyCard(props: {
 
   return (
     <article
-      className="nx-co-todo-sticky"
+      className={`nx-co-todo-sticky nx-co-todo-sticky--${accent}`}
       data-testid="client-operations-todo-card"
       data-todo-id={task.id}
       onClick={onClick}
@@ -725,9 +731,11 @@ function TodoStickyCard(props: {
         onDoubleClick();
       }}
     >
+      <span className="nx-co-todo-sticky__pip" aria-hidden="true" />
       <div className="nx-co-todo-sticky__client">{task.client.display_name ?? 'לקוח'}</div>
       <div className="nx-co-todo-sticky__tax">{task.client.tax_id ?? '—'}</div>
       <div className="nx-co-todo-sticky__text">{task.task_text}</div>
+      <div className="nx-co-todo-sticky__date">{formatDateHe(task.created_at)}</div>
       {showAssignee ? (
         <div className="nx-co-todo-sticky__meta">{task.assigned_to.display_name}</div>
       ) : null}
@@ -983,16 +991,28 @@ function TodoFormModal(props: {
               required
             />
           </label>
-          <label className="nx-co-todo-form__field">
+          <div className="nx-co-todo-form__field">
             <span>עדיפות</span>
-            <select value={priority} onChange={(e) => setPriority(e.target.value)}>
-              <option value="1">1</option>
-              <option value="2">2</option>
-              <option value="3">3</option>
-              <option value="4">4</option>
-              <option value="none">ללא עדיפות</option>
-            </select>
-          </label>
+            <div className="nx-co-todo-priority" role="radiogroup" aria-label="עדיפות">
+              {TODO_PRIORITY_LANES.map((lane) => {
+                const token = lane.priority == null ? 'none' : String(lane.priority);
+                const selected = priority === token;
+                return (
+                  <button
+                    key={lane.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    aria-label={`${lane.visual_number} ${lane.label_he}`}
+                    className={`nx-co-todo-priority__btn nx-co-todo-priority__btn--${lane.accent}${selected ? ' is-selected' : ''}`}
+                    onClick={() => setPriority(token)}
+                  >
+                    {lane.visual_number}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           {showAssigneeSelect && !hideAssigneeField ? (
             <label className="nx-co-todo-form__field">
               <span>מטפל</span>
@@ -1030,7 +1050,7 @@ function TodoFormModal(props: {
             className="nx-btn nx-btn-taxes-compact nx-btn-primary nx-co-todo-btn"
             disabled={saving}
           >
-            שמור
+            {mode === 'create' ? 'צור משימה' : 'שמור'}
           </button>
           {mode === 'edit' &&
           task?.allowed_actions.includes('complete_client_operations_todo') &&

@@ -5,17 +5,22 @@
 
 export type TodoPriorityLaneId = 'p1' | 'p2' | 'p3' | 'p4' | 'none';
 
+/** Desktop board shows one card-row per lane. Visual 5 is null priority, not a stored 5. */
+export const TODO_BOARD_DESKTOP_CARDS_PER_ROW = 5;
+
 export const TODO_PRIORITY_LANES: Array<{
   id: TodoPriorityLaneId;
   priority: 1 | 2 | 3 | 4 | null;
+  /** Presentation number. Lane "5" is null / no priority — never submitted as 5. */
+  visual_number: '1' | '2' | '3' | '4' | '5';
   label_he: string;
   accent: 'red' | 'orange' | 'gold' | 'green' | 'blue';
 }> = [
-  { id: 'p1', priority: 1, label_he: 'עדיפות 1', accent: 'red' },
-  { id: 'p2', priority: 2, label_he: 'עדיפות 2', accent: 'orange' },
-  { id: 'p3', priority: 3, label_he: 'עדיפות 3', accent: 'gold' },
-  { id: 'p4', priority: 4, label_he: 'עדיפות 4', accent: 'green' },
-  { id: 'none', priority: null, label_he: 'ללא עדיפות', accent: 'blue' },
+  { id: 'p1', priority: 1, visual_number: '1', label_he: 'דחוף', accent: 'red' },
+  { id: 'p2', priority: 2, visual_number: '2', label_he: 'גבוה', accent: 'orange' },
+  { id: 'p3', priority: 3, visual_number: '3', label_he: 'בינוני', accent: 'gold' },
+  { id: 'p4', priority: 4, visual_number: '4', label_he: 'נמוך', accent: 'green' },
+  { id: 'none', priority: null, visual_number: '5', label_he: 'ללא עדיפות', accent: 'blue' },
 ];
 
 export function todoPriorityToLaneId(priority: number | null | undefined): TodoPriorityLaneId {
