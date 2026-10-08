@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { apiJson } from '../api/client';
 import { ORGS } from '../api/endpoints';
 import { useAuth } from '../contexts/AuthContext';
+import { readStoredInviteReturnPath } from '../lib/invite-return-path.pure';
 
 export function CreateOrganization() {
   const [name, setName] = useState('');
@@ -12,6 +13,8 @@ export function CreateOrganization() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const auth = useAuth();
+  const inviteReturn = readStoredInviteReturnPath(typeof sessionStorage !== 'undefined' ? sessionStorage : null);
+  if (inviteReturn) return <Navigate to={inviteReturn} replace />;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

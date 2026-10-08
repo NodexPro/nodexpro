@@ -1,8 +1,13 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { AUTH } from '../api/endpoints';
 import { apiJson } from '../api/client';
+import {
+  captureInviteReturnPath,
+  readStoredInviteReturnPath,
+  resolvePostRegisterDestination,
+} from '../lib/invite-return-path.pure';
 
 export function Register() {
   const [email, setEmail] = useState('');
@@ -11,6 +16,9 @@ export function Register() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const redirectParam = new URLSearchParams(location.search).get('redirect');
+  captureInviteReturnPath(typeof sessionStorage !== 'undefined' ? sessionStorage : null, redirectParam);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -23,7 +31,10 @@ export function Register() {
       });
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (signInError) throw new Error(signInError.message);
-      navigate('/onboarding', { replace: true });
+      const inviteReturnPath = readStoredInviteReturnPath(
+        typeof sessionStorage !== 'undefined' ? sessionStorage : null,
+      );
+      navigate(resolvePostRegisterDestination(inviteReturnPath), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {

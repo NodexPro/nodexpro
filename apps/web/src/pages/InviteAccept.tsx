@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { apiJson } from '../api/client';
+import { ApiError, apiJson } from '../api/client';
 import { inviteAccept } from '../api/endpoints';
+import {
+  clearStoredInviteReturnPath,
+  isDefinitiveInviteRejection,
+  parseInviteReturnPath,
+  captureInviteReturnPath,
+} from '../lib/invite-return-path.pure';
 
 export function InviteAccept() {
   const [searchParams] = useSearchParams();
@@ -13,13 +19,20 @@ export function InviteAccept() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
+    const storage = typeof sessionStorage !== 'undefined' ? sessionStorage : null;
     if (!token) {
+      clearStoredInviteReturnPath(storage);
       setStatus('error');
       setMessage('Invalid invite link');
       return;
     }
+    const returnPath = parseInviteReturnPath(`${window.location.pathname}${window.location.search}`);
+    if (returnPath) captureInviteReturnPath(storage, returnPath);
     if (auth.status !== 'authenticated') {
-      navigate(`/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+      const loginTarget = returnPath
+        ? `/login?redirect=${encodeURIComponent(returnPath)}`
+        : `/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+      navigate(loginTarget);
       return;
     }
   }, [token, auth.status, navigate]);
@@ -32,13 +45,19 @@ export function InviteAccept() {
       body: JSON.stringify({ token }),
     })
       .then(async () => {
+        clearStoredInviteReturnPath(typeof sessionStorage !== 'undefined' ? sessionStorage : null);
         setStatus('success');
         await auth.refetchMe?.();
         setTimeout(() => navigate('/dashboard'), 2000);
       })
       .catch((e) => {
+        const message = e instanceof Error ? e.message : 'Failed to accept invitation';
+        const code = e instanceof ApiError ? e.code : undefined;
+        if (isDefinitiveInviteRejection({ message, code })) {
+          clearStoredInviteReturnPath(typeof sessionStorage !== 'undefined' ? sessionStorage : null);
+        }
         setStatus('error');
-        setMessage(e instanceof Error ? e.message : 'Failed to accept invitation');
+        setMessage(message);
       });
   }, [token, auth.status, status]);
 

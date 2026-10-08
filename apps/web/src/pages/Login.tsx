@@ -2,6 +2,11 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import {
+  captureInviteReturnPath,
+  readStoredInviteReturnPath,
+  resolvePostLoginDestination,
+} from '../lib/invite-return-path.pure';
 
 export function Login() {
   const [email, setEmail] = useState('');
@@ -13,6 +18,13 @@ export function Login() {
   const { refetchMe } = useAuth();
   const redirectParam = new URLSearchParams(location.search).get('redirect');
   const from = redirectParam ?? (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/dashboard';
+  const inviteReturnPath = captureInviteReturnPath(
+    typeof sessionStorage !== 'undefined' ? sessionStorage : null,
+    redirectParam,
+  );
+  const registerTo = inviteReturnPath
+    ? `/register?redirect=${encodeURIComponent(inviteReturnPath)}`
+    : '/register';
   const passwordResetOk = Boolean((location.state as { passwordResetOk?: boolean } | null)?.passwordResetOk);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -34,7 +46,14 @@ export function Login() {
         setLoading(false);
         return;
       }
-      const redirectTo = (me.redirect_to ?? '').trim() || from;
+      const inviteAfterAuth = readStoredInviteReturnPath(
+        typeof sessionStorage !== 'undefined' ? sessionStorage : null,
+      );
+      const redirectTo = resolvePostLoginDestination({
+        inviteReturnPath: inviteAfterAuth,
+        sessionRedirect: me.redirect_to,
+        fallback: from,
+      });
       navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -79,7 +98,7 @@ export function Login() {
         <Link to="/forgot-password">Forgot password?</Link>
       </p>
       <p style={{ marginTop: 16 }}>
-        <Link to="/register">Create account</Link>
+        <Link to={registerTo}>Create account</Link>
       </p>
     </div>
   );

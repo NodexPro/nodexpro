@@ -1,5 +1,9 @@
 import { supabaseAdmin } from '../../db/client.js';
-import { forbidden } from '../../shared/errors.js';
+import { AppError, conflict, forbidden } from '../../shared/errors.js';
+import {
+  PENDING_ORGANIZATION_INVITATION,
+  shouldRefuseOrganizationBootstrap,
+} from './organization-bootstrap-guard.pure.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import {
   listUserActiveOrganizationIds,
@@ -30,6 +34,40 @@ async function seedOrganizationSettingsOnCreate(
 }
 
 export async function createOrganization(ctx: RequestContext, params: { name: string; legalName?: string; countryCode: string; timezone?: string }): Promise<CreateOrganizationResponse> {
+  const { data: activeRows, error: membershipLookupError } = await supabaseAdmin
+    .from('organization_memberships')
+    .select('id')
+    .eq('user_id', ctx.user.id)
+    .eq('status', 'active')
+    .limit(1);
+  if (membershipLookupError) {
+    throw new AppError(500, 'Could not verify organization membership', 'MEMBERSHIP_LOOKUP_FAILED');
+  }
+  const hasActiveMembership = (activeRows?.length ?? 0) > 0;
+
+  let hasPendingUnexpiredInvitation = false;
+  if (!hasActiveMembership) {
+    const email = ctx.user.email.trim().toLowerCase();
+    const { data: pendingRows, error: invitationLookupError } = await supabaseAdmin
+      .from('user_invitations')
+      .select('id')
+      .eq('email', email)
+      .eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString())
+      .limit(1);
+    if (invitationLookupError) {
+      throw new AppError(500, 'Could not verify pending invitations', 'INVITATION_LOOKUP_FAILED');
+    }
+    hasPendingUnexpiredInvitation = (pendingRows?.length ?? 0) > 0;
+  }
+
+  if (shouldRefuseOrganizationBootstrap({ hasActiveMembership, hasPendingUnexpiredInvitation })) {
+    throw conflict(
+      'A pending organization invitation must be accepted before creating an organization',
+      PENDING_ORGANIZATION_INVITATION,
+    );
+  }
+
   const { data: org } = await supabaseAdmin
     .from('organizations')
     .insert({
