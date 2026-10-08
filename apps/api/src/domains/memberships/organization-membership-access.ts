@@ -51,7 +51,7 @@ export async function listActiveHandlerEligibleMembers(organizationId: string): 
   const eligibleRoles = await loadHandlerEligibleRoleCodes();
   const { data, error } = await supabaseAdmin
     .from('organization_memberships')
-    .select('user_id, role_code, users(id, email, full_name)')
+    .select('user_id, role_code, users!organization_memberships_user_id_fkey(id, email, full_name)')
     .eq('organization_id', organizationId)
     .eq('status', 'active')
     .in('role_code', [...eligibleRoles]);

@@ -56,6 +56,22 @@ test('Stage1 source contract — canonical membership helper owns CO handler + a
   assert.match(orgs, /role_code: 'owner'/);
 });
 
+test('Stage1 source contract — membership user embed uses user_id FK, not invited_by', () => {
+  const helper = readSrc('domains/memberships/organization-membership-access.ts');
+  const migration021 = readFileSync(
+    join(__dirname, '../../../../supabase/migrations/021_rbac_organization_memberships.sql'),
+    'utf8',
+  );
+  assert.match(migration021, /user_id uuid not null references public\.users\(id\)/);
+  assert.match(migration021, /invited_by uuid references public\.users\(id\)/);
+  assert.match(
+    helper,
+    /users!organization_memberships_user_id_fkey\(id, email, full_name\)/,
+  );
+  assert.doesNotMatch(helper, /users\(id, email, full_name\)/);
+  assert.doesNotMatch(helper, /organization_memberships_invited_by_fkey/);
+});
+
 test('Stage1 A–K membership integrity (live DB)', async (t) => {
   if (!supabaseConfigured()) {
     t.skip('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not configured');
