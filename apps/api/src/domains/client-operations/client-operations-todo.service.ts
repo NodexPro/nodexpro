@@ -15,7 +15,7 @@ import {
 import {
   assertCanAccessClientFromContext,
   clientIdIsAuthorized,
-  loadAssignedClientIdsForHandler,
+  resolveOrganizationClientAccessScope,
   roleHasOfficeClientAccess,
   type OrganizationClientAccessScope,
 } from './organization-client-access.js';
@@ -323,19 +323,41 @@ async function hydrateTodoCards(params: {
 async function loadOrgTodos(params: {
   orgId: string;
   active: boolean;
+  authorizedClientIds: string[] | null;
 }): Promise<TodoRow[]> {
+  if (params.authorizedClientIds && params.authorizedClientIds.length === 0) return [];
   let q = supabaseAdmin
     .from('client_operations_todos')
     .select(
       'id, organization_id, client_id, assigned_to_user_id, task_text, priority, created_at, created_by_user_id, updated_at, updated_by_user_id, completed_at, completed_by_user_id',
     )
     .eq('organization_id', params.orgId);
+  if (params.authorizedClientIds) q = q.in('client_id', params.authorizedClientIds);
   if (params.active) q = q.is('completed_at', null);
   else q = q.not('completed_at', 'is', null);
 
   const { data, error } = await q;
   if (error) throw new Error(error.message ?? 'Failed to load todos');
   return (data ?? []) as TodoRow[];
+}
+
+async function excludeArchivedClientTodos(
+  orgId: string,
+  rows: TodoRow[],
+  access: OrganizationClientAccessScope,
+): Promise<TodoRow[]> {
+  if (access.kind === 'OFFICE' || access.authorized_client_ids !== null || rows.length === 0) return rows;
+  const ids = [...new Set(rows.map((r) => r.client_id).filter(Boolean))];
+  if (ids.length === 0) return [];
+  const { data, error } = await supabaseAdmin
+    .from('clients')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('is_archived', false)
+    .in('id', ids);
+  if (error) throw new Error(error.message ?? 'Failed to filter todo clients');
+  const live = new Set((data ?? []).map((row) => String((row as { id: string }).id)));
+  return rows.filter((r) => live.has(r.client_id));
 }
 
 function filterTodosForWorkspace(
@@ -365,7 +387,15 @@ export async function getClientOperationsTodoBoard(
   const { orgId, workspace, materializationAccess } = await resolveWorkspace(ctx, query);
   const pageReq = normalizeTodoPage(query.page);
   const q = String(query.q ?? '').trim().toLowerCase();
-  const allActive = await loadOrgTodos({ orgId, active: true });
+  const allActive = await excludeArchivedClientTodos(
+    orgId,
+    await loadOrgTodos({
+      orgId,
+      active: true,
+      authorizedClientIds: materializationAccess.authorized_client_ids,
+    }),
+    materializationAccess,
+  );
   let scoped = filterTodosForWorkspace(allActive, workspace, materializationAccess);
 
   if (q) {
@@ -448,7 +478,15 @@ export async function getClientOperationsTodoArchive(
   else if (filterPriorityRaw === 'none') filterPriority = 'none';
   else filterPriority = safeNormalizePriority(filterPriorityRaw);
 
-  const allDone = await loadOrgTodos({ orgId, active: false });
+  const allDone = await excludeArchivedClientTodos(
+    orgId,
+    await loadOrgTodos({
+      orgId,
+      active: false,
+      authorizedClientIds: materializationAccess.authorized_client_ids,
+    }),
+    materializationAccess,
+  );
   let scoped = filterTodosForWorkspace(allDone, workspace, materializationAccess);
 
   if (filterAssignee) {
@@ -587,9 +625,21 @@ export async function listClientOperationsTodoAssigneeOptions(
   const eligible = await listActiveHandlerEligibleMembers(orgId);
 
   const canAccessClientAsAssignee = async (userId: string, roleCode: string): Promise<boolean> => {
-    if (roleHasOfficeClientAccess(roleCode)) return true;
-    const assigned = await loadAssignedClientIdsForHandler(orgId, userId);
-    return assigned.includes(clientId);
+    const scope = await resolveOrganizationClientAccessScope({
+      organizationId: orgId,
+      viewerUserId: userId,
+      roleCode,
+    });
+    if (!clientIdIsAuthorized(scope, clientId)) return false;
+    if (scope.kind === 'OFFICE') return true;
+    const { data } = await supabaseAdmin
+      .from('clients')
+      .select('id')
+      .eq('organization_id', orgId)
+      .eq('id', clientId)
+      .eq('is_archived', false)
+      .maybeSingle();
+    return Boolean(data);
   };
 
   let candidates = eligible;
@@ -633,10 +683,22 @@ async function assertAssigneeCanAccessClient(params: {
   const member = members.find((m) => m.user_id === params.assigneeUserId);
   if (!member) throw forbidden('Assignee not eligible', 'TODO_ASSIGNEE_FORBIDDEN');
   if (roleHasOfficeClientAccess(member.role_code)) return;
-  const assigned = await loadAssignedClientIdsForHandler(params.organizationId, params.assigneeUserId);
-  if (!assigned.includes(params.clientId)) {
+  const scope = await resolveOrganizationClientAccessScope({
+    organizationId: params.organizationId,
+    viewerUserId: params.assigneeUserId,
+    roleCode: member.role_code,
+  });
+  if (!clientIdIsAuthorized(scope, params.clientId)) {
     throw forbidden('Assignee cannot access client', 'TODO_ASSIGNEE_CLIENT_ACCESS_FORBIDDEN');
   }
+  const { data } = await supabaseAdmin
+    .from('clients')
+    .select('id')
+    .eq('organization_id', params.organizationId)
+    .eq('id', params.clientId)
+    .eq('is_archived', false)
+    .maybeSingle();
+  if (!data) throw forbidden('Assignee cannot access client', 'TODO_ASSIGNEE_CLIENT_ACCESS_FORBIDDEN');
 }
 
 async function loadTodoOrForbidden(orgId: string, todoId: string): Promise<TodoRow> {
@@ -1173,14 +1235,22 @@ export async function assertNoIncompatibleActiveTodosForHandlerChange(params: {
     if (m.status === 'active') roleByUser.set(m.user_id, m.role_code);
   }
 
-  const conflicting = rows.filter((r) => {
+  const conflicting: typeof rows = [];
+  for (const r of rows) {
     const role = roleByUser.get(r.assigned_to_user_id) ?? 'staff';
-    return !assigneeWouldRetainClientAccessAfterHandlerChange({
+    const scope = await resolveOrganizationClientAccessScope({
+      organizationId: params.organizationId,
+      viewerUserId: r.assigned_to_user_id,
+      roleCode: role,
+    });
+    const retains = assigneeWouldRetainClientAccessAfterHandlerChange({
       assigneeUserId: r.assigned_to_user_id,
       assigneeHasOfficeAccess: roleHasOfficeClientAccess(role),
+      assigneeHasClientVisibility: clientIdIsAuthorized(scope, params.clientId),
       afterHandlerUserId: params.afterHandlerUserId,
     });
-  });
+    if (!retains) conflicting.push(r);
+  }
 
   if (!conflicting.length) return;
 

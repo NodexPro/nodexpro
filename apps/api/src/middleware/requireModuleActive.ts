@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../db/client.js';
 import { forbidden } from '../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../shared/audit-events.js';
 import { resolveEntitlement } from '../domains/modules/entitlement.service.js';
+import { assertStaffViewerMayUseModule } from '../domains/modules/member-module-access.service.js';
 import { resolveModuleEntitlementCode } from '../shared/module-entitlement.pure.js';
 
 export function requireModuleActive(moduleCode: string) {
@@ -101,6 +102,16 @@ export function requireModuleActive(moduleCode: string) {
         payload: { reason: entitlement.reason ?? 'Not entitled to use this module' },
       });
       next(forbidden(entitlement.reason ?? 'Not entitled to use this module'));
+      return;
+    }
+
+    // Staff/Viewer: organization entitlement is not member access.
+    // Runs before module handlers and their caches, so a removed grant
+    // cannot reuse a previous response.
+    try {
+      await assertStaffViewerMayUseModule(ctx, String(mod.id));
+    } catch (e) {
+      next(e);
       return;
     }
 

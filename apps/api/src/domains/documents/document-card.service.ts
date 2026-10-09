@@ -7,6 +7,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { forbidden } from '../../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
+import { assertDocumentClientAccess, restrictDocumentLinks } from './document-client-access.js';
 
 export interface DocumentCardData {
   document: Record<string, unknown>;
@@ -33,6 +34,8 @@ export async function getDocumentCardData(
 
   const doc = docRes.data as Record<string, unknown> | null;
   if (!doc) throw forbidden('Document not found');
+  // Stage 5.5: card (document + versions + links + activity) is one client-ACL decision.
+  const allowList = await assertDocumentClientAccess(ctx, doc.primary_client_id as string | null | undefined);
 
   const canViewSensitive = perms.includes('documents:view_sensitive');
   if (!canViewSensitive && ['sensitive', 'restricted'].includes((doc.sensitivity_level as string) ?? '')) {
@@ -49,7 +52,7 @@ export async function getDocumentCardData(
   });
 
   const versions = (versionsRes.data ?? []) as Record<string, unknown>[];
-  const links = (linksRes.data ?? []) as Record<string, unknown>[];
+  const links = restrictDocumentLinks((linksRes.data ?? []) as Record<string, unknown>[], allowList);
   const activity = (activityRes.data ?? []) as Record<string, unknown>[];
 
   return {

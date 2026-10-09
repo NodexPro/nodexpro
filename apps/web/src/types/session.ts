@@ -1,6 +1,6 @@
 export type UiLanguageCode = 'en' | 'he';
 
-export type ShellProfile = 'income_only' | 'full_platform';
+export type ShellProfile = 'income_only' | 'full_platform' | 'worker' | 'closed';
 
 export interface SessionNavItemDto {
   path: string;

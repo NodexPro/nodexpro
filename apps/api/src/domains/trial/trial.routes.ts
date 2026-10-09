@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
 import { requirePermission } from '../../middleware/requirePermission.js';
+import { requireOfficeAdministration } from '../../middleware/requireOfficeAdministration.js';
 import { supabaseAdmin } from '../../db/client.js';
 import * as trialService from './trial.service.js';
 import * as legalIdentityService from './legal-identity.service.js';
@@ -9,7 +10,7 @@ import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 
 const router = Router();
 
-router.get('/:id/trial', authMiddleware, requireOrg, requirePermission('subscriptions:read'), async (req, res, next) => {
+router.get('/:id/trial', authMiddleware, requireOrg, requireOfficeAdministration, requirePermission('subscriptions:read'), async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) {
       return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
@@ -21,7 +22,7 @@ router.get('/:id/trial', authMiddleware, requireOrg, requirePermission('subscrip
   }
 });
 
-router.get('/:id/owner-identity', authMiddleware, requireOrg, requirePermission('subscriptions:read'), async (req, res, next) => {
+router.get('/:id/owner-identity', authMiddleware, requireOrg, requireOfficeAdministration, requirePermission('subscriptions:read'), async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) {
       return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
@@ -34,7 +35,7 @@ router.get('/:id/owner-identity', authMiddleware, requireOrg, requirePermission(
 });
 
 /** Company legal identity summary (alias for Settings UI). */
-router.get('/:id/settings/company/legal-identity', authMiddleware, requireOrg, requirePermission('subscriptions:read'), async (req, res, next) => {
+router.get('/:id/settings/company/legal-identity', authMiddleware, requireOrg, requireOfficeAdministration, requirePermission('subscriptions:read'), async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) {
       return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
@@ -52,7 +53,7 @@ router.get('/:id/settings/company/legal-identity', authMiddleware, requireOrg, r
   }
 });
 
-router.post('/:id/legal-identity', authMiddleware, requireOrg, requirePermission('modules:write'), async (req, res, next) => {
+router.post('/:id/legal-identity', authMiddleware, requireOrg, requireOfficeAdministration, requirePermission('modules:write'), async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) {
       return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });

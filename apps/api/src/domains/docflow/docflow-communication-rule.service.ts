@@ -1,7 +1,11 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { writeAudit } from '../../shared/audit-events.js';
-import { badRequest, forbidden, notFound } from '../../shared/errors.js';
+import { AppError, badRequest, forbidden, notFound } from '../../shared/errors.js';
+import {
+  assertCanAccessClientFromContext,
+  authorizedClientIdsForViewer,
+} from '../client-operations/organization-client-access.js';
 import { resolveCountryContext } from '../country-pack/country-pack-resolver.service.js';
 import { resolveOrganizationActiveRuleset } from '../country-pack/organization-country.service.js';
 import { getCountryPack } from '../country-pack/country-pack.service.js';
@@ -815,7 +819,9 @@ export async function buildCommunicationRuleReviewCatalog(
 export async function buildCommunicationRuleRunReviewAggregate(
   orgId: string,
   ruleRunId: string | null,
-  catalogRunDate: string
+  catalogRunDate: string,
+  /** Null/omit = unrestricted. Array = Stage 5.1 allow-list (drafts, skipped rows and counters are scoped to it). */
+  authorizedClientIds: string[] | null = null,
 ): Promise<Record<string, unknown>> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(catalogRunDate)) throw badRequest('run_date must be YYYY-MM-DD');
 
@@ -871,13 +877,17 @@ export async function buildCommunicationRuleRunReviewAggregate(
   if (runErr) throw runErr;
   if (!run) throw notFound('Rule run not found');
 
-  const { data: drafts, error: dErr } = await supabaseAdmin
+  const { data: draftsAll, error: dErr } = await supabaseAdmin
     .from('communication_draft_messages')
     .select('*')
     .eq('rule_run_id', rid)
     .eq('org_id', orgId)
     .order('generated_at', { ascending: true });
   if (dErr) throw dErr;
+  const reviewAllow = authorizedClientIds ? new Set(authorizedClientIds) : null;
+  const drafts = reviewAllow
+    ? (draftsAll ?? []).filter((d) => reviewAllow.has(String((d as { client_id?: string }).client_id ?? '')))
+    : draftsAll;
 
   const clientIds = [...new Set((drafts ?? []).map((d) => d.client_id as string))];
   const displayByClient = new Map<string, string | null>();
@@ -897,7 +907,10 @@ export async function buildCommunicationRuleRunReviewAggregate(
     .maybeSingle();
   if (lvErr) throw lvErr;
 
-  const skippedDetail = (run.skipped_detail as SkippedClient[] | null) ?? [];
+  const skippedDetailAll = (run.skipped_detail as SkippedClient[] | null) ?? [];
+  const skippedDetail = reviewAllow
+    ? skippedDetailAll.filter((s) => reviewAllow.has(String(s.client_id ?? '')))
+    : skippedDetailAll;
   const activePortalByClient = new Map<string, boolean>();
   if (clientIds.length) {
     const { data: portalRows, error: pErr } = await supabaseAdmin
@@ -1039,8 +1052,9 @@ export async function buildCommunicationRuleRunReviewAggregate(
       run_date: run.run_date,
       run_context_key: run.run_context_key,
       status: run.status,
-      generated_count: run.generated_count,
-      skipped_count: run.skipped_count,
+      // Restricted viewers only see counters over their authorized clients (no hidden-client totals).
+      generated_count: reviewAllow ? (drafts ?? []).length : run.generated_count,
+      skipped_count: reviewAllow ? skippedDetail.length : run.skipped_count,
       target_filter_summary: targetFilterSummary,
       created_at: run.created_at,
     },
@@ -1107,15 +1121,38 @@ async function resolveReviewCatalogRunDate(
   return new Date().toISOString().slice(0, 10);
 }
 
+function viewerParams(ctx: RequestContext) {
+  return {
+    organizationId: ctx.organizationId ?? '',
+    userId: ctx.user.id,
+    roleCode: ctx.membership?.roleCode ?? null,
+  };
+}
+
+/**
+ * Stage 5.5 — a draft id is never authority. Restricted Staff/Viewer need Stage 5.1 access to the
+ * draft's client; otherwise the draft is reported as not found (no existence leak).
+ */
+async function assertDraftClientAccess(ctx: RequestContext, orgId: string, clientId: string): Promise<void> {
+  await assertClientBelongsToOrg(orgId, clientId);
+  try {
+    await assertCanAccessClientFromContext(ctx, clientId);
+  } catch (e) {
+    if (e instanceof AppError && e.statusCode === 403) throw notFound('Draft not found');
+    throw e;
+  }
+}
+
 async function refreshedReview(
   orgId: string,
   ruleRunId: string,
-  payload?: Record<string, unknown>
+  payload?: Record<string, unknown>,
+  authorizedClientIds?: string[] | null,
 ): Promise<DocflowCommandResponse['refreshed']> {
   const catalogRunDate = await resolveReviewCatalogRunDate(orgId, ruleRunId, payload);
   return {
     aggregate_key: 'communication_rule_run_review_aggregate',
-    aggregate: await buildCommunicationRuleRunReviewAggregate(orgId, ruleRunId, catalogRunDate),
+    aggregate: await buildCommunicationRuleRunReviewAggregate(orgId, ruleRunId, catalogRunDate, authorizedClientIds ?? null),
   };
 }
 
@@ -1126,11 +1163,15 @@ async function refreshedAfterCommunicationCommand(
   ctx: RequestContext
 ): Promise<DocflowCommandResponse['refreshed']> {
   const target = asOptionalString(payload.refresh_aggregate);
+  const authorizedClientIds = await authorizedClientIdsForViewer(viewerParams(ctx));
   if (target === 'docflow_floating_widget_aggregate') {
     const canUse = canRunDocflowCommunicationRules(ctx);
     return {
       aggregate_key: 'docflow_floating_widget_aggregate',
-      aggregate: await buildDocflowFloatingWidgetAggregate(orgId, { can_use_communication_commands: canUse }),
+      aggregate: await buildDocflowFloatingWidgetAggregate(orgId, {
+        can_use_communication_commands: canUse,
+        authorizedClientIds,
+      }),
     };
   }
   if (target === 'office_docflow_task_center_aggregate') {
@@ -1141,11 +1182,12 @@ async function refreshedAfterCommunicationCommand(
         orgId,
         userId: ctx.user.id,
         can_use_communication_commands: canUse,
+        authorizedClientIds,
         ...parseTaskCenterOptsFromPayload(orgId, ctx.user.id, payload),
       }),
     };
   }
-  return refreshedReview(orgId, ruleRunId, payload);
+  return refreshedReview(orgId, ruleRunId, payload, await authorizedClientIdsForViewer(viewerParams(ctx)));
 }
 
 export async function executeDocflowCommunicationOfficeCommand(
@@ -1166,6 +1208,11 @@ export async function executeDocflowCommunicationOfficeCommand(
 
   switch (command) {
     case 'run_communication_rule': {
+      // Rule runs generate drafts for every targeted client of the office: class C (office-wide
+      // administration). A client-restricted Staff/Viewer must not trigger or see it.
+      if ((await authorizedClientIdsForViewer(viewerParams(ctx))) !== null) {
+        throw forbidden('Insufficient permission for communication rules');
+      }
       const valueKey = reqString(payload, 'value_key');
       const runDateRaw = asOptionalString(payload.run_date) ?? new Date().toISOString().slice(0, 10);
       if (!/^\d{4}-\d{2}-\d{2}$/.test(runDateRaw)) throw badRequest('run_date must be YYYY-MM-DD');
@@ -1198,7 +1245,7 @@ export async function executeDocflowCommunicationOfficeCommand(
       if (error) throw error;
       if (!draft) throw notFound('Draft not found');
       if (draft.status !== 'draft') throw badRequest('Draft is not in draft status');
-      await assertClientBelongsToOrg(orgId, draft.client_id as string);
+      await assertDraftClientAccess(ctx, orgId, draft.client_id as string);
 
       const { error: uErr } = await supabaseAdmin
         .from('communication_draft_messages')
@@ -1234,7 +1281,7 @@ export async function executeDocflowCommunicationOfficeCommand(
       if (error) throw error;
       if (!draft) throw notFound('Draft not found');
       if (draft.status !== 'draft') throw badRequest('Only draft messages can be edited');
-      await assertClientBelongsToOrg(orgId, draft.client_id as string);
+      await assertDraftClientAccess(ctx, orgId, draft.client_id as string);
 
       const { error: uErr } = await supabaseAdmin.from('communication_draft_messages').update({ message_body: messageBody }).eq('id', draftId);
       if (uErr) throw uErr;
@@ -1249,7 +1296,7 @@ export async function executeDocflowCommunicationOfficeCommand(
         payload: { rule_run_id: ruleRunId, client_id: draft.client_id },
       });
 
-      return { ok: true, command, refreshed: await refreshedReview(orgId, ruleRunId, payload) };
+      return { ok: true, command, refreshed: await refreshedReview(orgId, ruleRunId, payload, await authorizedClientIdsForViewer(viewerParams(ctx))) };
     }
 
     case 'cancel_draft_message': {
@@ -1266,7 +1313,7 @@ export async function executeDocflowCommunicationOfficeCommand(
       if (error) throw error;
       if (!draft) throw notFound('Draft not found');
       if (draft.status !== 'draft' && draft.status !== 'approved') throw badRequest('Cannot cancel this draft');
-      await assertClientBelongsToOrg(orgId, draft.client_id as string);
+      await assertDraftClientAccess(ctx, orgId, draft.client_id as string);
 
       const { error: uErr } = await supabaseAdmin
         .from('communication_draft_messages')
@@ -1302,7 +1349,7 @@ export async function executeDocflowCommunicationOfficeCommand(
       if (!draft) throw notFound('Draft not found');
       if (draft.status !== 'approved') throw badRequest('Only approved drafts can be sent');
       const clientId = draft.client_id as string;
-      await assertClientBelongsToOrg(orgId, clientId);
+      await assertDraftClientAccess(ctx, orgId, clientId);
 
       const { data: run, error: rErr } = await supabaseAdmin
         .from('communication_rule_runs')

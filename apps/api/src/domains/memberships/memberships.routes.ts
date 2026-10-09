@@ -2,17 +2,27 @@ import { Router } from 'express';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
 import { requirePermission } from '../../middleware/requirePermission.js';
+import { requireOfficeAdministration } from '../../middleware/requireOfficeAdministration.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
 import * as membershipsRbac from './memberships-rbac.service.js';
+import { setMemberClientAccess } from './member-client-access.service.js';
+import {
+  buildMemberClientAccessEditorAggregate,
+  buildUsersRolesAggregate,
+  closeMemberAccess,
+  setMemberProfile,
+} from './users-roles-aggregate.service.js';
+import { buildMemberModuleAssignabilityAggregate, setMemberModuleAccess } from '../modules/member-module-access.service.js';
 
 const router = Router();
 // Support both RBAC and legacy permission codes
-const withViewUsers = [authMiddleware, requireOrg, requirePermission('view_users', 'members:read')];
+const withViewUsers = [authMiddleware, requireOrg, requireOfficeAdministration, requirePermission('view_users', 'members:read')];
 
 // High-risk mutations: add abuse protection (per actor + route bucket).
 const withInvite = [
   authMiddleware,
   requireOrg,
+  requireOfficeAdministration,
   rateLimit({
     windowMs: 10 * 60 * 1000,
     max: 15,
@@ -25,6 +35,7 @@ const withInvite = [
 const withChangeRole = [
   authMiddleware,
   requireOrg,
+  requireOfficeAdministration,
   rateLimit({
     windowMs: 10 * 60 * 1000,
     max: 10,
@@ -34,9 +45,25 @@ const withChangeRole = [
   requirePermission('change_user_role', 'members:write'),
 ];
 
+const withSetClientAccess = [
+  authMiddleware,
+  requireOrg,
+  requireOfficeAdministration,
+  rateLimit({
+    windowMs: 10 * 60 * 1000,
+    max: 30,
+    keyGenerator: (req) => String(req.context?.user.id ?? 'anon'),
+    message: 'Too many requests. Please wait and try again later.',
+  }),
+  requirePermission('members:write'),
+];
+
+const withSetModuleAccess = withSetClientAccess;
+
 const withRevoke = [
   authMiddleware,
   requireOrg,
+  requireOfficeAdministration,
   rateLimit({
     windowMs: 10 * 60 * 1000,
     max: 10,
@@ -141,5 +168,131 @@ router.delete('/:id/members/:memberId', ...withRevoke, async (req, res, next) =>
     next(e);
   }
 });
+
+router.post(
+  '/:id/members/:memberId/commands/set_member_client_access',
+  ...withSetClientAccess,
+  async (req, res, next) => {
+    try {
+      if (req.params.id !== req.context!.organizationId) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+      }
+      const aggregate = await setMemberClientAccess(
+        req.context!,
+        req.params.id,
+        req.params.memberId,
+        req.body ?? {},
+      );
+      // Refreshed backend truth: the command result plus the full Users & Roles aggregate.
+      const users_roles_aggregate = await buildUsersRolesAggregate(req.context!, req.params.id);
+      return res.json({ ...aggregate, users_roles_aggregate });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.get(
+  '/:id/members/:memberId/aggregates/client-access',
+  ...withViewUsers,
+  async (req, res, next) => {
+    try {
+      if (req.params.id !== req.context!.organizationId) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+      }
+      return res.json(
+        await buildMemberClientAccessEditorAggregate(req.context!, req.params.id, req.params.memberId),
+      );
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.get(
+  '/:id/members/:memberId/aggregates/module-assignability',
+  ...withSetModuleAccess,
+  async (req, res, next) => {
+    try {
+      if (req.params.id !== req.context!.organizationId) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+      }
+      const aggregate = await buildMemberModuleAssignabilityAggregate(
+        req.context!,
+        req.params.id,
+        req.params.memberId,
+      );
+      return res.json(aggregate);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/:id/members/:memberId/commands/set_member_module_access',
+  ...withSetModuleAccess,
+  async (req, res, next) => {
+    try {
+      if (req.params.id !== req.context!.organizationId) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+      }
+      const aggregate = await setMemberModuleAccess(
+        req.context!,
+        req.params.id,
+        req.params.memberId,
+        req.body ?? {},
+      );
+      const [users_roles_aggregate, module_assignability_aggregate] = await Promise.all([
+        buildUsersRolesAggregate(req.context!, req.params.id),
+        buildMemberModuleAssignabilityAggregate(req.context!, req.params.id, req.params.memberId),
+      ]);
+      return res.json({ ...aggregate, users_roles_aggregate, module_assignability_aggregate });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.get('/:id/aggregates/users-roles', ...withViewUsers, async (req, res, next) => {
+  try {
+    if (req.params.id !== req.context!.organizationId) {
+      return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+    }
+    return res.json(await buildUsersRolesAggregate(req.context!, req.params.id));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post(
+  '/:id/members/:memberId/commands/set_member_profile',
+  ...withSetClientAccess,
+  async (req, res, next) => {
+    try {
+      if (req.params.id !== req.context!.organizationId) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+      }
+      return res.json(await setMemberProfile(req.context!, req.params.id, req.params.memberId, req.body ?? {}));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/:id/members/:memberId/commands/close_member_access',
+  ...withRevoke,
+  async (req, res, next) => {
+    try {
+      if (req.params.id !== req.context!.organizationId) {
+        return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+      }
+      return res.json(await closeMemberAccess(req.context!, req.params.id, req.params.memberId));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 export const membershipsRoutes = router;

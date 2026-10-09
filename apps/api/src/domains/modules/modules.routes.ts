@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
 import { requirePermission } from '../../middleware/requirePermission.js';
+import { requireOfficeAdministration } from '../../middleware/requireOfficeAdministration.js';
 import * as modulesService from './modules.service.js';
 import * as modulesStateService from './modules-state.service.js';
 import * as activationService from './activation.service.js';
@@ -41,7 +42,7 @@ router.get('/:id/modules/state', authMiddleware, requireOrg, requirePermission('
   }
 });
 
-router.post('/:id/modules/:moduleId/activate', authMiddleware, requireOrg, requirePermission('modules:write'), async (req, res, next) => {
+router.post('/:id/modules/:moduleId/activate', authMiddleware, requireOrg, requireOfficeAdministration, requirePermission('modules:write'), async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
     const result = await activationService.activateModule(req.context!, req.params.id, req.params.moduleId);
@@ -52,7 +53,7 @@ router.post('/:id/modules/:moduleId/activate', authMiddleware, requireOrg, requi
   }
 });
 
-router.post('/:id/modules/:moduleId/deactivate', authMiddleware, requireOrg, requirePermission('modules:write'), async (req, res, next) => {
+router.post('/:id/modules/:moduleId/deactivate', authMiddleware, requireOrg, requireOfficeAdministration, requirePermission('modules:write'), async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
     await activationService.deactivateModule(req.context!, req.params.id, req.params.moduleId);
@@ -62,7 +63,7 @@ router.post('/:id/modules/:moduleId/deactivate', authMiddleware, requireOrg, req
   }
 });
 
-router.get('/:id/modules/:moduleId/plans', authMiddleware, requireOrg, requirePermission('modules:read', 'subscriptions:read'), async (req, res, next) => {
+router.get('/:id/modules/:moduleId/plans', authMiddleware, requireOrg, requireOfficeAdministration, requirePermission('modules:read', 'subscriptions:read'), async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
     const plans = await moduleCommerceService.listPlansForModule(req.params.moduleId);
@@ -72,7 +73,7 @@ router.get('/:id/modules/:moduleId/plans', authMiddleware, requireOrg, requirePe
   }
 });
 
-router.post('/:id/modules/:moduleId/select-plan', authMiddleware, requireOrg, requirePermission('modules:write'), async (req, res, next) => {
+router.post('/:id/modules/:moduleId/select-plan', authMiddleware, requireOrg, requireOfficeAdministration, requirePermission('modules:write'), async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
     const { modulePlanId } = req.body as { modulePlanId?: string };
@@ -84,7 +85,7 @@ router.post('/:id/modules/:moduleId/select-plan', authMiddleware, requireOrg, re
   }
 });
 
-router.post('/:id/modules/:moduleId/change-plan', authMiddleware, requireOrg, requirePermission('modules:write'), async (req, res, next) => {
+router.post('/:id/modules/:moduleId/change-plan', authMiddleware, requireOrg, requireOfficeAdministration, requirePermission('modules:write'), async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
     const { modulePlanId } = req.body as { modulePlanId?: string };

@@ -8,7 +8,10 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { forbidden } from '../../shared/errors.js';
+import { restrictClientScopedRows } from '../client-operations/organization-client-access.pure.js';
+import { authorizedClientIdsForViewer } from '../client-operations/organization-client-access.js';
 import { buildAccountantWorkspaceTabs, loadInvoiceAttentionCounts } from './work-engine.read-models.service.js';
+import { workEngineAllowedClientIds } from './work-engine-client-scope.js';
 import { resolveInvoiceAttentionWorkspaceTabBadge } from './work-engine-queue-invoice-attention.pure.js';
 import { buildWorkEngineInvoicesDocumentCreationEntrypoint } from './work-engine-invoices-document-creation.builders.js';
 import type { WorkEngineInvoicesDocumentCreationEntrypoint } from './work-engine-invoices-document-creation.builders.js';
@@ -165,7 +168,10 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
     branding,
     document_creation_entrypoint,
   ] = await Promise.all([
-    loadInvoiceAttentionCounts(orgId),
+    workEngineAllowedClientIds(orgId, {
+      userId: params.ctx.user.id,
+      roleCode: params.ctx.membership?.roleCode ?? null,
+    }).then((allow) => loadInvoiceAttentionCounts(orgId, allow)),
     buildIncomeClientDocumentManagementPanel({
       ctx: params.ctx,
       perms: incomePerms,
@@ -258,8 +264,21 @@ export async function buildWorkEngineInvoicesTabAggregate(params: {
   ]);
   if (draftsRes.error) throw draftsRes.error;
   if (docsRes.error) throw docsRes.error;
-  const drafts = draftsRes.data;
-  const docs = docsRes.data;
+  const allowedClientIds = await authorizedClientIdsForViewer({
+    organizationId: orgId,
+    userId: params.ctx.user.id,
+    roleCode: params.ctx.membership?.roleCode,
+  });
+  const drafts = restrictClientScopedRows(
+    draftsRes.data ?? [],
+    (row) => (row as { represented_client_id?: string | null }).represented_client_id,
+    allowedClientIds,
+  );
+  const docs = restrictClientScopedRows(
+    docsRes.data ?? [],
+    (row) => (row as { represented_client_id?: string | null }).represented_client_id,
+    allowedClientIds,
+  );
 
   const clientIds = [
     ...new Set(

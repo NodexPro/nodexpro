@@ -2,6 +2,8 @@ import { supabaseAdmin } from '../../db/client.js';
 import { forbidden, badRequest } from '../../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
+import { assertCanAccessClientFromContext } from '../client-operations/organization-client-access.js';
+import { assertDocumentClientAccess } from './document-client-access.js';
 
 const BUCKET = 'document-files';
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -49,6 +51,8 @@ export async function uploadDocument(
 ) {
   assertOrg(ctx, orgId);
   assertPermission(ctx, 'documents:write');
+  const uploadClientId = String(body.primary_client_id ?? '').trim();
+  if (uploadClientId) await assertCanAccessClientFromContext(ctx, uploadClientId);
 
   const fileName = body.file_name?.trim();
   if (!fileName) throw badRequest('file_name is required');
@@ -173,8 +177,9 @@ export async function uploadNewVersion(
   assertOrg(ctx, orgId);
   assertPermission(ctx, 'documents:write');
 
-  const { data: doc } = await supabaseAdmin.from('documents').select('id, current_version_id, is_archived').eq('id', documentId).eq('organization_id', orgId).single();
+  const { data: doc } = await supabaseAdmin.from('documents').select('id, current_version_id, is_archived, primary_client_id').eq('id', documentId).eq('organization_id', orgId).single();
   if (!doc) throw forbidden('Document not found');
+  await assertDocumentClientAccess(ctx, (doc as { primary_client_id?: string | null }).primary_client_id);
   if ((doc as { is_archived?: boolean }).is_archived) throw badRequest('Cannot add version to archived document');
 
   const fileName = body.file_name?.trim();

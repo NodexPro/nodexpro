@@ -9,6 +9,7 @@ import {
   filterAuthorizedClientIds,
   resolveOrganizationClientAccessScopeFromContext,
 } from '../client-operations/organization-client-access.js';
+import { assertOfficeAdministration } from '../../shared/office-administration.js';
 
 const ENTITY_TYPE_CLIENT = 'client';
 const ALLOWED_CLIENT_TYPES = new Set([
@@ -110,9 +111,10 @@ export async function listClients(
 ): Promise<ListClientsResult> {
   assertOrg(ctx, orgId);
   assertClientsRead(ctx);
+  assertOfficeAdministration(ctx);
 
   const accessScope = await resolveOrganizationClientAccessScopeFromContext(ctx);
-  if (accessScope.kind === 'ASSIGNED_TO_SELF' && (accessScope.authorized_client_ids?.length ?? 0) === 0) {
+  if (accessScope.authorized_client_ids && accessScope.authorized_client_ids.length === 0) {
     const limit = Math.min(Math.max(1, Math.floor(Number(options.limit) || DEFAULT_LIMIT)), MAX_LIMIT);
     const offset = Math.max(0, Math.floor(Number(options.offset) || 0));
     return { items: [], total: 0, limit, offset, has_more: false };
@@ -124,12 +126,18 @@ export async function listClients(
       : 'all';
   const searchQ = typeof options.search === 'string' ? options.search.trim() : '';
   const includeArchivedByView = view === 'all' || view === 'archived';
-  const includeArchived = options.includeArchived === true || includeArchivedByView;
+  const includeArchived =
+    accessScope.kind === 'MEMBER_ALL'
+      ? false
+      : options.includeArchived === true || includeArchivedByView;
 
   let sortBy = ALLOWED_SORT_FIELDS.has(options.sort_by ?? '') ? options.sort_by! : DEFAULT_SORT_BY;
   const sortDir = options.sort_dir === 'desc' ? 'desc' : 'asc';
   const limit = Math.min(Math.max(1, Math.floor(Number(options.limit) || DEFAULT_LIMIT)), MAX_LIMIT);
   const offset = Math.max(0, Math.floor(Number(options.offset) || 0));
+  if (accessScope.kind === 'MEMBER_ALL' && view === 'archived') {
+    return { items: [], total: 0, limit, offset, has_more: false };
+  }
 
   if (view === 'recently_updated') {
     sortBy = 'updated_at';
@@ -147,8 +155,8 @@ export async function listClients(
     if (clientIdsFilter.length === 0) {
       return { items: [], total: 0, limit, offset, has_more: false };
     }
-  } else if (accessScope.kind === 'ASSIGNED_TO_SELF') {
-    clientIdsFilter = [...(accessScope.authorized_client_ids ?? [])];
+  } else if (accessScope.authorized_client_ids) {
+    clientIdsFilter = [...accessScope.authorized_client_ids];
   }
 
   let countQ = supabaseAdmin
@@ -177,12 +185,15 @@ export async function listClients(
 
   let duplicateTaxIds: string[] = [];
   if (view === 'duplicate_candidates') {
-    const { data: dupTaxIds } = await supabaseAdmin
+    let dupQuery = supabaseAdmin
       .from('clients')
       .select('tax_id')
       .eq('organization_id', orgId)
       .not('tax_id', 'is', null)
       .neq('tax_id', '');
+    if (accessScope.kind === 'MEMBER_ALL') dupQuery = dupQuery.eq('is_archived', false);
+    if (accessScope.authorized_client_ids) dupQuery = dupQuery.in('id', accessScope.authorized_client_ids);
+    const { data: dupTaxIds } = await dupQuery;
     const taxIdCounts = (dupTaxIds ?? []).reduce((acc: Record<string, number>, r: { tax_id: string }) => {
       acc[r.tax_id] = (acc[r.tax_id] ?? 0) + 1;
       return acc;
@@ -318,6 +329,7 @@ export async function createClient(
 ) {
   assertOrg(ctx, orgId);
   assertClientsWrite(ctx);
+  assertOfficeAdministration(ctx);
 
   const taxId = String(body.tax_id ?? '').trim();
   if (!taxId) throw badRequest('tax_id is required');
@@ -506,6 +518,7 @@ export async function updateClient(
 export async function archiveClient(ctx: RequestContext, orgId: string, clientId: string) {
   assertOrg(ctx, orgId);
   assertClientsArchive(ctx);
+  assertOfficeAdministration(ctx);
   await assertCanAccessClientFromContext(ctx, clientId);
 
   const { data: client, error } = await supabaseAdmin
@@ -546,6 +559,8 @@ export async function archiveClient(ctx: RequestContext, orgId: string, clientId
 export async function restoreClient(ctx: RequestContext, orgId: string, clientId: string) {
   assertOrg(ctx, orgId);
   assertClientsArchive(ctx);
+  assertOfficeAdministration(ctx);
+  await assertCanAccessClientFromContext(ctx, clientId);
 
   const { data: client, error } = await supabaseAdmin
     .from('clients')
@@ -620,6 +635,7 @@ export interface BulkResult {
 export async function bulkMarkActive(ctx: RequestContext, orgId: string, body: unknown): Promise<BulkResult> {
   assertOrg(ctx, orgId);
   assertClientsWrite(ctx);
+  assertOfficeAdministration(ctx);
   const clientIds = parseBulkClientIds(body);
   const inOrg = await resolveBulkClientsInOrg(ctx, orgId, clientIds);
   if (inOrg.length === 0) return { updated: 0, clientIds: [] };
@@ -644,6 +660,7 @@ export async function bulkMarkActive(ctx: RequestContext, orgId: string, body: u
 export async function bulkMarkInactive(ctx: RequestContext, orgId: string, body: unknown): Promise<BulkResult> {
   assertOrg(ctx, orgId);
   assertClientsWrite(ctx);
+  assertOfficeAdministration(ctx);
   const clientIds = parseBulkClientIds(body);
   const inOrg = await resolveBulkClientsInOrg(ctx, orgId, clientIds);
   if (inOrg.length === 0) return { updated: 0, clientIds: [] };
@@ -668,6 +685,7 @@ export async function bulkMarkInactive(ctx: RequestContext, orgId: string, body:
 export async function bulkArchive(ctx: RequestContext, orgId: string, body: unknown): Promise<BulkResult> {
   assertOrg(ctx, orgId);
   assertClientsArchive(ctx);
+  assertOfficeAdministration(ctx);
   const clientIds = parseBulkClientIds(body);
   const inOrg = await resolveBulkClientsInOrg(ctx, orgId, clientIds);
   if (inOrg.length === 0) return { updated: 0, clientIds: [] };
@@ -707,6 +725,7 @@ export async function bulkArchive(ctx: RequestContext, orgId: string, body: unkn
 export async function bulkRestore(ctx: RequestContext, orgId: string, body: unknown): Promise<BulkResult> {
   assertOrg(ctx, orgId);
   assertClientsArchive(ctx);
+  assertOfficeAdministration(ctx);
   const clientIds = parseBulkClientIds(body);
   const inOrg = await resolveBulkClientsInOrg(ctx, orgId, clientIds);
   if (inOrg.length === 0) return { updated: 0, clientIds: [] };

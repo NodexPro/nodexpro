@@ -2,6 +2,13 @@ import { supabaseAdmin } from '../../db/client.js';
 import { forbidden } from '../../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
+import { assertCanAccessClientFromContext } from '../client-operations/organization-client-access.js';
+import {
+  assertDocumentClientAccess,
+  assertDocumentClientChange,
+  documentClientAllowList,
+  restrictDocumentLinks,
+} from './document-client-access.js';
 
 function assertOrg(ctx: RequestContext, orgId: string): void {
   if (ctx.organizationId !== orgId) throw forbidden('Organization context required');
@@ -14,15 +21,17 @@ export async function listLinks(ctx: RequestContext, orgId: string, documentId: 
   assertOrg(ctx, orgId);
   assertPermission(ctx, 'documents:read');
 
-  const { data: doc } = await supabaseAdmin.from('documents').select('id').eq('id', documentId).eq('organization_id', orgId).single();
+  const { data: doc } = await supabaseAdmin.from('documents').select('id, primary_client_id').eq('id', documentId).eq('organization_id', orgId).single();
   if (!doc) throw forbidden('Document not found');
+  const allowList = await assertDocumentClientAccess(ctx, (doc as { primary_client_id?: string | null }).primary_client_id);
 
   const { data } = await supabaseAdmin
     .from('document_links')
     .select('id, target_entity_type, target_entity_id, relation_type, is_primary, created_at')
     .eq('document_id', documentId)
     .eq('organization_id', orgId);
-  return data ?? [];
+  // Links to clients the caller cannot access are never exposed.
+  return restrictDocumentLinks(data ?? [], allowList);
 }
 
 export async function addLink(
@@ -36,14 +45,20 @@ export async function addLink(
 
   const { data: doc } = await supabaseAdmin.from('documents').select('id, primary_client_id').eq('id', documentId).eq('organization_id', orgId).single();
   if (!doc) throw forbidden('Document not found');
+  const currentClientId = (doc as { primary_client_id?: string | null }).primary_client_id ?? null;
+  const allowList = await assertDocumentClientAccess(ctx, currentClientId);
 
   const targetType = body.target_entity_type?.trim();
   const targetId = body.target_entity_id?.trim();
   if (!targetType || !targetId) throw forbidden('target_entity_type and target_entity_id required');
 
   if (targetType === 'client') {
-    const { data: client } = await supabaseAdmin.from('clients').select('id').eq('id', targetId).eq('organization_id', orgId).single();
-    if (!client) throw forbidden('Client not found');
+    // Org membership of the target + Stage 5.1 access (restricted callers cannot link a document
+    // to a client they cannot access, nor expose it through that client).
+    await assertCanAccessClientFromContext(ctx, targetId);
+    if (body.is_primary) {
+      await assertDocumentClientChange(ctx, { currentClientId, nextClientId: targetId }, allowList);
+    }
   }
 
   const { data: link } = await supabaseAdmin
@@ -81,6 +96,11 @@ export async function removeLink(ctx: RequestContext, orgId: string, documentId:
   assertOrg(ctx, orgId);
   assertPermission(ctx, 'documents:write');
 
+  const { data: doc } = await supabaseAdmin.from('documents').select('id, primary_client_id').eq('id', documentId).eq('organization_id', orgId).single();
+  if (!doc) throw forbidden('Document not found');
+  const currentClientId = (doc as { primary_client_id?: string | null }).primary_client_id ?? null;
+  const allowList = await assertDocumentClientAccess(ctx, currentClientId);
+
   const { data: link } = await supabaseAdmin
     .from('document_links')
     .select('id, target_entity_type, target_entity_id, is_primary')
@@ -90,9 +110,19 @@ export async function removeLink(ctx: RequestContext, orgId: string, documentId:
     .single();
   if (!link) throw forbidden('Link not found');
 
+  const linkRow = link as { target_entity_type: string; target_entity_id: string; is_primary?: boolean };
+  if (linkRow.target_entity_type === 'client') {
+    // A restricted caller cannot even see (hence cannot remove) a link to an unauthorized client.
+    if (allowList !== null && !allowList.includes(String(linkRow.target_entity_id))) throw forbidden('Link not found');
+    // Removing the primary client link detaches the document from its client.
+    if (linkRow.is_primary) {
+      await assertDocumentClientChange(ctx, { currentClientId, nextClientId: null }, allowList);
+    }
+  }
+
   await supabaseAdmin.from('document_links').delete().eq('id', linkId).eq('organization_id', orgId);
 
-  if ((link as { is_primary?: boolean }).is_primary && (link as { target_entity_type: string }).target_entity_type === 'client') {
+  if (linkRow.is_primary && linkRow.target_entity_type === 'client') {
     await supabaseAdmin.from('documents').update({ primary_client_id: null }).eq('id', documentId).eq('organization_id', orgId);
   }
 

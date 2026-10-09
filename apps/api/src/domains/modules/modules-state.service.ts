@@ -4,6 +4,8 @@ import type { RequestContext } from '../../shared/context.js';
 import type { ModuleStateItem, ModulesStateResponse, EntitlementStatus, ActivationStatus } from '../../types/api.js';
 import { getTrialState } from '../trial/trial.service.js';
 import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
+import { roleHasOfficeClientAccess } from '../client-operations/organization-client-access.pure.js';
+import { loadEnabledMemberModuleIdSet } from './member-module-access.service.js';
 
 const LOG_MODULES_STATE_TIMING = process.env.LOG_MODULES_STATE_TIMING === 'true';
 
@@ -267,6 +269,30 @@ export async function getModulesState(ctx: RequestContext, organizationId: strin
   if (LOG_MODULES_STATE_TIMING) {
     const totalMs = Date.now() - startMs;
     console.log(`[modules-state] getModulesState org=${organizationId} fetchMs=${t1} totalMs=${totalMs} modules=${result.length}`);
+  }
+
+  if (!roleHasOfficeClientAccess(ctx.membership?.roleCode)) {
+    const grantedIds = await loadEnabledMemberModuleIdSet(organizationId, ctx.user.id);
+    return {
+      trialState: {
+        hasLegalIdentity: true,
+        trialStatus: 'none',
+        startedAt: null,
+        endsAt: null,
+        blocked: false,
+      },
+      modules: result
+        .filter((item) => grantedIds.has(item.moduleId))
+        .map((item) => ({
+          ...item,
+          canActivate: false,
+          canDeactivate: false,
+          canSelectPlan: false,
+          canChangePlan: false,
+          availablePlans: [],
+          currentSubscription: null,
+        })),
+    };
   }
 
   return {

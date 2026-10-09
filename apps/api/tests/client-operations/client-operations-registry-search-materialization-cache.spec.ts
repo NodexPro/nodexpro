@@ -449,7 +449,7 @@ test('service: tenant + RBAC + period + filters resolved BEFORE cache lookup; q 
 test('service: cache key derives from every pre-search dimension; opt-in flag defaults to bypass', () => {
   assert.match(
     serviceSource,
-    /buildClientOperationsRegistryMaterializationCacheKey\(\{\s*organizationId: orgId,\s*accessScopeKey: materializationAccess\.access_scope_key,\s*selectedPeriodKey,\s*defaultPeriodKey,\s*canEditRegistry,\s*filters: filterActive,\s*\}\)/,
+    /buildClientOperationsRegistryMaterializationCacheKey\(\{\s*organizationId: orgId,\s*accessScopeKey: materializationAccess\.access_scope_key,\s*manualWorkspaceKey: manualWorkspaceCacheKey\(manualWorkspace\),\s*selectedPeriodKey,\s*defaultPeriodKey,\s*canEditRegistry,\s*filters: filterActive,\s*\}\)/,
   );
   assert.match(serviceSource, /if \(options\?\.materializationCache === true\)/);
   assert.match(serviceSource, /materializationSource = 'bypass'/);

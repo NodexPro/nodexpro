@@ -9,7 +9,10 @@ import { AppError, badRequest } from '../../shared/errors.js';
 import {
   CLIENT_OPERATIONS_MANUAL_CELL_VALUE_MAX_LENGTH,
   initializeManualRowsForPeriod,
+  resolveManualRowWorkspaceForActor,
 } from './client-operations-manual-rows.service.js';
+import type { ClientOperationsManualWorkspaceKey } from './client-operations-manual-rows.pure.js';
+import type { ClientOperationsWorkspaceRequested } from './client-operations-workspace.pure.js';
 import {
   isClientOperationsManualFreeTextColumnKey,
   isMeaningfulManualCellValue,
@@ -56,12 +59,15 @@ async function loadCustomPeriodValues(input: {
 async function loadManualPeriodValues(input: {
   organizationId: string;
   operationalPeriodKey: string;
+  workspace: ClientOperationsManualWorkspaceKey;
 }): Promise<ManualRowPeriodValueRow[]> {
   const { data, error } = await supabaseAdmin
     .from('client_operations_manual_row_cell_values')
     .select('manual_row_slot, column_key, value_text')
     .eq('organization_id', input.organizationId)
-    .eq('operational_period_key', input.operationalPeriodKey);
+    .eq('operational_period_key', input.operationalPeriodKey)
+    .eq('workspace_kind', input.workspace.workspace_kind)
+    .eq('subject_user_id', input.workspace.subject_user_id);
   assertQueryError(error, 'Failed to load manual row period values for copy');
   return (data ?? []).map((row) => ({
     slot: Number((row as { manual_row_slot: number }).manual_row_slot),
@@ -73,6 +79,7 @@ async function loadManualPeriodValues(input: {
 async function upsertManualPeriodValue(input: {
   organizationId: string;
   operationalPeriodKey: string;
+  workspace: ClientOperationsManualWorkspaceKey;
   slot: number;
   columnKey: string;
   valueText: string;
@@ -88,13 +95,18 @@ async function upsertManualPeriodValue(input: {
     {
       organization_id: input.organizationId,
       operational_period_key: input.operationalPeriodKey,
+      workspace_kind: input.workspace.workspace_kind,
+      subject_user_id: input.workspace.subject_user_id,
       manual_row_slot: input.slot,
       column_key: input.columnKey,
       value_text: trimmed,
       updated_at: now,
       updated_by: input.actorUserId,
     },
-    { onConflict: 'organization_id,operational_period_key,manual_row_slot,column_key' },
+    {
+      onConflict:
+        'organization_id,operational_period_key,workspace_kind,subject_user_id,manual_row_slot,column_key',
+    },
   );
   assertQueryError(error, 'Failed to upsert manual row cell value during period copy');
 }
@@ -122,6 +134,7 @@ export async function copyClientOperationsUserPeriodData(input: {
   sourceOperationalPeriodKey: unknown;
   targetOperationalPeriodKey: unknown;
   mode: unknown;
+  requestedWorkspace?: ClientOperationsWorkspaceRequested | null;
 }): Promise<{
   source_period: string;
   target_period: string;
@@ -144,12 +157,24 @@ export async function copyClientOperationsUserPeriodData(input: {
 
   const columns = await loadActiveCustomColumnsExtended(input.organizationId);
   const eligibleColumnIds = new Set(columns.map((c) => c.id));
+  const manualWorkspace = await resolveManualRowWorkspaceForActor(
+    input.ctx,
+    input.requestedWorkspace ?? null,
+  );
 
   const [sourceCustom, targetCustom, sourceManual, targetManual] = await Promise.all([
     loadCustomPeriodValues({ organizationId: input.organizationId, operationalPeriodKey: sourcePeriod }),
     loadCustomPeriodValues({ organizationId: input.organizationId, operationalPeriodKey: targetPeriod }),
-    loadManualPeriodValues({ organizationId: input.organizationId, operationalPeriodKey: sourcePeriod }),
-    loadManualPeriodValues({ organizationId: input.organizationId, operationalPeriodKey: targetPeriod }),
+    loadManualPeriodValues({
+      organizationId: input.organizationId,
+      operationalPeriodKey: sourcePeriod,
+      workspace: manualWorkspace,
+    }),
+    loadManualPeriodValues({
+      organizationId: input.organizationId,
+      operationalPeriodKey: targetPeriod,
+      workspace: manualWorkspace,
+    }),
   ]);
 
   const customPlan = planCustomColumnPeriodValueCopies({
@@ -158,7 +183,7 @@ export async function copyClientOperationsUserPeriodData(input: {
     targetRows: targetCustom,
     eligibleColumnIds,
   });
-  // Staff/Viewer: only copy custom values for authorized clients (manual rows stay org-wide).
+  // Custom-column copies stay on the actor's client ACL. Manual cells copy only inside manualWorkspace.
   const { resolveOrganizationClientAccessScopeFromContext, filterAuthorizedClientIds } = await import(
     './organization-client-access.js'
   );
@@ -190,6 +215,7 @@ export async function copyClientOperationsUserPeriodData(input: {
       ctx: input.ctx,
       organizationId: input.organizationId,
       operationalPeriodKey: targetPeriod,
+      workspace: manualWorkspace,
     });
   }
 
@@ -207,6 +233,7 @@ export async function copyClientOperationsUserPeriodData(input: {
     await upsertManualPeriodValue({
       organizationId: input.organizationId,
       operationalPeriodKey: targetPeriod,
+      workspace: manualWorkspace,
       slot: row.slot,
       columnKey: row.column_key,
       valueText: row.value_text,
@@ -237,7 +264,11 @@ export async function copyClientOperationsUserPeriodData(input: {
     entityType: 'client_operations_user_period_data',
     entityId: `${input.organizationId}:${targetPeriod}`,
     action: AUDIT_ACTIONS.CLIENT_OPERATIONS_USER_PERIOD_DATA_COPIED,
-    payload: result,
+    payload: {
+      ...result,
+      workspace_kind: manualWorkspace.workspace_kind,
+      workspace_subject_user_id: manualWorkspace.subject_user_id,
+    },
   });
 
   return result;
@@ -249,6 +280,7 @@ export async function copyClientOperationsUserPeriodData(input: {
  */
 export async function loadUserPeriodDataCopySourcePeriods(
   organizationId: string,
+  manualWorkspace: ClientOperationsManualWorkspaceKey,
 ): Promise<string[]> {
   const [customRes, manualRes] = await Promise.all([
     supabaseAdmin
@@ -258,7 +290,9 @@ export async function loadUserPeriodDataCopySourcePeriods(
     supabaseAdmin
       .from('client_operations_manual_row_cell_values')
       .select('operational_period_key, column_key, value_text')
-      .eq('organization_id', organizationId),
+      .eq('organization_id', organizationId)
+      .eq('workspace_kind', manualWorkspace.workspace_kind)
+      .eq('subject_user_id', manualWorkspace.subject_user_id),
   ]);
   assertQueryError(customRes.error, 'Failed to load custom period keys for copy sources');
   assertQueryError(manualRes.error, 'Failed to load manual period keys for copy sources');

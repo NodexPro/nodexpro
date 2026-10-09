@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
+import { assertCanAccessClient, authorizedClientIdsForViewer } from '../client-operations/organization-client-access.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError, badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { createOpaqueToken, resolvePortalSessionByRawToken, sha256Hex } from './docflow-portal-auth.service.js';
@@ -272,6 +273,7 @@ async function refreshOffice(
           orgId,
           userId: ctx.user.id,
           can_use_communication_commands: canRunDocflowCommunicationRules(ctx),
+          authorizedClientIds: await docflowAuthorizedClientIds(ctx),
           ...o,
         }),
       };
@@ -281,6 +283,7 @@ async function refreshOffice(
         aggregate_key: 'docflow_floating_widget_aggregate',
         aggregate: await buildDocflowFloatingWidgetAggregate(orgId, {
           can_use_communication_commands: canRunDocflowCommunicationRules(ctx),
+          authorizedClientIds: await docflowAuthorizedClientIds(ctx),
         }),
       };
     }
@@ -306,6 +309,7 @@ async function refreshOfficeTarget(
         orgId,
         userId: ctx.user.id,
         can_use_communication_commands: canRunDocflowCommunicationRules(ctx),
+        authorizedClientIds: await docflowAuthorizedClientIds(ctx),
         ...o,
       }),
     };
@@ -315,6 +319,7 @@ async function refreshOfficeTarget(
       aggregate_key: 'docflow_floating_widget_aggregate',
       aggregate: await buildDocflowFloatingWidgetAggregate(orgId, {
         can_use_communication_commands: canRunDocflowCommunicationRules(ctx),
+        authorizedClientIds: await docflowAuthorizedClientIds(ctx),
       }),
     };
   }
@@ -324,6 +329,7 @@ async function refreshOfficeTarget(
       aggregate_key: 'office_docflow_inbox_aggregate',
       aggregate: await buildOfficeDocflowInboxAggregate({
         orgId,
+        viewer: docflowViewer(ctx),
         page: Number(payload.page ?? 1) || 1,
         pageSize: Number(payload.page_size ?? 25) || 25,
         searchClient: asOptionalString(payload.search_client),
@@ -358,6 +364,7 @@ async function refreshOfficeTarget(
       aggregate_key: 'office_docflow_messenger_aggregate',
       aggregate: await buildOfficeDocflowMessengerAggregate({
         orgId,
+        viewer: docflowViewer(ctx),
         page: Number(payload.page ?? 1) || 1,
         pageSize: Number(payload.page_size ?? 50) || 50,
         searchClient: asOptionalString(payload.search_client),
@@ -391,7 +398,24 @@ function parseInvitesRefreshParams(payload: DocflowCommandPayload): {
   };
 }
 
-async function refreshInvitesManagement(orgId: string, payload: DocflowCommandPayload): Promise<DocflowCommandResponse['refreshed']> {
+function docflowViewer(ctx: RequestContext): { userId: string; roleCode: string | null } {
+  return { userId: ctx.user.id, roleCode: ctx.membership?.roleCode ?? null };
+}
+
+async function docflowAuthorizedClientIds(ctx: RequestContext): Promise<string[] | null> {
+  if (!ctx.organizationId) return [];
+  return authorizedClientIdsForViewer({
+    organizationId: ctx.organizationId,
+    userId: ctx.user.id,
+    roleCode: ctx.membership?.roleCode,
+  });
+}
+
+async function refreshInvitesManagement(
+  orgId: string,
+  payload: DocflowCommandPayload,
+  ctx?: RequestContext,
+): Promise<DocflowCommandResponse['refreshed']> {
   const p = parseInvitesRefreshParams(payload);
   return {
     aggregate_key: 'docflow_invites_management_aggregate',
@@ -401,6 +425,7 @@ async function refreshInvitesManagement(orgId: string, payload: DocflowCommandPa
       pageSize: p.pageSize,
       searchClient: p.searchClient,
       inviteStatus: p.inviteStatus,
+      viewer: ctx ? docflowViewer(ctx) : null,
     }),
   };
 }
@@ -414,7 +439,7 @@ async function refreshInviteRelatedAggregate(
 ): Promise<DocflowCommandResponse['refreshed']> {
   const target = String(payload.refresh_target ?? '').trim();
   if (target === 'docflow_invites_management') {
-    return refreshInvitesManagement(orgId, payload);
+    return refreshInvitesManagement(orgId, payload, ctx);
   }
   if (target === 'office_messenger') {
     return refreshOfficeTarget(orgId, payload, { clientId, selectedThreadId: asOptionalString(payload.thread_id) }, ctx);
@@ -715,6 +740,45 @@ async function emitDocflowThreadNeedsAttentionAfterPortalWrite(args: {
   }
 }
 
+/**
+ * Stage 5.5 direct-id guard: a `thread_id` / `thread_ids` / `selected_thread_id` in a command payload
+ * is never authority. For restricted Staff/Viewer the thread's client must be in the Stage 5.1
+ * allow-list, otherwise the thread is reported as not found (no existence leak). Owner/Admin and
+ * ALL-access members skip the lookup.
+ */
+async function assertDocflowPayloadThreadsAuthorized(
+  ctx: RequestContext,
+  orgId: string,
+  payload: DocflowCommandPayload,
+): Promise<void> {
+  const ids = new Set<string>();
+  for (const key of ['thread_id', 'selected_thread_id'] as const) {
+    const v = String((payload as Record<string, unknown>)[key] ?? '').trim();
+    if (v) ids.add(v);
+  }
+  if (Array.isArray(payload.thread_ids)) {
+    for (const raw of payload.thread_ids) {
+      const v = String(raw ?? '').trim();
+      if (v) ids.add(v);
+    }
+  }
+  if (!ids.size) return;
+  const allow = await docflowAuthorizedClientIds(ctx);
+  if (allow === null) return;
+  const allowSet = new Set(allow);
+  const { data, error } = await supabaseAdmin
+    .from('client_message_threads')
+    .select('id, client_id')
+    .eq('org_id', orgId)
+    .in('id', [...ids]);
+  if (error) throw error;
+  const byId = new Map((data ?? []).map((r) => [String((r as { id: string }).id), String((r as { client_id: string }).client_id)]));
+  for (const id of ids) {
+    const clientId = byId.get(id);
+    if (!clientId || !allowSet.has(clientId)) throw notFound('Thread not found');
+  }
+}
+
 export async function executeDocflowOfficeCommand(
   ctx: RequestContext,
   command: DocflowCommandType,
@@ -731,6 +795,16 @@ export async function executeDocflowOfficeCommand(
   const orgId = ctx.organizationId ?? reqString(payload, 'org_id');
   assertOfficeScope(ctx, orgId);
   await assertDocflowEntitled(orgId);
+  const hintedClientId = String(payload.client_id ?? '').trim();
+  if (hintedClientId) {
+    await assertCanAccessClient({
+      organizationId: orgId,
+      viewerUserId: ctx.user.id,
+      roleCode: ctx.membership?.roleCode,
+      clientId: hintedClientId,
+    });
+  }
+  await assertDocflowPayloadThreadsAuthorized(ctx, orgId, payload);
   const actorUserId = ctx.user.id;
   if (command === 'invite_selected_clients_to_docflow') {
     const idsRaw = Array.isArray(payload.client_ids) ? payload.client_ids : [];
@@ -744,6 +818,12 @@ export async function executeDocflowOfficeCommand(
     if (clientsErr) throw clientsErr;
     const byId = new Map((clients ?? []).map((c) => [String(c.id), c]));
     for (const cid of clientIds) {
+      await assertCanAccessClient({
+        organizationId: orgId,
+        viewerUserId: ctx.user.id,
+        roleCode: ctx.membership?.roleCode,
+        clientId: cid,
+      });
       const client = byId.get(cid);
       if (!client) throw badRequest(`Client ${cid} not in organization`, 'client_out_of_scope');
       const hasPhone = typeof client.phone === 'string' && client.phone.trim() !== '';
@@ -763,7 +843,7 @@ export async function executeDocflowOfficeCommand(
         expiresInHours: Number(payload.expires_in_hours ?? 72),
       });
     }
-    return { ok: true, command, refreshed: await refreshInvitesManagement(orgId, payload) };
+    return { ok: true, command, refreshed: await refreshInvitesManagement(orgId, payload, ctx) };
   }
   if (command === 'invite_all_clients_to_docflow') {
     const aggregate = await buildDocflowInvitesManagementAggregate({
@@ -772,6 +852,7 @@ export async function executeDocflowOfficeCommand(
       pageSize: 1000,
       searchClient: null,
       inviteStatus: null,
+      viewer: docflowViewer(ctx),
     });
     const table = (aggregate.table as { rows?: Array<Record<string, unknown>> } | undefined)?.rows ?? [];
     for (const row of table) {
@@ -790,7 +871,7 @@ export async function executeDocflowOfficeCommand(
         expiresInHours: Number(payload.expires_in_hours ?? 72),
       });
     }
-    return { ok: true, command, refreshed: await refreshInvitesManagement(orgId, payload) };
+    return { ok: true, command, refreshed: await refreshInvitesManagement(orgId, payload, ctx) };
   }
   if (command === 'issue_docflow_invite_delivery') {
     const invitationId = reqString(payload, 'invitation_id');
@@ -810,6 +891,18 @@ export async function executeDocflowOfficeCommand(
     }
     const clientId = String(invite.client_id);
     await assertClientBelongsToOrg(orgId, clientId);
+    // Stage 5.5: an invitation id is never authority over a client the caller cannot access.
+    try {
+      await assertCanAccessClient({
+        organizationId: orgId,
+        viewerUserId: ctx.user.id,
+        roleCode: ctx.membership?.roleCode,
+        clientId,
+      });
+    } catch (e) {
+      if (e instanceof AppError && e.statusCode === 403) throw notFound('Invitation not found');
+      throw e;
+    }
 
     const { data: client, error: clientErr } = await supabaseAdmin
       .from('clients')

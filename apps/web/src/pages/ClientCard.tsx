@@ -156,7 +156,11 @@ export function ClientCard() {
 
   const orgId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
   const canWrite = auth.status === 'authenticated' && auth.me?.permissions?.includes('clients:write');
-  const canArchive = auth.status === 'authenticated' && auth.me?.permissions?.includes('clients:archive');
+  const officeActions = auth.status === 'authenticated' && Array.isArray(auth.me.available_actions)
+    ? auth.me.available_actions
+    : [];
+  const canArchive = officeActions.includes('archive_client');
+  const canRestore = officeActions.includes('restore_client');
 
   useEffect(() => {
     if (!orgId || !clientId) {
@@ -564,7 +568,7 @@ export function ClientCard() {
             {t('clients.actions.archive')}
           </button>
         )}
-        {canArchive && client.is_archived && (
+        {canRestore && client.is_archived && (
           <button type="button" onClick={restoreClient} disabled={restoring} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#15803d', cursor: 'pointer' }}>
             {restoring ? t('common.loading') : t('clients.actions.restore')}
           </button>

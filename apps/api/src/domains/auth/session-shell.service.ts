@@ -5,14 +5,14 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { isIncomeOnboardingComplete } from '../income/income-issuer-profile-sync.service.js';
 import {
-  computeSessionShellFromModules,
+  resolveSessionNavigation,
   type NavItemDto,
   type SessionShellModel,
   type ShellProfile,
 } from './session-shell.pure.js';
 
 export type { NavItemDto, SessionShellModel, ShellProfile } from './session-shell.pure.js';
-export { computeSessionShellFromModules } from './session-shell.pure.js';
+export { computeSessionShellFromModules, resolveSessionNavigation } from './session-shell.pure.js';
 
 async function loadActiveCommercialModuleCodes(orgId: string): Promise<string[]> {
   const { data } = await supabaseAdmin
@@ -36,6 +36,8 @@ async function loadActiveCommercialModuleCodes(orgId: string): Promise<string[]>
 
 export async function resolveSessionShell(params: {
   activeOrgId: string | null;
+  roleCode: string | null | undefined;
+  membershipActive: boolean;
   permissions: string[];
   allCoreNavItems: NavItemDto[];
   moduleAppNavItems: NavItemDto[];
@@ -46,12 +48,17 @@ export async function resolveSessionShell(params: {
       default_route: '/dashboard',
       visible_nav_items: [],
       income_onboarding_complete: false,
+      available_navigation: [],
+      available_modules: [],
+      available_actions: [],
     };
   }
 
   const incomeComplete = await isIncomeOnboardingComplete(params.activeOrgId);
   const commercialModules = await loadActiveCommercialModuleCodes(params.activeOrgId);
-  return computeSessionShellFromModules({
+  return resolveSessionNavigation({
+    roleCode: params.roleCode,
+    membershipActive: params.membershipActive,
     commercialModuleCodes: commercialModules,
     permissions: params.permissions,
     allCoreNavItems: params.allCoreNavItems,

@@ -1,6 +1,10 @@
 /**
- * Client Operations workspace resolver (Stage 4).
- * Narrows Stage 3 ACL by authorized projection — never broadens access.
+ * Client Operations workspace resolver (Stage 4 + Stage 5.2).
+ * Staff/Viewer MY uses their Stage 5.1 visibility policy.
+ * Owner/Admin OFFICE is the office client set.
+ * Owner/Admin MY stays a handler responsibility projection.
+ * Owner/Admin STAFF uses the selected employee's Stage 5.1 visibility policy.
+ * assigned_handler_user_id is not visibility for STAFF.
  */
 
 import { supabaseAdmin } from '../../db/client.js';
@@ -22,7 +26,6 @@ import {
   normalizeRequestedWorkspaceScopeKind,
   roleIsSelectableWorkspaceSubject,
   workspaceProjectionAccessScopeKey,
-  workspaceProjectionKind,
   type ClientOperationsWorkspaceOption,
   type ClientOperationsWorkspaceRequested,
   type ClientOperationsWorkspaceScopeKind,
@@ -40,7 +43,7 @@ export type ClientOperationsWorkspaceResolution = {
   workspace_subject_user_id: string | null;
   /** Cache / materialization identity — OFFICE or ASSIGNED:<subjectId>. */
   access_scope_key: string;
-  /** Null = all Stage-3-office clients; else assigned projection ids. */
+  /** Null = unrestricted ids for this projection; empty = fail closed; else allow-list. */
   authorized_client_ids: string[] | null;
   label_he: string;
   allowed_scopes: ClientOperationsWorkspaceOption[];
@@ -142,10 +145,11 @@ export async function resolveClientOperationsWorkspaceScope(params: {
 
   let scope_kind: ClientOperationsWorkspaceScopeKind = requestedKind;
   let workspace_subject_user_id: string | null = null;
+  let selectedSubjectRole: string | null = null;
   let label_he = '';
 
   if (!canInspect) {
-    // Staff/Viewer: MY only — reject broadening attempts.
+    // Staff/Viewer: MY only — reject broadening attempts. Subject is always the actor.
     if (requestedKind === 'OFFICE' || requestedKind === 'STAFF') {
       throw forbidden('Workspace scope not allowed', 'WORKSPACE_SCOPE_FORBIDDEN');
     }
@@ -159,7 +163,7 @@ export async function resolveClientOperationsWorkspaceScope(params: {
     workspace_subject_user_id = viewerUserId;
     label_he = 'הלקוחות שלי';
   } else {
-    // STAFF
+    // STAFF — active admin/staff in this organization only. Actor stays the viewer.
     if (!requestedSubjectRaw) {
       throw badRequest('workspace_subject_user_id required for staff workspace', 'WORKSPACE_SUBJECT_REQUIRED');
     }
@@ -169,31 +173,56 @@ export async function resolveClientOperationsWorkspaceScope(params: {
       throw forbidden('Workspace subject not available', 'WORKSPACE_SUBJECT_FORBIDDEN');
     }
     workspace_subject_user_id = subject.user_id;
+    selectedSubjectRole = subject.role_code;
     label_he = subject.display_name;
   }
 
-  const access_scope_key = workspaceProjectionAccessScopeKey({
-    scopeKind: scope_kind,
-    workspaceSubjectUserId: workspace_subject_user_id,
-  });
-
+  let access_scope_key: string;
   let authorized_client_ids: string[] | null;
-  if (scope_kind === 'OFFICE') {
+  let materializationKind: OrganizationClientAccessScope['kind'];
+  if (!canInspect) {
+    // Staff/Viewer MY is the visibility policy. Do not intersect with handler assignment.
+    access_scope_key = stage3.access_scope_key;
+    authorized_client_ids =
+      stage3.authorized_client_ids === null ? null : [...stage3.authorized_client_ids];
+    materializationKind = stage3.kind;
+  } else if (scope_kind === 'OFFICE') {
     // Must not broaden Stage 3 — Owner/Admin Stage 3 is already OFFICE.
     if (stage3.kind !== 'OFFICE') {
       throw forbidden('Workspace scope not allowed', 'WORKSPACE_SCOPE_FORBIDDEN');
     }
+    access_scope_key = workspaceProjectionAccessScopeKey({
+      scopeKind: 'OFFICE',
+      workspaceSubjectUserId: null,
+    });
     authorized_client_ids = null;
-  } else {
+    materializationKind = 'OFFICE';
+  } else if (scope_kind === 'MY') {
+    // Owner/Admin MY remains a responsibility projection (handler), never a grant.
     const subjectId = workspace_subject_user_id!;
     const assigned = await loadAssignedClientIdsForHandler(organizationId, subjectId);
+    access_scope_key = workspaceProjectionAccessScopeKey({
+      scopeKind: 'MY',
+      workspaceSubjectUserId: subjectId,
+    });
     if (stage3.kind === 'OFFICE') {
       authorized_client_ids = assigned;
     } else {
-      // Staff: intersect with Stage 3 assigned-self (cannot broaden).
       const allow = new Set(stage3.authorized_client_ids ?? []);
       authorized_client_ids = assigned.filter((id) => allow.has(id));
     }
+    materializationKind = 'ASSIGNED_TO_SELF';
+  } else {
+    // STAFF — employee visibility ACL, not handler.
+    const employeeScope = await resolveOrganizationClientAccessScope({
+      organizationId,
+      viewerUserId: workspace_subject_user_id!,
+      roleCode: selectedSubjectRole,
+    });
+    access_scope_key = employeeScope.access_scope_key;
+    authorized_client_ids =
+      employeeScope.authorized_client_ids === null ? null : [...employeeScope.authorized_client_ids];
+    materializationKind = employeeScope.kind;
   }
 
   const workspace: ClientOperationsWorkspaceResolution = {
@@ -211,7 +240,7 @@ export async function resolveClientOperationsWorkspaceScope(params: {
     organization_id: organizationId,
     viewer_user_id: viewerUserId,
     role_code: roleCode,
-    kind: workspaceProjectionKind(scope_kind),
+    kind: materializationKind,
     access_scope_key,
     authorized_client_ids,
   };

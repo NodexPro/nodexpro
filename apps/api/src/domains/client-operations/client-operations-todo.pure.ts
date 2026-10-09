@@ -86,18 +86,18 @@ export function sliceTodoPage<T>(rows: T[], page: number, pageSize = CLIENT_OPER
 }
 
 /**
- * After client handler becomes `afterHandlerUserId`, would `assigneeUserId` still
- * access the client under Stage 3 rules?
- * Owner/Admin (office access) always retain access; Staff only if they are the handler.
+ * Handler assignment does not grant or remove visibility.
+ * Office roles retain access. Staff/Viewer retain access only when the
+ * visibility policy already allows the client (`assigneeHasClientVisibility`).
  */
 export function assigneeWouldRetainClientAccessAfterHandlerChange(params: {
   assigneeUserId: string;
   assigneeHasOfficeAccess: boolean;
-  afterHandlerUserId: string | null;
+  assigneeHasClientVisibility: boolean;
+  afterHandlerUserId?: string | null;
 }): boolean {
   if (params.assigneeHasOfficeAccess) return true;
-  const after = params.afterHandlerUserId == null ? null : String(params.afterHandlerUserId).trim() || null;
-  return after === params.assigneeUserId;
+  return params.assigneeHasClientVisibility === true;
 }
 
 export function presentationPriorityToken(

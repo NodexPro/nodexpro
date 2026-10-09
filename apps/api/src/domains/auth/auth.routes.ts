@@ -23,6 +23,8 @@ import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import type { RequestContext } from '../../shared/context.js';
 import { resolveSessionShell } from './session-shell.service.js';
 import { filterSessionEnabledModuleCodes } from '../modules/entitlement.service.js';
+import { loadEnabledMemberModuleIdSet } from '../modules/member-module-access.service.js';
+import { roleHasOfficeClientAccess } from '../client-operations/organization-client-access.pure.js';
 
 const router = Router();
 const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey);
@@ -148,11 +150,22 @@ async function buildMeResponse(
       organizationId: activeOrgId,
       modules: sessionModules.map((m) => ({ moduleId: m.moduleId, code: m.code })),
     });
+    const roleCode = ctx.membership?.roleCode ?? '';
+    const memberModuleIds = roleHasOfficeClientAccess(roleCode)
+      ? null
+      : await loadEnabledMemberModuleIdSet(activeOrgId, ctx.user.id);
     enabledModules = sessionModules
       .map((m) => m.code)
       .filter((code) => entitledCodes.has(code));
+    if (memberModuleIds) {
+      const grantedCodes = new Set(
+        sessionModules.filter((m) => memberModuleIds.has(m.moduleId)).map((m) => m.code),
+      );
+      enabledModules = enabledModules.filter((code) => grantedCodes.has(code));
+    }
     for (const m of sessionModules) {
       if (!entitledCodes.has(m.code)) continue;
+      if (memberModuleIds && !memberModuleIds.has(m.moduleId)) continue;
       const mo = m.nav;
       if (!mo.nav_path?.startsWith('/m/')) continue;
       const label = mo.code === 'client-operations' ? 'Nodex לקוחות' : (mo.nav_label ?? mo.code);
@@ -165,21 +178,27 @@ async function buildMeResponse(
   const uiLanguage = resolveUiLanguage(ctx);
   const shell = await resolveSessionShell({
     activeOrgId,
+    roleCode: ctx.membership?.roleCode ?? null,
+    membershipActive: Boolean(ctx.membership?.roleCode),
     permissions,
     allCoreNavItems: navItems,
     moduleAppNavItems,
   });
+  const exposedCoreNav = shell.available_navigation.filter((item) => !item.path.startsWith('/m/'));
   const meCore: MeCoreForSidebar = {
     user: { id: ctx.user.id, email: ctx.user.email, fullName: ctx.user.fullName, status: ctx.user.status },
     organizations: orgList,
     activeOrganizationId: activeOrgId,
     permissions,
     enabledModules,
-    navItems,
-    moduleAppNavItems: moduleAppNavItems.map(({ path, label }) => ({ path, label })),
+    navItems: exposedCoreNav,
+    moduleAppNavItems: shell.available_modules.map(({ path, label }) => ({ path, label })),
     shell_profile: shell.shell_profile,
     default_route: shell.default_route,
-    visible_nav_items: shell.visible_nav_items,
+    visible_nav_items: shell.available_navigation,
+    available_navigation: shell.available_navigation,
+    available_modules: shell.available_modules,
+    available_actions: shell.available_actions,
     income_onboarding_complete: shell.income_onboarding_complete,
   };
   return {

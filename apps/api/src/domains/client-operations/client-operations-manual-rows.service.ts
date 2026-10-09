@@ -10,11 +10,15 @@ import {
   formatClientOperationsManualRowSlot,
   isClientOperationsManualFreeTextColumnKey,
   isMeaningfulManualCellValue,
+  manualRowWorkspaceKeyForScope,
   materializeClientOperationsManualRows,
   parseClientOperationsManualRowSlot,
   type ClientOperationsManualRegistryRow,
   type ClientOperationsManualRowSlot,
+  type ClientOperationsManualWorkspaceKey,
 } from './client-operations-manual-rows.pure.js';
+import type { ClientOperationsWorkspaceRequested } from './client-operations-workspace.pure.js';
+import { resolveClientOperationsWorkspaceScopeFromContext } from './client-operations-workspace.service.js';
 
 export const CLIENT_OPERATIONS_MANUAL_CELL_VALUE_MAX_LENGTH = 4000;
 
@@ -31,15 +35,38 @@ function periodKeyFrom(value: unknown): string {
   return key;
 }
 
+/**
+ * Manual-row subject is resolved here. A user id on the write body is never the owner.
+ * Staff/Viewer resolve to self. Owner/Admin OFFICE is the sentinel. MY is the actor.
+ * STAFF is the authorized employee. Actor stays the authenticated user.
+ */
+export async function resolveManualRowWorkspaceForActor(
+  ctx: RequestContext,
+  requested?: ClientOperationsWorkspaceRequested | null,
+): Promise<ClientOperationsManualWorkspaceKey> {
+  const { workspace } = await resolveClientOperationsWorkspaceScopeFromContext(ctx, requested ?? null);
+  try {
+    return manualRowWorkspaceKeyForScope({
+      scopeKind: workspace.scope_kind,
+      workspaceSubjectUserId: workspace.workspace_subject_user_id,
+    });
+  } catch {
+    throw forbidden('Workspace subject not available', 'WORKSPACE_SUBJECT_FORBIDDEN');
+  }
+}
+
 export async function isManualRowsPeriodSetupComplete(
   organizationId: string,
   operationalPeriodKey: string,
+  workspace: ClientOperationsManualWorkspaceKey,
 ): Promise<boolean> {
   const { data, error } = await supabaseAdmin
     .from('client_operations_manual_rows_period_setup')
     .select('operational_period_key')
     .eq('organization_id', organizationId)
     .eq('operational_period_key', operationalPeriodKey)
+    .eq('workspace_kind', workspace.workspace_kind)
+    .eq('subject_user_id', workspace.subject_user_id)
     .maybeSingle();
   assertQueryError(error, 'Failed to read manual rows period setup');
   return Boolean(data);
@@ -48,12 +75,15 @@ export async function isManualRowsPeriodSetupComplete(
 async function loadManualRowValuesForPeriod(input: {
   organizationId: string;
   operationalPeriodKey: string;
+  workspace: ClientOperationsManualWorkspaceKey;
 }): Promise<Array<{ slot: number; column_key: string; value_text: string }>> {
   const { data, error } = await supabaseAdmin
     .from('client_operations_manual_row_cell_values')
     .select('manual_row_slot, column_key, value_text')
     .eq('organization_id', input.organizationId)
-    .eq('operational_period_key', input.operationalPeriodKey);
+    .eq('operational_period_key', input.operationalPeriodKey)
+    .eq('workspace_kind', input.workspace.workspace_kind)
+    .eq('subject_user_id', input.workspace.subject_user_id);
   assertQueryError(error, 'Failed to load manual row cell values');
   return (data ?? []).map((row) => ({
     slot: Number((row as { manual_row_slot: number }).manual_row_slot),
@@ -65,6 +95,7 @@ async function loadManualRowValuesForPeriod(input: {
 async function upsertManualRowCellValue(input: {
   organizationId: string;
   operationalPeriodKey: string;
+  workspace: ClientOperationsManualWorkspaceKey;
   slot: ClientOperationsManualRowSlot;
   columnKey: string;
   valueText: string;
@@ -78,6 +109,8 @@ async function upsertManualRowCellValue(input: {
       .delete()
       .eq('organization_id', input.organizationId)
       .eq('operational_period_key', input.operationalPeriodKey)
+      .eq('workspace_kind', input.workspace.workspace_kind)
+      .eq('subject_user_id', input.workspace.subject_user_id)
       .eq('manual_row_slot', input.slot)
       .eq('column_key', input.columnKey);
     assertQueryError(error, 'Failed to clear manual row cell value');
@@ -90,13 +123,18 @@ async function upsertManualRowCellValue(input: {
     {
       organization_id: input.organizationId,
       operational_period_key: input.operationalPeriodKey,
+      workspace_kind: input.workspace.workspace_kind,
+      subject_user_id: input.workspace.subject_user_id,
       manual_row_slot: input.slot,
       column_key: input.columnKey,
       value_text: trimmed,
       updated_at: now,
       updated_by: input.actorUserId,
     },
-    { onConflict: 'organization_id,operational_period_key,manual_row_slot,column_key' },
+    {
+      onConflict:
+        'organization_id,operational_period_key,workspace_kind,subject_user_id,manual_row_slot,column_key',
+    },
   );
   assertQueryError(error, 'Failed to upsert manual row cell value');
 }
@@ -110,14 +148,21 @@ export async function initializeManualRowsForPeriod(input: {
   ctx: RequestContext;
   organizationId: string;
   operationalPeriodKey: string;
+  requestedWorkspace?: ClientOperationsWorkspaceRequested | null;
+  workspace?: ClientOperationsManualWorkspaceKey;
 }): Promise<{ initialized: boolean }> {
   const periodKey = periodKeyFrom(input.operationalPeriodKey);
-  if (await isManualRowsPeriodSetupComplete(input.organizationId, periodKey)) {
+  const workspace =
+    input.workspace ??
+    (await resolveManualRowWorkspaceForActor(input.ctx, input.requestedWorkspace ?? null));
+  if (await isManualRowsPeriodSetupComplete(input.organizationId, periodKey, workspace)) {
     return { initialized: false };
   }
   const { error } = await supabaseAdmin.from('client_operations_manual_rows_period_setup').insert({
     organization_id: input.organizationId,
     operational_period_key: periodKey,
+    workspace_kind: workspace.workspace_kind,
+    subject_user_id: workspace.subject_user_id,
     initialized_at: new Date().toISOString(),
     initialized_by: input.ctx.user.id,
   });
@@ -134,9 +179,13 @@ export async function initializeManualRowsForPeriod(input: {
     actorUserId: input.ctx.user.id,
     moduleCode: 'client-operations',
     entityType: 'client_operations_manual_rows_period_setup',
-    entityId: `${input.organizationId}:${periodKey}`,
+    entityId: `${input.organizationId}:${workspace.workspace_kind}:${workspace.subject_user_id}:${periodKey}`,
     action: AUDIT_ACTIONS.CLIENT_OPERATIONS_MANUAL_ROWS_PERIOD_INITIALIZED,
-    payload: { operational_period_key: periodKey },
+    payload: {
+      operational_period_key: periodKey,
+      workspace_kind: workspace.workspace_kind,
+      workspace_subject_user_id: workspace.subject_user_id,
+    },
   });
   return { initialized: true };
 }
@@ -150,11 +199,13 @@ export async function initializeManualRowsForPeriod(input: {
 export async function loadManualRowValuesBySlotColumnForRegistryAggregate(input: {
   organizationId: string;
   operationalPeriodKey: string;
+  workspace: ClientOperationsManualWorkspaceKey;
 }): Promise<Map<string, string>> {
   const periodKey = periodKeyFrom(input.operationalPeriodKey);
   const values = await loadManualRowValuesForPeriod({
     organizationId: input.organizationId,
     operationalPeriodKey: periodKey,
+    workspace: input.workspace,
   });
   const valuesBySlotColumn = new Map<string, string>();
   for (const row of values) {
@@ -175,11 +226,13 @@ export async function buildManualRowsForRegistryAggregate(input: {
   organizationId: string;
   operationalPeriodKey: string;
   columnKeys: readonly string[];
+  workspace: ClientOperationsManualWorkspaceKey;
   searchQ?: string | null;
 }): Promise<ClientOperationsManualRegistryRow[]> {
   const valuesBySlotColumn = await loadManualRowValuesBySlotColumnForRegistryAggregate({
     organizationId: input.organizationId,
     operationalPeriodKey: input.operationalPeriodKey,
+    workspace: input.workspace,
   });
   return materializeClientOperationsManualRows({
     columnKeys: input.columnKeys,
@@ -196,10 +249,11 @@ export async function buildManualRowsPeriodSetupForAggregate(input: {
   organizationId: string;
   operationalPeriodKey: string;
   canEdit: boolean;
+  workspace: ClientOperationsManualWorkspaceKey;
 }): Promise<{ needed: boolean; operational_period_key: string } | null> {
   if (!input.canEdit) return null;
   const periodKey = periodKeyFrom(input.operationalPeriodKey);
-  if (await isManualRowsPeriodSetupComplete(input.organizationId, periodKey)) return null;
+  if (await isManualRowsPeriodSetupComplete(input.organizationId, periodKey, input.workspace)) return null;
   return { needed: true, operational_period_key: periodKey };
 }
 
@@ -211,8 +265,10 @@ export async function setClientOperationsManualRowCellValue(input: {
   columnKey: string;
   value: unknown;
   eligibleColumnKeys: ReadonlySet<string>;
+  requestedWorkspace?: ClientOperationsWorkspaceRequested | null;
 }): Promise<void> {
   const periodKey = periodKeyFrom(input.operationalPeriodKey);
+  const workspace = await resolveManualRowWorkspaceForActor(input.ctx, input.requestedWorkspace ?? null);
   let slot: ClientOperationsManualRowSlot;
   try {
     slot = parseClientOperationsManualRowSlot(input.manualRowSlot);
@@ -229,17 +285,19 @@ export async function setClientOperationsManualRowCellValue(input: {
   }
 
   // Write path may initialize (named command chain) — never aggregate GET.
-  if (!(await isManualRowsPeriodSetupComplete(input.organizationId, periodKey))) {
+  if (!(await isManualRowsPeriodSetupComplete(input.organizationId, periodKey, workspace))) {
     await initializeManualRowsForPeriod({
       ctx: input.ctx,
       organizationId: input.organizationId,
       operationalPeriodKey: periodKey,
+      workspace,
     });
   }
 
   const beforeRows = await loadManualRowValuesForPeriod({
     organizationId: input.organizationId,
     operationalPeriodKey: periodKey,
+    workspace,
   });
   const before =
     beforeRows.find((r) => r.slot === slot && r.column_key === columnKey)?.value_text ?? '';
@@ -251,6 +309,7 @@ export async function setClientOperationsManualRowCellValue(input: {
   await upsertManualRowCellValue({
     organizationId: input.organizationId,
     operationalPeriodKey: periodKey,
+    workspace,
     slot,
     columnKey,
     valueText: next,
@@ -262,10 +321,12 @@ export async function setClientOperationsManualRowCellValue(input: {
     actorUserId: input.ctx.user.id,
     moduleCode: 'client-operations',
     entityType: 'client_operations_manual_row_cell_values',
-    entityId: `${input.organizationId}:${periodKey}:${slot}:${columnKey}`,
+    entityId: `${input.organizationId}:${workspace.workspace_kind}:${workspace.subject_user_id}:${periodKey}:${slot}:${columnKey}`,
     action: AUDIT_ACTIONS.CLIENT_OPERATIONS_MANUAL_ROW_CELL_VALUE_SET,
     payload: {
       operational_period_key: periodKey,
+      workspace_kind: workspace.workspace_kind,
+      workspace_subject_user_id: workspace.subject_user_id,
       manual_row_slot: slot,
       column_key: columnKey,
       before,

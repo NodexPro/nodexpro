@@ -1,0 +1,386 @@
+/* Users & Roles — compact office-owner management screen. Buttons follow nodexpro-buttons.mdc. */
+
+.nx-ur-page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px;
+  color: #111827;
+}
+
+.nx-ur-page__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.nx-ur-page__title {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.nx-ur-page__lead {
+  margin: 0;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.nx-ur-section-title {
+  margin: 28px 0 10px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* Buttons — rectangular, compact */
+.nx-ur-btn.nx-btn,
+.nx-ur-btn {
+  height: auto;
+  min-height: 0;
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.nx-ur-btn--sm.nx-btn,
+.nx-ur-btn--sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.nx-ur-btn--danger.nx-btn,
+.nx-ur-btn--danger {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.nx-ur-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Member rows */
+.nx-ur-grid {
+  display: grid;
+  grid-template-columns: minmax(200px, 2.2fr) 90px minmax(110px, 1fr) minmax(130px, 1.3fr) 100px 110px minmax(180px, 1.6fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.nx-ur-head {
+  padding: 0 14px 6px;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.nx-ur-row {
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.nx-ur-row--closed {
+  background: #f9fafb;
+  color: #6b7280;
+}
+
+.nx-ur-name {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.nx-ur-sub {
+  color: #6b7280;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.nx-ur-you {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.nx-ur-cell {
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+.nx-ur-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.nx-ur-badge--active {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.nx-ur-badge--invited {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.nx-ur-badge--access_closed {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.nx-ur-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.nx-ur-empty {
+  padding: 24px;
+  color: #6b7280;
+}
+
+/* Invitations */
+.nx-ur-invite-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 2fr) 110px 110px 120px minmax(160px, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border: 1px dashed #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.nx-ur-invite-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  padding: 16px;
+  margin-bottom: 20px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+/* Alerts */
+.nx-ur-error,
+.nx-ur-warning {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  font-size: 13.5px;
+}
+
+.nx-ur-error {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.nx-ur-warning {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.nx-ur-muted {
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.nx-ur-intro {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.nx-ur-pad {
+  padding: 12px;
+}
+
+.nx-ur-confirm-name {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+/* Modal (compact, consistent with the Staff Seats modal) */
+.nx-ur-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(17, 24, 39, 0.45);
+}
+
+.nx-ur-modal {
+  width: min(560px, 96vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+
+.nx-ur-modal__header,
+.nx-ur-modal__footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fff;
+}
+
+.nx-ur-modal__header {
+  justify-content: space-between;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.nx-ur-modal__footer {
+  justify-content: center;
+  border-top: 1px solid #e5e7eb;
+}
+
+.nx-ur-modal__footer .nx-ur-btn {
+  min-width: 96px;
+}
+
+.nx-ur-modal__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.nx-ur-modal__subtitle {
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.nx-ur-modal__close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #374151;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.nx-ur-modal__body {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px;
+}
+
+.nx-ur-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.nx-ur-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.nx-ur-field--wide {
+  grid-column: 1 / -1;
+}
+
+.nx-ur-field input,
+.nx-ur-field select,
+.nx-ur-search {
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.nx-ur-choice {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.nx-ur-choice__item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.nx-ur-choice__item small {
+  display: block;
+  color: #6b7280;
+  font-size: 12.5px;
+}
+
+.nx-ur-search-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.nx-ur-search {
+  flex: 1 1 auto;
+}
+
+.nx-ur-list {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.nx-ur-list__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.nx-ur-list__row:last-child {
+  border-bottom: 0;
+}
+
+.nx-ur-list__name {
+  flex: 1 1 auto;
+}
+
+.nx-ur-list__meta {
+  color: #6b7280;
+  font-size: 12.5px;
+}

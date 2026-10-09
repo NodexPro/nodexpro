@@ -238,7 +238,7 @@ test('aggregate exposes dedicated copy-source field without changing available_p
     'utf8',
   );
   assert.match(serviceSource, /user_period_data_copy_source_periods/);
-  assert.match(serviceSource, /loadUserPeriodDataCopySourcePeriods\(orgId\)/);
+  assert.match(serviceSource, /loadUserPeriodDataCopySourcePeriods\(orgId, manualWorkspace\)/);
   assert.match(serviceSource, /listKnownOperationalPeriodKeys\(orgId\)/);
   // available_periods still comes only from known operational keys (snapshots/material + default).
   const knownFn = readFileSync(

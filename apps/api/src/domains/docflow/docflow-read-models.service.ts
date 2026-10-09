@@ -1,5 +1,27 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { notFound } from '../../shared/errors.js';
+import { restrictClientScopedRows } from '../client-operations/organization-client-access.pure.js';
+import { authorizedClientIdsForViewer } from '../client-operations/organization-client-access.js';
+import {
+  activityByClientFromThreads,
+  loadAuthorizedInboxClients,
+  loadAuthorizedThreads,
+} from './docflow-authorized-paging.service.js';
+import { buildAuthorizedInboxPage } from './docflow-authorized-paging.pure.js';
+
+type DocflowClientViewer = { userId: string; roleCode: string | null | undefined };
+
+async function viewerClientAllowList(
+  orgId: string,
+  viewer?: DocflowClientViewer | null,
+): Promise<string[] | null> {
+  if (!viewer?.userId) return null;
+  return authorizedClientIdsForViewer({
+    organizationId: orgId,
+    userId: viewer.userId,
+    roleCode: viewer.roleCode,
+  });
+}
 import type { AllowedAction } from './docflow.types.js';
 import {
   fetchDocflowRequestTemplatesForOrgCountry,
@@ -786,6 +808,7 @@ export async function buildDocflowInvitesManagementAggregate(params: {
   pageSize?: number;
   searchClient?: string | null;
   inviteStatus?: string | null;
+  viewer?: DocflowClientViewer | null;
 }): Promise<Record<string, unknown>> {
   const pageSize = Math.max(1, Math.min(100, Number(params.pageSize ?? 25) || 25));
   const page = Math.max(1, Number(params.page ?? 1) || 1);
@@ -853,7 +876,13 @@ export async function buildDocflowInvitesManagementAggregate(params: {
     });
   }
 
-  const rowsAll: DocflowInviteManagementRow[] = (clientsRes.data ?? []).map((client) => {
+  const inviteAllowList = await viewerClientAllowList(params.orgId, params.viewer);
+  const visibleInviteClients = restrictClientScopedRows(
+    clientsRes.data ?? [],
+    (client) => String((client as { id?: string }).id ?? ''),
+    inviteAllowList,
+  );
+  const rowsAll: DocflowInviteManagementRow[] = visibleInviteClients.map((client) => {
     const clientId = String(client.id);
     const latestPortal = latestPortalByClient.get(clientId);
     const latestInvite = latestInviteByClient.get(clientId);
@@ -1417,6 +1446,7 @@ export async function buildOfficeDocflowInboxAggregate(params: {
   selectedThreadId?: string | null;
   /** When false, skips nested `client_context` (e.g. office messenger composes thread context separately). Default true. */
   includeClientContext?: boolean;
+  viewer?: DocflowClientViewer | null;
 }): Promise<Record<string, unknown>> {
   const pageSize = normalizePageSize(params.pageSize, 25);
   const page = normalizePage(params.page, 1);
@@ -1424,47 +1454,80 @@ export async function buildOfficeDocflowInboxAggregate(params: {
   const searchForRpc = searchRaw ? searchRaw : null;
 
   // Order by latest DocFlow thread activity (max updated_at per client), then display_name.
-  // Pagination and search are applied in SQL (RPC) so ordering truth stays on the backend.
-  const { data: inboxRows, error: cErr } = await supabaseAdmin.rpc('docflow_office_inbox_clients_page', {
-    p_org_id: params.orgId,
-    p_search: searchForRpc,
-    p_page: page,
-    p_page_size: pageSize,
-  });
-  if (cErr) throw cErr;
-
-  const rows = (inboxRows ?? []) as Array<{
+  // Unrestricted viewers: pagination/search in SQL (RPC) so ordering truth stays on the backend.
+  // Restricted Staff/Viewer (Stage 5.5): the authorized client set is applied BEFORE
+  // ordering/LIMIT/OFFSET, so pages and totals contain authorized rows only.
+  const inboxAllowList = await viewerClientAllowList(params.orgId, params.viewer);
+  type InboxRpcRow = {
     client_id: string;
     display_name: string | null;
     status: string | null;
     phone: string | null;
     email: string | null;
     last_thread_activity_at: string | null;
-    total_count: string | number | null;
-  }>;
-  let total = rows.length ? Number(rows[0]?.total_count ?? 0) : 0;
-  if (!rows.length && page > 1) {
-    const { data: headRows, error: headErr } = await supabaseAdmin.rpc('docflow_office_inbox_clients_page', {
+  };
+  let rows: InboxRpcRow[] = [];
+  let total = 0;
+  let safePage = page;
+  let totalPages = 1;
+  if (inboxAllowList) {
+    if (inboxAllowList.length > 0) {
+      const [authorizedClients, authorizedThreads] = await Promise.all([
+        loadAuthorizedInboxClients(params.orgId, inboxAllowList),
+        loadAuthorizedThreads(params.orgId, inboxAllowList),
+      ]);
+      const paged = buildAuthorizedInboxPage({
+        clients: authorizedClients,
+        activityByClient: activityByClientFromThreads(authorizedThreads),
+        allowedClientIds: inboxAllowList,
+        search: searchForRpc,
+        page,
+        pageSize,
+      });
+      rows = paged.rows;
+      total = paged.total;
+      safePage = paged.effective_page;
+    }
+    totalPages = Math.max(1, Math.ceil(total / pageSize));
+  } else {
+    const { data: inboxRows, error: cErr } = await supabaseAdmin.rpc('docflow_office_inbox_clients_page', {
       p_org_id: params.orgId,
       p_search: searchForRpc,
-      p_page: 1,
-      p_page_size: 1,
+      p_page: page,
+      p_page_size: pageSize,
     });
-    if (headErr) throw headErr;
-    const head = (headRows ?? []) as Array<{ total_count?: string | number | null }>;
-    total = head.length ? Number(head[0]?.total_count ?? 0) : 0;
-  }
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const safePage = Math.min(page, totalPages);
+    if (cErr) throw cErr;
 
-  const pageRows = rows.map((c) => ({
-    client_id: String(c.client_id),
-    display_name: String(c.display_name ?? ''),
-    status: String(c.status ?? ''),
-    phone: c.phone ? String(c.phone) : null,
-    email: c.email ? String(c.email) : null,
-    last_thread_activity_at: c.last_thread_activity_at ? String(c.last_thread_activity_at) : null,
-  }));
+    const rpcRows = (inboxRows ?? []) as Array<InboxRpcRow & { total_count: string | number | null }>;
+    rows = rpcRows;
+    total = rpcRows.length ? Number(rpcRows[0]?.total_count ?? 0) : 0;
+    if (!rpcRows.length && page > 1) {
+      const { data: headRows, error: headErr } = await supabaseAdmin.rpc('docflow_office_inbox_clients_page', {
+        p_org_id: params.orgId,
+        p_search: searchForRpc,
+        p_page: 1,
+        p_page_size: 1,
+      });
+      if (headErr) throw headErr;
+      const head = (headRows ?? []) as Array<{ total_count?: string | number | null }>;
+      total = head.length ? Number(head[0]?.total_count ?? 0) : 0;
+    }
+    totalPages = Math.max(1, Math.ceil(total / pageSize));
+    safePage = Math.min(page, totalPages);
+  }
+
+  const pageRows = restrictClientScopedRows(
+    rows.map((c) => ({
+      client_id: String(c.client_id),
+      display_name: String(c.display_name ?? ''),
+      status: String(c.status ?? ''),
+      phone: c.phone ? String(c.phone) : null,
+      email: c.email ? String(c.email) : null,
+      last_thread_activity_at: c.last_thread_activity_at ? String(c.last_thread_activity_at) : null,
+    })),
+    (row) => row.client_id,
+    inboxAllowList,
+  );
 
   const pageClientIds = pageRows.map((r) => r.client_id);
   const { data: threads, error: tErr } = await supabaseAdmin
@@ -1506,9 +1569,12 @@ export async function buildOfficeDocflowInboxAggregate(params: {
 
   const portalExtrasByClient = await buildMessengerPortalListExtrasByClientId(params.orgId, pageRows);
 
-  const selectedClientId =
+  let selectedClientId =
     String(params.selectedClientId ?? '').trim() ||
     (pageRows.length ? pageRows[0]!.client_id : '');
+  if (inboxAllowList && selectedClientId && !inboxAllowList.includes(selectedClientId)) {
+    selectedClientId = pageRows[0]?.client_id ?? '';
+  }
 
   // Selected client must be resolved in-scope even if it is not in current page.
   const selectedClientInScope = selectedClientId
@@ -1592,6 +1658,7 @@ export async function buildOfficeDocflowMessengerAggregate(params: {
   searchClient?: string | null;
   clientId?: string | null;
   threadId?: string | null;
+  viewer?: DocflowClientViewer | null;
 }): Promise<Record<string, unknown>> {
   const messengerPageSize = params.pageSize ?? 50;
   const clientIdParam = String(params.clientId ?? '').trim() || null;
@@ -1605,6 +1672,7 @@ export async function buildOfficeDocflowMessengerAggregate(params: {
     page: params.page,
     pageSize: messengerPageSize,
     searchClient: params.searchClient,
+    viewer: params.viewer,
     selectedClientId: clientIdParam,
     selectedThreadId: threadIdParam,
     includeClientContext: false,

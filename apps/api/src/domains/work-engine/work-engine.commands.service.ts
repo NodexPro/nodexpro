@@ -266,7 +266,10 @@ async function buildRefreshedForPayload(
   }
   return {
     aggregate_key: REFRESH_FOUNDATION,
-    aggregate: await buildWorkEngineFoundationAggregate({ orgId }),
+    aggregate: await buildWorkEngineFoundationAggregate({
+      orgId,
+      viewer: { userId: ctx.user.id, roleCode: ctx.membership?.roleCode ?? null },
+    }),
   };
 }
 

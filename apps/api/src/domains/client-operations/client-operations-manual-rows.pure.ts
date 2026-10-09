@@ -1,7 +1,62 @@
 /**
  * Client Operations — five period-scoped MANUAL spreadsheet rows (presentation + carry rules).
  * NOT Core clients. NOT Accounting Base. Presentation/domain identity only.
+ * Stage 5.2: manual:01..05 are workspace-scoped. Storage is sparse.
+ * client_id stays null. Slots are not visibility grants and must not hydrate a canonical client.
+ *
+ * OFFICE sheet uses workspace_kind=office and the sentinel subject.
+ * Each member sheet uses workspace_kind=member and that member's user id.
+ * Existing cells have no worker owner, so backfill attaches them to the OFFICE sheet only.
  */
+
+export const CLIENT_OPERATIONS_MANUAL_OFFICE_SUBJECT_USER_ID =
+  '00000000-0000-0000-0000-000000000000';
+
+export type ClientOperationsManualWorkspaceKind = 'office' | 'member';
+
+export type ClientOperationsManualWorkspaceKey = {
+  workspace_kind: ClientOperationsManualWorkspaceKind;
+  subject_user_id: string;
+};
+
+/** Historical cells stay on the OFFICE sheet. updated_by is not an owner. */
+export function backfillExistingManualRowsToOfficeWorkspace(): ClientOperationsManualWorkspaceKey {
+  return {
+    workspace_kind: 'office',
+    subject_user_id: CLIENT_OPERATIONS_MANUAL_OFFICE_SUBJECT_USER_ID,
+  };
+}
+
+/**
+ * Storage identity for a workspace the backend has already authorized.
+ * OFFICE → sentinel. MY and STAFF → the resolved subject, never a client-supplied id.
+ */
+export function manualRowWorkspaceKeyForScope(input: {
+  scopeKind: 'OFFICE' | 'MY' | 'STAFF';
+  workspaceSubjectUserId: string | null;
+}): ClientOperationsManualWorkspaceKey {
+  if (input.scopeKind === 'OFFICE') {
+    return backfillExistingManualRowsToOfficeWorkspace();
+  }
+  const subject = String(input.workspaceSubjectUserId ?? '').trim().toLowerCase();
+  if (!subject || subject === CLIENT_OPERATIONS_MANUAL_OFFICE_SUBJECT_USER_ID) {
+    throw new Error('MANUAL_WORKSPACE_SUBJECT_REQUIRED');
+  }
+  return { workspace_kind: 'member', subject_user_id: subject };
+}
+
+export function manualWorkspaceCacheKey(key: ClientOperationsManualWorkspaceKey): string {
+  return `${key.workspace_kind}:${key.subject_user_id}`;
+}
+
+export function manualRowsShareWorkspace(
+  left: ClientOperationsManualWorkspaceKey,
+  right: ClientOperationsManualWorkspaceKey,
+): boolean {
+  return (
+    left.workspace_kind === right.workspace_kind && left.subject_user_id === right.subject_user_id
+  );
+}
 
 export const CLIENT_OPERATIONS_MANUAL_ROW_SLOT_COUNT = 5;
 

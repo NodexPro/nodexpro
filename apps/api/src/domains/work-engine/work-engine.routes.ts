@@ -46,6 +46,8 @@ import { requireModuleActive } from '../../middleware/requireModuleActive.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
 import { requirePermission } from '../../middleware/requirePermission.js';
 import type { RequestContext } from '../../shared/context.js';
+import { assertIncomeRequestClientAccess } from '../income/income-request-client-access.service.js';
+import { collectIncomeRequestIds } from '../income/income-request-resource-ids.pure.js';
 import { badRequest, forbidden } from '../../shared/errors.js';
 import { runWorkEngineScheduler } from './work-engine.scheduler.service.js';
 import { executeWorkEngineCommand } from './work-engine.commands.service.js';
@@ -143,6 +145,25 @@ router.post('/internal/scheduler/run', async (req: Request, res: Response, next:
 
 const officeRouter = Router();
 officeRouter.use(authMiddleware, requireOrg, requireModuleActive(WORK_ENGINE_MODULE_CODE));
+officeRouter.use(async (req: Request, _res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    // Stage 5.5: explicit client ids AND resource ids (work item / reminder candidate / issued
+    // document / draft / customer) resolve to a client and pass the Stage 5.1 allow-list before
+    // any handler runs. A guessed id never bypasses client ACL.
+    await assertIncomeRequestClientAccess(
+      ctx,
+      collectIncomeRequestIds({
+        path: req.path,
+        query: req.query as Record<string, unknown>,
+        body: (req.body ?? {}) as Record<string, unknown>,
+      }),
+    );
+    next();
+  } catch (e) {
+    next(e);
+  }
+});
 
 officeRouter.get(
   '/aggregates/foundation',
@@ -151,7 +172,10 @@ officeRouter.get(
     try {
       const ctx = req.context as RequestContext;
       const orgId = ctx.organizationId!;
-      const aggregate = await buildWorkEngineFoundationAggregate({ orgId });
+      const aggregate = await buildWorkEngineFoundationAggregate({
+        orgId,
+        viewer: { userId: ctx.user.id, roleCode: ctx.membership?.roleCode ?? null },
+      });
       return res.json(aggregate);
     } catch (e) {
       next(e);

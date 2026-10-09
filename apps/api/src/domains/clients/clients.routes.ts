@@ -3,6 +3,7 @@ import { authMiddleware } from '../../middleware/auth.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
 import { requirePermission } from '../../middleware/requirePermission.js';
 import { requireAuthorizedClientParam } from '../../middleware/requireAuthorizedClient.js';
+import { requireOfficeAdministration } from '../../middleware/requireOfficeAdministration.js';
 import * as clientsService from './clients.service.js';
 import * as contactsService from './client-contacts.service.js';
 import * as notesService from './client-notes.service.js';
@@ -21,7 +22,7 @@ router.param('clientId', (req, res, next) => {
   void requireAuthorizedClientParam('clientId')(req, res, next);
 });
 
-router.get('/:id/clients', authMiddleware, requireOrg, requirePermission('clients:read', 'view_clients'), async (req, res, next) => {
+router.get('/:id/clients', authMiddleware, requireOrg, requirePermission('clients:read', 'view_clients'), requireOfficeAdministration, async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
     const view = typeof req.query.view === 'string' ? req.query.view : undefined;
@@ -46,7 +47,7 @@ router.get('/:id/clients', authMiddleware, requireOrg, requirePermission('client
   }
 });
 
-router.post('/:id/clients', authMiddleware, requireOrg, requirePermission('clients:write'), async (req, res, next) => {
+router.post('/:id/clients', authMiddleware, requireOrg, requirePermission('clients:write'), requireOfficeAdministration, async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
     const client = await clientsService.createClient(req.context!, req.params.id, req.body);
@@ -68,13 +69,14 @@ router.get('/:id/clients/search', authMiddleware, requireOrg, requirePermission(
       clientIdIsAuthorized,
     } = await import('../client-operations/organization-client-access.js');
     const accessScope = await resolveOrganizationClientAccessScopeFromContext(req.context!);
+    const archivedVisible = accessScope.kind === 'OFFICE' && includeArchived;
     if (full && q) {
       const includeSensitive = req.context!.membership?.permissions?.includes('clients:view_sensitive');
-      const clients = await searchClientsWithData(req.params.id, q, { includeArchived, includeSensitive });
+      const clients = await searchClientsWithData(req.params.id, q, { includeArchived: archivedVisible, includeSensitive });
       const allowed = clients.filter((c) => clientIdIsAuthorized(accessScope, String((c as { id?: string }).id ?? '')));
       return res.json({ results: allowed });
     }
-    const results = await searchClients(req.params.id, q, { includeArchived });
+    const results = await searchClients(req.params.id, q, { includeArchived: archivedVisible });
     const allowedIds = new Set(
       filterAuthorizedClientIds(
         accessScope,
@@ -89,7 +91,7 @@ router.get('/:id/clients/search', authMiddleware, requireOrg, requirePermission(
   }
 });
 
-router.post('/:id/clients/import/preview', authMiddleware, requireOrg, requirePermission('clients:write'), async (req, res, next) => {
+router.post('/:id/clients/import/preview', authMiddleware, requireOrg, requirePermission('clients:write'), requireOfficeAdministration, async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
     const csv = typeof req.body?.csv === 'string' ? req.body.csv : '';
@@ -100,7 +102,7 @@ router.post('/:id/clients/import/preview', authMiddleware, requireOrg, requirePe
   }
 });
 
-router.post('/:id/clients/import', authMiddleware, requireOrg, requirePermission('clients:write'), async (req, res, next) => {
+router.post('/:id/clients/import', authMiddleware, requireOrg, requirePermission('clients:write'), requireOfficeAdministration, async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
     const csv = typeof req.body?.csv === 'string' ? req.body.csv : '';
@@ -124,7 +126,7 @@ router.get('/:id/clients/export', authMiddleware, requireOrg, requirePermission(
 });
 
 // Bulk actions (must be before /:id/clients/:clientId)
-router.post('/:id/clients/bulk/mark-active', authMiddleware, requireOrg, requirePermission('clients:write'), async (req, res, next) => {
+router.post('/:id/clients/bulk/mark-active', authMiddleware, requireOrg, requirePermission('clients:write'), requireOfficeAdministration, async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
     const result = await clientsService.bulkMarkActive(req.context!, req.params.id, req.body);
@@ -133,7 +135,7 @@ router.post('/:id/clients/bulk/mark-active', authMiddleware, requireOrg, require
     next(e);
   }
 });
-router.post('/:id/clients/bulk/mark-inactive', authMiddleware, requireOrg, requirePermission('clients:write'), async (req, res, next) => {
+router.post('/:id/clients/bulk/mark-inactive', authMiddleware, requireOrg, requirePermission('clients:write'), requireOfficeAdministration, async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
     const result = await clientsService.bulkMarkInactive(req.context!, req.params.id, req.body);
@@ -142,7 +144,7 @@ router.post('/:id/clients/bulk/mark-inactive', authMiddleware, requireOrg, requi
     next(e);
   }
 });
-router.post('/:id/clients/bulk/archive', authMiddleware, requireOrg, requirePermission('clients:archive'), async (req, res, next) => {
+router.post('/:id/clients/bulk/archive', authMiddleware, requireOrg, requirePermission('clients:archive'), requireOfficeAdministration, async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
     const result = await clientsService.bulkArchive(req.context!, req.params.id, req.body);
@@ -151,7 +153,7 @@ router.post('/:id/clients/bulk/archive', authMiddleware, requireOrg, requirePerm
     next(e);
   }
 });
-router.post('/:id/clients/bulk/restore', authMiddleware, requireOrg, requirePermission('clients:archive'), async (req, res, next) => {
+router.post('/:id/clients/bulk/restore', authMiddleware, requireOrg, requirePermission('clients:archive'), requireOfficeAdministration, async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
     const result = await clientsService.bulkRestore(req.context!, req.params.id, req.body);
@@ -204,7 +206,7 @@ router.patch('/:id/clients/:clientId', authMiddleware, requireOrg, requirePermis
   }
 });
 
-router.post('/:id/clients/:clientId/archive', authMiddleware, requireOrg, requirePermission('clients:archive'), async (req, res, next) => {
+router.post('/:id/clients/:clientId/archive', authMiddleware, requireOrg, requirePermission('clients:archive'), requireOfficeAdministration, async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
     const client = await clientsService.archiveClient(req.context!, req.params.id, req.params.clientId);
@@ -214,7 +216,7 @@ router.post('/:id/clients/:clientId/archive', authMiddleware, requireOrg, requir
   }
 });
 
-router.post('/:id/clients/:clientId/restore', authMiddleware, requireOrg, requirePermission('clients:archive'), async (req, res, next) => {
+router.post('/:id/clients/:clientId/restore', authMiddleware, requireOrg, requirePermission('clients:archive'), requireOfficeAdministration, async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
     const client = await clientsService.restoreClient(req.context!, req.params.id, req.params.clientId);

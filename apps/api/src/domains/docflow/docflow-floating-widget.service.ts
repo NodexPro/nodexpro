@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { resolveEntitlement } from '../modules/entitlement.service.js';
 import { getTrialState } from '../trial/trial.service.js';
 import type { AllowedAction } from './docflow.types.js';
+import { loadAuthorizedWidgetDraftRows } from './docflow-authorized-paging.service.js';
 
 const DOCFLOW_CODE = 'docflow';
 
@@ -68,6 +69,8 @@ function buildWidgetDraftAllowedActions(
 export type DocflowFloatingWidgetBuildOpts = {
   /** When false and org has full DocFlow access, draft actions are disabled (membership cannot run communication commands). */
   can_use_communication_commands?: boolean;
+  /** Null/omit = unrestricted. Array = Stage 5.1 allow-list. */
+  authorizedClientIds?: string[] | null;
 };
 
 export async function buildDocflowFloatingWidgetAggregate(
@@ -179,16 +182,23 @@ export async function buildDocflowFloatingWidgetAggregate(
   const billingCtaLabel = subscriptionLocked ? 'Go to billing' : null;
   const billingPath = subscriptionLocked ? '/billing' : null;
 
-  const { data: draftRows, error: dErr } = await supabaseAdmin
-    .from('communication_draft_messages')
-    .select('*')
-    .eq('org_id', orgId)
-    .in('status', ['draft', 'approved'])
-    .order('generated_at', { ascending: false })
-    .limit(50);
-  if (dErr) throw dErr;
-
-  const drafts = draftRows ?? [];
+  // Stage 5.5: restricted viewers get the allow-list applied BEFORE ORDER/LIMIT, so 50 authorized
+  // drafts are returned even when unauthorized drafts are interleaved.
+  const allowClientIds = opts?.authorizedClientIds;
+  let drafts: Record<string, unknown>[];
+  if (allowClientIds == null) {
+    const { data: draftRows, error: dErr } = await supabaseAdmin
+      .from('communication_draft_messages')
+      .select('*')
+      .eq('org_id', orgId)
+      .in('status', ['draft', 'approved'])
+      .order('generated_at', { ascending: false })
+      .limit(50);
+    if (dErr) throw dErr;
+    drafts = (draftRows ?? []) as Record<string, unknown>[];
+  } else {
+    drafts = allowClientIds.length ? await loadAuthorizedWidgetDraftRows(orgId, allowClientIds, 50) : [];
+  }
   const clientIds = [...new Set(drafts.map((d) => d.client_id as string))];
   const displayByClient = new Map<string, string | null>();
   if (clientIds.length) {

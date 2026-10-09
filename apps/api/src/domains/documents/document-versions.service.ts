@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { forbidden, badRequest } from '../../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
+import { assertDocumentClientAccess } from './document-client-access.js';
 
 const BUCKET = 'document-files';
 const SIGNED_URL_EXPIRES_SEC = 60;
@@ -27,8 +28,14 @@ export async function listVersions(ctx: RequestContext, orgId: string, documentI
   assertOrg(ctx, orgId);
   assertPermission(ctx, 'documents:read');
 
-  const { data: doc } = await supabaseAdmin.from('documents').select('id').eq('id', documentId).eq('organization_id', orgId).single();
+  const { data: doc } = await supabaseAdmin
+    .from('documents')
+    .select('id, primary_client_id')
+    .eq('id', documentId)
+    .eq('organization_id', orgId)
+    .single();
   if (!doc) throw forbidden('Document not found');
+  await assertDocumentClientAccess(ctx, (doc as { primary_client_id?: string | null }).primary_client_id);
 
   const { data } = await supabaseAdmin
     .from('document_versions')
@@ -50,11 +57,12 @@ export async function getDocumentOpenUrl(
 
   const { data: doc } = await supabaseAdmin
     .from('documents')
-    .select('id, sensitivity_level, current_version_id')
+    .select('id, sensitivity_level, current_version_id, primary_client_id')
     .eq('id', documentId)
     .eq('organization_id', orgId)
     .single();
   if (!doc) throw forbidden('Document not found');
+  await assertDocumentClientAccess(ctx, (doc as { primary_client_id?: string | null }).primary_client_id);
 
   const canViewSensitive = ctx.membership?.permissions?.includes('documents:view_sensitive');
   if (!canViewSensitive && ['sensitive', 'restricted'].includes(doc.sensitivity_level)) {

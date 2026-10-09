@@ -9,6 +9,7 @@ import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
 import { addTimelineEvent, TIMELINE_SOURCE, TIMELINE_EVENTS } from './timeline.service.js';
 import { buildClientSearchText, upsertClientSearchIndex } from './search-index.service.js';
+import { assertOfficeAdministration } from '../../shared/office-administration.js';
 
 const ENTITY_TYPE_CLIENT = 'client';
 const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2MB
@@ -164,6 +165,7 @@ export interface ImportPreviewResult {
 export async function previewImport(ctx: RequestContext, orgId: string, csv: string): Promise<ImportPreviewResult> {
   assertOrg(ctx, orgId);
   assertClientsWrite(ctx);
+  assertOfficeAdministration(ctx);
 
   if (Buffer.byteLength(csv, 'utf8') > MAX_FILE_BYTES) throw badRequest(`CSV too large. Max ${MAX_FILE_BYTES / 1024}KB`);
 
@@ -223,6 +225,7 @@ export interface ImportResult {
 export async function executeImport(ctx: RequestContext, orgId: string, csv: string): Promise<ImportResult> {
   assertOrg(ctx, orgId);
   assertClientsWrite(ctx);
+  assertOfficeAdministration(ctx);
 
   if (Buffer.byteLength(csv, 'utf8') > MAX_FILE_BYTES) throw badRequest(`CSV too large. Max ${MAX_FILE_BYTES / 1024}KB`);
 
@@ -332,12 +335,30 @@ export async function exportClientsCsv(ctx: RequestContext, orgId: string): Prom
   assertOrg(ctx, orgId);
   assertClientsWrite(ctx);
 
-  const { data: clients } = await supabaseAdmin
+  const {
+    resolveOrganizationClientAccessScopeFromContext,
+    filterAuthorizedClientIds,
+  } = await import('../client-operations/organization-client-access.js');
+  const accessScope = await resolveOrganizationClientAccessScopeFromContext(ctx);
+  if (accessScope.authorized_client_ids && accessScope.authorized_client_ids.length === 0) {
+    return 'name,email,phone,company_name,tax_id,address,city,country,notes\r\n';
+  }
+
+  let query = supabaseAdmin
     .from('clients')
-    .select('display_name, email, phone, legal_name, tax_id, address, city, country_code, notes')
+    .select('id, display_name, email, phone, legal_name, tax_id, address, city, country_code, notes')
     .eq('organization_id', orgId)
     .eq('is_archived', false)
     .order('display_name');
+  if (accessScope.authorized_client_ids) {
+    const ids = filterAuthorizedClientIds(accessScope, accessScope.authorized_client_ids);
+    if (ids.length === 0) {
+      return 'name,email,phone,company_name,tax_id,address,city,country,notes\r\n';
+    }
+    query = query.in('id', ids);
+  }
+
+  const { data: clients } = await query;
 
   const rows = (clients ?? []) as Array<{
     display_name: string;

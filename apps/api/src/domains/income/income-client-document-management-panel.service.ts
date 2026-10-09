@@ -19,6 +19,8 @@
 
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
+import { restrictClientScopedRows } from '../client-operations/organization-client-access.pure.js';
+import { resolveOrganizationClientAccessScopeFromContext } from '../client-operations/organization-client-access.js';
 import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-metrics.js';
 import { throwIfSupabaseError } from '../../shared/supabase-errors.js';
 import {
@@ -640,22 +642,34 @@ function emptyPanel(visible: boolean): IncomeClientDocumentManagementPanel {
   };
 }
 
-async function countSelfModeRows(orgId: string): Promise<{ issued: number; drafts: number }> {
-  const [issuedRes, draftRes] = await Promise.all([
-    supabaseAdmin
-      .from('income_documents')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', orgId)
-      .eq('acting_mode', 'self')
-      .eq('document_status', 'issued'),
-    supabaseAdmin
-      .from('income_document_drafts')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', orgId)
-      .eq('acting_mode', 'self')
-      .eq('status', 'draft')
-      .not('user_saved_at', 'is', null),
-  ]);
+/**
+ * Self-mode (own-business) counts. Stage 5.5 classification: class A (personal operational count).
+ * Source rows: income_documents (issued, acting_mode=self) and user-saved income_document_drafts.
+ * Owner/Admin (actorUserId = null) keep the office-wide count; Staff/Viewer only count rows they
+ * created themselves, so the count cannot reveal other users' / the office's own activity.
+ */
+async function countSelfModeRows(
+  orgId: string,
+  actorUserId: string | null = null,
+): Promise<{ issued: number; drafts: number }> {
+  let issuedQ = supabaseAdmin
+    .from('income_documents')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', orgId)
+    .eq('acting_mode', 'self')
+    .eq('document_status', 'issued');
+  let draftQ = supabaseAdmin
+    .from('income_document_drafts')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', orgId)
+    .eq('acting_mode', 'self')
+    .eq('status', 'draft')
+    .not('user_saved_at', 'is', null);
+  if (actorUserId) {
+    issuedQ = issuedQ.eq('actor_user_id', actorUserId);
+    draftQ = draftQ.eq('actor_user_id', actorUserId);
+  }
+  const [issuedRes, draftRes] = await Promise.all([issuedQ, draftQ]);
   throwIfSupabaseError(issuedRes.error, 'countSelfModeIssuedDocuments');
   throwIfSupabaseError(draftRes.error, 'countSelfModeUserSavedDrafts');
   return {
@@ -902,43 +916,59 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
   let stepStart = aggregateStartMs;
   const officeRangeEnd = officePageReq.offset + officePageReq.limit; // inclusive → limit+1 rows
   const customersRangeEnd = customersPageReq.offset + customersPageReq.limit;
+  const clientScope = await resolveOrganizationClientAccessScopeFromContext(params.ctx);
+  const allowedClientIds = clientScope.authorized_client_ids;
+  const noAuthorizedClients = allowedClientIds != null && allowedClientIds.length === 0;
+
+  /** Paginated eligible office clients — stable order display_name, id. */
+  let officeClientsQuery = supabaseAdmin
+    .from('clients')
+    .select('id, display_name, tax_id, email, phone')
+    .eq('organization_id', orgId)
+    .eq('is_archived', false)
+    .order('display_name', { ascending: true })
+    .order('id', { ascending: true });
+  /**
+   * Independent customer population page (not scoped to the office_clients page).
+   * Inner-join non-archived office clients; order parent name then customer name, id.
+   */
+  let customersQuery = supabaseAdmin
+    .from('income_customers')
+    .select(
+      'id, display_name, tax_id, email, phone, represented_client_id, clients!inner(id, display_name, is_archived, organization_id)',
+    )
+    .eq('organization_id', orgId)
+    .eq('status', 'active')
+    .eq('is_one_time', false)
+    .eq('clients.organization_id', orgId)
+    .eq('clients.is_archived', false)
+    .order('display_name', { foreignTable: 'clients', ascending: true })
+    .order('display_name', { ascending: true })
+    .order('id', { ascending: true });
+  if (allowedClientIds && allowedClientIds.length > 0) {
+    officeClientsQuery = officeClientsQuery.in('id', allowedClientIds);
+    customersQuery = customersQuery.in('represented_client_id', allowedClientIds);
+  }
 
   const [statsRes, endCustomerStatsRes, selfCounts, officeClientsRes, canonicalCustomersRes] =
     await Promise.all([
-      supabaseAdmin.rpc('income_client_document_management_panel_stats', {
-        p_org_id: orgId,
-      }),
-      supabaseAdmin.rpc('income_client_document_management_end_customer_stats', {
-        p_org_id: orgId,
-      }),
-      countSelfModeRows(orgId),
-      /** Paginated eligible office clients — stable order display_name, id. */
-      supabaseAdmin
-        .from('clients')
-        .select('id, display_name, tax_id, email, phone')
-        .eq('organization_id', orgId)
-        .eq('is_archived', false)
-        .order('display_name', { ascending: true })
-        .order('id', { ascending: true })
-        .range(officePageReq.offset, officeRangeEnd),
-      /**
-       * Independent customer population page (not scoped to the office_clients page).
-       * Inner-join non-archived office clients; order parent name then customer name, id.
-       */
-      supabaseAdmin
-        .from('income_customers')
-        .select(
-          'id, display_name, tax_id, email, phone, represented_client_id, clients!inner(id, display_name, is_archived, organization_id)',
-        )
-        .eq('organization_id', orgId)
-        .eq('status', 'active')
-        .eq('is_one_time', false)
-        .eq('clients.organization_id', orgId)
-        .eq('clients.is_archived', false)
-        .order('display_name', { foreignTable: 'clients', ascending: true })
-        .order('display_name', { ascending: true })
-        .order('id', { ascending: true })
-        .range(customersPageReq.offset, customersRangeEnd),
+      noAuthorizedClients
+        ? Promise.resolve({ data: [], error: null })
+        : supabaseAdmin.rpc('income_client_document_management_panel_stats', {
+            p_org_id: orgId,
+          }),
+      noAuthorizedClients
+        ? Promise.resolve({ data: [], error: null })
+        : supabaseAdmin.rpc('income_client_document_management_end_customer_stats', {
+            p_org_id: orgId,
+          }),
+      countSelfModeRows(orgId, clientScope.kind === 'OFFICE' ? null : params.ctx.user.id),
+      noAuthorizedClients
+        ? Promise.resolve({ data: [], error: null })
+        : officeClientsQuery.range(officePageReq.offset, officeRangeEnd),
+      noAuthorizedClients
+        ? Promise.resolve({ data: [], error: null })
+        : customersQuery.range(customersPageReq.offset, customersRangeEnd),
     ]);
   throwIfSupabaseError(statsRes.error, 'incomeClientDocumentManagementPanelStats', {
     migrationHint: '167_income_client_panel_stats_office_to_client_scope.sql',
@@ -950,8 +980,16 @@ export async function buildIncomeClientDocumentManagementPanel(params: {
   throwIfSupabaseError(canonicalCustomersRes.error, 'loadCanonicalEndCustomersForDocumentManagementPanel');
   stepStart = logPanelTiming('rpc_office_and_end_customer_stats_and_paged_populations', stepStart);
 
-  const stats = (statsRes.data ?? []) as PanelStatRow[];
-  const endCustomerStats = (endCustomerStatsRes.data ?? []) as EndCustomerStatRow[];
+  const stats = restrictClientScopedRows(
+    (statsRes.data ?? []) as PanelStatRow[],
+    (row) => row.represented_client_id,
+    allowedClientIds,
+  );
+  const endCustomerStats = restrictClientScopedRows(
+    (endCustomerStatsRes.data ?? []) as EndCustomerStatRow[],
+    (row) => row.represented_client_id,
+    allowedClientIds,
+  );
   const officeClientsFetched = (officeClientsRes.data ?? []) as Array<{
     id: string;
     display_name: string;

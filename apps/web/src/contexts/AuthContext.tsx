@@ -16,6 +16,9 @@ export interface MeData {
   shell_profile?: ShellProfile;
   default_route?: string;
   visible_nav_items?: SessionNavItemDto[];
+  available_navigation?: SessionNavItemDto[];
+  available_modules?: SessionNavItemDto[];
+  available_actions?: string[];
   income_onboarding_complete?: boolean;
   sidebar_account_block: SidebarAccountBlockModel;
   session_state?: 'platform_owner' | 'needs_onboarding' | 'needs_org_selection' | 'ready' | 'blocked';

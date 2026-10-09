@@ -38,6 +38,11 @@ import {
   reqString,
 } from '../domains/docflow/docflow.guards.js';
 import { config } from '../config.js';
+import {
+  assertCanAccessClientFromContext,
+  authorizedClientIdsForViewer,
+} from '../domains/client-operations/organization-client-access.js';
+import { assertStaffViewerMayUseEntitledModuleCode } from '../domains/modules/member-module-access.service.js';
 import { runDocflowCommunicationDailyScheduler } from '../domains/docflow/docflow-communication-scheduler.service.js';
 
 const router = Router();
@@ -57,8 +62,17 @@ officeBaseRouter.get('/aggregates/floating-widget', async (req: Request, res: Re
   try {
     const ctx = req.context as RequestContext;
     const orgId = ctx.organizationId!;
+    await assertStaffViewerMayUseEntitledModuleCode(ctx, 'docflow');
     const canUse = canRunDocflowCommunicationRules(ctx);
-    const aggregate = await buildDocflowFloatingWidgetAggregate(orgId, { can_use_communication_commands: canUse });
+    const authorizedClientIds = await authorizedClientIdsForViewer({
+      organizationId: orgId,
+      userId: ctx.user.id,
+      roleCode: ctx.membership?.roleCode,
+    });
+    const aggregate = await buildDocflowFloatingWidgetAggregate(orgId, {
+      can_use_communication_commands: canUse,
+      authorizedClientIds,
+    });
     return res.json(aggregate);
   } catch (e) {
     next(e);
@@ -69,11 +83,18 @@ officeBaseRouter.get('/aggregates/office-task-center', async (req: Request, res:
   try {
     const ctx = req.context as RequestContext;
     const orgId = ctx.organizationId!;
+    await assertStaffViewerMayUseEntitledModuleCode(ctx, 'docflow');
     const canUse = canRunDocflowCommunicationRules(ctx);
+    const authorizedClientIds = await authorizedClientIdsForViewer({
+      organizationId: orgId,
+      userId: ctx.user.id,
+      roleCode: ctx.membership?.roleCode,
+    });
     const aggregate = await buildOfficeDocflowTaskCenterAggregate({
       orgId,
       userId: ctx.user.id,
       can_use_communication_commands: canUse,
+      authorizedClientIds,
       ...parseTaskCenterOptsFromQuery(req.query as Record<string, unknown>),
     });
     return res.json(aggregate);
@@ -98,6 +119,17 @@ router.post('/internal/scheduler/run-daily', async (req: Request, res: Response,
 
 const officeRouter = Router();
 officeRouter.use(authMiddleware, requireOrg, requireModuleActive('docflow'));
+officeRouter.use(async (req: Request, _res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const body = (req.body ?? {}) as { client_id?: unknown; selected_client_id?: unknown };
+    const clientId = String(req.query.client_id ?? req.query.selected_client_id ?? body.client_id ?? body.selected_client_id ?? '').trim();
+    if (clientId) await assertCanAccessClientFromContext(ctx, clientId);
+    next();
+  } catch (e) {
+    next(e);
+  }
+});
 
 officeRouter.get('/aggregates/client-tab', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -119,6 +151,7 @@ officeRouter.get('/aggregates/office-inbox', async (req: Request, res: Response,
     const orgId = ctx.organizationId!;
     const aggregate = await buildOfficeDocflowInboxAggregate({
       orgId,
+      viewer: { userId: ctx.user.id, roleCode: ctx.membership?.roleCode ?? null },
       page: Number(req.query.page ?? 1) || 1,
       pageSize: Number(req.query.page_size ?? 25) || 25,
       searchClient: String(req.query.search_client ?? '').trim() || null,
@@ -137,6 +170,7 @@ officeRouter.get('/aggregates/office-messenger', async (req: Request, res: Respo
     const orgId = ctx.organizationId!;
     const aggregate = await buildOfficeDocflowMessengerAggregate({
       orgId,
+      viewer: { userId: ctx.user.id, roleCode: ctx.membership?.roleCode ?? null },
       page: Number(req.query.page ?? 1) || 1,
       pageSize: Number(req.query.page_size ?? 50) || 50,
       searchClient: String(req.query.search_client ?? '').trim() || null,
@@ -187,7 +221,12 @@ officeRouter.get('/aggregates/communication-rule-run-review', async (req: Reques
     const catalogRunDate = /^\d{4}-\d{2}-\d{2}$/.test(runDateRaw)
       ? runDateRaw
       : new Date().toISOString().slice(0, 10);
-    const aggregate = await buildCommunicationRuleRunReviewAggregate(orgId, ruleRunId, catalogRunDate);
+    const authorizedClientIds = await authorizedClientIdsForViewer({
+      organizationId: orgId,
+      userId: ctx.user.id,
+      roleCode: ctx.membership?.roleCode,
+    });
+    const aggregate = await buildCommunicationRuleRunReviewAggregate(orgId, ruleRunId, catalogRunDate, authorizedClientIds);
     return res.json(aggregate);
   } catch (e) {
     next(e);
@@ -200,6 +239,7 @@ officeRouter.get('/aggregates/invites-management', async (req: Request, res: Res
     const orgId = ctx.organizationId!;
     const aggregate = await buildDocflowInvitesManagementAggregate({
       orgId,
+      viewer: { userId: ctx.user.id, roleCode: ctx.membership?.roleCode ?? null },
       page: Number(req.query.page ?? 1) || 1,
       pageSize: Number(req.query.page_size ?? 25) || 25,
       searchClient: String(req.query.search_client ?? '').trim() || null,

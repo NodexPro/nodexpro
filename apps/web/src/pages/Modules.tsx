@@ -170,6 +170,10 @@ export function Modules() {
   const [legalIdentityValue, setLegalIdentityValue] = useState('');
 
   const orgId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
+  const canAdministerModules =
+    auth.status === 'authenticated' &&
+    Array.isArray(auth.me.available_actions) &&
+    auth.me.available_actions.includes('module_administration');
 
   const load = () => {
     if (!orgId) return;
@@ -290,8 +294,10 @@ export function Modules() {
   return (
     <div style={styles.page}>
       <h1 style={styles.title}>Module catalog</h1>
+      {canAdministerModules && (
       <p style={styles.subtitle}>Choose a plan and activate the modules you need. Trial gives full access to all commercial modules.</p>
-      {trialActive && (
+      )}
+      {canAdministerModules && trialActive && (
         <div style={styles.trialBanner}>
           <strong>Free trial active</strong>
           {trialState.endsAt && (
@@ -299,17 +305,17 @@ export function Modules() {
           )}
         </div>
       )}
-      {trialEnded && !trialActive && (
+      {canAdministerModules && trialEnded && !trialActive && (
         <div style={styles.trialEnded}>
           <strong>Trial ended.</strong> Choose and pay for modules to continue using them.
         </div>
       )}
-      {trialBlocked && (
+      {canAdministerModules && trialBlocked && (
         <div style={styles.trialBlocked}>
           Trial is not available for this organization.
         </div>
       )}
-      {!trialState?.hasLegalIdentity && !trialBlocked && trialState !== null && (
+      {canAdministerModules && !trialState?.hasLegalIdentity && !trialBlocked && trialState !== null && (
         <form onSubmit={handleSetLegalIdentity} style={{ marginBottom: 20, padding: 16, background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
           <div style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: 8 }}>Start free trial</div>
           <p style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: 12 }}>Set legal identity (Israel teudat zehut, 9 digits) to start a 2‑month free trial for all commercial modules.</p>

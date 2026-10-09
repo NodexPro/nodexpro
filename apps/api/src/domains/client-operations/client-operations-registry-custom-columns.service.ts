@@ -811,6 +811,7 @@ export async function executeClientOperationsRegistryCommand(
       reported: enabled,
     });
   } else if (command === 'initialize_client_operations_manual_rows_for_period') {
+    const requested = queryFrom(body.query);
     const periodKey = operationalPeriodKeyFrom(
       body.operational_period_key ?? (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
     );
@@ -818,8 +819,13 @@ export async function executeClientOperationsRegistryCommand(
       ctx,
       organizationId: orgId,
       operationalPeriodKey: periodKey,
+      requestedWorkspace: {
+        workspace_scope: requested.workspace_scope,
+        workspace_subject_user_id: requested.workspace_subject_user_id,
+      },
     });
   } else if (command === 'set_client_operations_manual_row_cell_value') {
+    const requested = queryFrom(body.query);
     const operationalPeriodKey = operationalPeriodKeyFrom(
       body.operational_period_key ?? (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
     );
@@ -836,8 +842,13 @@ export async function executeClientOperationsRegistryCommand(
       columnKey: String(body.column_key ?? ''),
       value: body.value,
       eligibleColumnKeys,
+      requestedWorkspace: {
+        workspace_scope: requested.workspace_scope,
+        workspace_subject_user_id: requested.workspace_subject_user_id,
+      },
     });
   } else if (command === 'copy_client_operations_user_period_data') {
+    const requested = queryFrom(body.query);
     const targetPeriodKey = operationalPeriodKeyFrom(
       body.target_operational_period_key ??
         body.operational_period_key ??
@@ -849,6 +860,10 @@ export async function executeClientOperationsRegistryCommand(
       sourceOperationalPeriodKey: body.source_operational_period_key,
       targetOperationalPeriodKey: targetPeriodKey,
       mode: body.mode ?? 'empty_only',
+      requestedWorkspace: {
+        workspace_scope: requested.workspace_scope,
+        workspace_subject_user_id: requested.workspace_subject_user_id,
+      },
     });
   } else if (command === 'archive_client_operations_custom_column') {
     const column = await loadOwnedColumn(orgId, body.column_id);

@@ -113,6 +113,9 @@ export const AUDIT_ACTIONS = {
   CLIENT_DOCUMENTS_WORKSPACE_UPDATED: 'client_documents_workspace.updated',
   /** שמירת כרטיס "פרטי לקוח" במסך תפעול הלקוח (לא שינוי סכימת audit_log) */
   CLIENT_OPERATIONS_WORKSPACE_PROFILE_UPDATED: 'client_operations.workspace_profile.updated',
+  MEMBER_CLIENT_ACCESS_SET: 'member_client_access.set',
+  MEMBER_MODULE_ACCESS_SET: 'member_module_access.set',
+  MEMBER_PROFILE_SET: 'member_profile.set',
   CLIENT_OPERATIONS_CLIENT_HANDLER_ASSIGNED: 'client_operations.client_handler.assigned',
   CLIENT_OPERATIONS_CLIENT_HANDLER_BULK_ASSIGNED: 'client_operations.client_handler.bulk_assigned',
   CLIENT_OPERATIONS_TODO_CREATED: 'client_operations.todo.created',

@@ -75,12 +75,13 @@ test('task text validation rejects empty / overlong', () => {
   assert.equal(normalizeTodoTaskText('  hello  '), 'hello');
 });
 
-test('AF — assignee retains access only if office role or remains handler', () => {
+test('AF — handler change does not grant visibility; grant or office role retains it', () => {
   assert.equal(
     assigneeWouldRetainClientAccessAfterHandlerChange({
       assigneeUserId: 'anna',
       assigneeHasOfficeAccess: false,
-      afterHandlerUserId: 'dana',
+      assigneeHasClientVisibility: false,
+      afterHandlerUserId: 'anna',
     }),
     false,
   );
@@ -88,7 +89,8 @@ test('AF — assignee retains access only if office role or remains handler', ()
     assigneeWouldRetainClientAccessAfterHandlerChange({
       assigneeUserId: 'anna',
       assigneeHasOfficeAccess: false,
-      afterHandlerUserId: 'anna',
+      assigneeHasClientVisibility: true,
+      afterHandlerUserId: 'dana',
     }),
     true,
   );
@@ -96,6 +98,7 @@ test('AF — assignee retains access only if office role or remains handler', ()
     assigneeWouldRetainClientAccessAfterHandlerChange({
       assigneeUserId: 'owner',
       assigneeHasOfficeAccess: true,
+      assigneeHasClientVisibility: false,
       afterHandlerUserId: 'dana',
     }),
     true,

@@ -115,8 +115,11 @@ import {
 } from './client-operations-registry-materialization-cache.js';
 import type { BoundedTtlCacheSource } from '../../shared/bounded-ttl-cache.js';
 import {
+  manualRowWorkspaceKeyForScope,
+  manualWorkspaceCacheKey,
   materializeClientOperationsManualRows,
   type ClientOperationsManualRegistryRow,
+  type ClientOperationsManualWorkspaceKey,
 } from './client-operations-manual-rows.pure.js';
 import {
   buildClientOperationsRegistryFiltersContract,
@@ -537,6 +540,10 @@ export async function listClientOperationsRegistry(
     workspace_scope: query.workspace_scope,
     workspace_subject_user_id: query.workspace_subject_user_id,
   });
+  const manualWorkspace = manualRowWorkspaceKeyForScope({
+    scopeKind: workspace.scope_kind,
+    workspaceSubjectUserId: workspace.workspace_subject_user_id,
+  });
   const selectedPeriodKey = resolveRegistryOperationalPeriodKey(query.operational_period_key);
   const defaultPeriodKey = resolveDefaultOperationalPeriodKey();
   const canEditRegistry =
@@ -551,6 +558,7 @@ export async function listClientOperationsRegistry(
     buildClientOperationsRegistryPreSearchMaterialization({
       orgId,
       accessScope: materializationAccess,
+      manualWorkspace,
       selectedPeriodKey,
       defaultPeriodKey,
       canEditRegistry,
@@ -563,6 +571,7 @@ export async function listClientOperationsRegistry(
     const cacheKey = buildClientOperationsRegistryMaterializationCacheKey({
       organizationId: orgId,
       accessScopeKey: materializationAccess.access_scope_key,
+      manualWorkspaceKey: manualWorkspaceCacheKey(manualWorkspace),
       selectedPeriodKey,
       defaultPeriodKey,
       canEditRegistry,
@@ -654,6 +663,7 @@ export async function listClientOperationsRegistry(
 async function buildClientOperationsRegistryPreSearchMaterialization(input: {
   orgId: string;
   accessScope: OrganizationClientAccessScope;
+  manualWorkspace: ClientOperationsManualWorkspaceKey;
   selectedPeriodKey: string;
   defaultPeriodKey: string;
   canEditRegistry: boolean;
@@ -663,6 +673,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
   const {
     orgId,
     accessScope,
+    manualWorkspace,
     selectedPeriodKey,
     defaultPeriodKey,
     canEditRegistry,
@@ -681,7 +692,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       listOperationalNoteTypes(),
       loadActiveCustomColumnsExtended(orgId),
       listKnownOperationalPeriodKeys(orgId),
-      loadUserPeriodDataCopySourcePeriods(orgId),
+      loadUserPeriodDataCopySourcePeriods(orgId, manualWorkspace),
       loadOrgHandlerFilterOptions(orgId),
     ]);
   markStage('boot_note_types_columns_periods_handlers', bootMs);
@@ -713,7 +724,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
   const setupMs = Date.now();
   // Assigned-only scope: empty authorized set ⇒ empty client rows (no org-wide leak).
   const assignedOnlyIds =
-    accessScope.kind === 'ASSIGNED_TO_SELF' ? (accessScope.authorized_client_ids ?? []) : null;
+    accessScope.authorized_client_ids === null ? null : accessScope.authorized_client_ids;
   if (assignedOnlyIds && assignedOnlyIds.length === 0) {
     const userColumnsPeriodExtras = await buildUserColumnsPeriodAggregateExtras({
       organizationId: orgId,
@@ -744,6 +755,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       organizationId: orgId,
       operationalPeriodKey: selectedPeriodKey,
       canEdit: canEditRegistry,
+      workspace: manualWorkspace,
     });
     markStage('assigned_scope_empty', setupMs);
     return {
@@ -763,6 +775,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
         : await loadManualRowValuesBySlotColumnForRegistryAggregate({
             organizationId: orgId,
             operationalPeriodKey: selectedPeriodKey,
+            workspace: manualWorkspace,
           }),
       stage_timings: stageTimings,
       materialized_at_ms: Date.now(),
@@ -796,15 +809,16 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       organizationId: orgId,
       operationalPeriodKey: selectedPeriodKey,
       canEdit: canEditRegistry,
+      workspace: manualWorkspace,
     }),
     activeClientsQuery,
-    // Manual rows are organization-wide free-text slots (not client records). Keep for all scopes;
-    // they cannot leak canonical client identity. Hidden under business filters as before.
+    // Manual cells belong only to the resolved workspace subject. Five slots are still materialized.
     anyBusinessFilter
       ? Promise.resolve(null)
       : loadManualRowValuesBySlotColumnForRegistryAggregate({
           organizationId: orgId,
           operationalPeriodKey: selectedPeriodKey,
+          workspace: manualWorkspace,
         }),
   ]);
   markStage('user_columns_manual_setup_clients', setupMs);
@@ -850,7 +864,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
   const activeSafe = (activeClients ?? []) as RegistryClientRow[];
   let safeClients: RegistryClientRow[] = activeSafe;
 
-  if (!isCurrentOrDefaultPeriod) {
+  if (!isCurrentOrDefaultPeriod && accessScope.kind !== 'MEMBER_ALL') {
     // Historical period: keep live active clients, and re-include archived clients
     // that already have frozen membership (snapshot and/or material fact) for this period.
     const membershipIds = filterAuthorizedClientIds(
@@ -1926,7 +1940,7 @@ async function upsertAssignedHandler(params: {
 
 /**
  * Named security-sensitive command: assign / reassign / unassign responsible handler.
- * Owner/Admin only. Immediately changes Staff access scope.
+ * Owner/Admin only. Updates responsibility only — does not grant or remove visibility.
  */
 export async function assignClientHandler(
   ctx: RequestContext,

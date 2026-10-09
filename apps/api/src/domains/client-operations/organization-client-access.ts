@@ -1,34 +1,44 @@
 /**
- * Canonical organization client access scope (Stage 3).
+ * Canonical organization client access scope.
  *
- * Responsibility field remains client_operational_profiles.assigned_handler_user_id.
- * This module converts that into BACKEND access scope — not frontend filtering.
+ * Visibility is organization_member_client_access / grants.
+ * Responsibility remains client_operational_profiles.assigned_handler_user_id
+ * and is not an authorization input.
  *
- * Scope kinds (Stage 4-ready):
- * - OFFICE — Owner/Admin see all org clients (including unassigned)
- * - ASSIGNED_TO_SELF — Staff/Viewer see only clients assigned to them
+ * - OFFICE — Owner/Admin, all org clients
+ * - MEMBER_ALL — Staff/Viewer policy all (current and future; archived excluded by readers)
+ * - ASSIGNED_TO_SELF — Staff/Viewer selected grants, or fail closed to assigned-only empty set
  */
 
 import { supabaseAdmin } from '../../db/client.js';
 import { forbidden } from '../../shared/errors.js';
 import type { RequestContext } from '../../shared/context.js';
 import {
+  backfillStaffViewerClientAccess,
   buildClientAccessScopeKey,
   canManageClientHandlerAssignment,
+  canManageMemberClientAccess,
   clientIdIsAuthorized,
   filterAuthorizedClientIds,
+  normalizeMemberClientAccessCommand,
   roleHasOfficeClientAccess,
+  scopeForMemberClientPolicy,
+  type MemberClientAccessMode,
   type OrganizationClientAccessScope,
   type OrganizationClientAccessScopeKind,
 } from './organization-client-access.pure.js';
 
-export type { OrganizationClientAccessScope, OrganizationClientAccessScopeKind };
+export type { MemberClientAccessMode, OrganizationClientAccessScope, OrganizationClientAccessScopeKind };
 export {
+  backfillStaffViewerClientAccess,
   buildClientAccessScopeKey,
   canManageClientHandlerAssignment,
+  canManageMemberClientAccess,
   clientIdIsAuthorized,
   filterAuthorizedClientIds,
+  normalizeMemberClientAccessCommand,
   roleHasOfficeClientAccess,
+  scopeForMemberClientPolicy,
 };
 
 export async function loadAssignedClientIdsForHandler(
@@ -73,20 +83,62 @@ export async function resolveOrganizationClientAccessScope(params: {
     };
   }
 
-  // Staff + Viewer (+ unknown): fail closed to assigned-only.
-  // Viewer has view permissions but must NOT see the full office client set.
-  const assigned = await loadAssignedClientIdsForHandler(organization_id, viewer_user_id);
-  return {
-    organization_id,
-    viewer_user_id,
-    role_code,
-    kind: 'ASSIGNED_TO_SELF',
-    access_scope_key: buildClientAccessScopeKey({
-      kind: 'ASSIGNED_TO_SELF',
-      viewerUserId: viewer_user_id,
-    }),
-    authorized_client_ids: assigned,
-  };
+  // Staff/Viewer/unknown: policy table only. Missing policy is fail closed to assigned-only.
+  // Do not fall back to assigned_handler_user_id.
+  const { data: policy, error: policyError } = await supabaseAdmin
+    .from('organization_member_client_access')
+    .select('access_mode')
+    .eq('organization_id', organization_id)
+    .eq('user_id', viewer_user_id)
+    .maybeSingle();
+  if (policyError) throw new Error(policyError.message ?? 'Failed to load client access policy');
+
+  const accessMode = String((policy as { access_mode?: string } | null)?.access_mode ?? '').trim().toLowerCase();
+  let grantedActiveClientIds: string[] = [];
+  if (accessMode === 'selected') {
+    const { data: grants, error: grantError } = await supabaseAdmin
+      .from('organization_member_client_grants')
+      .select('client_id')
+      .eq('organization_id', organization_id)
+      .eq('user_id', viewer_user_id);
+    if (grantError) throw new Error(grantError.message ?? 'Failed to load client access grants');
+    const grantIds = (grants ?? [])
+      .map((row) => String((row as { client_id: string }).client_id ?? '').trim())
+      .filter(Boolean);
+    if (grantIds.length > 0) {
+      const { data: liveClients, error: clientError } = await supabaseAdmin
+        .from('clients')
+        .select('id')
+        .eq('organization_id', organization_id)
+        .eq('is_archived', false)
+        .in('id', grantIds);
+      if (clientError) throw new Error(clientError.message ?? 'Failed to load granted clients');
+      grantedActiveClientIds = (liveClients ?? []).map((row) => String((row as { id: string }).id));
+    }
+  }
+
+  return scopeForMemberClientPolicy({
+    organizationId: organization_id,
+    viewerUserId: viewer_user_id,
+    roleCode: role_code,
+    accessMode,
+    grantedActiveClientIds,
+  });
+}
+
+/** Null means unrestricted (Owner/Admin or Staff/Viewer ALL). An array is the allow-list. */
+export async function authorizedClientIdsForViewer(params: {
+  organizationId: string;
+  userId: string;
+  roleCode: string | null | undefined;
+}): Promise<string[] | null> {
+  if (roleHasOfficeClientAccess(params.roleCode)) return null;
+  const scope = await resolveOrganizationClientAccessScope({
+    organizationId: params.organizationId,
+    viewerUserId: params.userId,
+    roleCode: params.roleCode,
+  });
+  return scope.authorized_client_ids;
 }
 
 export async function resolveOrganizationClientAccessScopeFromContext(
@@ -120,30 +172,23 @@ export async function assertCanAccessClient(params: {
       roleCode: params.roleCode,
     }));
 
-  if (scope.kind === 'OFFICE') {
-    // Still verify client belongs to org (tenant isolation).
-    const { data } = await supabaseAdmin
-      .from('clients')
-      .select('id')
-      .eq('organization_id', params.organizationId)
-      .eq('id', clientId)
-      .maybeSingle();
-    if (!data) throw forbidden('Client not found');
-    return scope;
-  }
-
-  if (!clientIdIsAuthorized(scope, clientId)) {
-    // Do not leak existence of unauthorized clients.
-    throw forbidden('Client not found');
-  }
-
   const { data } = await supabaseAdmin
     .from('clients')
-    .select('id')
+    .select('id, is_archived')
     .eq('organization_id', params.organizationId)
     .eq('id', clientId)
     .maybeSingle();
-  if (!data) throw forbidden('Client not found');
+  const row = data as { id: string; is_archived?: boolean } | null;
+
+  if (scope.kind === 'OFFICE') {
+    if (!row) throw forbidden('Client not found');
+    return scope;
+  }
+
+  // Staff/Viewer: do not leak existence, and never expose an archived client.
+  if (!row || row.is_archived === true || !clientIdIsAuthorized(scope, clientId)) {
+    throw forbidden('Client not found');
+  }
   return scope;
 }
 

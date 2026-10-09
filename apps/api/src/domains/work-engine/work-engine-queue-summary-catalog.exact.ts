@@ -5,6 +5,7 @@
  */
 
 import { supabaseAdmin } from '../../db/client.js';
+import { scopeQueryToAllowedClients } from './work-engine-client-scope.js';
 import { WORK_STATES, type WorkState } from './work-engine.types.js';
 import {
   WORK_ENGINE_FILTER_CATALOG_MAX_PAGES,
@@ -30,17 +31,21 @@ export type WorkItemFilterCatalogDimensions = {
  */
 export async function loadWorkItemCountsByStateExact(
   orgId: string,
+  allowedClientIds: readonly string[] | null = null,
 ): Promise<WorkItemCountsByState> {
   const by_state = {} as Record<WorkState, number>;
   for (const s of WORK_STATES) by_state[s] = 0;
 
   const stateResults = await Promise.all(
     WORK_STATES.map(async (state) => {
-      const resp = await supabaseAdmin
-        .from('work_items')
-        .select('id', { count: 'exact', head: true })
-        .eq('org_id', orgId)
-        .eq('work_state', state);
+      const resp = await scopeQueryToAllowedClients(
+        supabaseAdmin
+          .from('work_items')
+          .select('id', { count: 'exact', head: true })
+          .eq('org_id', orgId)
+          .eq('work_state', state),
+        allowedClientIds,
+      );
       if (resp.error) throw resp.error;
       return { state, count: resp.count ?? 0 };
     }),
@@ -70,6 +75,7 @@ type CatalogScanRow = {
  */
 export async function loadWorkItemFilterCatalogDimensionsExact(
   orgId: string,
+  allowedClientIds: readonly string[] | null = null,
 ): Promise<WorkItemFilterCatalogDimensions> {
   const distinctModules = new Set<string>();
   const distinctAssignees = new Set<string>();
@@ -79,10 +85,13 @@ export async function loadWorkItemFilterCatalogDimensionsExact(
   for (let page = 0; page < WORK_ENGINE_FILTER_CATALOG_MAX_PAGES; page += 1) {
     const from = page * WORK_ENGINE_FILTER_CATALOG_PAGE_SIZE;
     const to = from + WORK_ENGINE_FILTER_CATALOG_PAGE_SIZE - 1;
-    const resp = await supabaseAdmin
-      .from('work_items')
-      .select('module_key, assigned_user_id, reviewer_user_id, period_key')
-      .eq('org_id', orgId)
+    const resp = await scopeQueryToAllowedClients(
+      supabaseAdmin
+        .from('work_items')
+        .select('module_key, assigned_user_id, reviewer_user_id, period_key')
+        .eq('org_id', orgId),
+      allowedClientIds,
+    )
       .order('id', { ascending: true })
       .range(from, to);
     if (resp.error) throw resp.error;

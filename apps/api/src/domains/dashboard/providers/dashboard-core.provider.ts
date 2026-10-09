@@ -4,6 +4,8 @@ import type { RequestContext } from '../../../shared/context.js';
 import type { DashboardOverviewPartial } from '../dashboard-overview.types.js';
 import type { DashboardProvider } from '../dashboard-provider.js';
 import { getTrialState } from '../../trial/trial.service.js';
+import { resolveOrganizationClientAccessScopeFromContext } from '../../client-operations/organization-client-access.js';
+import { roleHasOfficeClientAccess } from '../../client-operations/organization-client-access.pure.js';
 
 function monthKeyUTC(d: Date): string {
   const y = d.getUTCFullYear();
@@ -29,34 +31,60 @@ export const dashboardCoreProvider: DashboardProvider = {
 
     const monthsToShow = 6;
     const startRangeUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (monthsToShow - 1), 1, 0, 0, 0));
+    const accessScope = await resolveOrganizationClientAccessScopeFromContext(ctx);
+    const allowIds = accessScope.authorized_client_ids;
 
     const [orgRow, thisMonthCountRes, lastMonthCountRes, totalClientsRes, createdRowsRes, trialState] = await Promise.all([
       supabaseAdmin.from('organizations').select('id, name').eq('id', orgId).single(),
-      supabaseAdmin
-        .from('clients')
-        .select('id', { count: 'exact', head: true })
-        .eq('organization_id', orgId)
-        .eq('is_archived', false)
-        .gte('created_at', startThisMonthUTC.toISOString())
-        .lt('created_at', startNextMonthUTC.toISOString()),
-      supabaseAdmin
-        .from('clients')
-        .select('id', { count: 'exact', head: true })
-        .eq('organization_id', orgId)
-        .eq('is_archived', false)
-        .gte('created_at', startLastMonthUTC.toISOString())
-        .lt('created_at', startThisMonthUTC.toISOString()),
-      supabaseAdmin
-        .from('clients')
-        .select('id', { count: 'exact', head: true })
-        .eq('organization_id', orgId)
-        .eq('is_archived', false),
-      supabaseAdmin
-        .from('clients')
-        .select('created_at')
-        .eq('organization_id', orgId)
-        .eq('is_archived', false)
-        .gte('created_at', startRangeUTC.toISOString()),
+      (allowIds && allowIds.length === 0
+        ? Promise.resolve({ count: 0, data: null, error: null })
+        : (() => {
+            let q = supabaseAdmin
+              .from('clients')
+              .select('id', { count: 'exact', head: true })
+              .eq('organization_id', orgId)
+              .eq('is_archived', false)
+              .gte('created_at', startThisMonthUTC.toISOString())
+              .lt('created_at', startNextMonthUTC.toISOString());
+            if (allowIds) q = q.in('id', allowIds);
+            return q;
+          })()),
+      (allowIds && allowIds.length === 0
+        ? Promise.resolve({ count: 0, data: null, error: null })
+        : (() => {
+            let q = supabaseAdmin
+              .from('clients')
+              .select('id', { count: 'exact', head: true })
+              .eq('organization_id', orgId)
+              .eq('is_archived', false)
+              .gte('created_at', startLastMonthUTC.toISOString())
+              .lt('created_at', startThisMonthUTC.toISOString());
+            if (allowIds) q = q.in('id', allowIds);
+            return q;
+          })()),
+      (allowIds && allowIds.length === 0
+        ? Promise.resolve({ count: 0, data: null, error: null })
+        : (() => {
+            let q = supabaseAdmin
+              .from('clients')
+              .select('id', { count: 'exact', head: true })
+              .eq('organization_id', orgId)
+              .eq('is_archived', false);
+            if (allowIds) q = q.in('id', allowIds);
+            return q;
+          })()),
+      (allowIds && allowIds.length === 0
+        ? Promise.resolve({ data: [], error: null })
+        : (() => {
+            let q = supabaseAdmin
+              .from('clients')
+              .select('created_at')
+              .eq('organization_id', orgId)
+              .eq('is_archived', false)
+              .gte('created_at', startRangeUTC.toISOString());
+            if (allowIds) q = q.in('id', allowIds);
+            return q;
+          })()),
       getTrialState(orgId),
     ]);
 
@@ -87,9 +115,12 @@ export const dashboardCoreProvider: DashboardProvider = {
 
     const newClientsByMonth = months.map((m) => ({ month: m, count: countsByMonth.get(m) ?? 0 }));
 
-    const canCreateClient = membership.permissions.includes('clients:write');
+    const officeAdmin = roleHasOfficeClientAccess(membership.roleCode);
+    const canCreateClient = officeAdmin && membership.permissions.includes('clients:write');
     const canUploadDocument = membership.permissions.includes('documents:write');
-    const canInviteMember = membership.permissions.includes('invite_users') || membership.permissions.includes('members:write');
+    const canInviteMember =
+      officeAdmin &&
+      (membership.permissions.includes('invite_users') || membership.permissions.includes('members:write'));
 
     return {
       summary: {

@@ -12,6 +12,7 @@ import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import { sendInvitationEmail } from '../../shared/email.service.js';
 import { updateUserStoredActiveOrganizationId } from '../auth/active-organization.service.js';
 import { syncLegacyOrganizationUserFromCanonical } from './organization-membership-access.js';
+import { assertNoCloseAccessBlockers } from './member-close-access-blockers.service.js';
 import {
   activateMembershipWithStaffSeatGuard,
   changeMembershipRoleWithStaffSeatGuard,
@@ -406,7 +407,7 @@ export async function revokeUserAccessRbac(ctx: RequestContext, orgId: string, m
   if (ctx.organizationId !== orgId) throw forbidden('Organization context required');
   requireRbacPermission(ctx, orgId, RBAC_PERMISSIONS.revoke_user_access);
 
-  let member = (await supabaseAdmin.from('organization_memberships').select('id, user_id, role_code').eq('id', memberId).eq('organization_id', orgId).single()).data;
+  let member = (await supabaseAdmin.from('organization_memberships').select('id, user_id, role_code, status').eq('id', memberId).eq('organization_id', orgId).single()).data;
   let targetUserId: string;
   let targetRole: string;
 
@@ -423,6 +424,13 @@ export async function revokeUserAccessRbac(ctx: RequestContext, orgId: string, m
 
   if (targetRole === 'owner') throw forbidden('Cannot revoke owner');
   if (targetUserId === ctx.user.id) throw badRequest('Owner cannot revoke their own access');
+
+  if (member) {
+    // Idempotent: closing an already closed membership changes nothing and writes no second audit row.
+    if ((member as { status: string }).status === 'revoked') return { success: true };
+    // Stage 5.6: never silently orphan live responsibilities (handler clients, open ToDos).
+    await assertNoCloseAccessBlockers(orgId, targetUserId);
+  }
 
   const now = new Date().toISOString();
   if (member) {

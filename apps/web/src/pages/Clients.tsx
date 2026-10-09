@@ -107,8 +107,15 @@ export function Clients() {
   const [hasMore, setHasMore] = useState(false);
 
   const orgId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
-  const canWrite = auth.status === 'authenticated' && auth.me?.permissions?.includes('clients:write');
-  const canArchive = auth.status === 'authenticated' && auth.me?.permissions?.includes('clients:archive');
+  const officeActions = auth.status === 'authenticated' && Array.isArray(auth.me.available_actions)
+    ? auth.me.available_actions
+    : [];
+  const canWrite = officeActions.includes('create_client');
+  const canImport = officeActions.includes('import_clients');
+  const canInactive = officeActions.includes('mark_client_inactive');
+  const canReactivate = officeActions.includes('reactivate_client');
+  const canArchive = officeActions.includes('archive_client');
+  const canRestore = officeActions.includes('restore_client');
 
   useEffect(() => {
     if (!orgId) {
@@ -372,9 +379,11 @@ export function Clients() {
               <button type="button" onClick={() => setShowCreate(true)} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer' }}>
                 {t('clients.newClient')}
               </button>
+              {canImport && (
               <button type="button" onClick={() => setShowImport(true)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #059669', background: '#fff', color: '#059669', cursor: 'pointer' }}>
                 Import CSV
               </button>
+              )}
               <button type="button" onClick={downloadExport} disabled={exportLoading} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#f9fafb', cursor: 'pointer' }}>
                 {exportLoading ? t('common.loading') : 'Export CSV'}
               </button>
@@ -434,25 +443,25 @@ export function Clients() {
       {selectedIds.size > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', marginBottom: 16, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8 }}>
           <strong style={{ color: '#1e40af' }}>{selectedIds.size} selected</strong>
-          {canWrite && (
-            <>
+          {canReactivate && (
               <button type="button" onClick={() => runBulk('mark-active')} disabled={bulkLoading} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #2563eb', background: '#fff', color: '#2563eb', cursor: 'pointer', fontSize: 13 }}>
                 Mark active
               </button>
+          )}
+          {canInactive && (
               <button type="button" onClick={() => runBulk('mark-inactive')} disabled={bulkLoading} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #2563eb', background: '#fff', color: '#2563eb', cursor: 'pointer', fontSize: 13 }}>
                 Mark inactive
               </button>
-            </>
           )}
           {canArchive && (
-            <>
               <button type="button" onClick={() => runBulk('archive')} disabled={bulkLoading} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #2563eb', background: '#fff', color: '#2563eb', cursor: 'pointer', fontSize: 13 }}>
                 Archive
               </button>
+          )}
+          {canRestore && (
               <button type="button" onClick={() => runBulk('restore')} disabled={bulkLoading} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #2563eb', background: '#fff', color: '#2563eb', cursor: 'pointer', fontSize: 13 }}>
                 Restore
               </button>
-            </>
           )}
           {canWrite && (
             <button type="button" onClick={exportSelected} disabled={bulkLoading} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #2563eb', background: '#fff', color: '#2563eb', cursor: 'pointer', fontSize: 13 }}>
@@ -465,7 +474,7 @@ export function Clients() {
         </div>
       )}
 
-      {showImport && canWrite && (
+      {showImport && canImport && (
         <div style={{ marginBottom: 24, padding: 20, background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 12 }}>
           <h3 style={{ marginTop: 0, marginBottom: 12 }}>Import clients (CSV)</h3>
           <p style={{ fontSize: 14, color: '#6b7280', marginBottom: 12 }}>Columns: name (required), email, phone, company_name, tax_id, address, city, country, notes. Max 10,000 rows.</p>

@@ -7,6 +7,7 @@
  */
 
 import { supabaseAdmin } from '../../db/client.js';
+import { authorizedClientIdsForViewer } from '../client-operations/organization-client-access.js';
 import { hasPermission } from '../rbac/rbac.service.js';
 import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-metrics.js';
 import type {
@@ -75,6 +76,8 @@ import {
 } from './work-engine-queue-invoice-attention.pure.js';
 import { RECURRING_FAILURE_WORK_TYPE } from './work-engine-invoice-retainer.pure.js';
 import { loadFailedOperationsSummary } from './work-engine-failed-operations.read.js';
+import { buildFailedOperationsSummary } from './work-engine-failed-operations.pure.js';
+import { scopeQueryToAllowedClients, workEngineAllowedClientIds } from './work-engine-client-scope.js';
 import {
   loadWorkItemCountsByStateExact,
   loadWorkItemFilterCatalogDimensionsExact,
@@ -957,21 +960,27 @@ function workItemAllowedActions(state: WorkState): AllowedAction[] {
 
 export async function buildWorkEngineFoundationAggregate(params: {
   orgId: string;
+  /** Stage 5.5: viewer for client-scoped counts/lists. Omit only for system reads. */
+  viewer?: { userId: string; roleCode?: string | null } | null;
 }): Promise<Record<string, unknown>> {
   const { orgId } = params;
+  const scopeAllow = await workEngineAllowedClientIds(orgId, params.viewer);
 
   // P4.3: exact per-state counts (head/exact) — not a capped 5000-row sample.
-  const stateCounts = await loadWorkItemCountsByStateExact(orgId);
+  const stateCounts = await loadWorkItemCountsByStateExact(orgId, scopeAllow);
   const counts: Record<string, number> = { ...stateCounts.by_state };
   const totalActive = stateCounts.total_active;
   const totalLoaded = stateCounts.total_all;
 
-  const recentResp = await supabaseAdmin
-    .from('work_items')
-    .select(
-      'id, client_id, module_key, work_type, period_key, work_state, owner_user_id, assigned_user_id, reviewer_user_id, escalation_owner_id, due_at, sla_status, override_active, version, created_at, updated_at',
-    )
-    .eq('org_id', orgId)
+  const recentResp = await scopeQueryToAllowedClients(
+    supabaseAdmin
+      .from('work_items')
+      .select(
+        'id, client_id, module_key, work_type, period_key, work_state, owner_user_id, assigned_user_id, reviewer_user_id, escalation_owner_id, due_at, sla_status, override_active, version, created_at, updated_at',
+      )
+      .eq('org_id', orgId),
+    scopeAllow,
+  )
     .order('updated_at', { ascending: false })
     .limit(25);
   if (recentResp.error) throw recentResp.error;
@@ -999,23 +1008,29 @@ export async function buildWorkEngineFoundationAggregate(params: {
 
   // Stage 3B: pending_mapping totals + recent rows. Backend-owned: the UI
   // never recomputes counts and never inspects work_events directly.
-  const pendingCountResp = await supabaseAdmin
-    .from('work_events')
-    .select('id', { count: 'exact', head: true })
-    .eq('org_id', orgId)
-    .is('work_item_id', null)
-    .in('processing_outcome', PENDING_MAPPING_OUTCOMES as unknown as string[]);
+  const pendingCountResp = await scopeQueryToAllowedClients(
+    supabaseAdmin
+      .from('work_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .is('work_item_id', null)
+      .in('processing_outcome', PENDING_MAPPING_OUTCOMES as unknown as string[]),
+    scopeAllow,
+  );
   if (pendingCountResp.error) throw pendingCountResp.error;
   const pendingMappingCount = pendingCountResp.count ?? 0;
 
-  const pendingRecentResp = await supabaseAdmin
-    .from('work_events')
-    .select(
-      'id, event_id, event_type, source_module, source_entity_type, source_entity_id, client_id, period_key, processing_outcome, received_at, occurred_at',
-    )
-    .eq('org_id', orgId)
-    .is('work_item_id', null)
-    .in('processing_outcome', PENDING_MAPPING_OUTCOMES as unknown as string[])
+  const pendingRecentResp = await scopeQueryToAllowedClients(
+    supabaseAdmin
+      .from('work_events')
+      .select(
+        'id, event_id, event_type, source_module, source_entity_type, source_entity_id, client_id, period_key, processing_outcome, received_at, occurred_at',
+      )
+      .eq('org_id', orgId)
+      .is('work_item_id', null)
+      .in('processing_outcome', PENDING_MAPPING_OUTCOMES as unknown as string[]),
+    scopeAllow,
+  )
     .order('received_at', { ascending: false })
     .limit(25);
   if (pendingRecentResp.error) throw pendingRecentResp.error;
@@ -2024,19 +2039,25 @@ const REMINDER_REVIEW_QUEUE_TABLE: { columns: QueueTableColumnModel[] } = {
   ],
 };
 
-export async function loadInvoiceAttentionCounts(orgId: string): Promise<{
+export async function loadInvoiceAttentionCounts(
+  orgId: string,
+  allowedClientIds: readonly string[] | null = null,
+): Promise<{
   totalCount: number;
   failureCount: number;
 }> {
   const baseQuery = () =>
-    supabaseAdmin
-      .from('work_items')
-      .select('id', { count: 'exact', head: true })
-      .eq('org_id', orgId)
-      .eq('module_key', INVOICE_ATTENTION_MODULE_KEY)
-      .in('work_type', [...INVOICE_ATTENTION_WORK_TYPES])
-      .not('work_state', 'eq', 'done')
-      .not('work_state', 'eq', 'archived');
+    scopeQueryToAllowedClients(
+      supabaseAdmin
+        .from('work_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .eq('module_key', INVOICE_ATTENTION_MODULE_KEY)
+        .in('work_type', [...INVOICE_ATTENTION_WORK_TYPES])
+        .not('work_state', 'eq', 'done')
+        .not('work_state', 'eq', 'archived'),
+      allowedClientIds,
+    );
 
   const [totalResp, failureResp] = await Promise.all([
     baseQuery(),
@@ -2062,58 +2083,89 @@ export async function buildWorkEngineQueueAggregate(params: {
   const f = parseWorkEngineQueueFilters(params.filters ?? {});
   const viewerId = viewer?.userId ?? null;
 
-  const reminderReviewSummary = await loadReminderReviewCounts(orgId);
+  // Stage 5.5: ONE allow-list for every count/catalog/list below (null = Owner/Admin/ALL-access).
+  const scopeAllow = await workEngineAllowedClientIds(orgId, viewer);
+  const clientRestricted = scopeAllow !== null;
+
+  const reminderReviewSummary = await loadReminderReviewCounts(orgId, scopeAllow);
   const reminderBanner = buildReminderReviewBanner(reminderReviewSummary);
 
   // ---- 1. Counts for summary cards (P4.3: exact DB counts, not capped sample).
-  const stateCounts = await loadWorkItemCountsByStateExact(orgId);
+  const stateCounts = await loadWorkItemCountsByStateExact(orgId, scopeAllow);
   const counts: Record<string, number> = { ...stateCounts.by_state };
   const totalActive = stateCounts.total_active;
 
-  // Pending-mapping counts (work_events with no work_item_id).
-  const pendingCountResp = await supabaseAdmin
-    .from('work_events')
-    .select('id', { count: 'exact', head: true })
-    .eq('org_id', orgId)
-    .is('work_item_id', null)
-    .in('processing_outcome', PENDING_MAPPING_OUTCOMES as unknown as string[]);
+  // Pending-mapping counts (work_events with no work_item_id) — client-scoped (class A).
+  const pendingCountResp = await scopeQueryToAllowedClients(
+    supabaseAdmin
+      .from('work_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('org_id', orgId)
+      .is('work_item_id', null)
+      .in('processing_outcome', PENDING_MAPPING_OUTCOMES as unknown as string[]),
+    scopeAllow,
+  );
   if (pendingCountResp.error) throw pendingCountResp.error;
   const pendingMappingCount = pendingCountResp.count ?? 0;
 
-  const invoiceAttentionCounts = await loadInvoiceAttentionCounts(orgId);
+  const invoiceAttentionCounts = await loadInvoiceAttentionCounts(orgId, scopeAllow);
   const invoiceAttentionCard = buildInvoiceAttentionCard(invoiceAttentionCounts);
-  const failedOperationsSummary = await loadFailedOperationsSummary(orgId);
+  // Failed operations (delivery / PDF / posting failures with client labels) are office
+  // administration data (class C): never served to a client-restricted caller.
+  const failedOperationsSummary = clientRestricted
+    ? buildFailedOperationsSummary({
+        deliveryFailedCount: 0,
+        incomePdfFailedCount: 0,
+        workEventFailedCount: 0,
+        retainerFailedCount: 0,
+        accountingPostingFailedCount: 0,
+        rows: [],
+        notes: [],
+      })
+    : await loadFailedOperationsSummary(orgId);
 
   let bucketAssignedToMe = 0;
   let bucketUnassigned = 0;
   let bucketClaimedByMe = 0;
   let bucketReviewForMe = 0;
   if (viewerId) {
-    const a = await supabaseAdmin
-      .from('work_items')
-      .select('id', { count: 'exact', head: true })
-      .eq('org_id', orgId)
-      .eq('assigned_user_id', viewerId)
-      .not('work_state', 'eq', 'done')
-      .not('work_state', 'eq', 'archived');
-    const u = await supabaseAdmin
-      .from('work_items')
-      .select('id', { count: 'exact', head: true })
-      .eq('org_id', orgId)
-      .is('assigned_user_id', null)
-      .not('work_state', 'eq', 'done')
-      .not('work_state', 'eq', 'archived');
-    const c = await supabaseAdmin
-      .from('work_items')
-      .select('id', { count: 'exact', head: true })
-      .eq('org_id', orgId)
-      .eq('claimed_by_user_id', viewerId);
-    const rfm = await supabaseAdmin
-      .from('work_items')
-      .select('id', { count: 'exact', head: true })
-      .eq('org_id', orgId)
-      .eq('work_state', 'review_pending')
-      .eq('reviewer_user_id', viewerId);
+    const a = await scopeQueryToAllowedClients(
+      supabaseAdmin
+        .from('work_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .eq('assigned_user_id', viewerId)
+        .not('work_state', 'eq', 'done')
+        .not('work_state', 'eq', 'archived'),
+      scopeAllow,
+    );
+    const u = await scopeQueryToAllowedClients(
+      supabaseAdmin
+        .from('work_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .is('assigned_user_id', null)
+        .not('work_state', 'eq', 'done')
+        .not('work_state', 'eq', 'archived'),
+      scopeAllow,
+    );
+    const c = await scopeQueryToAllowedClients(
+      supabaseAdmin
+        .from('work_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .eq('claimed_by_user_id', viewerId),
+      scopeAllow,
+    );
+    const rfm = await scopeQueryToAllowedClients(
+      supabaseAdmin
+        .from('work_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .eq('work_state', 'review_pending')
+        .eq('reviewer_user_id', viewerId),
+      scopeAllow,
+    );
     if (a.error) throw a.error;
     if (u.error) throw u.error;
     if (c.error) throw c.error;
@@ -2128,7 +2180,7 @@ export async function buildWorkEngineQueueAggregate(params: {
   // Distinct values for module / assignee / reviewer / period_key come from
   // the work_items table for this org — they reflect actual data so the UI
   // never invents filter options. Not derived from a silent 5000-row sample.
-  const catalog = await loadWorkItemFilterCatalogDimensionsExact(orgId);
+  const catalog = await loadWorkItemFilterCatalogDimensionsExact(orgId, scopeAllow);
   const distinctModules = new Set(catalog.modules);
   const distinctAssignees = new Set(catalog.assignees);
   const distinctReviewers = new Set(catalog.reviewers);
@@ -2177,6 +2229,22 @@ export async function buildWorkEngineQueueAggregate(params: {
   if (f.reviewer_user_id) q = q.eq('reviewer_user_id', f.reviewer_user_id);
   if (f.client_id) q = q.eq('client_id', f.client_id);
   if (f.period_key) q = q.eq('period_key', f.period_key);
+  const allowedClientIds = viewer?.userId
+    ? await authorizedClientIdsForViewer({
+        organizationId: orgId,
+        userId: viewer.userId,
+        roleCode: viewer.roleCode,
+      })
+    : [];
+  if (allowedClientIds) {
+    if (f.client_id && !allowedClientIds.includes(f.client_id)) {
+      q = q.in('client_id', ['00000000-0000-0000-0000-000000000000']);
+    } else if (!f.client_id && allowedClientIds.length === 0) {
+      q = q.is('client_id', null);
+    } else if (!f.client_id) {
+      q = q.or(`client_id.is.null,client_id.in.(${allowedClientIds.join(',')})`);
+    }
+  }
   const pageResp = await q
     .order('updated_at', { ascending: false })
     .range(f.offset, f.offset + f.limit - 1);
@@ -2270,14 +2338,17 @@ export async function buildWorkEngineQueueAggregate(params: {
   }
 
   // ---- 5. Recent pending-mapping rows for the pending section.
-  const pendingRecentResp = await supabaseAdmin
-    .from('work_events')
-    .select(
-      'id, event_id, event_type, source_module, source_entity_type, source_entity_id, client_id, period_key, processing_outcome, received_at, occurred_at',
-    )
-    .eq('org_id', orgId)
-    .is('work_item_id', null)
-    .in('processing_outcome', PENDING_MAPPING_OUTCOMES as unknown as string[])
+  const pendingRecentResp = await scopeQueryToAllowedClients(
+    supabaseAdmin
+      .from('work_events')
+      .select(
+        'id, event_id, event_type, source_module, source_entity_type, source_entity_id, client_id, period_key, processing_outcome, received_at, occurred_at',
+      )
+      .eq('org_id', orgId)
+      .is('work_item_id', null)
+      .in('processing_outcome', PENDING_MAPPING_OUTCOMES as unknown as string[]),
+    scopeAllow,
+  )
     .order('received_at', { ascending: false })
     .limit(25);
   if (pendingRecentResp.error) throw pendingRecentResp.error;

@@ -22,7 +22,7 @@ export interface SidebarAccountBlockModel {
   };
 }
 
-export type ShellProfile = 'income_only' | 'full_platform';
+export type ShellProfile = 'income_only' | 'full_platform' | 'worker' | 'closed';
 
 export interface SessionNavItemDto {
   path: string;
@@ -50,6 +50,12 @@ export interface MeResponse {
   default_route: string;
   /** Backend-filtered nav for the active shell. */
   visible_nav_items: SessionNavItemDto[];
+  /** Same truth as visible_nav_items. Workers do not receive office-admin entries. */
+  available_navigation: SessionNavItemDto[];
+  /** Entitled module apps. Stage 5.4 will filter this list per member. */
+  available_modules: SessionNavItemDto[];
+  /** Office-administration actions. Empty for Staff/Viewer. */
+  available_actions: string[];
   income_onboarding_complete: boolean;
   /** Ready-to-render sidebar account block (session aggregate). */
   sidebar_account_block: SidebarAccountBlockModel;

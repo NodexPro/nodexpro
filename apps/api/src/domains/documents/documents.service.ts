@@ -2,6 +2,12 @@ import { supabaseAdmin } from '../../db/client.js';
 import { forbidden, badRequest } from '../../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
+import { assertCanAccessClientFromContext } from '../client-operations/organization-client-access.js';
+import {
+  assertDocumentClientAccess,
+  assertDocumentClientChange,
+  documentClientAllowList,
+} from './document-client-access.js';
 
 const DOCUMENT_TYPES = ['invoice', 'receipt', 'contract', 'statement', 'payroll_document', 'tax_document', 'other'] as const;
 const LIFECYCLE_STATES = ['uploaded', 'pending_classification', 'classified', 'linked', 'reviewed', 'approved', 'rejected', 'archived', 'superseded'] as const;
@@ -95,6 +101,7 @@ export async function getDocumentById(ctx: RequestContext, orgId: string, docume
     .eq('organization_id', orgId)
     .single();
   if (!doc) throw forbidden('Document not found');
+  await assertDocumentClientAccess(ctx, (doc as { primary_client_id?: string | null }).primary_client_id);
 
   const canViewSensitive = ctx.membership?.permissions?.includes('documents:view_sensitive');
   if (!canViewSensitive && ['sensitive', 'restricted'].includes(doc.sensitivity_level)) {
@@ -133,8 +140,25 @@ export async function updateDocument(
   assertOrg(ctx, orgId);
   assertPermission(ctx, 'documents:write');
 
-  const { data: existing } = await supabaseAdmin.from('documents').select('id, status, lifecycle_state').eq('id', documentId).eq('organization_id', orgId).single();
+  const { data: existing } = await supabaseAdmin.from('documents').select('id, status, lifecycle_state, primary_client_id').eq('id', documentId).eq('organization_id', orgId).single();
   if (!existing) throw forbidden('Document not found');
+
+  // Stage 5.5: source client must be authorized; a client change must also be authorized for the
+  // target client (and may not detach a client-owned document for a restricted caller).
+  const allowList = await documentClientAllowList(ctx);
+  await assertDocumentClientAccess(ctx, (existing as { primary_client_id?: string | null }).primary_client_id, allowList);
+  if (body.primary_client_id !== undefined) {
+    await assertDocumentClientChange(
+      ctx,
+      {
+        currentClientId: (existing as { primary_client_id?: string | null }).primary_client_id,
+        nextClientId: body.primary_client_id,
+      },
+      allowList,
+    );
+    const nextClientId = String(body.primary_client_id ?? '').trim();
+    if (nextClientId) await assertCanAccessClientFromContext(ctx, nextClientId);
+  }
 
   const updates: Record<string, unknown> = {};
   if (body.title !== undefined) updates.title = body.title;
@@ -184,8 +208,9 @@ export async function getDocumentActivity(ctx: RequestContext, orgId: string, do
   assertOrg(ctx, orgId);
   assertPermission(ctx, 'documents:read');
 
-  const { data: doc } = await supabaseAdmin.from('documents').select('id').eq('id', documentId).eq('organization_id', orgId).single();
+  const { data: doc } = await supabaseAdmin.from('documents').select('id, primary_client_id').eq('id', documentId).eq('organization_id', orgId).single();
   if (!doc) throw forbidden('Document not found');
+  await assertDocumentClientAccess(ctx, (doc as { primary_client_id?: string | null }).primary_client_id);
 
   const { data } = await supabaseAdmin
     .from('document_activity_timeline')
@@ -200,8 +225,9 @@ export async function archiveDocument(ctx: RequestContext, orgId: string, docume
   assertOrg(ctx, orgId);
   assertPermission(ctx, 'documents:archive');
 
-  const { data: doc } = await supabaseAdmin.from('documents').select('id').eq('id', documentId).eq('organization_id', orgId).single();
+  const { data: doc } = await supabaseAdmin.from('documents').select('id, primary_client_id').eq('id', documentId).eq('organization_id', orgId).single();
   if (!doc) throw forbidden('Document not found');
+  await assertDocumentClientAccess(ctx, (doc as { primary_client_id?: string | null }).primary_client_id);
 
   const { data: updated } = await supabaseAdmin
     .from('documents')

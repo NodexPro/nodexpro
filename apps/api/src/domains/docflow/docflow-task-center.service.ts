@@ -3,6 +3,18 @@ import type { AllowedAction, OfficeDocflowTaskCenterRow } from './docflow.types.
 import { buildDocflowFloatingWidgetAggregate } from './docflow-floating-widget.service.js';
 import { getUnreadForOffice, threadStatusLabel, threadTypeLabel } from './docflow-read-models.service.js';
 import { asOptionalString } from './docflow.guards.js';
+import {
+  buildAuthorizedTaskCenterPage,
+  computeAuthorizedTaskCenterThreadKpis,
+  threadPassesTaskCenterFilters,
+  type AuthorizedTaskThread,
+} from './docflow-authorized-paging.pure.js';
+import {
+  loadAuthorizedDraftCounts,
+  loadAuthorizedInboxClients,
+  loadAuthorizedThreads,
+  loadAuthorizedUnreadTotal,
+} from './docflow-authorized-paging.service.js';
 
 export type OfficeDocflowTaskCenterBuildOpts = {
   orgId: string;
@@ -20,6 +32,8 @@ export type OfficeDocflowTaskCenterBuildOpts = {
   due_from?: string | null;
   due_to?: string | null;
   draft_rule_filter?: string | null;
+  /** Null/omit = unrestricted. Array = Stage 5.1 allow-list. */
+  authorizedClientIds?: string[] | null;
 };
 
 function clampPage(n: number): number {
@@ -188,6 +202,7 @@ export async function buildOfficeDocflowTaskCenterAggregate(opts: OfficeDocflowT
 
   const base = await buildDocflowFloatingWidgetAggregate(opts.orgId, {
     can_use_communication_commands: canUse,
+    authorizedClientIds: opts.authorizedClientIds,
   });
 
   const widgetAccess = String(base.widget_access ?? '');
@@ -214,12 +229,31 @@ export async function buildOfficeDocflowTaskCenterAggregate(opts: OfficeDocflowT
     };
   }
 
-  const { data: metricsRows, error: mErr } = await supabaseAdmin.rpc('docflow_task_center_metrics', {
-    p_org_id: opts.orgId,
-    p_user_id: opts.userId,
-  });
-  if (mErr) throw mErr;
-  const m0 = (metricsRows as Record<string, unknown>[] | null)?.[0] ?? {};
+  // Restricted Staff/Viewer (Stage 5.5): every KPI, filter option and page is derived from the
+  // authorized client set only. Unrestricted viewers keep the unchanged office-wide SQL path.
+  const authorizedIds = opts.authorizedClientIds ?? null;
+  let authorizedThreads: AuthorizedTaskThread[] | null = null;
+  let m0: Record<string, unknown> = {};
+  if (authorizedIds) {
+    authorizedThreads = authorizedIds.length ? await loadAuthorizedThreads(opts.orgId, authorizedIds) : [];
+    const kpis = computeAuthorizedTaskCenterThreadKpis(authorizedThreads, opts.userId, Date.now());
+    const draftCounts = authorizedIds.length
+      ? await loadAuthorizedDraftCounts(opts.orgId, authorizedIds)
+      : { drafts: 0, pending: 0 };
+    m0 = {
+      ...kpis,
+      needs_review_count: draftCounts.drafts,
+      pending_drafts_count: draftCounts.pending,
+      unread_replies_count: authorizedIds.length ? await loadAuthorizedUnreadTotal(opts.orgId, authorizedIds) : 0,
+    };
+  } else {
+    const { data: metricsRows, error: mErr } = await supabaseAdmin.rpc('docflow_task_center_metrics', {
+      p_org_id: opts.orgId,
+      p_user_id: opts.userId,
+    });
+    if (mErr) throw mErr;
+    m0 = (metricsRows as Record<string, unknown>[] | null)?.[0] ?? {};
+  }
 
   type ThreadsRpcRow = {
     thread_id: string;
@@ -261,20 +295,96 @@ export async function buildOfficeDocflowTaskCenterAggregate(opts: OfficeDocflowT
   };
 
   let effectivePage = page;
-  let rowsRaw = await fetchThreadsPage(effectivePage, pageSize);
-
-  let totalRows = rowsRaw.length ? Number(rowsRaw[0].total_count) || 0 : 0;
-  if (!rowsRaw.length) {
-    const peek = await fetchThreadsPage(1, 1);
-    totalRows = peek.length ? Number(peek[0].total_count) || 0 : 0;
-  }
-
-  let totalPages = totalRows > 0 ? Math.max(1, Math.ceil(totalRows / pageSize)) : 0;
-  if (totalPages > 0 && effectivePage > totalPages) {
-    effectivePage = totalPages;
+  let rowsRaw: ThreadsRpcRow[] = [];
+  let totalRows = 0;
+  let totalPages = 0;
+  if (authorizedIds && authorizedThreads) {
+    const nowMs = Date.now();
+    const authorizedClients = authorizedIds.length ? await loadAuthorizedInboxClients(opts.orgId, authorizedIds) : [];
+    const clientById = new Map(authorizedClients.map((c) => [c.client_id, c]));
+    const filters = {
+      search: opts.search,
+      module: opts.module,
+      thread_type: opts.thread_type,
+      thread_status: opts.thread_status,
+      assigned_filter: opts.assigned_filter,
+      overdue_only: !!opts.overdue_only,
+      due_from: rpcArgs.p_due_from,
+      due_to: rpcArgs.p_due_to,
+    };
+    let candidates = authorizedThreads.filter((t) => {
+      const c = clientById.get(t.client_id);
+      if (!c) return false;
+      return threadPassesTaskCenterFilters(t, c.display_name ?? '', c.phone, c.email, filters, opts.userId, nowMs);
+    });
+    if (opts.unread_only) {
+      const kept: AuthorizedTaskThread[] = [];
+      for (const t of candidates) {
+        if ((await getUnreadForOffice(opts.orgId, t.client_id, t.thread_id)) > 0) kept.push(t);
+      }
+      candidates = kept;
+    }
+    const moduleNames = new Map<string, string>();
+    const moduleKeys = [...new Set(candidates.map((t) => t.module_key).filter(Boolean))];
+    if (moduleKeys.length) {
+      const { data: mods, error: modErr } = await supabaseAdmin.from('modules').select('code, name').in('code', moduleKeys);
+      if (modErr) throw modErr;
+      for (const mo of mods ?? []) moduleNames.set(String((mo as { code: string }).code), String((mo as { name?: string }).name ?? ''));
+    }
+    const assigneeIdsInPage = [...new Set(candidates.map((t) => t.assigned_user_id).filter((x): x is string => !!x))];
+    const assigneeNames = new Map<string, string>();
+    if (assigneeIdsInPage.length) {
+      const { data: us, error: uErr0 } = await supabaseAdmin.from('users').select('id, full_name, email').in('id', assigneeIdsInPage);
+      if (uErr0) throw uErr0;
+      for (const u of us ?? []) {
+        const label =
+          String((u as { full_name?: string | null }).full_name ?? '').trim() ||
+          String((u as { email?: string | null }).email ?? '').trim() ||
+          'User';
+        assigneeNames.set(String((u as { id: string }).id), label);
+      }
+    }
+    const shaped = candidates.map((t) => {
+      const c = clientById.get(t.client_id)!;
+      return {
+        ...t,
+        client_name: String(c.display_name ?? '').trim() || 'Client',
+        module_name: moduleNames.get(t.module_key) || t.module_key,
+        assigned_display_name: t.assigned_user_id ? assigneeNames.get(t.assigned_user_id) ?? 'User' : null,
+      };
+    });
+    const paged = buildAuthorizedTaskCenterPage({ rows: shaped, page, pageSize });
+    rowsRaw = paged.rows.map((r) => ({
+      thread_id: r.thread_id,
+      client_id: r.client_id,
+      client_name: r.client_name,
+      module_key: r.module_key,
+      module_name: r.module_name,
+      thread_type: r.thread_type,
+      thread_status: r.thread_status,
+      deadline_at: r.deadline_at,
+      assigned_user_id: r.assigned_user_id,
+      assigned_display_name: r.assigned_display_name,
+      updated_at: r.updated_at,
+      total_count: paged.total_rows,
+    }));
+    totalRows = paged.total_rows;
+    totalPages = paged.total_pages;
+    effectivePage = paged.effective_page;
+  } else {
     rowsRaw = await fetchThreadsPage(effectivePage, pageSize);
-  } else if (totalPages === 0) {
-    effectivePage = 1;
+    totalRows = rowsRaw.length ? Number(rowsRaw[0].total_count) || 0 : 0;
+    if (!rowsRaw.length) {
+      const peek = await fetchThreadsPage(1, 1);
+      totalRows = peek.length ? Number(peek[0].total_count) || 0 : 0;
+    }
+    totalPages = totalRows > 0 ? Math.max(1, Math.ceil(totalRows / pageSize)) : 0;
+    if (totalPages > 0 && effectivePage > totalPages) {
+      effectivePage = totalPages;
+      rowsRaw = await fetchThreadsPage(effectivePage, pageSize);
+    } else if (totalPages === 0) {
+      effectivePage = 1;
+    }
   }
 
   const rows: Record<string, unknown>[] = [];
@@ -300,15 +410,22 @@ export async function buildOfficeDocflowTaskCenterAggregate(opts: OfficeDocflowT
     });
   }
 
-  const { data: modKeys } = await supabaseAdmin
-    .from('client_message_threads')
-    .select('module_key')
-    .eq('org_id', opts.orgId)
-    .neq('thread_status', 'archived');
   const moduleSet = new Set<string>();
-  for (const row of modKeys ?? []) {
-    const k = String((row as { module_key?: string }).module_key ?? '').trim();
-    if (k) moduleSet.add(k);
+  if (authorizedThreads) {
+    // Filter options come from authorized threads only (no hidden-client module activity).
+    for (const t of authorizedThreads) {
+      if (t.thread_status !== 'archived' && t.module_key.trim()) moduleSet.add(t.module_key.trim());
+    }
+  } else {
+    const { data: modKeys } = await supabaseAdmin
+      .from('client_message_threads')
+      .select('module_key')
+      .eq('org_id', opts.orgId)
+      .neq('thread_status', 'archived');
+    for (const row of modKeys ?? []) {
+      const k = String((row as { module_key?: string }).module_key ?? '').trim();
+      if (k) moduleSet.add(k);
+    }
   }
   const moduleCodes = [...moduleSet];
   const moduleNameByCode = new Map<string, string>();
@@ -332,14 +449,19 @@ export async function buildOfficeDocflowTaskCenterAggregate(opts: OfficeDocflowT
     label: threadStatusLabel(code),
   }));
 
-  const { data: assigneeRows, error: assigneeErr } = await supabaseAdmin
-    .from('client_message_threads')
-    .select('assigned_user_id')
-    .eq('org_id', opts.orgId)
-    .not('assigned_user_id', 'is', null)
-    .limit(2000);
-  if (assigneeErr) throw assigneeErr;
-  const assigneeIds = [...new Set((assigneeRows ?? []).map((r) => String((r as { assigned_user_id: string }).assigned_user_id)))];
+  let assigneeIds: string[];
+  if (authorizedThreads) {
+    assigneeIds = [...new Set(authorizedThreads.map((t) => t.assigned_user_id).filter((x): x is string => !!x))];
+  } else {
+    const { data: assigneeRows, error: assigneeErr } = await supabaseAdmin
+      .from('client_message_threads')
+      .select('assigned_user_id')
+      .eq('org_id', opts.orgId)
+      .not('assigned_user_id', 'is', null)
+      .limit(2000);
+    if (assigneeErr) throw assigneeErr;
+    assigneeIds = [...new Set((assigneeRows ?? []).map((r) => String((r as { assigned_user_id: string }).assigned_user_id)))];
+  }
   const accountantMap = new Map<string, string>();
   if (assigneeIds.length) {
     const { data: userRows, error: uErr } = await supabaseAdmin

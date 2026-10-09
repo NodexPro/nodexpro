@@ -329,7 +329,37 @@ export type ReminderReviewCounts = {
   overdue_count: number;
 };
 
-export async function loadReminderReviewCounts(orgId: string): Promise<ReminderReviewCounts> {
+/**
+ * Stage 5.5 count class A (client-scoped operational count). `allowedClientIds` = Stage 5.1 allow-list
+ * (null = unrestricted/office behavior). Candidates are tied to a client through their work item;
+ * candidates of work items outside the allow-list are not counted.
+ */
+async function authorizedWorkItemIdSet(
+  orgId: string,
+  workItemIds: string[],
+  allowedClientIds: readonly string[],
+): Promise<Set<string>> {
+  const ok = new Set<string>();
+  for (let i = 0; i < workItemIds.length; i += 100) {
+    const chunk = workItemIds.slice(i, i + 100);
+    const { data, error } = await supabaseAdmin
+      .from('work_items')
+      .select('id, client_id')
+      .eq('org_id', orgId)
+      .in('id', chunk);
+    if (error) throw error;
+    for (const r of data ?? []) {
+      const clientId = (r as { client_id?: string | null }).client_id;
+      if (!clientId || allowedClientIds.includes(String(clientId))) ok.add(String((r as { id: string }).id));
+    }
+  }
+  return ok;
+}
+
+export async function loadReminderReviewCounts(
+  orgId: string,
+  allowedClientIds: readonly string[] | null = null,
+): Promise<ReminderReviewCounts> {
   // P4.3: uncapped thin scan — pending/urgent/overdue must not silently truncate at 5000.
   const pageSize = 1000;
   const maxPages = 10_000;
@@ -343,7 +373,7 @@ export async function loadReminderReviewCounts(orgId: string): Promise<ReminderR
     const to = from + pageSize - 1;
     const { data, error } = await supabaseAdmin
       .from('work_reminder_candidates')
-      .select('id, status, snoozed_until, sla_context_snapshot')
+      .select('id, work_item_id, status, snoozed_until, sla_context_snapshot')
       .eq('org_id', orgId)
       .in('status', ['pending_review', 'edited', 'snoozed', 'delivery_failed'])
       .order('id', { ascending: true })
@@ -352,7 +382,19 @@ export async function loadReminderReviewCounts(orgId: string): Promise<ReminderR
     const rows = data ?? [];
     if (rows.length === 0) break;
 
+    const authorizedItems =
+      allowedClientIds === null
+        ? null
+        : await authorizedWorkItemIdSet(
+            orgId,
+            [...new Set(rows.map((r) => String((r as { work_item_id?: string }).work_item_id ?? '')).filter(Boolean))],
+            allowedClientIds,
+          );
+
     for (const row of rows) {
+      if (authorizedItems && !authorizedItems.has(String((row as { work_item_id?: string }).work_item_id ?? ''))) {
+        continue;
+      }
       const status = String(row.status);
       if (status === 'snoozed') {
         const until = row.snoozed_until ? new Date(String(row.snoozed_until)).getTime() : 0;

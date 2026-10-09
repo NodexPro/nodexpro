@@ -6,6 +6,7 @@
 
 import type { RequestContext } from '../../shared/context.js';
 import { forbidden } from '../../shared/errors.js';
+import { assertStaffViewerMayUseEntitledModuleCode } from '../modules/member-module-access.service.js';
 import {
   listClientOperationsRegistry,
   type ClientOperationsRegistryRow,
@@ -57,6 +58,7 @@ export async function buildWorkEngineClientsTabAggregate(params: {
   if (!permissions.includes('client_operations.view')) {
     throw forbidden('client_operations.view permission required');
   }
+  await assertStaffViewerMayUseEntitledModuleCode(params.ctx, 'client-operations');
 
   const registry = await listClientOperationsRegistry(params.ctx);
 

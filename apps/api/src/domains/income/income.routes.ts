@@ -9,6 +9,8 @@ import { requireModuleActive } from '../../middleware/requireModuleActive.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
 import { requirePermission } from '../../middleware/requirePermission.js';
 import type { RequestContext } from '../../shared/context.js';
+import { assertIncomeRequestClientAccess } from './income-request-client-access.service.js';
+import { collectIncomeRequestIds } from './income-request-resource-ids.pure.js';
 import { executeIncomeCommand } from './income-commands.service.js';
 import { buildIncomeWorkspaceContextAggregate } from './income-issuer-context.service.js';
 import { downloadIncomeDocumentPdfBuffer } from './income-document-pdf.service.js';
@@ -29,6 +31,29 @@ import {
 } from '../../shared/observability.js';
 
 const router = Router();
+router.use(async (req: Request, _res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext | undefined;
+    if (!ctx?.organizationId) {
+      next();
+      return;
+    }
+    // Stage 5.5: explicit client ids AND resource ids (draft / issued document / customer / work item)
+    // are resolved to their represented client and checked against the Stage 5.1 allow-list
+    // BEFORE any handler runs. An id is never authority.
+    await assertIncomeRequestClientAccess(
+      ctx,
+      collectIncomeRequestIds({
+        path: req.path,
+        query: req.query as Record<string, unknown>,
+        body: (req.body ?? {}) as Record<string, unknown>,
+      }),
+    );
+    next();
+  } catch (e) {
+    next(e);
+  }
+});
 
 router.get(
   '/aggregates/workspace-context',

@@ -34,6 +34,8 @@ export type ClientOperationsRegistryMaterializationCacheKeyInput = {
   organizationId: string;
   /** Canonical access scope identity from resolveOrganizationClientAccessScope (never FE-supplied). */
   accessScopeKey: string;
+  /** Manual-row sheet identity. Separates OFFICE cells from a member sheet that shares a client scope key. */
+  manualWorkspaceKey?: string;
   selectedPeriodKey: string;
   defaultPeriodKey: string;
   canEditRegistry: boolean;
@@ -48,6 +50,8 @@ export function clientOperationsRegistryMaterializationCacheOrgPrefix(organizati
 
 /**
  * Every dimension that changes PRE-SEARCH rows, in a fixed order. Never `q` / sort.
+ * Member module grants are enforced by requireModuleActive before this cache is read,
+ * so a removed grant cannot reuse an entry on the next request.
  * Derived from `listClientOperationsRegistry` inputs: org scoping, access scope, selected +
  * default period (current-vs-historical branch), `client_operations.edit` (editable cells /
  * setup blocks), and the six business filters (early facet filtering).
@@ -60,6 +64,7 @@ export function buildClientOperationsRegistryMaterializationCacheKey(
     input.organizationId,
     'v2',
     input.accessScopeKey,
+    input.manualWorkspaceKey ?? '',
     input.selectedPeriodKey,
     input.defaultPeriodKey,
     input.canEditRegistry ? 'edit' : 'view',

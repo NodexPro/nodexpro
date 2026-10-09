@@ -2,14 +2,15 @@ import { Router } from 'express';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
 import { requirePermission } from '../../middleware/requirePermission.js';
+import { requireOfficeAdministration } from '../../middleware/requireOfficeAdministration.js';
 import * as settingsService from './organization-settings.service.js';
 import * as fileAccessService from '../file-access/file-access.service.js';
 import { buildOrganizationCountrySettingsAggregate } from '../country-pack/country-pack-read-models.service.js';
 
 const router = Router();
-const withSettingsRead = [authMiddleware, requireOrg, requirePermission('settings:read', 'access_settings', 'subscriptions:read')];
-const withSettingsWrite = [authMiddleware, requireOrg, requirePermission('settings:write', 'access_settings')];
-const withSettingsFileRead = [authMiddleware, requireOrg, requirePermission('settings:read', 'access_settings')];
+const withSettingsRead = [authMiddleware, requireOrg, requireOfficeAdministration, requirePermission('settings:read', 'access_settings', 'subscriptions:read')];
+const withSettingsWrite = [authMiddleware, requireOrg, requireOfficeAdministration, requirePermission('settings:write', 'access_settings')];
+const withSettingsFileRead = [authMiddleware, requireOrg, requireOfficeAdministration, requirePermission('settings:read', 'access_settings')];
 
 /** GET /api/v1/organizations/:id/files/:fileAssetId/open — secure signed URL; must be settings-linked (logo/signature). */
 router.get('/:id/files/:fileAssetId/open', ...withSettingsFileRead, async (req, res, next) => {

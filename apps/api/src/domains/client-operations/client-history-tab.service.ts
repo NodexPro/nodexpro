@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import { AppError, badRequest, forbidden } from '../../shared/errors.js';
+import { assertCanAccessClientFromContext } from './organization-client-access.js';
 import { buildHistoryReportPdfBuffer } from './client-history-report-pdf.js';
 
 const MODULE_CODE = 'client-operations';
@@ -709,6 +710,7 @@ export async function exportClientHistoryReport(
 ): Promise<ClientHistoryExportFileResult> {
   const orgId = assertOrg(ctx);
   if (!canViewHistoryTab(ctx)) throw forbidden('Insufficient permission');
+  await assertCanAccessClientFromContext(ctx, clientId);
 
   const fmt = body.format === 'pdf' ? 'pdf' : body.format === 'excel' ? 'excel' : null;
   if (!fmt) throw badRequest('יש לבחור פורמט דוח: pdf או excel');

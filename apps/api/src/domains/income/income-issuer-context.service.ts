@@ -9,6 +9,10 @@ import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, forbidden, notFound } from '../../shared/errors.js';
 import { hasPermission } from '../rbac/rbac.service.js';
+import {
+  assertCanAccessClientFromContext,
+  authorizedClientIdsForViewer,
+} from '../client-operations/organization-client-access.js';
 import { resolveIncomeIssuerBusinessDisplay } from './income-issuer-display.js';
 import {
   buildAllowedActingModes,
@@ -103,14 +107,25 @@ async function loadClientForIssuer(orgId: string, clientId: string): Promise<Cli
   return (data as ClientIssuerRow | null) ?? null;
 }
 
-async function listRepresentedClientIssuerOptions(orgId: string): Promise<ClientIssuerRow[]> {
-  const { data } = await supabaseAdmin
+/**
+ * Selector options for "issue on behalf of client". Stage 5.5: the Stage 5.1 allow-list is applied in
+ * the query BEFORE the 500-row limit (null = unrestricted; [] = none), so a restricted Staff/Viewer
+ * never receives names of clients they cannot access.
+ */
+async function listRepresentedClientIssuerOptions(
+  orgId: string,
+  allowedClientIds: string[] | null = null,
+): Promise<ClientIssuerRow[]> {
+  if (allowedClientIds !== null && allowedClientIds.length === 0) return [];
+  let q = supabaseAdmin
     .from('clients')
     .select('id, display_name, legal_name, is_archived')
     .eq('organization_id', orgId)
     .eq('is_archived', false)
     .order('display_name', { ascending: true })
     .limit(500);
+  if (allowedClientIds !== null) q = q.in('id', allowedClientIds);
+  const { data } = await q;
   return (data ?? []) as ClientIssuerRow[];
 }
 
@@ -198,6 +213,7 @@ async function resolveEffectiveWorkspace(
   orgId: string,
   persisted: PersistedWorkspaceRow | null,
   orgIssuer: OrgIssuerProfileRow,
+  allowedClientIds: string[] | null = null,
 ): Promise<{ row: PersistedWorkspaceRow; warnings: IncomeWorkspaceWarning[] }> {
   const warnings: IncomeWorkspaceWarning[] = [];
   const defaultRow: PersistedWorkspaceRow = {
@@ -225,6 +241,16 @@ async function resolveEffectiveWorkspace(
     warnings.push({
       code: 'issuer_context_reset',
       message: 'Stored office representative context was missing a client and was reset.',
+    });
+    return { row: defaultRow, warnings };
+  }
+
+  // Stage 5.5: a persisted represented client is re-authorized on EVERY resolve. If the member's
+  // Stage 5.1 access was removed, the stale selection is reset to the office issuer (no cached grant).
+  if (allowedClientIds !== null && !allowedClientIds.includes(persisted.represented_client_id)) {
+    warnings.push({
+      code: 'issuer_context_reset',
+      message: 'Stored represented client is unavailable; workspace reset to office issuer.',
     });
     return { row: defaultRow, warnings };
   }
@@ -262,9 +288,14 @@ export async function buildIncomeWorkspaceContextAggregate(
   if (!perms.view) throw forbidden('income.view required');
 
   const orgIssuer = await ensureOrgIncomeIssuerProfile(orgId);
+  const allowedClientIds = await authorizedClientIdsForViewer({
+    organizationId: orgId,
+    userId: actorUserId,
+    roleCode: ctx.membership?.roleCode,
+  });
   const clients =
     perms.issue_on_behalf && hasPermission(ctx.membership?.permissions ?? [], 'clients:read')
-      ? await listRepresentedClientIssuerOptions(orgId)
+      ? await listRepresentedClientIssuerOptions(orgId, allowedClientIds)
       : [];
 
   const persisted = await loadPersistedWorkspace(orgId, actorUserId);
@@ -272,6 +303,7 @@ export async function buildIncomeWorkspaceContextAggregate(
     orgId,
     persisted,
     orgIssuer,
+    allowedClientIds,
   );
 
   if (
@@ -362,6 +394,10 @@ export async function applyOfficialIncomeIssuerContext(
   }
 
   const orgIssuer = await ensureOrgIncomeIssuerProfile(orgId);
+  if (input.represented_client_id != null) {
+    // Stage 5.5 defense in depth (internal orchestration paths bypass the router-level guard).
+    await assertCanAccessClientFromContext(ctx, input.represented_client_id);
+  }
   const representedClient =
     input.represented_client_id != null
       ? await loadClientForIssuer(orgId, input.represented_client_id)
