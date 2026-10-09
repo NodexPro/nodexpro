@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { apiJson, userFacingApiMessage } from '../../api/client';
 import { OWNER } from '../../api/endpoints';
+import { StaffSeatTermsModal } from './StaffSeatTermsModal';
 import './nx-owner-modules.css';
 
 type UnknownRecord = Record<string, unknown>;
@@ -55,6 +56,8 @@ export function PlatformOwnerModuleDetailPage() {
   const [activationStatus, setActivationStatus] = useState('');
 
   const [extendModal, setExtendModal] = useState<ExtendTrialModal | null>(null);
+  const [seatModal, setSeatModal] = useState<UnknownRecord | null>(null);
+  const [seatError, setSeatError] = useState('');
   const [extendUntilYmd, setExtendUntilYmd] = useState('');
   const [extendReason, setExtendReason] = useState('');
   const [extendError, setExtendError] = useState('');
@@ -154,6 +157,43 @@ export function PlatformOwnerModuleDetailPage() {
     } catch (e) {
       setError(userFacingApiMessage(e));
       return null;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveStaffSeatTerms(payload: {
+    organization_id: string;
+    effective_from: string;
+    additional_seat_quantity: number;
+    unit_price_amount: number | null;
+    currency: string | null;
+    discount_percent: number;
+  }): Promise<void> {
+    setBusy(true);
+    setSeatError('');
+    try {
+      const out = await apiJson<{
+        refreshed?: { aggregate_key?: string; aggregate?: UnknownRecord };
+      }>(OWNER.command, {
+        method: 'POST',
+        body: JSON.stringify({
+          command: 'set_organization_staff_seat_terms',
+          payload: {
+            ...payload,
+            owner_module_detail_code: moduleCode,
+            commercial_controls_context: commercialContext(),
+          },
+        }),
+      });
+      if (out?.refreshed?.aggregate_key === 'owner_module_detail_aggregate' && out.refreshed.aggregate) {
+        setAggregate(out.refreshed.aggregate);
+        setSeatModal(null);
+        return;
+      }
+      setSeatError('Command succeeded but refreshed module aggregate was not returned.');
+    } catch (e) {
+      setSeatError(userFacingApiMessage(e));
     } finally {
       setBusy(false);
     }
@@ -492,7 +532,7 @@ export function PlatformOwnerModuleDetailPage() {
             <table className="nx-owner-sheet">
               <thead>
                 <tr>
-                  {['Organization', 'Clients', 'Org activation', 'Entitlement', 'Trial ends', 'Base', 'Effective', 'Actions'].map(
+                  {['Organization', 'Clients', 'Org activation', 'Entitlement', 'Trial ends', 'Base', 'Effective', 'Staff Seats', 'Seat Charge', 'Actions'].map(
                     (h) => (
                       <th key={h}>{h}</th>
                     )
@@ -504,6 +544,7 @@ export function PlatformOwnerModuleDetailPage() {
                   const modules = asRows(org.modules);
                   const mod = modules.find((m) => text(m.module_key) === moduleCode) ?? modules[0] ?? {};
                   const eff = (mod.effective_price_preview as UnknownRecord | undefined) ?? {};
+                  const seats = (org.staff_seats as UnknownRecord | null) ?? null;
                   return (
                     <tr key={text(org.org_id)}>
                       <td>{text(org.org_name)}</td>
@@ -517,6 +558,8 @@ export function PlatformOwnerModuleDetailPage() {
                       <td>
                         {text(eff.amount)} {text(eff.currency)}
                       </td>
+                      <td>{text(seats?.staff_seats_label) || '—'}</td>
+                      <td>{text(seats?.seat_charge_label) || '—'}</td>
                       <td>
                         <button
                           type="button"
@@ -541,6 +584,17 @@ export function PlatformOwnerModuleDetailPage() {
                           }}
                         >
                           Activate
+                        </button>{' '}
+                        <button
+                          type="button"
+                          className="nx-owner-btn"
+                          disabled={busy}
+                          onClick={() => {
+                            setSeatError('');
+                            setSeatModal(org);
+                          }}
+                        >
+                          Staff Seats
                         </button>
                       </td>
                     </tr>
@@ -548,7 +602,7 @@ export function PlatformOwnerModuleDetailPage() {
                 })}
                 {!orgRows.length ? (
                   <tr>
-                    <td colSpan={8} style={{ color: '#6b7280' }}>
+                    <td colSpan={10} style={{ color: '#6b7280' }}>
                       No organizations for this module filter.
                     </td>
                   </tr>
@@ -750,6 +804,19 @@ export function PlatformOwnerModuleDetailPage() {
             </div>
           </div>
         </div>
+      ) : null}
+      {seatModal ? (
+        <StaffSeatTermsModal
+          orgName={text(seatModal.org_name) || 'Organization'}
+          organizationId={text(seatModal.org_id)}
+          seats={(seatModal.staff_seats as UnknownRecord | null) ?? null}
+          busy={busy}
+          error={seatError}
+          onClose={() => {
+            if (!busy) setSeatModal(null);
+          }}
+          onSave={(payload) => void saveStaffSeatTerms(payload)}
+        />
       ) : null}
     </div>
   );

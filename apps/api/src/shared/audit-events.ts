@@ -27,6 +27,7 @@ export const AUDIT_ACTIONS = {
   MODULE_SUBSCRIPTION_CREATED: 'module_subscription_created',
   MODULE_SUBSCRIPTION_CHANGED: 'module_subscription_changed',
   STAFF_SEAT_ENTITLEMENT_QUANTITY_CHANGED: 'staff_seat.entitlement_quantity_changed',
+  STAFF_SEAT_COMMERCIAL_TERMS_SET: 'staff_seat.commercial_terms_set',
   STAFF_SEAT_CAPACITY_ACTIVATION_REJECTED: 'staff_seat.capacity_activation_rejected',
   MODULE_PURCHASE_STARTED: 'module_purchase_started',
   MODULE_PURCHASE_CONFIRMED: 'module_purchase_confirmed',

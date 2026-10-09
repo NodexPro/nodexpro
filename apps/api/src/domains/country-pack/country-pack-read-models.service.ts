@@ -24,6 +24,7 @@ import {
 import { buildOwnerEmailProviderConfigAggregate } from '../../shared/owner-email-provider-config.service.js';
 import { fetchDocflowRequestTemplatesForOwner } from '../docflow/docflow-request-templates.service.js';
 import { buildOwnerLegalValuesTableModel } from './owner-legal-values-table.pure.js';
+import { loadStaffSeatOrgProjections } from '../modules/staff-seat-entitlement.service.js';
 export type CommercialControlsQuery = {
   page: number;
   page_size: number;
@@ -303,6 +304,7 @@ export async function buildOwnerCommercialControlsAggregate(queryInput?: Partial
   const page = Math.min(q0.page, Math.max(1, totalPages || 1));
   const start = (page - 1) * q0.page_size;
   const pageOrgs = meaningful.slice(start, start + q0.page_size);
+  const staffSeatsByOrg = await loadStaffSeatOrgProjections(pageOrgs.map((org) => String((org as { id: string }).id)));
 
   const orgRows = [];
   for (const o of pageOrgs) {
@@ -340,6 +342,7 @@ export async function buildOwnerCommercialControlsAggregate(queryInput?: Partial
       org_name: String((o as any).name ?? ''),
       clients_count: clientsCount,
       modules: modulesOut,
+      staff_seats: staffSeatsByOrg.get(orgId) ?? null,
     });
   }
 
