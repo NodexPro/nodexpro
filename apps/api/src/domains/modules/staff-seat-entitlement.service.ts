@@ -95,6 +95,9 @@ function staffSeatAsOfDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Canonical purchased quantity is organization_staff_seat_commercial_terms.
+// purchased_additional_staff_seats remains a LEGACY COMPATIBILITY MIRROR for the
+// pre-183 API and is intentionally not read here.
 async function loadEntitlementRow(organizationId: string): Promise<{
   grandfathered: number;
   included_override: number | null;
@@ -444,10 +447,10 @@ export async function setOrganizationStaffSeatQuantityCommand(
 
   const before = await resolveStaffSeatEntitlement(organizationId);
 
+  // Preserved (uuid, int) signature. SQL writes today's terms and the legacy mirror together.
   const { data, error } = await supabaseAdmin.rpc('set_organization_purchased_staff_seats', {
     p_organization_id: organizationId,
     p_purchased_additional_staff_seats: quantity,
-    p_created_by: ctx.user.id,
   });
   if (error) mapSeatRpcError(error);
 

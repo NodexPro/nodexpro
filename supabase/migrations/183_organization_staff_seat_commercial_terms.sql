@@ -1,6 +1,12 @@
 -- Staff-seat commercial terms. Purchased quantity is the version covering current_date.
--- organization_staff_seat_entitlements keeps grandfathered seats and the included override only.
 -- No payment, invoice, or scheduler. Closed history is not rewritten.
+--
+-- LEGACY COMPATIBILITY MIRROR
+-- organization_staff_seat_entitlements.purchased_additional_staff_seats stays.
+-- It is not canonical. It exists only so the pre-183 API can keep reading and
+-- calling the same RPC while this migration is applied with that API still live.
+-- Canonical purchased quantity is organization_staff_seat_commercial_terms.
+-- A later, separately approved migration may drop the mirror. This file does not.
 
 create extension if not exists btree_gist;
 
@@ -38,7 +44,7 @@ alter table public.organization_staff_seat_commercial_terms force row level secu
 revoke all on table public.organization_staff_seat_commercial_terms from anon, authenticated;
 
 comment on table public.organization_staff_seat_commercial_terms is
-  'Organization staff-seat commercial terms by effective date. Purchased quantity is resolved from the version covering the date. Not a payment record. NULL unit price means no agreed charge.';
+  'Canonical organization staff-seat commercial terms by effective date. Purchased quantity is resolved from the version covering the date. Not a payment record. NULL unit price means no agreed charge. The entitlements.purchased_additional_staff_seats column is a legacy compatibility mirror, not a second truth.';
 
 -- Backfill agreed quantity only. Do not copy the technical catalog unit price.
 insert into public.organization_staff_seat_commercial_terms (
@@ -314,6 +320,17 @@ begin
       and (t.effective_to is null or t.effective_to >= v_next);
   end if;
 
+  -- Same transaction as the terms write. Future-dated versions do not move the mirror:
+  -- there is no scheduler, and the pre-183 API does not write future terms.
+  -- A current-date write stores the operational quantity, which the reduction guard
+  -- has already proven safe, so this matches the quantity just written.
+  if p_effective_from <= current_date then
+    update public.organization_staff_seat_entitlements e
+    set purchased_additional_staff_seats = public.resolve_org_purchased_staff_seats(p_organization_id, current_date),
+        updated_at = now()
+    where e.organization_id = p_organization_id;
+  end if;
+
   return jsonb_build_object(
     'ok', true,
     'organization_id', p_organization_id,
@@ -526,12 +543,11 @@ begin
 end;
 $$;
 
-drop function if exists public.set_organization_purchased_staff_seats(uuid, int);
-
+-- Same (uuid, int) signature the pre-183 API calls. Body now writes canonical terms
+-- for today and synchronizes the legacy mirror inside that same function.
 create or replace function public.set_organization_purchased_staff_seats(
   p_organization_id uuid,
-  p_purchased_additional_staff_seats int,
-  p_created_by uuid default null
+  p_purchased_additional_staff_seats int
 )
 returns jsonb
 language plpgsql
@@ -540,6 +556,11 @@ set search_path = public
 as $$
 declare
   v_result jsonb;
+  v_purchased int := 0;
+  v_included int := 0;
+  v_grandfathered int := 0;
+  v_consumed int := 0;
+  v_entitled int := 0;
 begin
   v_result := public.apply_organization_staff_seat_commercial_terms(
     p_organization_id,
@@ -549,31 +570,97 @@ begin
     null,
     null,
     true,
-    p_created_by
+    null
   );
+  v_purchased := public.resolve_org_purchased_staff_seats(p_organization_id, current_date);
+  v_included := public.resolve_org_included_staff_seats(p_organization_id);
+  select coalesce(e.grandfathered_staff_seats, 0)
+    into v_grandfathered
+  from public.organization_staff_seat_entitlements e
+  where e.organization_id = p_organization_id;
+  v_grandfathered := coalesce(v_grandfathered, 0);
+  v_consumed := public.count_active_staff_seat_consumers(p_organization_id);
+  v_entitled := v_included + v_purchased + v_grandfathered;
   return v_result || jsonb_build_object(
-    'purchased_staff_seats', public.resolve_org_purchased_staff_seats(p_organization_id, current_date),
+    'previous_purchased_staff_seats', coalesce((v_result ->> 'previous_additional_seat_quantity')::int, 0),
+    'purchased_staff_seats', v_purchased,
+    'included_staff_seats', v_included,
+    'grandfathered_staff_seats', v_grandfathered,
+    'entitled_staff_seats', v_entitled,
+    'active_consumed_staff_seats', v_consumed,
+    'available_staff_seats', greatest(v_entitled - v_consumed, 0),
     'price_preserved', true
   );
 end;
 $$;
 
-alter table public.organization_staff_seat_entitlements
-  drop column if exists purchased_additional_staff_seats;
+comment on column public.organization_staff_seat_entitlements.purchased_additional_staff_seats is
+  'LEGACY COMPATIBILITY MIRROR. Not canonical. Mirrors the current-date operational purchased quantity for the pre-183 API. Canonical truth is organization_staff_seat_commercial_terms.';
 
 comment on table public.organization_staff_seat_entitlements is
-  'Non-commercial staff-seat entitlement: grandfathered seats and included override. Purchased quantity lives only in organization_staff_seat_commercial_terms.';
+  'Staff-seat entitlement: grandfathered seats, included override, and the legacy purchased_additional_staff_seats compatibility mirror. Canonical purchased quantity lives in organization_staff_seat_commercial_terms.';
+
+-- Catch a quantity write that committed on the old function while this migration was running.
+insert into public.organization_staff_seat_commercial_terms (
+  organization_id,
+  effective_from,
+  effective_to,
+  additional_seat_quantity,
+  currency,
+  unit_price_amount,
+  discount_percent,
+  billing_period,
+  created_by_user_id
+)
+select
+  e.organization_id,
+  current_date,
+  null,
+  e.purchased_additional_staff_seats,
+  null,
+  null,
+  0,
+  coalesce(
+    (
+      select p.billing_period
+      from public.platform_staff_seat_pricing p
+      where p.code = 'default' and p.is_active = true
+      order by p.created_at
+      limit 1
+    ),
+    'month'
+  ),
+  null
+from public.organization_staff_seat_entitlements e
+where e.purchased_additional_staff_seats > 0
+  and not exists (
+    select 1
+    from public.organization_staff_seat_commercial_terms t
+    where t.organization_id = e.organization_id
+      and t.effective_from <= current_date
+      and (t.effective_to is null or t.effective_to >= current_date)
+  );
+
+update public.organization_staff_seat_commercial_terms t
+set additional_seat_quantity = e.purchased_additional_staff_seats
+from public.organization_staff_seat_entitlements e
+where t.organization_id = e.organization_id
+  and t.effective_from = current_date
+  and t.effective_to is null
+  and t.unit_price_amount is null
+  and t.currency is null
+  and t.additional_seat_quantity <> e.purchased_additional_staff_seats;
 
 revoke all on function public.resolve_org_purchased_staff_seats(uuid, date) from public, anon, authenticated;
 revoke all on function public.staff_seat_catalog_billing_period() from public, anon, authenticated;
 revoke all on function public.apply_organization_staff_seat_commercial_terms(uuid, date, int, numeric, text, numeric, boolean, uuid) from public, anon, authenticated;
 revoke all on function public.activate_organization_membership_with_staff_seat_guard(uuid, uuid, text, uuid) from public, anon, authenticated;
 revoke all on function public.change_organization_membership_role_with_staff_seat_guard(uuid, uuid, text) from public, anon, authenticated;
-revoke all on function public.set_organization_purchased_staff_seats(uuid, int, uuid) from public, anon, authenticated;
+revoke all on function public.set_organization_purchased_staff_seats(uuid, int) from public, anon, authenticated;
 
 grant execute on function public.resolve_org_purchased_staff_seats(uuid, date) to service_role;
 grant execute on function public.staff_seat_catalog_billing_period() to service_role;
 grant execute on function public.apply_organization_staff_seat_commercial_terms(uuid, date, int, numeric, text, numeric, boolean, uuid) to service_role;
 grant execute on function public.activate_organization_membership_with_staff_seat_guard(uuid, uuid, text, uuid) to service_role;
 grant execute on function public.change_organization_membership_role_with_staff_seat_guard(uuid, uuid, text) to service_role;
-grant execute on function public.set_organization_purchased_staff_seats(uuid, int, uuid) to service_role;
+grant execute on function public.set_organization_purchased_staff_seats(uuid, int) to service_role;

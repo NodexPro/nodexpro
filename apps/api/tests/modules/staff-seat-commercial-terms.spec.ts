@@ -52,12 +52,18 @@ function version(partial: Partial<StaffSeatTermVersion> & Pick<StaffSeatTermVers
   };
 }
 
-test('1-3 backfill keeps quantity, null price, and drops the purchased column', () => {
+test('1-3 backfill keeps quantity, null price, and keeps the legacy purchased mirror', () => {
+  assert.match(migration183, /LEGACY COMPATIBILITY MIRROR/);
   assert.match(migration183, /where e\.purchased_additional_staff_seats > 0/);
   assert.match(migration183, /null,\s*null,\s*0/);
-  assert.match(migration183, /drop column if exists purchased_additional_staff_seats/);
+  assert.doesNotMatch(migration183, /drop column if exists purchased_additional_staff_seats/);
+  assert.match(migration183, /set purchased_additional_staff_seats = public\.resolve_org_purchased_staff_seats/);
+  assert.match(migration183, /set_organization_purchased_staff_seats\(\s*p_organization_id uuid,\s*p_purchased_additional_staff_seats int\s*\)/);
+  assert.doesNotMatch(migration183, /drop function if exists public\.set_organization_purchased_staff_seats/);
   assert.doesNotMatch(migration183, /unit_price_amount,\s*49/);
   assert.doesNotMatch(service, /purchased_additional_staff_seats, grandfathered_staff_seats, included_staff_seats_override/);
+  const quantityCall = service.slice(service.indexOf("rpc('set_organization_purchased_staff_seats'"));
+  assert.doesNotMatch(quantityCall.slice(0, quantityCall.indexOf(');')), /p_created_by/);
 });
 
 test('2 null price displays an em dash and never falls back to 49', () => {
