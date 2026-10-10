@@ -46,6 +46,8 @@ const EN: UsersRolesText = {
   you: 'You',
   no_members: 'No team members yet.',
   actions: 'Actions',
+  number_short: 'No.',
+  owner_section: 'Owner',
   // row actions
   edit_details: 'Edit details',
   manage_clients: 'Clients',
@@ -104,6 +106,8 @@ const HE: UsersRolesText = {
   you: 'את/ה',
   no_members: 'עדיין אין חברי צוות.',
   actions: 'פעולות',
+  number_short: 'מס׳',
+  owner_section: 'בעלים',
   edit_details: 'עריכת פרטים',
   manage_clients: 'לקוחות',
   manage_modules: 'מודולים',

@@ -14,8 +14,17 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow-x: hidden;
+  /* Still scrollable on very short viewports, but never shows an internal scrollbar. */
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   padding-bottom: 8px;
+}
+
+.t1-sidebar__nav::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .t1-sidebar-account {
@@ -118,5 +127,36 @@
 [dir='rtl'] .t1-sidebar-account__select,
 [dir='rtl'] .t1-sidebar-account__org-name,
 [dir='rtl'] .t1-sidebar-account__user {
+  text-align: right;
+}
+
+/* Employee office identity (backend-owned office_context). */
+.t1-sidebar-account__office {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 4px 0;
+}
+
+.t1-sidebar-account__office-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  line-height: 1.2;
+}
+
+.t1-sidebar-account__office-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[dir='rtl'] .t1-sidebar-account__office-label,
+[dir='rtl'] .t1-sidebar-account__office-name {
   text-align: right;
 }

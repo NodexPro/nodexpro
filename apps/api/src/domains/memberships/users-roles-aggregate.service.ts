@@ -78,6 +78,12 @@ export type UsersRolesMemberRow = {
   close_access: { blockers: CloseAccessBlockers; blocked: boolean; message: string | null } | null;
   is_self: boolean;
   available_actions: MemberActions;
+  /**
+   * 1-based position in the ordered employee list (active first, closed last). DISPLAY ORDER ONLY:
+   * recomputed on every read, never stored, never an identity / foreign key / audit key.
+   * null for owner rows (the Owner is not part of the numbered employee list).
+   */
+  display_number: number | null;
 };
 
 export type UsersRolesInvitationRow = {
@@ -102,6 +108,9 @@ export type UsersRolesAggregate = {
   available_actions: { invite_member: boolean };
   /** Roles an invitation may carry. Backend-owned; the form renders exactly these. */
   invite_roles: Array<{ code: string; label: string }>;
+  /** Owner(s) are presented separately from the employee list. */
+  owners: UsersRolesMemberRow[];
+  /** Employees only (admin / staff / viewer): active first, closed access last. */
   members: UsersRolesMemberRow[];
   invitations: UsersRolesInvitationRow[];
 };
@@ -250,6 +259,7 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
         close_access: closeAccess,
         is_self: m.user_id === ctx.user.id,
         available_actions: actions,
+        display_number: null,
       };
     }),
   );
@@ -262,6 +272,12 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
       a.profile.display_name.localeCompare(b.profile.display_name)
     );
   });
+
+  // Owner is not an ordinary employee row. Employees are numbered in display order only.
+  const owners = rows.filter((r) => r.role.code === 'owner');
+  const employees = rows
+    .filter((r) => r.role.code !== 'owner')
+    .map((r, index) => ({ ...r, display_number: index + 1 }));
 
   // Pending invitations stay a separate list: an invitation is not a member.
   const invites = await listInvitesRbac(ctx, orgId);
@@ -288,7 +304,8 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
     invite_roles: canWrite
       ? ['admin', 'staff', 'viewer'].map((code) => ({ code, label: resolveRoleLabel(code, locale) }))
       : [],
-    members: rows,
+    owners,
+    members: employees,
     invitations,
   };
 }

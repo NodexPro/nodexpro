@@ -25,6 +25,7 @@ import { resolveSessionShell } from './session-shell.service.js';
 import { filterSessionEnabledModuleCodes } from '../modules/entitlement.service.js';
 import { loadEnabledMemberModuleIdSet } from '../modules/member-module-access.service.js';
 import { roleHasOfficeClientAccess } from '../client-operations/organization-client-access.pure.js';
+import { buildSidebarAccountBlock } from './sidebar-account-block.pure.js';
 
 const router = Router();
 const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey);
@@ -37,58 +38,21 @@ function resolveUiLanguage(ctx: RequestContext): UiLanguageCode {
 
 type MeCoreForSidebar = Omit<MeResponse, 'sidebar_account_block'>;
 
-function buildSidebarAccountBlock(me: MeCoreForSidebar, uiLanguage: UiLanguageCode): SidebarAccountBlockModel {
-  const activeOrg = me.organizations.find((o) => o.id === me.activeOrganizationId) ?? null;
-  const organizationName =
-    activeOrg?.name ?? (me.organizations.length === 1 ? me.organizations[0]?.name ?? null : null);
-  const displayName = (me.user.fullName?.trim() || me.user.email || '').trim();
-  const labels =
-    uiLanguage === 'he'
-      ? { org: 'ארגון', language: 'שפה', logout: 'התנתקות', en: 'English', he: 'עברית' }
-      : { org: 'Organization', language: 'Language', logout: 'Sign out', en: 'English', he: 'עברית' };
-
-  return {
-    organization_name: organizationName,
-    user_display_name: displayName,
-    user_email: me.user.email,
-    organization_switcher: {
-      visible: me.organizations.length > 1,
-      label: labels.org,
-      organizations: me.organizations.map((o) => ({
-        organization_id: o.id,
-        name: o.name,
-        selected: o.id === me.activeOrganizationId,
-      })),
-    },
-    language_selector: {
-      label: labels.language,
-      current_value: uiLanguage,
-      options: [
-        { value: 'en', label: labels.en },
-        { value: 'he', label: labels.he },
-      ],
-    },
-    logout_action: {
-      label: labels.logout,
-      command_key: 'logout',
-    },
-  };
-}
-
 async function buildMeResponse(
   ctx: RequestContext,
   opts?: { preferredActiveOrganizationId?: string | null }
 ): Promise<MeResponse> {
   const activeOrgIds = await listUserActiveOrganizationIds(ctx.user.id);
   const orgList: Array<{ id: string; name: string }> = [];
+  const orgCountryById = new Map<string, string | null>();
   if (activeOrgIds.length) {
     const { data: orgRows } = await supabaseAdmin
       .from('organizations')
-      .select('id, name')
+      .select('id, name, country_code')
       .in('id', activeOrgIds);
-    const byId = new Map(
-      ((orgRows ?? []) as Array<{ id: string; name: string }>).map((o) => [o.id, o.name]),
-    );
+    const typedOrgRows = (orgRows ?? []) as Array<{ id: string; name: string; country_code?: string | null }>;
+    const byId = new Map(typedOrgRows.map((o) => [o.id, o.name]));
+    for (const o of typedOrgRows) orgCountryById.set(o.id, o.country_code ?? null);
     for (const id of activeOrgIds) {
       orgList.push({ id, name: byId.get(id) ?? '' });
     }
@@ -203,7 +167,16 @@ async function buildMeResponse(
   };
   return {
     ...meCore,
-    sidebar_account_block: buildSidebarAccountBlock(meCore, uiLanguage),
+    sidebar_account_block: buildSidebarAccountBlock({
+      user: { email: meCore.user.email, fullName: meCore.user.fullName },
+      organizations: meCore.organizations,
+      activeOrganizationId: meCore.activeOrganizationId,
+      shellProfile: meCore.shell_profile,
+      uiLanguage,
+      activeOrganizationCountryCode: meCore.activeOrganizationId
+        ? (orgCountryById.get(meCore.activeOrganizationId) ?? null)
+        : null,
+    }),
   };
 }
 

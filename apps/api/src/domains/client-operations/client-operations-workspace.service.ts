@@ -277,6 +277,11 @@ export function workspaceAggregateContract(workspace: ClientOperationsWorkspaceR
   allowed_scopes: ClientOperationsWorkspaceOption[];
   available_workspace_subjects: ClientOperationsWorkspaceResolution['available_workspace_subjects'];
   selector_visible: boolean;
+  /**
+   * Presentation only: the assigned-handler column / filter (מטפל בתיק) is shown in the office workspace.
+   * Employees (no OFFICE scope) do not see it; the assigned-handler truth itself is untouched.
+   */
+  show_handler: boolean;
 } {
   return {
     scope_kind: workspace.scope_kind,
@@ -287,5 +292,6 @@ export function workspaceAggregateContract(workspace: ClientOperationsWorkspaceR
     allowed_scopes: workspace.allowed_scopes,
     available_workspace_subjects: workspace.available_workspace_subjects,
     selector_visible: workspace.allowed_scopes.length > 1,
+    show_handler: workspace.allowed_scopes.some((s) => s.scope_kind === 'OFFICE'),
   };
 }

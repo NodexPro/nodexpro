@@ -48,6 +48,8 @@ export type UsersRolesMemberRow = {
   } | null;
   is_self: boolean;
   available_actions: UsersRolesMemberActions;
+  /** Display order only (backend-recomputed on every read); null for the owner. Never an identity. */
+  display_number: number | null;
 };
 
 export type UsersRolesInvitationRow = {
@@ -68,6 +70,7 @@ export type UsersRolesAggregate = {
   ui: UsersRolesUi;
   available_actions: { invite_member: boolean };
   invite_roles: Array<{ code: string; label: string }>;
+  owners: UsersRolesMemberRow[];
   members: UsersRolesMemberRow[];
   invitations: UsersRolesInvitationRow[];
 };

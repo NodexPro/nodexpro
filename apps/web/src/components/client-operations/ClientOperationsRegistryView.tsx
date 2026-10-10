@@ -494,6 +494,8 @@ export type ClientOperationsRegistryViewProps = {
       role_code: string;
     }>;
     selector_visible: boolean;
+    /** Backend presentation flag: assigned-handler column / filter is shown in the office workspace only. */
+    show_handler?: boolean;
   } | null;
   onWorkspaceChange?: (optionValue: string) => void;
   query?: {
@@ -578,7 +580,12 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
   const setRows = onRowsChange;
   const isSpreadsheet = variant === 'spreadsheet';
-  const columns = columnsProp ?? [];
+  // Presentation only: employees do not see the assigned-handler column / filter (backend truth is untouched).
+  const showHandler = workspace?.show_handler !== false;
+  const columns = useMemo(() => {
+    const all = columnsProp ?? [];
+    return showHandler ? all : all.filter((c) => c.key !== 'handler');
+  }, [columnsProp, showHandler]);
   /** Route header centre slot (CO route). null → search renders inline in the toolbar. */
   const headerSearchSlot = useClientOperationsHeaderSearchSlot();
   const headerWorkspaceSlot = useClientOperationsHeaderWorkspaceSlot();
@@ -2962,7 +2969,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         data-testid="client-operations-filter-bar"
       >
         <div className="nx-co-sheet__filter-bar-scroll">
-          {filters.definitions.map((def) => {
+          {filters.definitions
+            .filter((def) => showHandler || def.id !== 'handler')
+            .map((def) => {
             const widthClass =
               def.width_hint === 'wide'
                 ? ' nx-co-sheet__filter-control--wide'
@@ -3776,8 +3785,6 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           <div className="nx-co-sheet__period-pending-line" />
           <p className="nx-co-sheet__period-pending-label">טוען תקופה…</p>
         </div>
-      ) : rows.length === 0 ? (
-        <p className="nx-co-sheet__empty">לא נמצאו לקוחות.</p>
       ) : null}
     </div>
   );

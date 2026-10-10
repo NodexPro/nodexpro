@@ -276,7 +276,7 @@ test('15. Commands return the refreshed aggregate; profile command audits and is
 
 test('16. Aggregate separates pending invitations from members and has no self-profile command', () => {
   const svc = api('domains/memberships/users-roles-aggregate.service.ts');
-  assert.match(svc, /members: rows,\s*invitations,/);
+  assert.match(svc, /owners,\s*members: employees,\s*invitations,/);
   const routes = api('domains/memberships/memberships.routes.ts');
   assert.doesNotMatch(routes, /set_my_member_profile/);
   assert.doesNotMatch(svc, /set_my_member_profile/);
@@ -484,7 +484,7 @@ test('28. Users & Roles uses the canonical working shell: same collapsible rail,
   assert.match(layout, /header = isUsersRolesWorkspace \? null :/);
   // No second sidebar implementation: the page never renders its own rail.
   const page = web('pages/UsersRoles.tsx');
-  assert.doesNotMatch(page, /AppSidebar|t1-sidebar/);
+  assert.doesNotMatch(page, /<AppSidebar|t1-sidebar/);
   // Compact table: header row + one actions cell, columns from backend text.
   assert.match(page, /<table className="nx-ur-table">/);
   assert.match(page, /<th className="nx-ur-th--actions">\{T\('actions'\)\}<\/th>/);
@@ -493,4 +493,49 @@ test('28. Users & Roles uses the canonical working shell: same collapsible rail,
   // Primary action stays above the table, as the canonical blue/cyan action.
   assert.ok(page.indexOf('nx-ur-btn--primary') < page.indexOf('<table'));
   assert.match(web('components/users-roles/UsersRoles.css'), /linear-gradient\(135deg, #1477e8, #00cfef\)/);
+});
+
+test('29. Owner is separate from the employee table; numbering is display-order only (backend ordered)', () => {
+  const svc = api('domains/memberships/users-roles-aggregate.service.ts');
+  assert.match(svc, /const owners = rows\.filter\(\(r\) => r\.role\.code === 'owner'\);/);
+  assert.match(svc, /\.filter\(\(r\) => r\.role\.code !== 'owner'\)\s*\.map\(\(r, index\) => \(\{ \.\.\.r, display_number: index \+ 1 \}\)\)/);
+  // Active first, closed access last — decided before numbering.
+  assert.ok(svc.indexOf('statusRank(a) - statusRank(b)') < svc.indexOf('display_number: index + 1'));
+  // Never persisted: no write mentions display_number.
+  assert.doesNotMatch(svc, /(insert|upsert|update)\([^)]*display_number/);
+  assert.match(svc, /display_number: null,/);
+
+  const page = web('pages/UsersRoles.tsx');
+  assert.match(page, /data-testid="users-roles-owner-section"/);
+  assert.ok(page.indexOf('users-roles-owner-section') < page.indexOf('<table'));
+  assert.match(page, /\{m\.display_number \?\? ''\}/);
+  assert.match(page, /<th className="nx-ur-th--num">\{T\('number_short'\)\}<\/th>/);
+  // Column order for the employee table (RTL reads right → left): מס׳, שם, תפקיד, לקוחות, מודולים, תאריך, סטטוס, פעולות.
+  const head = page.slice(page.indexOf('nx-ur-th--num'), page.indexOf('</thead>'));
+  const order = ['number_short', 'name', 'role', 'clients', 'modules', 'start_date', 'status', 'actions'].map((k) =>
+    head.indexOf(`T('${k}')`),
+  );
+  assert.deepEqual(order, [...order].sort((a, b) => a - b));
+  assert.ok(order.every((i) => i >= 0));
+  // Modal lookup also resolves the owner row (owner profile edit stays available to the Owner).
+  assert.match(page, /\[\.\.\.\(data\?\.owners \?\? \[\]\), \.\.\.\(data\?\.members \?\? \[\]\)\]/);
+});
+
+test('30. Row actions are compact icon actions (reused glyphs, locale tooltips, restrained destructive)', () => {
+  const page = web('pages/UsersRoles.tsx');
+  assert.match(page, /function RowIconAction/);
+  assert.match(page, /title=\{props\.label\}\s*aria-label=\{props\.label\}/);
+  for (const k of ['edit_details', 'manage_clients', 'manage_modules', 'close_access']) {
+    assert.match(page, new RegExp(`label=\\{T\\('${k}'\\)\\}`));
+  }
+  assert.match(page, /tone="destructive"/);
+  // No text-button cluster in the members table any more.
+  const members = page.slice(page.indexOf('nx-ur-table--members'), page.indexOf('</table>'));
+  assert.doesNotMatch(members, /nx-ur-btn--action/);
+  const sidebar = web('templates/template-1/components/AppSidebar.tsx');
+  assert.match(sidebar, /export const ROW_ACTION_GLYPH/);
+  assert.match(sidebar, /clients: '🗂️',\s*modules: '🧩',/); // the EXISTING sidebar glyph keys (no duplicate icons)
+  const css = web('components/users-roles/UsersRoles.css');
+  assert.doesNotMatch(css, /position: sticky/);
+  assert.match(css, /font-family: Arial, sans-serif/);
 });

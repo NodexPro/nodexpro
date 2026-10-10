@@ -45,6 +45,7 @@ type RegistryWorkspaceAggregate = {
     role_code: string;
   }>;
   selector_visible: boolean;
+  show_handler?: boolean;
 };
 
 type RegistryAggregate = {

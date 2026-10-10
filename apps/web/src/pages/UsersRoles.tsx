@@ -10,6 +10,7 @@ import {
   MemberProfileModal,
 } from '../components/users-roles/UsersRolesModals';
 import { uiText } from '../components/users-roles/users-roles-selection.pure';
+import { CoNavGlyph, ROW_ACTION_GLYPH } from '../templates/template-1/components/AppSidebar';
 import '../components/users-roles/UsersRoles.css';
 
 type ModalState =
@@ -19,6 +20,26 @@ type ModalState =
 /** Backend message when there is one; the screen text (backend `ui`) is used once it is known. */
 function errorText(e: unknown, fallback: string): string {
   return e instanceof Error && e.message ? e.message : fallback;
+}
+
+/** Compact icon-only row action (canonical 24 / 1.7 / round line glyph). Label doubles as tooltip + accessible name. */
+function RowIconAction(props: {
+  icon: string;
+  label: string;
+  onClick: () => void;
+  tone?: 'default' | 'destructive';
+}) {
+  return (
+    <button
+      type="button"
+      className={`nx-ur-icon-btn${props.tone === 'destructive' ? ' nx-ur-icon-btn--destructive' : ''}`}
+      title={props.label}
+      aria-label={props.label}
+      onClick={props.onClick}
+    >
+      <CoNavGlyph icon={props.icon} className="nx-ur-icon" />
+    </button>
+  );
 }
 
 /**
@@ -122,7 +143,7 @@ export function UsersRoles() {
   if (!orgId) return <p className="nx-ur-empty">{T('select_organization') || '…'}</p>;
 
   const modalMember: UsersRolesMemberRow | null = modal
-    ? (data?.members.find((m) => m.member_id === modal.memberId) ?? null)
+    ? ([...(data?.owners ?? []), ...(data?.members ?? [])].find((m) => m.member_id === modal.memberId) ?? null)
     : null;
 
   return (
@@ -182,11 +203,43 @@ export function UsersRoles() {
 
       {data ? (
         <>
+          {data.owners.length > 0 ? (
+            <section className="nx-ur-owner" aria-label={T('owner_section')} data-testid="users-roles-owner-section">
+              <div className="nx-ur-owner__tag">{T('owner_section')}</div>
+              {data.owners.map((o) => (
+                <div key={o.member_id} className={`nx-ur-owner__row${o.membership.status.code === 'active' ? '' : ' is-closed'}`}>
+                  <div className="nx-ur-owner__who">
+                    <div className="nx-ur-name">
+                      {o.profile.display_name}
+                      {o.is_self ? <span className="nx-ur-you">{T('you')}</span> : null}
+                    </div>
+                    {o.profile.email && o.profile.email !== o.profile.display_name ? (
+                      <div className="nx-ur-sub nx-ur-ltr">{o.profile.email}</div>
+                    ) : null}
+                  </div>
+                  {o.profile.phone ? <div className="nx-ur-owner__meta nx-ur-ltr">{o.profile.phone}</div> : null}
+                  <div className="nx-ur-owner__meta nx-ur-ltr">{o.membership.start_date ?? '—'}</div>
+                  <span className={`nx-ur-badge nx-ur-badge--${o.membership.status.code}`}>{o.membership.status.label}</span>
+                  <div className="nx-ur-actions">
+                    {o.available_actions.edit_profile ? (
+                      <RowIconAction
+                        icon={ROW_ACTION_GLYPH.edit}
+                        label={T('edit_details')}
+                        onClick={() => setModal({ kind: 'profile', memberId: o.member_id })}
+                      />
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </section>
+          ) : null}
+
           <div className="nx-ur-sheet">
             <div className="nx-ur-table-scroll">
-              <table className="nx-ur-table">
+              <table className="nx-ur-table nx-ur-table--members">
                 <thead>
                   <tr>
+                    <th className="nx-ur-th--num">{T('number_short')}</th>
                     <th>{T('name')}</th>
                     <th>{T('role')}</th>
                     <th>{T('clients')}</th>
@@ -199,15 +252,18 @@ export function UsersRoles() {
                 <tbody>
                   {data.members.map((m) => (
                     <tr key={m.member_id} className={m.membership.status.code === 'active' ? '' : 'is-closed'}>
+                      <td className="nx-ur-td--num">{m.display_number ?? ''}</td>
                       <td className="nx-ur-td--name">
                         <div className="nx-ur-name">
                           {m.profile.display_name}
                           {m.is_self ? <span className="nx-ur-you">{T('you')}</span> : null}
                         </div>
-                        {m.profile.email && m.profile.email !== m.profile.display_name ? (
-                          <div className="nx-ur-sub nx-ur-ltr">{m.profile.email}</div>
-                        ) : null}
-                        {m.profile.phone ? <div className="nx-ur-sub nx-ur-ltr">{m.profile.phone}</div> : null}
+                        <div className="nx-ur-subline">
+                          {m.profile.email && m.profile.email !== m.profile.display_name ? (
+                            <span className="nx-ur-sub nx-ur-ltr">{m.profile.email}</span>
+                          ) : null}
+                          {m.profile.phone ? <span className="nx-ur-sub nx-ur-ltr">{m.profile.phone}</span> : null}
+                        </div>
                       </td>
                       <td>{m.role.label}</td>
                       <td>{m.client_access.summary}</td>
@@ -221,40 +277,33 @@ export function UsersRoles() {
                       <td className="nx-ur-td--actions">
                         <div className="nx-ur-actions">
                           {m.available_actions.edit_profile ? (
-                            <button
-                              type="button"
-                              className="nx-btn nx-btn-secondary nx-ur-btn nx-ur-btn--sm nx-ur-btn--action"
+                            <RowIconAction
+                              icon={ROW_ACTION_GLYPH.edit}
+                              label={T('edit_details')}
                               onClick={() => setModal({ kind: 'profile', memberId: m.member_id })}
-                            >
-                              {T('edit_details')}
-                            </button>
+                            />
                           ) : null}
                           {m.available_actions.manage_clients ? (
-                            <button
-                              type="button"
-                              className="nx-btn nx-btn-secondary nx-ur-btn nx-ur-btn--sm nx-ur-btn--action"
+                            <RowIconAction
+                              icon={ROW_ACTION_GLYPH.clients}
+                              label={T('manage_clients')}
                               onClick={() => setModal({ kind: 'clients', memberId: m.member_id })}
-                            >
-                              {T('manage_clients')}
-                            </button>
+                            />
                           ) : null}
                           {m.available_actions.manage_modules ? (
-                            <button
-                              type="button"
-                              className="nx-btn nx-btn-secondary nx-ur-btn nx-ur-btn--sm nx-ur-btn--action"
+                            <RowIconAction
+                              icon={ROW_ACTION_GLYPH.modules}
+                              label={T('manage_modules')}
                               onClick={() => setModal({ kind: 'modules', memberId: m.member_id })}
-                            >
-                              {T('manage_modules')}
-                            </button>
+                            />
                           ) : null}
                           {m.available_actions.close_access ? (
-                            <button
-                              type="button"
-                              className="nx-btn nx-ur-btn nx-ur-btn--sm nx-ur-btn--action nx-ur-btn--danger"
+                            <RowIconAction
+                              icon={ROW_ACTION_GLYPH.close_access}
+                              label={T('close_access')}
+                              tone="destructive"
                               onClick={() => setModal({ kind: 'close', memberId: m.member_id })}
-                            >
-                              {T('close_access')}
-                            </button>
+                            />
                           ) : null}
                         </div>
                       </td>
@@ -262,7 +311,7 @@ export function UsersRoles() {
                   ))}
                   {data.members.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="nx-ur-td--empty">
+                      <td colSpan={8} className="nx-ur-td--empty">
                         {T('no_members')}
                       </td>
                     </tr>
@@ -309,7 +358,7 @@ export function UsersRoles() {
                           {inv.available_actions.cancel ? (
                             <button
                               type="button"
-                              className="nx-btn nx-ur-btn nx-ur-btn--sm nx-ur-btn--action nx-ur-btn--danger"
+                              className="nx-btn nx-btn-secondary nx-ur-btn nx-ur-btn--sm nx-ur-btn--action nx-ur-btn--soft-danger"
                               disabled={inviteRowBusy === inv.invitation_id}
                               onClick={() => cancelInvite(inv.invitation_id, inv.cancel_confirm)}
                             >

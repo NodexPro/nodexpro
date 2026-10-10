@@ -20,9 +20,12 @@ export const CLIENT_OPERATIONS_HEADER_TITLE_HE = 'ניהול לקוחות';
 export function ClientOperationsAppHeader({
   searchSlotRef,
   workspaceSlotRef,
+  greetingText = null,
 }: {
   searchSlotRef: (el: HTMLDivElement | null) => void;
   workspaceSlotRef: (el: HTMLDivElement | null) => void;
+  /** Employee workspace top line (backend-composed, e.g. "היי, <first name>"). Falls back to the module title. */
+  greetingText?: string | null;
 }) {
   return (
     <header className="nx-co-app-header" dir="rtl" data-testid="client-operations-app-header">
@@ -34,7 +37,13 @@ export function ClientOperationsAppHeader({
             <path d="M8 13h8M8 16.5h5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
           </svg>
         </span>
-        <h1 className="nx-co-app-header__title">{CLIENT_OPERATIONS_HEADER_TITLE_HE}</h1>
+        {greetingText ? (
+          <h1 className="nx-co-app-header__title" data-testid="client-operations-greeting">
+            {greetingText}
+          </h1>
+        ) : (
+          <h1 className="nx-co-app-header__title">{CLIENT_OPERATIONS_HEADER_TITLE_HE}</h1>
+        )}
       </div>
       <div
         ref={searchSlotRef}

@@ -13,6 +13,8 @@
  */
 
 .t1-appShell--client-operations {
+  /* One typography system for the working shell (sidebar, header, Users & Roles, ToDo): Arial. */
+  font-family: Arial, sans-serif;
   --nx-nova: #123756;
   --nx-navy-950: #061a33;
   --nx-navy-900: #082447;
@@ -440,6 +442,21 @@
 .t1-appShell--client-operations .t1-sidebar-account__user,
 .t1-appShell--client-operations .t1-sidebar-account__label {
   color: var(--nx-text-on-navy);
+}
+
+.t1-appShell--client-operations button,
+.t1-appShell--client-operations input,
+.t1-appShell--client-operations select,
+.t1-appShell--client-operations textarea {
+  font-family: inherit;
+}
+
+.t1-appShell--client-operations .t1-sidebar-account__office-name {
+  color: var(--nx-text-on-navy);
+}
+
+.t1-appShell--client-operations .t1-sidebar-account__office-label {
+  color: var(--nx-text-on-navy-muted);
 }
 
 .t1-appShell--client-operations .t1-sidebar-account__divider {

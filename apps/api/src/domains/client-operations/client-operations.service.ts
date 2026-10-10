@@ -287,6 +287,7 @@ export type ClientOperationsRegistryResponse = {
       role_code: string;
     }>;
     selector_visible: boolean;
+    show_handler: boolean;
   };
   query: {
     q: string | null;

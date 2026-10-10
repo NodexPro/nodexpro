@@ -66,6 +66,7 @@ export function TemplateLayout({
       <ClientOperationsAppHeader
         searchSlotRef={coHeaderSearchSlotRef}
         workspaceSlotRef={coHeaderWorkspaceSlotRef}
+        greetingText={sidebarAccountBlock.workspace_greeting?.text ?? null}
       />
     ) : (
       <AppHeader

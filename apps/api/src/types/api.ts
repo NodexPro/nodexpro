@@ -12,14 +12,26 @@ export interface SidebarAccountBlockModel {
     organizations: Array<{ organization_id: string; name: string; selected: boolean }>;
   };
   language_selector: {
+    /** Backend-owned: false hides the control in the UI (capability is kept). */
+    visible: boolean;
     label: string;
     current_value: UiLanguageCode;
     options: Array<{ value: UiLanguageCode; label: string }>;
   };
   logout_action: {
+    /** false for employees: sign-out is not shown in the sidebar (logout capability is untouched). */
+    visible: boolean;
     label: string;
     command_key: 'logout';
   };
+  /** Employee-only office identity line (משרד / name). */
+  office_context: {
+    visible: boolean;
+    label: string;
+    name: string | null;
+  };
+  /** Employee workspace top line (היי, <first name>); null for everyone else. */
+  workspace_greeting: { text: string; direction: 'ltr' | 'rtl' } | null;
 }
 
 export type ShellProfile = 'income_only' | 'full_platform' | 'worker' | 'closed';

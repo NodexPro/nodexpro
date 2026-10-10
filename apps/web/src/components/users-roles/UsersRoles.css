@@ -25,6 +25,16 @@
   margin: 0;
   padding: 0;
   color: #c8d9ed;
+  /* Same typography as the Owner workspace / working shell. */
+  font-family: Arial, sans-serif;
+}
+
+.nx-ur-overlay,
+.nx-ur-modal,
+.nx-ur-page button,
+.nx-ur-page input,
+.nx-ur-page select {
+  font-family: Arial, sans-serif;
 }
 
 .nx-ur-page__head {
@@ -98,17 +108,18 @@
   box-shadow: 0 0 0 3px rgba(0, 207, 239, 0.25);
 }
 
+/* Destructive confirmation (modal only): clearly destructive, still within the NodexPro palette. */
 .nx-ur-btn--danger.nx-btn,
 .nx-ur-btn--danger {
-  border: 1px solid #fecaca;
-  background: #fef2f2;
-  color: #b91c1c;
+  border: 1px solid #c98a8a;
+  background: #fbeeee;
+  color: #8f3a3a;
 }
 
 .nx-ur-btn--danger:hover:not(:disabled) {
-  border-color: #fca5a5;
-  background: #fee2e2;
-  color: #991b1b;
+  border-color: #b36a6a;
+  background: #f6dede;
+  color: #7a2d2d;
 }
 
 .nx-ur-btn:disabled {
@@ -118,7 +129,6 @@
 
 /* ───────────── Data sheet (light glass on the navy workspace) ───────────── */
 .nx-ur-sheet {
-  container-type: inline-size;
   overflow: hidden;
   border: 1px solid rgba(125, 236, 247, 0.55);
   border-radius: 14px;
@@ -130,14 +140,18 @@
   color: var(--nx-ur-navy-text);
 }
 
-/* Wide data is scrolled inside the sheet — never hidden or truncated. */
+/*
+ * One natural scrolling model: the page scrolls. The sheet only gets a horizontal scroller as a last-resort
+ * safety net (nothing is hidden or truncated); at normal desktop widths the columns fit and no scrollbar shows.
+ */
 .nx-ur-table-scroll {
   overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .nx-ur-table {
   width: 100%;
-  min-width: 900px;
+  min-width: 0;
   border-collapse: collapse;
   font-size: 13px;
   color: var(--nx-ur-navy-text);
@@ -170,9 +184,6 @@
 }
 
 .nx-ur-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   background: var(--nx-ur-header);
   color: var(--nx-ur-navy-text);
   font-size: 12.5px;
@@ -198,7 +209,21 @@
 }
 
 .nx-ur-td--name {
-  min-width: 190px;
+  min-width: 200px;
+}
+
+/* Display-order column (מס׳): narrow, centered, never an identity. */
+.nx-ur-th--num,
+.nx-ur-td--num {
+  width: 1%;
+  min-width: 44px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.nx-ur-td--num {
+  color: var(--nx-ur-text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .nx-ur-th--actions,
@@ -222,6 +247,13 @@
   color: var(--nx-ur-text-secondary);
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+/* Email + phone share ONE line under the name (compact row). */
+.nx-ur-subline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 12px;
 }
 
 .nx-ur-you {
@@ -262,8 +294,56 @@
 .nx-ur-actions {
   display: flex;
   flex-wrap: nowrap;
-  gap: 6px;
+  align-items: center;
+  gap: 4px;
   justify-content: flex-start;
+}
+
+/* Compact icon actions — same line-glyph language as the sidebar (24 viewBox, 20px, 1.7 stroke). */
+.nx-ur-icon-btn {
+  appearance: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #36587d;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.nx-ur-icon-btn:hover,
+.nx-ur-icon-btn:focus-visible {
+  outline: none;
+  border-color: #c9d9ec;
+  background: rgba(38, 140, 255, 0.1);
+  color: #1477e8;
+}
+
+.nx-ur-icon-btn:focus-visible {
+  box-shadow: 0 0 0 3px rgba(0, 207, 239, 0.22);
+}
+
+/* Restrained destructive treatment: neutral slate at rest, muted brick on hover — never a bright red button. */
+.nx-ur-icon-btn--destructive {
+  color: #6f7f94;
+}
+
+.nx-ur-icon-btn--destructive:hover,
+.nx-ur-icon-btn--destructive:focus-visible {
+  border-color: #e3c7c7;
+  background: rgba(168, 76, 76, 0.08);
+  color: #a04545;
+}
+
+.nx-ur-icon {
+  width: 20px;
+  height: 20px;
+  display: block;
 }
 
 .nx-ur-btn--action.nx-btn,
@@ -289,12 +369,11 @@
   color: #0f4c9a;
 }
 
-/* Narrower content area (e.g. 240px rail expanded on a laptop): wrap the actions instead of hiding anything. */
-@container (max-width: 1120px) {
-  .nx-ur-actions {
-    flex-wrap: wrap;
-    max-width: 232px;
-  }
+/* Invitation cancel: soft, not a bright red button. */
+.nx-ur-btn--soft-danger.nx-btn-secondary:hover:not(:disabled) {
+  border-color: #e3c7c7;
+  background: rgba(168, 76, 76, 0.08);
+  color: #a04545;
 }
 
 /* Emails, phones, dates and tax ids keep their own left-to-right shape inside an RTL screen. */
@@ -316,6 +395,55 @@
 .nx-ur-empty {
   padding: 24px;
   color: #c8d9ed;
+}
+
+/* ───────────── Owner section (separate from the employee table) ───────────── */
+.nx-ur-owner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 8px 14px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(125, 236, 247, 0.55);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(247, 250, 255, 0.97) 0%, rgba(237, 245, 255, 0.95) 100%);
+  box-shadow: 0 10px 30px rgba(2, 20, 45, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  color: var(--nx-ur-navy-text);
+}
+
+.nx-ur-owner__tag {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #1477e8, #00cfef);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.nx-ur-owner__row {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+}
+
+.nx-ur-owner__row.is-closed {
+  color: var(--nx-ur-text-secondary);
+}
+
+.nx-ur-owner__who {
+  min-width: 180px;
+}
+
+.nx-ur-owner__meta {
+  font-size: 13px;
+}
+
+.nx-ur-owner__row .nx-ur-actions {
+  margin-inline-start: auto;
 }
 
 /* ───────────── Invite form ───────────── */

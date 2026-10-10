@@ -97,13 +97,36 @@ const CO_GLYPH_PATHS: Record<string, React.ReactNode> = {
       <path d="M8.5 9.5h7M8.5 12.5h4.5" />
     </>
   ),
+  // Row-action glyphs (Users & Roles) — same 24 / 1.7 / round language as the navigation set.
+  edit: (
+    <>
+      <path d="M4.5 19.5l.9-4L16.4 4.5a2.1 2.1 0 0 1 3 3L8.4 18.6z" />
+      <path d="M14.6 6.3l3 3" />
+    </>
+  ),
+  close_access: (
+    <>
+      <circle cx="9" cy="8.5" r="3" />
+      <path d="M3.5 19a5.5 5.5 0 0 1 11 0" />
+      <path d="M16.5 10.5h5" />
+    </>
+  ),
 };
 
-function CoNavGlyph({ icon }: { icon: string }) {
+/** Glyph keys for Users & Roles row actions — clients/modules are the EXISTING sidebar glyphs (no duplicates). */
+export const ROW_ACTION_GLYPH = {
+  edit: 'edit',
+  clients: '🗂️',
+  modules: '🧩',
+  close_access: 'close_access',
+} as const;
+
+/** Canonical line glyph (also reused for Users & Roles row actions): 24 viewBox, 20px, stroke 1.7, round. */
+export function CoNavGlyph({ icon, className = 't1-sidebar__glyph' }: { icon: string; className?: string }) {
   const paths = CO_GLYPH_PATHS[icon];
   return (
     <svg
-      className="t1-sidebar__glyph"
+      className={className}
       viewBox="0 0 24 24"
       width="20"
       height="20"

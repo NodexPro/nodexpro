@@ -17,6 +17,9 @@ export function SidebarAccountBlock(props: {
   busy?: boolean;
 }) {
   const { block, expanded, onSelectOrganization, onSetLanguage, onLogout, busy = false } = props;
+  const showLanguage = block.language_selector?.visible === true;
+  const showLogout = block.logout_action?.visible !== false;
+  const showOfficeContext = Boolean(block.office_context?.visible && block.office_context.name);
   const initials = useMemo(() => initialsFromDisplayName(block.user_display_name), [block.user_display_name]);
 
   if (!expanded) {
@@ -38,7 +41,7 @@ export function SidebarAccountBlock(props: {
     <div className="t1-sidebar-account" aria-label="Account">
       <div className="t1-sidebar-account__divider" role="presentation" />
 
-      {block.organization_name ? (
+      {block.organization_name && !showOfficeContext ? (
         <div className="t1-sidebar-account__org-name" title={block.organization_name}>
           {block.organization_name}
         </div>
@@ -73,6 +76,7 @@ export function SidebarAccountBlock(props: {
         {block.user_display_name}
       </div>
 
+      {showLanguage ? (
       <div className="t1-sidebar-account__field">
         <label className="t1-sidebar-account__label" htmlFor="t1-sidebar-lang-select">
           {block.language_selector.label}
@@ -94,15 +98,27 @@ export function SidebarAccountBlock(props: {
           ))}
         </select>
       </div>
+      ) : null}
 
-      <button
-        type="button"
-        className="t1-sidebar-account__logout nx-btn nx-btn-taxes-compact"
-        disabled={busy}
-        onClick={() => void onLogout()}
-      >
-        {block.logout_action.label}
-      </button>
+      {showLogout ? (
+        <button
+          type="button"
+          className="t1-sidebar-account__logout nx-btn nx-btn-taxes-compact"
+          disabled={busy}
+          onClick={() => void onLogout()}
+        >
+          {block.logout_action.label}
+        </button>
+      ) : null}
+
+      {showOfficeContext && block.office_context ? (
+        <div className="t1-sidebar-account__office" data-testid="sidebar-office-context">
+          <div className="t1-sidebar-account__office-label">{block.office_context.label}</div>
+          <div className="t1-sidebar-account__office-name" title={block.office_context.name ?? undefined}>
+            {block.office_context.name}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
