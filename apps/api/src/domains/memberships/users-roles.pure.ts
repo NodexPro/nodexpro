@@ -8,6 +8,17 @@
  *   structured first/last name → users.full_name → email
  */
 
+import {
+  allClientsSummaryFor,
+  allOfficeModulesSummaryFor,
+  invitationStatusLabelFor,
+  memberStatusLabelFor,
+  noModulesSummaryFor,
+  roleLabelFor,
+  selectedClientsSummaryFor,
+  type UsersRolesLocale,
+} from './users-roles-locale.pure.js';
+
 export type MemberProfileInput = {
   first_name?: string | null;
   last_name?: string | null;
@@ -103,34 +114,26 @@ export function toDateOnly(iso: string | null | undefined, timeZone?: string | n
 
 export type MemberStatusCode = 'active' | 'invited' | 'access_closed';
 
-export function resolveMemberStatus(membershipStatus: string): { code: MemberStatusCode; label: string } {
+export function resolveMemberStatus(
+  membershipStatus: string,
+  locale: UsersRolesLocale = 'en',
+): { code: MemberStatusCode; label: string } {
   const status = String(membershipStatus ?? '').trim().toLowerCase();
-  if (status === 'active') return { code: 'active', label: 'Active' };
-  if (status === 'invited') return { code: 'invited', label: 'Invited' };
-  return { code: 'access_closed', label: 'Access closed' };
+  const code: MemberStatusCode = status === 'active' ? 'active' : status === 'invited' ? 'invited' : 'access_closed';
+  return { code, label: memberStatusLabelFor(code, locale) };
 }
 
-export function resolveRoleLabel(roleCode: string): string {
-  switch (String(roleCode ?? '').trim().toLowerCase()) {
-    case 'owner':
-      return 'Owner';
-    case 'admin':
-      return 'Admin';
-    case 'staff':
-      return 'Employee';
-    case 'viewer':
-      return 'Viewer';
-    default:
-      return 'Member';
-  }
+export function resolveRoleLabel(roleCode: string, locale: UsersRolesLocale = 'en'): string {
+  return roleLabelFor(roleCode, locale);
 }
 
-export function resolveInvitationStatus(status: string): { code: string; label: string } {
+export function resolveInvitationStatus(
+  status: string,
+  locale: UsersRolesLocale = 'en',
+): { code: 'invited' | 'accepted' | 'expired' | 'cancelled'; label: string } {
   const s = String(status ?? '').trim().toLowerCase();
-  if (s === 'pending') return { code: 'invited', label: 'Invited' };
-  if (s === 'accepted') return { code: 'accepted', label: 'Accepted' };
-  if (s === 'expired') return { code: 'expired', label: 'Expired' };
-  return { code: 'cancelled', label: 'Cancelled' };
+  const code = s === 'pending' ? 'invited' : s === 'accepted' ? 'accepted' : s === 'expired' ? 'expired' : 'cancelled';
+  return { code, label: invitationStatusLabelFor(code, locale) };
 }
 
 export type ClientAccessProjection = {
@@ -145,12 +148,14 @@ export function buildClientAccessProjection(params: {
   applicable: boolean;
   policyMode: string | null | undefined;
   activeGrantCount: number;
+  locale?: UsersRolesLocale;
 }): ClientAccessProjection {
+  const locale = params.locale ?? 'en';
   if (!params.applicable) {
-    return { applicable: false, mode: 'all', selected_count: 0, summary: 'All clients' };
+    return { applicable: false, mode: 'all', selected_count: 0, summary: allClientsSummaryFor(locale) };
   }
   if (String(params.policyMode ?? '').trim().toLowerCase() === 'all') {
-    return { applicable: true, mode: 'all', selected_count: 0, summary: 'All clients' };
+    return { applicable: true, mode: 'all', selected_count: 0, summary: allClientsSummaryFor(locale) };
   }
   // Missing policy fails closed to "selected, none" — same as the Stage 5.1 resolver.
   const count = Math.max(0, Math.floor(params.activeGrantCount) || 0);
@@ -158,7 +163,7 @@ export function buildClientAccessProjection(params: {
     applicable: true,
     mode: 'selected',
     selected_count: count,
-    summary: `Selected clients · ${count}`,
+    summary: selectedClientsSummaryFor(count, locale),
   };
 }
 
@@ -171,15 +176,17 @@ export type ModuleAccessProjection = {
 export function buildModuleAccessProjection(params: {
   applicable: boolean;
   enabledModules: ReadonlyArray<{ module_id: string; name: string }>;
+  locale?: UsersRolesLocale;
 }): ModuleAccessProjection {
+  const locale = params.locale ?? 'en';
   if (!params.applicable) {
-    return { applicable: false, enabled_modules: [], summary: 'All office modules' };
+    return { applicable: false, enabled_modules: [], summary: allOfficeModulesSummaryFor(locale) };
   }
   const enabled = [...params.enabledModules];
   return {
     applicable: true,
     enabled_modules: enabled,
-    summary: enabled.length === 0 ? 'No modules' : enabled.map((m) => m.name).join(', '),
+    summary: enabled.length === 0 ? noModulesSummaryFor(locale) : enabled.map((m) => m.name).join(', '),
   };
 }
 

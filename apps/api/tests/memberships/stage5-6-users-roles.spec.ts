@@ -30,11 +30,18 @@ import {
 import {
   buildClientAccessPayload,
   buildModuleAccessPayload,
-  describeCloseAccessBlockers,
+  fillCount,
   filterCatalogClients,
   initialModuleDraft,
   toggleSelected,
+  uiText,
 } from '../../../web/src/components/users-roles/users-roles-selection.pure.js';
+import {
+  buildUsersRolesUi,
+  closeAccessBlockedMessageFor,
+  resolveUsersRolesPresentation,
+  USERS_ROLES_TEXT,
+} from '../../src/domains/memberships/users-roles-locale.pure.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const readRepo = (rel: string): string => readFileSync(join(root, rel), 'utf8');
@@ -223,8 +230,12 @@ test('13. Close-access blockers are counted by the backend and rendered, never c
   assert.equal(hasCloseAccessBlockers({ handler_client_count: 0, open_todo_count: 0 }), false);
   assert.equal(hasCloseAccessBlockers({ handler_client_count: 2, open_todo_count: 0 }), true);
   assert.equal(hasCloseAccessBlockers({ handler_client_count: 0, open_todo_count: 1 }), true);
-  assert.equal(describeCloseAccessBlockers({ handler_client_count: 0, open_todo_count: 0 }), null);
-  assert.match(describeCloseAccessBlockers({ handler_client_count: 2, open_todo_count: 1 })!, /2 clients.*1 open task\b/);
+  // The sentence is built by the backend (localized); the UI renders `close_access.message` as-is.
+  assert.equal(closeAccessBlockedMessageFor({ handler_client_count: 0, open_todo_count: 0 }, 'en'), null);
+  assert.match(
+    closeAccessBlockedMessageFor({ handler_client_count: 2, open_todo_count: 1 }, 'en')!,
+    /2 clients.*1 open task\b/,
+  );
 
   const rbac = api('domains/memberships/memberships-rbac.service.ts');
   assert.match(rbac, /assertNoCloseAccessBlockers\(orgId, targetUserId\)/);
@@ -353,6 +364,95 @@ test('23. Migrations 184-186 exist and 187 is the next additive migration', () =
     assert.ok(names.some((n) => n.startsWith(`${prefix}_`)), `missing migration ${prefix}`);
   }
   assert.equal(names.filter((n) => n.startsWith('187_')).length, 1);
+});
+
+// Israel localization / RTL (backend-owned) and Manage Clients latency.
+test('25. Presentation comes from the organization country only: Israel = Hebrew + RTL, others English + LTR', () => {
+  assert.deepEqual(resolveUsersRolesPresentation('IL'), { locale: 'he', direction: 'rtl' });
+  assert.deepEqual(resolveUsersRolesPresentation(' il '), { locale: 'he', direction: 'rtl' });
+  for (const other of ['US', 'GB', 'DE', '', null, undefined]) {
+    assert.deepEqual(resolveUsersRolesPresentation(other), { locale: 'en', direction: 'ltr' });
+  }
+  const il = buildUsersRolesUi('IL');
+  assert.equal(il.direction, 'rtl');
+  assert.equal(il.text.title, 'משתמשים והרשאות');
+  assert.equal(buildUsersRolesUi('US').text.title, 'Users & Roles');
+
+  const agg = api('domains/memberships/users-roles-aggregate.service.ts');
+  assert.match(agg, /select\('timezone, country_code'\)/);
+  assert.match(agg, /buildUsersRolesUi\(orgRow\?\.country_code\)/);
+  for (const rel of ['pages/UsersRoles.tsx', 'components/users-roles/UsersRolesModals.tsx']) {
+    const src = web(rel);
+    assert.doesNotMatch(src, /navigator\.language|Accept-Language|i18n|\bcountry/i, `${rel}: no client-side locale truth`);
+  }
+  assert.match(web('pages/UsersRoles.tsx'), /dir=\{ui\?\.direction \?\? 'ltr'\}/);
+  assert.match(web('components/users-roles/UsersRolesModals.tsx'), /dir=\{props\.ui\.direction\}/);
+});
+
+test('26. Hebrew and English dictionaries are complete, and the screens only use keys that exist', () => {
+  const en = Object.keys(USERS_ROLES_TEXT.en).sort();
+  const he = Object.keys(USERS_ROLES_TEXT.he).sort();
+  assert.deepEqual(he, en);
+  for (const value of Object.values(USERS_ROLES_TEXT.he)) assert.ok(value.trim().length > 0);
+
+  const expectedHe: Record<string, string> = {
+    title: 'משתמשים והרשאות',
+    invite_member: 'הזמנת משתמש',
+    name: 'שם',
+    role: 'תפקיד',
+    clients: 'לקוחות',
+    modules: 'מודולים',
+    start_date: 'תאריך התחלה',
+    status: 'סטטוס',
+    edit_details: 'עריכת פרטים',
+    manage_clients: 'לקוחות',
+    manage_modules: 'מודולים',
+    close_access: 'סגירת גישה',
+    invitations: 'הזמנות',
+    first_name: 'שם פרטי',
+    last_name: 'שם משפחה',
+    phone: 'טלפון',
+    save: 'שמירה',
+    close: 'סגירה',
+    all_clients: 'כל הלקוחות',
+    selected_clients: 'לקוחות נבחרים',
+    search_placeholder: 'חיפוש לפי שם או מספר מזהה',
+  };
+  for (const [key, text] of Object.entries(expectedHe)) assert.equal(USERS_ROLES_TEXT.he[key], text, key);
+  assert.equal(resolveMemberStatus('active', 'he').label, 'פעיל');
+  assert.equal(resolveRoleLabel('owner', 'he'), 'בעלים');
+  assert.equal(buildClientAccessProjection({ applicable: false, policyMode: null, activeGrantCount: 0, locale: 'he' }).summary, 'כל הלקוחות');
+  assert.equal(
+    buildClientAccessProjection({ applicable: true, policyMode: 'selected', activeGrantCount: 3, locale: 'he' }).summary,
+    'לקוחות נבחרים · 3',
+  );
+  assert.match(closeAccessBlockedMessageFor({ handler_client_count: 2, open_todo_count: 1 }, 'he')!, /2 לקוחות.*משימה פתוחה אחת/);
+
+  const used = new Set<string>();
+  for (const rel of ['pages/UsersRoles.tsx', 'components/users-roles/UsersRolesModals.tsx']) {
+    const src = web(rel);
+    for (const m of src.matchAll(/\b(?:T|t)\('([a-z_]+)'\)/g)) used.add(m[1]);
+    for (const m of src.matchAll(/uiText\(\w+, '([a-z_]+)'\)/g)) used.add(m[1]);
+  }
+  assert.ok(used.size > 20);
+  for (const key of used) assert.ok(key in USERS_ROLES_TEXT.en, `unknown ui text key: ${key}`);
+  assert.equal(uiText({ locale: 'en', direction: 'ltr', text: { a: 'x' } }, 'a'), 'x');
+  assert.equal(fillCount('{count} selected', 4), '4 selected');
+  // The screens carry no hard-coded English labels any more.
+  const page = web('pages/UsersRoles.tsx');
+  for (const literal of ['Invite member', 'Edit details', 'Manage clients', 'Close access', 'Start date', 'Invitations']) {
+    assert.ok(!page.includes(`>${literal}<`) && !page.includes(`${literal}\n`), `hard-coded: ${literal}`);
+  }
+});
+
+test('27. Manage Clients editor reads its independent parts concurrently within the same aggregate', () => {
+  const agg = api('domains/memberships/users-roles-aggregate.service.ts');
+  const editor = agg.slice(agg.indexOf('export async function buildMemberClientAccessEditorAggregate'));
+  assert.match(editor, /await Promise\.all\(\[\s*resolveOrganizationClientAccessScope\(/);
+  assert.match(editor, /loadClientCatalog\(orgId\)/);
+  // Authorization/target resolution still happens first and the catalog stays organization-scoped.
+  assert.ok(editor.indexOf('loadTargetMembership') < editor.indexOf('Promise.all'));
+  assert.match(agg, /\.eq\('organization_id', orgId\)\s*\.eq\('is_archived', false\)/);
 });
 
 test('24. organization_memberships has two FKs to users (user_id, invited_by): embeds must name user_id', () => {

@@ -28,6 +28,14 @@ import {
 import { listInvitesRbac, revokeUserAccessRbac } from './memberships-rbac.service.js';
 import { loadCloseAccessBlockers } from './member-close-access-blockers.service.js';
 import {
+  buildUsersRolesUi,
+  cancelInvitationConfirmFor,
+  closeAccessBlockedMessageFor,
+  invitationSentSummaryFor,
+  noAccessSummaryFor,
+  type UsersRolesUi,
+} from './users-roles-locale.pure.js';
+import {
   buildClientAccessProjection,
   buildModuleAccessProjection,
   computeMemberActions,
@@ -67,7 +75,7 @@ export type UsersRolesMemberRow = {
   client_access: ClientAccessProjection;
   module_access: ModuleAccessProjection;
   /** Present only when close_access is available: what must be reassigned first. */
-  close_access: { blockers: CloseAccessBlockers; blocked: boolean } | null;
+  close_access: { blockers: CloseAccessBlockers; blocked: boolean; message: string | null } | null;
   is_self: boolean;
   available_actions: MemberActions;
 };
@@ -79,12 +87,18 @@ export type UsersRolesInvitationRow = {
   status: { code: string; label: string };
   send_count: number;
   last_sent_date: string | null;
+  /** Ready-to-render sent line, localized by the backend. */
+  sent_summary: string;
+  /** Ready-to-render confirmation text for the cancel action. */
+  cancel_confirm: string;
   available_actions: { resend: boolean; cancel: boolean };
 };
 
 export type UsersRolesAggregate = {
   aggregate_key: 'users_roles_aggregate';
   organization_id: string;
+  /** Language, direction and screen text — from the organization's canonical country. */
+  ui: UsersRolesUi;
   available_actions: { invite_member: boolean };
   /** Roles an invitation may carry. Backend-owned; the form renders exactly these. */
   invite_roles: Array<{ code: string; label: string }>;
@@ -123,7 +137,7 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
   const actorRole = ctx.membership?.roleCode ?? '';
 
   const [orgRes, membershipsRes, profilesRes, assignableModules] = await Promise.all([
-    supabaseAdmin.from('organizations').select('timezone').eq('id', orgId).maybeSingle(),
+    supabaseAdmin.from('organizations').select('timezone, country_code').eq('id', orgId).maybeSingle(),
     supabaseAdmin
       .from('organization_memberships')
       .select('id, user_id, role_code, status, joined_at, users!organization_memberships_user_id_fkey(email, full_name)')
@@ -137,7 +151,10 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
   ]);
   if (membershipsRes.error) throw membershipsRes.error;
   if (profilesRes.error) throw profilesRes.error;
-  const timeZone = (orgRes.data as { timezone?: string | null } | null)?.timezone ?? 'UTC';
+  const orgRow = orgRes.data as { timezone?: string | null; country_code?: string | null } | null;
+  const timeZone = orgRow?.timezone ?? 'UTC';
+  const ui = buildUsersRolesUi(orgRow?.country_code);
+  const locale = ui.locale;
 
   const profileByMembership = new Map(
     (profilesRes.data ?? []).map((row) => [
@@ -175,11 +192,12 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
         });
         clientAccess =
           scope.authorized_client_ids === null
-            ? buildClientAccessProjection({ applicable: true, policyMode: 'all', activeGrantCount: 0 })
+            ? buildClientAccessProjection({ applicable: true, policyMode: 'all', activeGrantCount: 0, locale })
             : buildClientAccessProjection({
                 applicable: true,
                 policyMode: 'selected',
                 activeGrantCount: scope.authorized_client_ids.length,
+                locale,
               });
         const effective = await loadEnabledMemberModuleIdSet(orgId, m.user_id);
         moduleAccess = buildModuleAccessProjection({
@@ -187,19 +205,24 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
           enabledModules: [...assignableModules.entries()]
             .filter(([id]) => effective.has(id))
             .map(([module_id, name]) => ({ module_id, name })),
+          locale,
         });
       } else if (isEmployee) {
-        clientAccess = { applicable: false, mode: 'selected', selected_count: 0, summary: 'No access' };
-        moduleAccess = { applicable: false, enabled_modules: [], summary: 'No access' };
+        clientAccess = { applicable: false, mode: 'selected', selected_count: 0, summary: noAccessSummaryFor(locale) };
+        moduleAccess = { applicable: false, enabled_modules: [], summary: noAccessSummaryFor(locale) };
       } else {
-        clientAccess = buildClientAccessProjection({ applicable: false, policyMode: 'all', activeGrantCount: 0 });
-        moduleAccess = buildModuleAccessProjection({ applicable: false, enabledModules: [] });
+        clientAccess = buildClientAccessProjection({ applicable: false, policyMode: 'all', activeGrantCount: 0, locale });
+        moduleAccess = buildModuleAccessProjection({ applicable: false, enabledModules: [], locale });
       }
 
       let closeAccess: UsersRolesMemberRow['close_access'] = null;
       if (actions.close_access) {
         const blockers = await loadCloseAccessBlockers(orgId, m.user_id);
-        closeAccess = { blockers, blocked: hasCloseAccessBlockers(blockers) };
+        closeAccess = {
+          blockers,
+          blocked: hasCloseAccessBlockers(blockers),
+          message: closeAccessBlockedMessageFor(blockers, locale),
+        };
       }
 
       return {
@@ -217,9 +240,9 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
           }),
           email: user?.email ?? null,
         },
-        role: { code: m.role_code, label: resolveRoleLabel(m.role_code) },
+        role: { code: m.role_code, label: resolveRoleLabel(m.role_code, locale) },
         membership: {
-          status: resolveMemberStatus(m.status),
+          status: resolveMemberStatus(m.status, locale),
           start_date: toDateOnly(m.joined_at, timeZone),
         },
         client_access: clientAccess,
@@ -245,19 +268,25 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
   const invitations: UsersRolesInvitationRow[] = invites.map((inv) => ({
     invitation_id: inv.id,
     email: inv.email,
-    role: { code: inv.role_key, label: resolveRoleLabel(inv.role_key) },
-    status: resolveInvitationStatus(inv.status),
+    role: { code: inv.role_key, label: resolveRoleLabel(inv.role_key, locale) },
+    status: resolveInvitationStatus(inv.status, locale),
     send_count: inv.send_count,
     last_sent_date: toDateOnly(inv.last_sent_at ?? inv.created_at, timeZone),
+    sent_summary: invitationSentSummaryFor(
+      { lastSentDate: toDateOnly(inv.last_sent_at ?? inv.created_at, timeZone), sendCount: inv.send_count },
+      locale,
+    ),
+    cancel_confirm: cancelInvitationConfirmFor(inv.email, locale),
     available_actions: { resend: canWrite, cancel: canWrite },
   }));
 
   return {
     aggregate_key: 'users_roles_aggregate',
     organization_id: orgId,
+    ui,
     available_actions: { invite_member: canWrite },
     invite_roles: canWrite
-      ? ['admin', 'staff', 'viewer'].map((code) => ({ code, label: resolveRoleLabel(code) }))
+      ? ['admin', 'staff', 'viewer'].map((code) => ({ code, label: resolveRoleLabel(code, locale) }))
       : [],
     members: rows,
     invitations,
@@ -383,25 +412,10 @@ export type MemberClientAccessEditorAggregate = {
 const CLIENT_CATALOG_PAGE = 1000;
 const CLIENT_CATALOG_MAX = 5000;
 
-/** One screen, one aggregate: the focused "Manage clients" editor. */
-export async function buildMemberClientAccessEditorAggregate(
-  ctx: RequestContext,
+/** Non-archived office clients, stable order display_name, id. Pages are read until a short page. */
+async function loadClientCatalog(
   orgId: string,
-  membershipId: string,
-): Promise<MemberClientAccessEditorAggregate> {
-  assertOfficeActor(ctx, orgId);
-  requireRbacPermission(ctx, orgId, RBAC_PERMISSIONS.view_users);
-  const target = await loadTargetMembership(orgId, membershipId);
-  if (target.status !== 'active' || !['staff', 'viewer'].includes(target.role_code)) {
-    throw badRequest('Client access applies to active employees only', 'MEMBER_CLIENT_ACCESS_TARGET_ROLE');
-  }
-
-  const scope = await resolveOrganizationClientAccessScope({
-    organizationId: orgId,
-    viewerUserId: target.user_id,
-    roleCode: target.role_code,
-  });
-
+): Promise<{ clients: MemberClientAccessEditorAggregate['clients']; truncated: boolean }> {
   const clients: MemberClientAccessEditorAggregate['clients'] = [];
   let truncated = false;
   for (let from = 0; from < CLIENT_CATALOG_MAX; from += CLIENT_CATALOG_PAGE) {
@@ -419,19 +433,43 @@ export async function buildMemberClientAccessEditorAggregate(
     if (page.length < CLIENT_CATALOG_PAGE) break;
     if (from + CLIENT_CATALOG_PAGE >= CLIENT_CATALOG_MAX) truncated = true;
   }
+  return { clients, truncated };
+}
 
+/** One screen, one aggregate: the focused "Manage clients" editor. */
+export async function buildMemberClientAccessEditorAggregate(
+  ctx: RequestContext,
+  orgId: string,
+  membershipId: string,
+): Promise<MemberClientAccessEditorAggregate> {
+  assertOfficeActor(ctx, orgId);
+  requireRbacPermission(ctx, orgId, RBAC_PERMISSIONS.view_users);
+  const target = await loadTargetMembership(orgId, membershipId);
+  if (target.status !== 'active' || !['staff', 'viewer'].includes(target.role_code)) {
+    throw badRequest('Client access applies to active employees only', 'MEMBER_CLIENT_ACCESS_TARGET_ROLE');
+  }
+
+  // The four reads below are independent of each other (all depend only on the target membership),
+  // so they run concurrently: one round-trip wave instead of a serial chain. Same queries, same scoping.
+  const [scope, catalog, profileRes, userRes] = await Promise.all([
+    resolveOrganizationClientAccessScope({
+      organizationId: orgId,
+      viewerUserId: target.user_id,
+      roleCode: target.role_code,
+    }),
+    loadClientCatalog(orgId),
+    supabaseAdmin
+      .from('organization_member_profiles')
+      .select('first_name, last_name')
+      .eq('organization_id', orgId)
+      .eq('membership_id', target.id)
+      .maybeSingle(),
+    supabaseAdmin.from('users').select('email, full_name').eq('id', target.user_id).maybeSingle(),
+  ]);
+  const { clients, truncated } = catalog;
+  const profile = profileRes.data;
+  const user = userRes.data;
   const selected = scope.authorized_client_ids ?? [];
-  const { data: profile } = await supabaseAdmin
-    .from('organization_member_profiles')
-    .select('first_name, last_name')
-    .eq('organization_id', orgId)
-    .eq('membership_id', target.id)
-    .maybeSingle();
-  const { data: user } = await supabaseAdmin
-    .from('users')
-    .select('email, full_name')
-    .eq('id', target.user_id)
-    .maybeSingle();
 
   return {
     aggregate_key: 'member_client_access_editor',

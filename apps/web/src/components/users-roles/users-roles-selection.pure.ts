@@ -45,21 +45,18 @@ export function initialModuleDraft(
   return new Set(modules.filter((m) => m.member_assignable && m.member_enabled).map((m) => m.module_id));
 }
 
-/** Blocker sentence for the close-access dialog (numbers come from the backend). */
-export function describeCloseAccessBlockers(blockers: {
-  handler_client_count: number;
-  open_todo_count: number;
-}): string | null {
-  const parts: string[] = [];
-  if (blockers.handler_client_count > 0) {
-    parts.push(
-      `${blockers.handler_client_count} ${blockers.handler_client_count === 1 ? 'client' : 'clients'} handled by this employee`,
-    );
-  }
-  if (blockers.open_todo_count > 0) {
-    parts.push(
-      `${blockers.open_todo_count} open ${blockers.open_todo_count === 1 ? 'task' : 'tasks'} assigned to this employee`,
-    );
-  }
-  return parts.length ? parts.join(' and ') : null;
+/** Screen text delivered by the backend aggregate (`ui`). Language and direction are never decided here. */
+export type UsersRolesUi = {
+  locale: 'en' | 'he';
+  direction: 'ltr' | 'rtl';
+  text: Record<string, string>;
+};
+
+export function uiText(ui: UsersRolesUi, key: string): string {
+  return ui.text[key] ?? key;
+}
+
+/** Fills the `{count}` slot of a backend text with the draft count the user is looking at (display only). */
+export function fillCount(template: string, count: number): string {
+  return template.replace('{count}', String(count));
 }

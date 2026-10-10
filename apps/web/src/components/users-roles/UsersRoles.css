@@ -59,6 +59,12 @@
   color: #b91c1c;
 }
 
+.nx-ur-btn--danger:hover:not(:disabled) {
+  border-color: #fca5a5;
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 .nx-ur-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
@@ -67,7 +73,7 @@
 /* Member rows */
 .nx-ur-grid {
   display: grid;
-  grid-template-columns: minmax(200px, 2.2fr) 90px minmax(110px, 1fr) minmax(130px, 1.3fr) 100px 110px minmax(180px, 1.6fr);
+  grid-template-columns: minmax(180px, 2.2fr) 84px minmax(110px, 1fr) minmax(120px, 1.3fr) 96px 100px max-content;
   gap: 12px;
   align-items: center;
 }
@@ -106,7 +112,7 @@
 }
 
 .nx-ur-you {
-  margin-left: 6px;
+  margin-inline-start: 6px;
   padding: 1px 6px;
   border-radius: 4px;
   background: #eef2ff;
@@ -143,11 +149,44 @@
   color: #4b5563;
 }
 
+/* Row actions: one consistent size; Edit / Clients / Modules are secondary, Close access is destructive. */
 .nx-ur-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
   justify-content: flex-end;
+}
+
+.nx-ur-btn--action.nx-btn,
+.nx-ur-btn--action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  padding: 6px 12px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .nx-ur-grid {
+    grid-template-columns: minmax(160px, 2.2fr) 84px minmax(100px, 1fr) minmax(110px, 1.3fr) 96px 100px minmax(180px, 1.6fr);
+  }
+
+  .nx-ur-actions {
+    flex-wrap: wrap;
+  }
+}
+
+/* Emails, phones, dates and tax ids keep their own left-to-right shape inside an RTL screen. */
+.nx-ur-ltr {
+  direction: ltr;
+  unicode-bidi: isolate;
+  text-align: start;
+}
+
+.nx-ur-input-ltr {
+  text-align: start;
 }
 
 .nx-ur-empty {
@@ -363,6 +402,9 @@
 }
 
 .nx-ur-list__row {
+  /* Large client catalogs: skip layout/paint work for rows outside the scroll viewport. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 38px;
   display: flex;
   align-items: center;
   gap: 10px;

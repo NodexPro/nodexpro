@@ -9,20 +9,22 @@ import {
   MemberModulesModal,
   MemberProfileModal,
 } from '../components/users-roles/UsersRolesModals';
+import { uiText } from '../components/users-roles/users-roles-selection.pure';
 import '../components/users-roles/UsersRoles.css';
 
 type ModalState =
   | { kind: 'profile' | 'clients' | 'modules' | 'close'; memberId: string }
   | null;
 
-function errorText(e: unknown): string {
-  return e instanceof Error && e.message ? e.message : 'Something went wrong. Please try again.';
+/** Backend message when there is one; the screen text (backend `ui`) is used once it is known. */
+function errorText(e: unknown, fallback: string): string {
+  return e instanceof Error && e.message ? e.message : fallback;
 }
 
 /**
  * Users & Roles — office employee management.
- * Renders ONE backend aggregate. Actions, labels, counts and summaries come from the backend;
- * this screen contains no role or permission logic.
+ * Renders ONE backend aggregate. Actions, labels, counts, summaries, language and text direction
+ * come from the backend (`ui`); this screen contains no role, permission or locale logic.
  */
 export function UsersRoles() {
   const auth = useAuth();
@@ -38,13 +40,18 @@ export function UsersRoles() {
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteRowBusy, setInviteRowBusy] = useState<string | null>(null);
 
+  // Text and direction are backend truth. Before the first aggregate arrives there is nothing to translate.
+  const ui = data?.ui ?? null;
+  const T = (key: string): string => (ui ? uiText(ui, key) : '');
+  const fallbackError = ui ? uiText(ui, 'something_went_wrong') : 'Something went wrong. Please try again.';
+
   const load = useCallback(async () => {
     if (!orgId) return;
     try {
       setData(await fetchUsersRolesAggregate(orgId));
       setError('');
     } catch (e) {
-      setError(errorText(e));
+      setError(errorText(e, 'Something went wrong. Please try again.'));
     }
   }, [orgId]);
 
@@ -77,7 +84,7 @@ export function UsersRoles() {
       if (result?.invite_link) await navigator.clipboard.writeText(result.invite_link).catch(() => undefined);
       await load();
     } catch (err) {
-      setError(errorText(err));
+      setError(errorText(err, fallbackError));
     } finally {
       setInviteBusy(false);
     }
@@ -91,39 +98,39 @@ export function UsersRoles() {
       await apiFetch(orgInviteResend(orgId, inviteId), { method: 'POST' });
       await load();
     } catch (err) {
-      setError(errorText(err));
+      setError(errorText(err, fallbackError));
     } finally {
       setInviteRowBusy(null);
     }
   };
 
-  const cancelInvite = async (inviteId: string, email: string) => {
-    if (!orgId || !window.confirm(`Cancel the invitation for ${email}?`)) return;
+  const cancelInvite = async (inviteId: string, confirmText: string) => {
+    if (!orgId || !window.confirm(confirmText)) return;
     setInviteRowBusy(inviteId);
     setError('');
     try {
       await apiFetch(orgInviteRevoke(orgId, inviteId), { method: 'POST' });
       await load();
     } catch (err) {
-      setError(errorText(err));
+      setError(errorText(err, fallbackError));
     } finally {
       setInviteRowBusy(null);
     }
   };
 
   if (auth.status !== 'authenticated') return null;
-  if (!orgId) return <p className="nx-ur-empty">Select an organization.</p>;
+  if (!orgId) return <p className="nx-ur-empty">{T('select_organization') || '…'}</p>;
 
   const modalMember: UsersRolesMemberRow | null = modal
     ? (data?.members.find((m) => m.member_id === modal.memberId) ?? null)
     : null;
 
   return (
-    <div className="nx-ur-page">
+    <div className="nx-ur-page" dir={ui?.direction ?? 'ltr'} lang={ui?.locale ?? 'en'}>
       <div className="nx-ur-page__head">
         <div>
-          <h1 className="nx-ur-page__title">Users & Roles</h1>
-          <p className="nx-ur-page__lead">Your office team: who they are, which clients and areas they can open.</p>
+          <h1 className="nx-ur-page__title">{T('title')}</h1>
+          <p className="nx-ur-page__lead">{T('lead')}</p>
         </div>
         {data?.available_actions.invite_member ? (
           <button
@@ -134,7 +141,7 @@ export function UsersRoles() {
               setShowInvite(true);
             }}
           >
-            Invite member
+            {T('invite_member')}
           </button>
         ) : null}
       </div>
@@ -144,9 +151,10 @@ export function UsersRoles() {
       {showInvite && data ? (
         <form className="nx-ur-invite-form" onSubmit={sendInvite}>
           <label className="nx-ur-field" style={{ flex: '1 1 240px' }}>
-            <span>Email</span>
+            <span>{T('email')}</span>
             <input
               type="email"
+              dir="ltr"
               required
               value={inviteEmail}
               placeholder="name@example.com"
@@ -154,7 +162,7 @@ export function UsersRoles() {
             />
           </label>
           <label className="nx-ur-field">
-            <span>Role</span>
+            <span>{T('role')}</span>
             <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
               {data.invite_roles.map((r) => (
                 <option key={r.code} value={r.code}>
@@ -164,10 +172,10 @@ export function UsersRoles() {
             </select>
           </label>
           <button type="submit" className="nx-btn nx-btn-primary nx-ur-btn" disabled={inviteBusy}>
-            {inviteBusy ? 'Sending…' : 'Send invitation'}
+            {inviteBusy ? T('sending') : T('send_invitation')}
           </button>
-          <button type="button" className="nx-btn nx-ur-btn" onClick={() => setShowInvite(false)}>
-            Cancel
+          <button type="button" className="nx-btn nx-btn-secondary nx-ur-btn" onClick={() => setShowInvite(false)}>
+            {T('cancel')}
           </button>
         </form>
       ) : null}
@@ -175,12 +183,12 @@ export function UsersRoles() {
       {data ? (
         <>
           <div className="nx-ur-grid nx-ur-head" aria-hidden="true">
-            <div>Name</div>
-            <div>Role</div>
-            <div>Clients</div>
-            <div>Modules</div>
-            <div>Start date</div>
-            <div>Status</div>
+            <div>{T('name')}</div>
+            <div>{T('role')}</div>
+            <div>{T('clients')}</div>
+            <div>{T('modules')}</div>
+            <div>{T('start_date')}</div>
+            <div>{T('status')}</div>
             <div />
           </div>
 
@@ -192,17 +200,17 @@ export function UsersRoles() {
               <div>
                 <div className="nx-ur-name">
                   {m.profile.display_name}
-                  {m.is_self ? <span className="nx-ur-you">You</span> : null}
+                  {m.is_self ? <span className="nx-ur-you">{T('you')}</span> : null}
                 </div>
                 {m.profile.email && m.profile.email !== m.profile.display_name ? (
-                  <div className="nx-ur-sub">{m.profile.email}</div>
+                  <div className="nx-ur-sub nx-ur-ltr">{m.profile.email}</div>
                 ) : null}
-                {m.profile.phone ? <div className="nx-ur-sub">{m.profile.phone}</div> : null}
+                {m.profile.phone ? <div className="nx-ur-sub nx-ur-ltr">{m.profile.phone}</div> : null}
               </div>
               <div className="nx-ur-cell">{m.role.label}</div>
               <div className="nx-ur-cell">{m.client_access.summary}</div>
               <div className="nx-ur-cell">{m.module_access.summary}</div>
-              <div className="nx-ur-cell">{m.membership.start_date ?? '—'}</div>
+              <div className="nx-ur-cell nx-ur-ltr">{m.membership.start_date ?? '—'}</div>
               <div>
                 <span className={`nx-ur-badge nx-ur-badge--${m.membership.status.code}`}>
                   {m.membership.status.label}
@@ -212,97 +220,118 @@ export function UsersRoles() {
                 {m.available_actions.edit_profile ? (
                   <button
                     type="button"
-                    className="nx-btn nx-ur-btn nx-ur-btn--sm"
+                    className="nx-btn nx-btn-secondary nx-ur-btn nx-ur-btn--sm nx-ur-btn--action"
                     onClick={() => setModal({ kind: 'profile', memberId: m.member_id })}
                   >
-                    Edit details
+                    {T('edit_details')}
                   </button>
                 ) : null}
                 {m.available_actions.manage_clients ? (
                   <button
                     type="button"
-                    className="nx-btn nx-ur-btn nx-ur-btn--sm"
+                    className="nx-btn nx-btn-secondary nx-ur-btn nx-ur-btn--sm nx-ur-btn--action"
                     onClick={() => setModal({ kind: 'clients', memberId: m.member_id })}
                   >
-                    Manage clients
+                    {T('manage_clients')}
                   </button>
                 ) : null}
                 {m.available_actions.manage_modules ? (
                   <button
                     type="button"
-                    className="nx-btn nx-ur-btn nx-ur-btn--sm"
+                    className="nx-btn nx-btn-secondary nx-ur-btn nx-ur-btn--sm nx-ur-btn--action"
                     onClick={() => setModal({ kind: 'modules', memberId: m.member_id })}
                   >
-                    Manage modules
+                    {T('manage_modules')}
                   </button>
                 ) : null}
                 {m.available_actions.close_access ? (
                   <button
                     type="button"
-                    className="nx-btn nx-ur-btn nx-ur-btn--sm nx-ur-btn--danger"
+                    className="nx-btn nx-ur-btn nx-ur-btn--sm nx-ur-btn--action nx-ur-btn--danger"
                     onClick={() => setModal({ kind: 'close', memberId: m.member_id })}
                   >
-                    Close access
+                    {T('close_access')}
                   </button>
                 ) : null}
               </div>
             </div>
           ))}
-          {data.members.length === 0 ? <p className="nx-ur-empty">No team members yet.</p> : null}
+          {data.members.length === 0 ? <p className="nx-ur-empty">{T('no_members')}</p> : null}
 
-          <h2 className="nx-ur-section-title">Invitations</h2>
+          <h2 className="nx-ur-section-title">{T('invitations')}</h2>
           {data.invitations.map((inv) => (
             <div key={inv.invitation_id} className="nx-ur-invite-row">
-              <div className="nx-ur-cell">{inv.email}</div>
+              <div className="nx-ur-cell nx-ur-ltr">{inv.email}</div>
               <div className="nx-ur-cell">{inv.role.label}</div>
               <div>
                 <span className={`nx-ur-badge nx-ur-badge--${inv.status.code}`}>{inv.status.label}</span>
               </div>
-              <div className="nx-ur-sub">
-                {inv.last_sent_date ? `Sent ${inv.last_sent_date}` : ''}
-                {inv.send_count > 1 ? ` · ${inv.send_count}×` : ''}
-              </div>
+              <div className="nx-ur-sub">{inv.sent_summary}</div>
               <div className="nx-ur-actions">
                 {inv.available_actions.resend ? (
                   <button
                     type="button"
-                    className="nx-btn nx-ur-btn nx-ur-btn--sm"
+                    className="nx-btn nx-btn-secondary nx-ur-btn nx-ur-btn--sm nx-ur-btn--action"
                     disabled={inviteRowBusy === inv.invitation_id}
                     onClick={() => resendInvite(inv.invitation_id)}
                   >
-                    Resend
+                    {T('resend')}
                   </button>
                 ) : null}
                 {inv.available_actions.cancel ? (
                   <button
                     type="button"
-                    className="nx-btn nx-ur-btn nx-ur-btn--sm nx-ur-btn--danger"
+                    className="nx-btn nx-ur-btn nx-ur-btn--sm nx-ur-btn--action nx-ur-btn--danger"
                     disabled={inviteRowBusy === inv.invitation_id}
-                    onClick={() => cancelInvite(inv.invitation_id, inv.email)}
+                    onClick={() => cancelInvite(inv.invitation_id, inv.cancel_confirm)}
                   >
-                    Cancel
+                    {T('cancel')}
                   </button>
                 ) : null}
               </div>
             </div>
           ))}
-          {data.invitations.length === 0 ? <p className="nx-ur-muted">No pending invitations.</p> : null}
+          {data.invitations.length === 0 ? <p className="nx-ur-muted">{T('no_invitations')}</p> : null}
         </>
       ) : !error ? (
-        <p className="nx-ur-empty">Loading…</p>
+        <p className="nx-ur-empty">…</p>
       ) : null}
 
-      {modal && modalMember && modal.kind === 'profile' ? (
-        <MemberProfileModal orgId={orgId} member={modalMember} onClose={() => setModal(null)} onSaved={applyTruth} />
+      {ui && modal && modalMember && modal.kind === 'profile' ? (
+        <MemberProfileModal
+          orgId={orgId}
+          member={modalMember}
+          ui={ui}
+          onClose={() => setModal(null)}
+          onSaved={applyTruth}
+        />
       ) : null}
-      {modal && modalMember && modal.kind === 'clients' ? (
-        <MemberClientsModal orgId={orgId} member={modalMember} onClose={() => setModal(null)} onSaved={applyTruth} />
+      {ui && modal && modalMember && modal.kind === 'clients' ? (
+        <MemberClientsModal
+          orgId={orgId}
+          member={modalMember}
+          ui={ui}
+          onClose={() => setModal(null)}
+          onSaved={applyTruth}
+        />
       ) : null}
-      {modal && modalMember && modal.kind === 'modules' ? (
-        <MemberModulesModal orgId={orgId} member={modalMember} onClose={() => setModal(null)} onSaved={applyTruth} />
+      {ui && modal && modalMember && modal.kind === 'modules' ? (
+        <MemberModulesModal
+          orgId={orgId}
+          member={modalMember}
+          ui={ui}
+          onClose={() => setModal(null)}
+          onSaved={applyTruth}
+        />
       ) : null}
-      {modal && modalMember && modal.kind === 'close' ? (
-        <CloseAccessModal orgId={orgId} member={modalMember} onClose={() => setModal(null)} onClosed={applyTruth} />
+      {ui && modal && modalMember && modal.kind === 'close' ? (
+        <CloseAccessModal
+          orgId={orgId}
+          member={modalMember}
+          ui={ui}
+          onClose={() => setModal(null)}
+          onClosed={applyTruth}
+        />
       ) : null}
     </div>
   );

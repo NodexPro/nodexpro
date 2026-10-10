@@ -11,6 +11,7 @@
  */
 
 import { apiJson } from './client';
+import type { UsersRolesUi } from '../components/users-roles/users-roles-selection.pure';
 
 const base = (orgId: string) => `/organizations/${orgId}`;
 
@@ -43,6 +44,7 @@ export type UsersRolesMemberRow = {
   close_access: {
     blockers: { handler_client_count: number; open_todo_count: number };
     blocked: boolean;
+    message: string | null;
   } | null;
   is_self: boolean;
   available_actions: UsersRolesMemberActions;
@@ -55,12 +57,15 @@ export type UsersRolesInvitationRow = {
   status: { code: string; label: string };
   send_count: number;
   last_sent_date: string | null;
+  sent_summary: string;
+  cancel_confirm: string;
   available_actions: { resend: boolean; cancel: boolean };
 };
 
 export type UsersRolesAggregate = {
   aggregate_key: 'users_roles_aggregate';
   organization_id: string;
+  ui: UsersRolesUi;
   available_actions: { invite_member: boolean };
   invite_roles: Array<{ code: string; label: string }>;
   members: UsersRolesMemberRow[];

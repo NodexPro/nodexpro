@@ -14,18 +14,26 @@ import {
 import {
   buildClientAccessPayload,
   buildModuleAccessPayload,
-  describeCloseAccessBlockers,
+  fillCount,
   filterCatalogClients,
   initialModuleDraft,
   toggleSelected,
+  uiText,
+  type UsersRolesUi,
 } from './users-roles-selection.pure';
 import './UsersRoles.css';
 
-function errorText(e: unknown): string {
-  return e instanceof Error && e.message ? e.message : 'Something went wrong. Please try again.';
+/**
+ * Every modal receives `ui` from the Users & Roles aggregate that opened it: same language, same
+ * direction, same backend text. The modals never decide a language themselves.
+ */
+
+function errorText(e: unknown, fallback: string): string {
+  return e instanceof Error && e.message ? e.message : fallback;
 }
 
 function ModalShell(props: {
+  ui: UsersRolesUi;
   title: string;
   subtitle?: string;
   busy: boolean;
@@ -34,14 +42,26 @@ function ModalShell(props: {
   children: ReactNode;
 }) {
   return (
-    <div className="nx-ur-overlay" role="presentation" onClick={() => !props.busy && props.onClose()}>
+    <div
+      className="nx-ur-overlay"
+      role="presentation"
+      dir={props.ui.direction}
+      lang={props.ui.locale}
+      onClick={() => !props.busy && props.onClose()}
+    >
       <div className="nx-ur-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className="nx-ur-modal__header">
           <div>
             <h2 className="nx-ur-modal__title">{props.title}</h2>
             {props.subtitle ? <div className="nx-ur-modal__subtitle">{props.subtitle}</div> : null}
           </div>
-          <button type="button" className="nx-ur-modal__close" aria-label="Close" disabled={props.busy} onClick={props.onClose}>
+          <button
+            type="button"
+            className="nx-ur-modal__close"
+            aria-label={uiText(props.ui, 'close')}
+            disabled={props.busy}
+            onClick={props.onClose}
+          >
             ×
           </button>
         </div>
@@ -57,10 +77,12 @@ function ModalShell(props: {
 export function MemberProfileModal(props: {
   orgId: string;
   member: UsersRolesMemberRow;
+  ui: UsersRolesUi;
   onClose: () => void;
   onSaved: (aggregate: UsersRolesAggregate) => void;
 }) {
-  const { member } = props;
+  const { member, ui } = props;
+  const t = (key: string) => uiText(ui, key);
   const [first, setFirst] = useState(member.profile.first_name ?? '');
   const [last, setLast] = useState(member.profile.last_name ?? '');
   const [phone, setPhone] = useState(member.profile.phone ?? '');
@@ -78,24 +100,25 @@ export function MemberProfileModal(props: {
       });
       props.onSaved(aggregate);
     } catch (e) {
-      setError(errorText(e));
+      setError(errorText(e, t('something_went_wrong')));
       setBusy(false);
     }
   };
 
   return (
     <ModalShell
-      title="Edit details"
+      ui={ui}
+      title={t('edit_details')}
       subtitle={member.profile.email ?? undefined}
       busy={busy}
       onClose={props.onClose}
       footer={
         <>
-          <button type="button" className="nx-btn nx-ur-btn" disabled={busy} onClick={props.onClose}>
-            Close
+          <button type="button" className="nx-btn nx-btn-secondary nx-ur-btn" disabled={busy} onClick={props.onClose}>
+            {t('close')}
           </button>
           <button type="button" className="nx-btn nx-btn-primary nx-ur-btn" disabled={busy} onClick={save}>
-            {busy ? 'Saving…' : 'Save'}
+            {busy ? t('saving') : t('save')}
           </button>
         </>
       }
@@ -103,16 +126,23 @@ export function MemberProfileModal(props: {
       {error ? <div className="nx-ur-error">{error}</div> : null}
       <div className="nx-ur-form-grid">
         <label className="nx-ur-field">
-          <span>First name</span>
+          <span>{t('first_name')}</span>
           <input value={first} maxLength={80} onChange={(e) => setFirst(e.target.value)} />
         </label>
         <label className="nx-ur-field">
-          <span>Last name</span>
+          <span>{t('last_name')}</span>
           <input value={last} maxLength={80} onChange={(e) => setLast(e.target.value)} />
         </label>
         <label className="nx-ur-field nx-ur-field--wide">
-          <span>Phone</span>
-          <input value={phone} maxLength={32} inputMode="tel" onChange={(e) => setPhone(e.target.value)} />
+          <span>{t('phone')}</span>
+          <input
+            className="nx-ur-input-ltr"
+            dir="ltr"
+            value={phone}
+            maxLength={32}
+            inputMode="tel"
+            onChange={(e) => setPhone(e.target.value)}
+          />
         </label>
       </div>
     </ModalShell>
@@ -124,9 +154,13 @@ export function MemberProfileModal(props: {
 export function MemberClientsModal(props: {
   orgId: string;
   member: UsersRolesMemberRow;
+  ui: UsersRolesUi;
   onClose: () => void;
   onSaved: (aggregate: UsersRolesAggregate) => void;
 }) {
+  const { ui } = props;
+  const t = (key: string) => uiText(ui, key);
+  const failedText = t('something_went_wrong');
   const [editor, setEditor] = useState<MemberClientAccessEditorAggregate | null>(null);
   const [mode, setMode] = useState<'all' | 'selected'>('selected');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -143,11 +177,11 @@ export function MemberClientsModal(props: {
         setMode(agg.access_mode);
         setSelected(new Set(agg.selected_client_ids));
       })
-      .catch((e) => alive && setError(errorText(e)));
+      .catch((e) => alive && setError(errorText(e, failedText)));
     return () => {
       alive = false;
     };
-  }, [props.orgId, props.member.member_id]);
+  }, [props.orgId, props.member.member_id, failedText]);
 
   const visible = useMemo(() => filterCatalogClients(editor?.clients ?? [], query), [editor, query]);
 
@@ -162,45 +196,46 @@ export function MemberClientsModal(props: {
       );
       props.onSaved(out.users_roles_aggregate);
     } catch (e) {
-      setError(errorText(e));
+      setError(errorText(e, t('something_went_wrong')));
       setBusy(false);
     }
   };
 
   return (
     <ModalShell
-      title="Manage clients"
+      ui={ui}
+      title={t('manage_clients')}
       subtitle={editor?.member.display_name ?? props.member.profile.display_name}
       busy={busy}
       onClose={props.onClose}
       footer={
         <>
-          <button type="button" className="nx-btn nx-ur-btn" disabled={busy} onClick={props.onClose}>
-            Close
+          <button type="button" className="nx-btn nx-btn-secondary nx-ur-btn" disabled={busy} onClick={props.onClose}>
+            {t('close')}
           </button>
           <button type="button" className="nx-btn nx-btn-primary nx-ur-btn" disabled={busy || !editor} onClick={save}>
-            {busy ? 'Saving…' : 'Save'}
+            {busy ? t('saving') : t('save')}
           </button>
         </>
       }
     >
       {error ? <div className="nx-ur-error">{error}</div> : null}
-      {!editor && !error ? <div className="nx-ur-muted">Loading…</div> : null}
+      {!editor && !error ? <div className="nx-ur-muted">{t('loading')}</div> : null}
       {editor ? (
         <>
-          <div className="nx-ur-choice" role="radiogroup" aria-label="Client access">
+          <div className="nx-ur-choice" role="radiogroup" aria-label={t('client_access_label')}>
             <label className="nx-ur-choice__item">
               <input type="radio" name="client-mode" checked={mode === 'all'} onChange={() => setMode('all')} />
               <span>
-                <strong>All clients</strong>
-                <small>Every current client and every client you add later.</small>
+                <strong>{t('all_clients')}</strong>
+                <small>{t('all_clients_hint')}</small>
               </span>
             </label>
             <label className="nx-ur-choice__item">
               <input type="radio" name="client-mode" checked={mode === 'selected'} onChange={() => setMode('selected')} />
               <span>
-                <strong>Selected clients</strong>
-                <small>Only the clients you tick below. New clients are not added automatically.</small>
+                <strong>{t('selected_clients')}</strong>
+                <small>{t('selected_clients_hint')}</small>
               </span>
             </label>
           </div>
@@ -209,13 +244,13 @@ export function MemberClientsModal(props: {
               <div className="nx-ur-search-row">
                 <input
                   className="nx-ur-search"
-                  placeholder="Search by name or ID"
+                  placeholder={t('search_placeholder')}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                 />
-                <span className="nx-ur-muted">{selected.size} selected</span>
+                <span className="nx-ur-muted">{fillCount(t('selected_count'), selected.size)}</span>
               </div>
-              <div className="nx-ur-list" role="group" aria-label="Clients">
+              <div className="nx-ur-list" role="group" aria-label={t('clients_list_label')}>
                 {visible.map((c) => (
                   <label key={c.client_id} className="nx-ur-list__row">
                     <input
@@ -224,14 +259,12 @@ export function MemberClientsModal(props: {
                       onChange={() => setSelected((prev) => toggleSelected(prev, c.client_id))}
                     />
                     <span className="nx-ur-list__name">{c.display_name}</span>
-                    <span className="nx-ur-list__meta">{c.tax_id ?? ''}</span>
+                    <span className="nx-ur-list__meta nx-ur-ltr">{c.tax_id ?? ''}</span>
                   </label>
                 ))}
-                {visible.length === 0 ? <div className="nx-ur-muted nx-ur-pad">No clients found.</div> : null}
+                {visible.length === 0 ? <div className="nx-ur-muted nx-ur-pad">{t('no_clients_found')}</div> : null}
               </div>
-              {editor.catalog_truncated ? (
-                <div className="nx-ur-muted">Showing the first clients only. Use search to narrow the list.</div>
-              ) : null}
+              {editor.catalog_truncated ? <div className="nx-ur-muted">{t('catalog_truncated')}</div> : null}
             </>
           ) : null}
         </>
@@ -245,9 +278,13 @@ export function MemberClientsModal(props: {
 export function MemberModulesModal(props: {
   orgId: string;
   member: UsersRolesMemberRow;
+  ui: UsersRolesUi;
   onClose: () => void;
   onSaved: (aggregate: UsersRolesAggregate) => void;
 }) {
+  const { ui } = props;
+  const t = (key: string) => uiText(ui, key);
+  const failedText = t('something_went_wrong');
   const [truth, setTruth] = useState<MemberModuleAssignabilityAggregate | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -261,11 +298,11 @@ export function MemberModulesModal(props: {
         setTruth(agg);
         setChecked(initialModuleDraft(agg.modules));
       })
-      .catch((e) => alive && setError(errorText(e)));
+      .catch((e) => alive && setError(errorText(e, failedText)));
     return () => {
       alive = false;
     };
-  }, [props.orgId, props.member.member_id]);
+  }, [props.orgId, props.member.member_id, failedText]);
 
   // Backend decides which modules are employee choices; nothing else is rendered.
   const assignable = (truth?.modules ?? []).filter((m) => m.member_assignable);
@@ -282,34 +319,35 @@ export function MemberModulesModal(props: {
       );
       props.onSaved(out.users_roles_aggregate);
     } catch (e) {
-      setError(errorText(e));
+      setError(errorText(e, t('something_went_wrong')));
       setBusy(false);
     }
   };
 
   return (
     <ModalShell
-      title="Manage modules"
+      ui={ui}
+      title={t('manage_modules')}
       subtitle={truth?.member_display_name ?? props.member.profile.display_name}
       busy={busy}
       onClose={props.onClose}
       footer={
         <>
-          <button type="button" className="nx-btn nx-ur-btn" disabled={busy} onClick={props.onClose}>
-            Close
+          <button type="button" className="nx-btn nx-btn-secondary nx-ur-btn" disabled={busy} onClick={props.onClose}>
+            {t('close')}
           </button>
           <button type="button" className="nx-btn nx-btn-primary nx-ur-btn" disabled={busy || !truth} onClick={save}>
-            {busy ? 'Saving…' : 'Save'}
+            {busy ? t('saving') : t('save')}
           </button>
         </>
       }
     >
       {error ? <div className="nx-ur-error">{error}</div> : null}
-      {!truth && !error ? <div className="nx-ur-muted">Loading…</div> : null}
+      {!truth && !error ? <div className="nx-ur-muted">{t('loading')}</div> : null}
       {truth ? (
         <>
-          <p className="nx-ur-muted nx-ur-intro">Choose which areas of the system this employee can open.</p>
-          <div className="nx-ur-list" role="group" aria-label="Modules">
+          <p className="nx-ur-muted nx-ur-intro">{t('modules_intro')}</p>
+          <div className="nx-ur-list" role="group" aria-label={t('modules_list_label')}>
             {assignable.map((m) => (
               <label key={m.module_id} className="nx-ur-list__row">
                 <input
@@ -320,9 +358,7 @@ export function MemberModulesModal(props: {
                 <span className="nx-ur-list__name">{m.display_name}</span>
               </label>
             ))}
-            {assignable.length === 0 ? (
-              <div className="nx-ur-muted nx-ur-pad">No modules are available for employees yet.</div>
-            ) : null}
+            {assignable.length === 0 ? <div className="nx-ur-muted nx-ur-pad">{t('no_modules_available')}</div> : null}
           </div>
         </>
       ) : null}
@@ -335,14 +371,16 @@ export function MemberModulesModal(props: {
 export function CloseAccessModal(props: {
   orgId: string;
   member: UsersRolesMemberRow;
+  ui: UsersRolesUi;
   onClose: () => void;
   onClosed: (aggregate: UsersRolesAggregate) => void;
 }) {
-  const { member } = props;
+  const { member, ui } = props;
+  const t = (key: string) => uiText(ui, key);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  // Counts are backend-owned (close_access.blockers); the command enforces the same rule.
-  const blockerText = member.close_access ? describeCloseAccessBlockers(member.close_access.blockers) : null;
+  // Blocker state and its sentence are backend-owned (close_access); the command enforces the same rule.
+  const blockerMessage = member.close_access?.message ?? null;
   const blocked = Boolean(member.close_access?.blocked);
 
   const confirm = async () => {
@@ -351,20 +389,21 @@ export function CloseAccessModal(props: {
     try {
       props.onClosed(await closeMemberAccessCommand(props.orgId, member.member_id));
     } catch (e) {
-      setError(errorText(e));
+      setError(errorText(e, t('something_went_wrong')));
       setBusy(false);
     }
   };
 
   return (
     <ModalShell
-      title="Close access"
+      ui={ui}
+      title={t('close_access')}
       busy={busy}
       onClose={props.onClose}
       footer={
         <>
-          <button type="button" className="nx-btn nx-ur-btn" disabled={busy} onClick={props.onClose}>
-            Cancel
+          <button type="button" className="nx-btn nx-btn-secondary nx-ur-btn" disabled={busy} onClick={props.onClose}>
+            {t('cancel')}
           </button>
           <button
             type="button"
@@ -372,7 +411,7 @@ export function CloseAccessModal(props: {
             disabled={busy || blocked}
             onClick={confirm}
           >
-            {busy ? 'Closing…' : 'Close access'}
+            {busy ? t('closing') : t('close_access')}
           </button>
         </>
       }
@@ -381,18 +420,13 @@ export function CloseAccessModal(props: {
       <p className="nx-ur-confirm-name">
         <strong>{member.profile.display_name}</strong>
         {member.profile.email && member.profile.email !== member.profile.display_name ? (
-          <span className="nx-ur-muted"> · {member.profile.email}</span>
+          <span className="nx-ur-muted nx-ur-ltr"> · {member.profile.email}</span>
         ) : null}
       </p>
-      {blocked && blockerText ? (
-        <div className="nx-ur-warning">
-          This employee still has {blockerText}. Reassign them first, then close access.
-        </div>
+      {blocked && blockerMessage ? (
+        <div className="nx-ur-warning">{blockerMessage}</div>
       ) : (
-        <p className="nx-ur-intro">
-          This employee will no longer be able to sign in to the office. Their history, documents and past work stay
-          exactly as they are.
-        </p>
+        <p className="nx-ur-intro">{t('close_access_intro')}</p>
       )}
     </ModalShell>
   );
