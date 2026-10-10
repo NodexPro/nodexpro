@@ -43,7 +43,12 @@ export function TemplateLayout({
   const isIncomeModule = location.pathname.startsWith('/m/income');
   const isWorkEngineSection = location.pathname.startsWith('/work-engine/');
   const isWorkEngineQueuePage = location.pathname === '/work-engine/queue';
-  const pageMaxWidth = isClientOperationsModule || isIncomeModule || isWorkEngineSection ? 1600 : 1100;
+  // Users & Roles is an office working window: same collapsible navy rail as the employee workspace,
+  // no generic top header (organization / user / language already live in the sidebar account block).
+  const isUsersRolesWorkspace = location.pathname === '/users-roles';
+  const usesCanonicalWorkingShell = isClientOperationsModule || isUsersRolesWorkspace;
+  const pageMaxWidth =
+    isClientOperationsModule || isIncomeModule || isWorkEngineSection || isUsersRolesWorkspace ? 1600 : 1100;
 
   // CO route only: header centre slot that receives the registry's existing search field (portal).
   const [coHeaderSearchSlot, setCoHeaderSearchSlot] = useState<HTMLElement | null>(null);
@@ -56,7 +61,8 @@ export function TemplateLayout({
 
   let header: React.ReactNode = null;
   if (!isWorkEngineQueuePage) {
-    header = isClientOperationsModule ? (
+    // Users & Roles renders no header strip at all (account / org / language live in the sidebar).
+    header = isUsersRolesWorkspace ? null : isClientOperationsModule ? (
       <ClientOperationsAppHeader
         searchSlotRef={coHeaderSearchSlotRef}
         workspaceSlotRef={coHeaderWorkspaceSlotRef}
@@ -74,13 +80,13 @@ export function TemplateLayout({
 
   return (
     <div
-      className={`t1-appShell${isClientOperationsModule ? ' t1-appShell--client-operations' : ''}`}
+      className={`t1-appShell${usesCanonicalWorkingShell ? ' t1-appShell--client-operations' : ''}${isUsersRolesWorkspace ? ' t1-appShell--users-roles' : ''}`}
       style={{ display: 'flex', minHeight: '100vh' }}
     >
       <AppSidebar
         items={sidebarItems}
-        mode={isClientOperationsModule || isIncomeModule || isWorkEngineSection ? 'collapsedHover' : 'default'}
-        appearance={isClientOperationsModule ? 'co-navy-glass' : 'default'}
+        mode={usesCanonicalWorkingShell || isIncomeModule || isWorkEngineSection ? 'collapsedHover' : 'default'}
+        appearance={usesCanonicalWorkingShell ? 'co-navy-glass' : 'default'}
         accountBlock={sidebarAccountBlock}
         accountBusy={accountBusy}
         onSelectOrganization={onSelectOrg}

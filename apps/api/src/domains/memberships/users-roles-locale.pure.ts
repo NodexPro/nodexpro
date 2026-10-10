@@ -45,6 +45,7 @@ const EN: UsersRolesText = {
   status: 'Status',
   you: 'You',
   no_members: 'No team members yet.',
+  actions: 'Actions',
   // row actions
   edit_details: 'Edit details',
   manage_clients: 'Clients',
@@ -58,6 +59,7 @@ const EN: UsersRolesText = {
   cancel: 'Cancel',
   resend: 'Resend',
   no_invitations: 'No pending invitations.',
+  last_sent: 'Last sent',
   // edit details modal
   first_name: 'First name',
   last_name: 'Last name',
@@ -101,6 +103,7 @@ const HE: UsersRolesText = {
   status: 'סטטוס',
   you: 'את/ה',
   no_members: 'עדיין אין חברי צוות.',
+  actions: 'פעולות',
   edit_details: 'עריכת פרטים',
   manage_clients: 'לקוחות',
   manage_modules: 'מודולים',
@@ -112,6 +115,7 @@ const HE: UsersRolesText = {
   cancel: 'ביטול',
   resend: 'שליחה מחדש',
   no_invitations: 'אין הזמנות ממתינות.',
+  last_sent: 'נשלח לאחרונה',
   first_name: 'שם פרטי',
   last_name: 'שם משפחה',
   phone: 'טלפון',

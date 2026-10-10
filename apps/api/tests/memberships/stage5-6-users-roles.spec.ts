@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Stage 5.6 — Users & Roles owner management.
  * Pure rules + source contracts (no live Supabase env). Database behaviour of migration 187 is
  * validated separately on a disposable PostgreSQL.
@@ -473,4 +473,24 @@ test('24. organization_memberships has two FKs to users (user_id, invited_by): e
       `${rel}: ambiguous users(...) embed on organization_memberships`,
     );
   }
+});
+
+test('28. Users & Roles uses the canonical working shell: same collapsible rail, no header strip, compact data table', () => {
+  const layout = web('templates/template-1/TemplateLayout.tsx');
+  assert.match(layout, /const isUsersRolesWorkspace = location\.pathname === '\/users-roles';/);
+  assert.match(layout, /usesCanonicalWorkingShell \|\| isIncomeModule \|\| isWorkEngineSection \? 'collapsedHover'/);
+  assert.match(layout, /appearance=\{usesCanonicalWorkingShell \? 'co-navy-glass' : 'default'\}/);
+  assert.match(layout, /usesCanonicalWorkingShell \? ' t1-appShell--client-operations'/);
+  assert.match(layout, /header = isUsersRolesWorkspace \? null :/);
+  // No second sidebar implementation: the page never renders its own rail.
+  const page = web('pages/UsersRoles.tsx');
+  assert.doesNotMatch(page, /AppSidebar|t1-sidebar/);
+  // Compact table: header row + one actions cell, columns from backend text.
+  assert.match(page, /<table className="nx-ur-table">/);
+  assert.match(page, /<th className="nx-ur-th--actions">\{T\('actions'\)\}<\/th>/);
+  assert.equal((page.match(/<td className="nx-ur-td--actions">/g) ?? []).length, 2);
+  assert.doesNotMatch(page, /nx-ur-grid|nx-ur-row\b/);
+  // Primary action stays above the table, as the canonical blue/cyan action.
+  assert.ok(page.indexOf('nx-ur-btn--primary') < page.indexOf('<table'));
+  assert.match(web('components/users-roles/UsersRoles.css'), /linear-gradient\(135deg, #1477e8, #00cfef\)/);
 });

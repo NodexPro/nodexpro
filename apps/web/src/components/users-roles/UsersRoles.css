@@ -1,10 +1,30 @@
-/* Users & Roles — compact office-owner management screen. Buttons follow nodexpro-buttons.mdc. */
+/*
+ * Users & Roles — office employee management.
+ *
+ * Presentation only. The page lives inside the canonical working shell (navy collapsible rail,
+ * no top header — see TemplateLayout / nx-client-operations-shell.css), so the page chrome is
+ * light-on-navy and the data sits on a light glass "sheet", exactly like the Client Operations
+ * workspace. Buttons follow nodexpro-buttons.mdc (compact, rectangular, 6px radius).
+ */
 
 .nx-ur-page {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 24px;
-  color: #111827;
+  --nx-ur-navy-text: #102a4c;
+  --nx-ur-text-secondary: #58708e;
+  --nx-ur-text-muted: #879ab0;
+  --nx-ur-grid: #d5e2f0;
+  --nx-ur-header: #e8f2fc;
+  --nx-ur-row-alt: #f8fbff;
+  --nx-ur-row-hover: rgba(38, 140, 255, 0.1);
+  --nx-ur-blue: #268cff;
+  --nx-ur-cyan: #00cfef;
+  --nx-ur-cyan-light: #7decf7;
+
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  color: #c8d9ed;
 }
 
 .nx-ur-page__head {
@@ -12,28 +32,31 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .nx-ur-page__title {
-  margin: 0 0 4px;
+  margin: 0 0 2px;
+  color: #ffffff;
   font-size: 22px;
   font-weight: 700;
+  line-height: 1.25;
 }
 
 .nx-ur-page__lead {
   margin: 0;
-  color: #6b7280;
-  font-size: 14px;
+  color: #a9c9ee;
+  font-size: 13.5px;
 }
 
 .nx-ur-section-title {
-  margin: 28px 0 10px;
+  margin: 22px 0 8px;
+  color: #ffffff;
   font-size: 16px;
   font-weight: 700;
 }
 
-/* Buttons — rectangular, compact */
+/* ───────────── Buttons — rectangular, compact ───────────── */
 .nx-ur-btn.nx-btn,
 .nx-ur-btn {
   height: auto;
@@ -50,6 +73,29 @@
 .nx-ur-btn--sm {
   padding: 6px 12px;
   font-size: 13px;
+}
+
+/* Primary action: the canonical blue → cyan NodexPro gradient (same as the active navigation tile). */
+.nx-ur-btn--primary.nx-btn,
+.nx-ur-btn--primary,
+.nx-ur-modal .nx-btn.nx-btn-primary {
+  border: 1px solid var(--nx-ur-cyan-light);
+  background: linear-gradient(135deg, #1477e8, #00cfef);
+  color: #ffffff;
+  box-shadow: 0 2px 10px rgba(20, 119, 232, 0.28);
+}
+
+.nx-ur-btn--primary:hover:not(:disabled),
+.nx-ur-modal .nx-btn.nx-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  border-color: #b5f4fb;
+}
+
+.nx-ur-btn--primary:focus-visible,
+.nx-ur-modal .nx-btn:focus-visible,
+.nx-ur-btn--action:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0, 207, 239, 0.25);
 }
 
 .nx-ur-btn--danger.nx-btn,
@@ -70,44 +116,111 @@
   cursor: not-allowed;
 }
 
-/* Member rows */
-.nx-ur-grid {
-  display: grid;
-  grid-template-columns: minmax(180px, 2.2fr) 84px minmax(110px, 1fr) minmax(120px, 1.3fr) 96px 100px max-content;
-  gap: 12px;
-  align-items: center;
+/* ───────────── Data sheet (light glass on the navy workspace) ───────────── */
+.nx-ur-sheet {
+  container-type: inline-size;
+  overflow: hidden;
+  border: 1px solid rgba(125, 236, 247, 0.55);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(247, 250, 255, 0.97) 0%, rgba(237, 245, 255, 0.95) 100%);
+  box-shadow:
+    0 16px 44px rgba(2, 20, 45, 0.28),
+    0 0 16px rgba(0, 207, 239, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  color: var(--nx-ur-navy-text);
 }
 
-.nx-ur-head {
-  padding: 0 14px 6px;
-  color: #6b7280;
-  font-size: 12px;
+/* Wide data is scrolled inside the sheet — never hidden or truncated. */
+.nx-ur-table-scroll {
+  overflow-x: auto;
+}
+
+.nx-ur-table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+  font-size: 13px;
+  color: var(--nx-ur-navy-text);
+}
+
+.nx-ur-table th,
+.nx-ur-table td {
+  padding: 6px 12px;
+  border: 1px solid var(--nx-ur-grid);
+  vertical-align: middle;
+  text-align: start;
+  line-height: 1.35;
+}
+
+/* Outer edge comes from the sheet border. */
+.nx-ur-table tr > :first-child {
+  border-inline-start: 0;
+}
+
+.nx-ur-table tr > :last-child {
+  border-inline-end: 0;
+}
+
+.nx-ur-table thead tr:first-child > th {
+  border-top: 0;
+}
+
+.nx-ur-table tbody tr:last-child > td {
+  border-bottom: 0;
+}
+
+.nx-ur-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--nx-ur-header);
+  color: var(--nx-ur-navy-text);
+  font-size: 12.5px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+  white-space: nowrap;
+  box-shadow: inset 0 -1px 0 var(--nx-ur-grid);
 }
 
-.nx-ur-row {
-  padding: 12px 14px;
-  margin-bottom: 8px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
+.nx-ur-table tbody td {
+  background: #ffffff;
 }
 
-.nx-ur-row--closed {
-  background: #f9fafb;
-  color: #6b7280;
+.nx-ur-table tbody tr:nth-child(even) td {
+  background: var(--nx-ur-row-alt);
+}
+
+.nx-ur-table tbody tr:hover td {
+  background: var(--nx-ur-row-hover);
+}
+
+.nx-ur-table tbody tr.is-closed td {
+  color: var(--nx-ur-text-secondary);
+}
+
+.nx-ur-td--name {
+  min-width: 190px;
+}
+
+.nx-ur-th--actions,
+.nx-ur-td--actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.nx-ur-td--empty {
+  padding: 16px 12px;
+  text-align: center;
+  color: var(--nx-ur-text-secondary);
 }
 
 .nx-ur-name {
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13.5px;
 }
 
 .nx-ur-sub {
-  color: #6b7280;
-  font-size: 12.5px;
+  color: var(--nx-ur-text-secondary);
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 
@@ -115,23 +228,19 @@
   margin-inline-start: 6px;
   padding: 1px 6px;
   border-radius: 4px;
-  background: #eef2ff;
-  color: #3730a3;
+  background: rgba(38, 140, 255, 0.12);
+  color: #1d5fb8;
   font-size: 11px;
   font-weight: 700;
 }
 
-.nx-ur-cell {
-  font-size: 13.5px;
-  overflow-wrap: anywhere;
-}
-
 .nx-ur-badge {
   display: inline-block;
-  padding: 2px 8px;
+  padding: 1px 8px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .nx-ur-badge--active {
@@ -145,16 +254,16 @@
 }
 
 .nx-ur-badge--access_closed {
-  background: #f3f4f6;
-  color: #4b5563;
+  background: #eef2f7;
+  color: #4b5b70;
 }
 
-/* Row actions: one consistent size; Edit / Clients / Modules are secondary, Close access is destructive. */
+/* Row actions live in ONE compact cell: Edit / Clients / Modules are secondary, Close access is destructive. */
 .nx-ur-actions {
   display: flex;
   flex-wrap: nowrap;
   gap: 6px;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .nx-ur-btn--action.nx-btn,
@@ -162,19 +271,29 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 72px;
-  padding: 6px 12px;
+  min-width: 0;
+  padding: 4px 10px;
   font-size: 13px;
   white-space: nowrap;
 }
 
-@media (max-width: 1100px) {
-  .nx-ur-grid {
-    grid-template-columns: minmax(160px, 2.2fr) 84px minmax(100px, 1fr) minmax(110px, 1.3fr) 96px 100px minmax(180px, 1.6fr);
-  }
+.nx-ur-btn--action.nx-btn-secondary {
+  border: 1px solid #c9d9ec;
+  background: #ffffff;
+  color: #123756;
+}
 
+.nx-ur-btn--action.nx-btn-secondary:hover:not(:disabled) {
+  border-color: var(--nx-ur-blue);
+  background: rgba(38, 140, 255, 0.08);
+  color: #0f4c9a;
+}
+
+/* Narrower content area (e.g. 240px rail expanded on a laptop): wrap the actions instead of hiding anything. */
+@container (max-width: 1120px) {
   .nx-ur-actions {
     flex-wrap: wrap;
+    max-width: 232px;
   }
 }
 
@@ -185,41 +304,36 @@
   text-align: start;
 }
 
+/* In an RTL screen the LTR value still aligns with the column (inline-start edge). */
+.nx-ur-page[dir='rtl'] .nx-ur-ltr:not(.nx-ur-input-ltr) {
+  text-align: right;
+}
+
 .nx-ur-input-ltr {
   text-align: start;
 }
 
 .nx-ur-empty {
   padding: 24px;
-  color: #6b7280;
+  color: #c8d9ed;
 }
 
-/* Invitations */
-.nx-ur-invite-row {
-  display: grid;
-  grid-template-columns: minmax(200px, 2fr) 110px 110px 120px minmax(160px, 1fr);
-  gap: 12px;
-  align-items: center;
-  padding: 10px 14px;
-  margin-bottom: 8px;
-  border: 1px dashed #d1d5db;
-  border-radius: 8px;
-  background: #fff;
-}
-
+/* ───────────── Invite form ───────────── */
 .nx-ur-invite-form {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   align-items: flex-end;
-  padding: 16px;
-  margin-bottom: 20px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #f9fafb;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(125, 236, 247, 0.55);
+  border-radius: 12px;
+  background: rgba(247, 250, 255, 0.97);
+  box-shadow: 0 10px 30px rgba(2, 20, 45, 0.22);
+  color: var(--nx-ur-navy-text);
 }
 
-/* Alerts */
+/* ───────────── Alerts ───────────── */
 .nx-ur-error,
 .nx-ur-warning {
   padding: 10px 12px;
@@ -257,7 +371,7 @@
   font-size: 15px;
 }
 
-/* Modal (compact, consistent with the Staff Seats modal) */
+/* ───────────── Modal (premium NodexPro language: light glass, cyan edge, compact buttons) ───────────── */
 .nx-ur-overlay {
   position: fixed;
   inset: 0;
@@ -265,7 +379,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(17, 24, 39, 0.45);
+  background: rgba(6, 26, 51, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 .nx-ur-modal {
@@ -274,9 +390,13 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(125, 236, 247, 0.55);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f7faff 0%, #edf5ff 100%);
+  box-shadow:
+    0 24px 60px rgba(2, 20, 45, 0.45),
+    0 0 22px rgba(0, 207, 239, 0.22);
+  color: #102a4c;
 }
 
 .nx-ur-modal__header,
@@ -285,45 +405,63 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
-  background: #fff;
+  padding: 10px 16px;
 }
 
 .nx-ur-modal__header {
   justify-content: space-between;
-  border-bottom: 1px solid #e5e7eb;
+  background: #e8f2fc;
+  border-bottom: 1px solid #d5e2f0;
 }
 
 .nx-ur-modal__footer {
   justify-content: center;
-  border-top: 1px solid #e5e7eb;
+  background: #f7faff;
+  border-top: 1px solid #d5e2f0;
 }
 
 .nx-ur-modal__footer .nx-ur-btn {
   min-width: 96px;
 }
 
+.nx-ur-modal .nx-btn-secondary {
+  border: 1px solid #c9d9ec;
+  background: #ffffff;
+  color: #123756;
+}
+
+.nx-ur-modal .nx-btn-secondary:hover:not(:disabled) {
+  border-color: #268cff;
+  background: rgba(38, 140, 255, 0.08);
+}
+
 .nx-ur-modal__title {
   margin: 0;
+  color: #102a4c;
   font-size: 16px;
   font-weight: 700;
 }
 
 .nx-ur-modal__subtitle {
-  color: #6b7280;
+  color: #58708e;
   font-size: 13px;
 }
 
 .nx-ur-modal__close {
   width: 28px;
   height: 28px;
-  border: 1px solid #d1d5db;
+  border: 1px solid #c9d9ec;
   border-radius: 6px;
-  background: #fff;
-  color: #374151;
+  background: #ffffff;
+  color: #123756;
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
+}
+
+.nx-ur-modal__close:hover {
+  border-color: #268cff;
+  background: rgba(38, 140, 255, 0.08);
 }
 
 .nx-ur-modal__body {
@@ -345,6 +483,7 @@
   gap: 4px;
   font-size: 13px;
   font-weight: 600;
+  color: #102a4c;
 }
 
 .nx-ur-field--wide {
@@ -354,11 +493,21 @@
 .nx-ur-field input,
 .nx-ur-field select,
 .nx-ur-search {
-  padding: 8px 10px;
-  border: 1px solid #d1d5db;
+  padding: 7px 10px;
+  border: 1px solid #c9d9ec;
   border-radius: 6px;
+  background: #ffffff;
+  color: #102a4c;
   font-size: 14px;
   font-weight: 400;
+}
+
+.nx-ur-field input:focus-visible,
+.nx-ur-field select:focus-visible,
+.nx-ur-search:focus-visible {
+  outline: none;
+  border-color: #00cfef;
+  box-shadow: 0 0 0 3px rgba(0, 207, 239, 0.18);
 }
 
 .nx-ur-choice {
@@ -371,15 +520,20 @@
   display: flex;
   gap: 10px;
   align-items: flex-start;
-  padding: 10px 12px;
-  border: 1px solid #e5e7eb;
+  padding: 8px 12px;
+  border: 1px solid #d5e2f0;
   border-radius: 8px;
+  background: #ffffff;
   cursor: pointer;
+}
+
+.nx-ur-choice__item:hover {
+  border-color: #268cff;
 }
 
 .nx-ur-choice__item small {
   display: block;
-  color: #6b7280;
+  color: #58708e;
   font-size: 12.5px;
 }
 
@@ -397,8 +551,9 @@
 .nx-ur-list {
   max-height: 320px;
   overflow-y: auto;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #d5e2f0;
   border-radius: 8px;
+  background: #ffffff;
 }
 
 .nx-ur-list__row {
@@ -408,10 +563,14 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
-  border-bottom: 1px solid #f3f4f6;
+  padding: 7px 12px;
+  border-bottom: 1px solid #e3edf7;
   font-size: 14px;
   cursor: pointer;
+}
+
+.nx-ur-list__row:hover {
+  background: rgba(38, 140, 255, 0.08);
 }
 
 .nx-ur-list__row:last-child {
@@ -423,6 +582,6 @@
 }
 
 .nx-ur-list__meta {
-  color: #6b7280;
+  color: #58708e;
   font-size: 12.5px;
 }

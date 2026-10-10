@@ -135,7 +135,7 @@ export function UsersRoles() {
         {data?.available_actions.invite_member ? (
           <button
             type="button"
-            className="nx-btn nx-btn-primary nx-ur-btn"
+            className="nx-btn nx-ur-btn nx-ur-btn--primary"
             onClick={() => {
               setInviteRole(data.invite_roles[0]?.code ?? '');
               setShowInvite(true);
@@ -171,7 +171,7 @@ export function UsersRoles() {
               ))}
             </select>
           </label>
-          <button type="submit" className="nx-btn nx-btn-primary nx-ur-btn" disabled={inviteBusy}>
+          <button type="submit" className="nx-btn nx-ur-btn nx-ur-btn--primary" disabled={inviteBusy}>
             {inviteBusy ? T('sending') : T('send_invitation')}
           </button>
           <button type="button" className="nx-btn nx-btn-secondary nx-ur-btn" onClick={() => setShowInvite(false)}>
@@ -182,116 +182,155 @@ export function UsersRoles() {
 
       {data ? (
         <>
-          <div className="nx-ur-grid nx-ur-head" aria-hidden="true">
-            <div>{T('name')}</div>
-            <div>{T('role')}</div>
-            <div>{T('clients')}</div>
-            <div>{T('modules')}</div>
-            <div>{T('start_date')}</div>
-            <div>{T('status')}</div>
-            <div />
+          <div className="nx-ur-sheet">
+            <div className="nx-ur-table-scroll">
+              <table className="nx-ur-table">
+                <thead>
+                  <tr>
+                    <th>{T('name')}</th>
+                    <th>{T('role')}</th>
+                    <th>{T('clients')}</th>
+                    <th>{T('modules')}</th>
+                    <th>{T('start_date')}</th>
+                    <th>{T('status')}</th>
+                    <th className="nx-ur-th--actions">{T('actions')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.members.map((m) => (
+                    <tr key={m.member_id} className={m.membership.status.code === 'active' ? '' : 'is-closed'}>
+                      <td className="nx-ur-td--name">
+                        <div className="nx-ur-name">
+                          {m.profile.display_name}
+                          {m.is_self ? <span className="nx-ur-you">{T('you')}</span> : null}
+                        </div>
+                        {m.profile.email && m.profile.email !== m.profile.display_name ? (
+                          <div className="nx-ur-sub nx-ur-ltr">{m.profile.email}</div>
+                        ) : null}
+                        {m.profile.phone ? <div className="nx-ur-sub nx-ur-ltr">{m.profile.phone}</div> : null}
+                      </td>
+                      <td>{m.role.label}</td>
+                      <td>{m.client_access.summary}</td>
+                      <td>{m.module_access.summary}</td>
+                      <td className="nx-ur-ltr">{m.membership.start_date ?? '—'}</td>
+                      <td>
+                        <span className={`nx-ur-badge nx-ur-badge--${m.membership.status.code}`}>
+                          {m.membership.status.label}
+                        </span>
+                      </td>
+                      <td className="nx-ur-td--actions">
+                        <div className="nx-ur-actions">
+                          {m.available_actions.edit_profile ? (
+                            <button
+                              type="button"
+                              className="nx-btn nx-btn-secondary nx-ur-btn nx-ur-btn--sm nx-ur-btn--action"
+                              onClick={() => setModal({ kind: 'profile', memberId: m.member_id })}
+                            >
+                              {T('edit_details')}
+                            </button>
+                          ) : null}
+                          {m.available_actions.manage_clients ? (
+                            <button
+                              type="button"
+                              className="nx-btn nx-btn-secondary nx-ur-btn nx-ur-btn--sm nx-ur-btn--action"
+                              onClick={() => setModal({ kind: 'clients', memberId: m.member_id })}
+                            >
+                              {T('manage_clients')}
+                            </button>
+                          ) : null}
+                          {m.available_actions.manage_modules ? (
+                            <button
+                              type="button"
+                              className="nx-btn nx-btn-secondary nx-ur-btn nx-ur-btn--sm nx-ur-btn--action"
+                              onClick={() => setModal({ kind: 'modules', memberId: m.member_id })}
+                            >
+                              {T('manage_modules')}
+                            </button>
+                          ) : null}
+                          {m.available_actions.close_access ? (
+                            <button
+                              type="button"
+                              className="nx-btn nx-ur-btn nx-ur-btn--sm nx-ur-btn--action nx-ur-btn--danger"
+                              onClick={() => setModal({ kind: 'close', memberId: m.member_id })}
+                            >
+                              {T('close_access')}
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {data.members.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="nx-ur-td--empty">
+                        {T('no_members')}
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          {data.members.map((m) => (
-            <div
-              key={m.member_id}
-              className={`nx-ur-grid nx-ur-row${m.membership.status.code === 'active' ? '' : ' nx-ur-row--closed'}`}
-            >
-              <div>
-                <div className="nx-ur-name">
-                  {m.profile.display_name}
-                  {m.is_self ? <span className="nx-ur-you">{T('you')}</span> : null}
-                </div>
-                {m.profile.email && m.profile.email !== m.profile.display_name ? (
-                  <div className="nx-ur-sub nx-ur-ltr">{m.profile.email}</div>
-                ) : null}
-                {m.profile.phone ? <div className="nx-ur-sub nx-ur-ltr">{m.profile.phone}</div> : null}
-              </div>
-              <div className="nx-ur-cell">{m.role.label}</div>
-              <div className="nx-ur-cell">{m.client_access.summary}</div>
-              <div className="nx-ur-cell">{m.module_access.summary}</div>
-              <div className="nx-ur-cell nx-ur-ltr">{m.membership.start_date ?? '—'}</div>
-              <div>
-                <span className={`nx-ur-badge nx-ur-badge--${m.membership.status.code}`}>
-                  {m.membership.status.label}
-                </span>
-              </div>
-              <div className="nx-ur-actions">
-                {m.available_actions.edit_profile ? (
-                  <button
-                    type="button"
-                    className="nx-btn nx-btn-secondary nx-ur-btn nx-ur-btn--sm nx-ur-btn--action"
-                    onClick={() => setModal({ kind: 'profile', memberId: m.member_id })}
-                  >
-                    {T('edit_details')}
-                  </button>
-                ) : null}
-                {m.available_actions.manage_clients ? (
-                  <button
-                    type="button"
-                    className="nx-btn nx-btn-secondary nx-ur-btn nx-ur-btn--sm nx-ur-btn--action"
-                    onClick={() => setModal({ kind: 'clients', memberId: m.member_id })}
-                  >
-                    {T('manage_clients')}
-                  </button>
-                ) : null}
-                {m.available_actions.manage_modules ? (
-                  <button
-                    type="button"
-                    className="nx-btn nx-btn-secondary nx-ur-btn nx-ur-btn--sm nx-ur-btn--action"
-                    onClick={() => setModal({ kind: 'modules', memberId: m.member_id })}
-                  >
-                    {T('manage_modules')}
-                  </button>
-                ) : null}
-                {m.available_actions.close_access ? (
-                  <button
-                    type="button"
-                    className="nx-btn nx-ur-btn nx-ur-btn--sm nx-ur-btn--action nx-ur-btn--danger"
-                    onClick={() => setModal({ kind: 'close', memberId: m.member_id })}
-                  >
-                    {T('close_access')}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          ))}
-          {data.members.length === 0 ? <p className="nx-ur-empty">{T('no_members')}</p> : null}
-
           <h2 className="nx-ur-section-title">{T('invitations')}</h2>
-          {data.invitations.map((inv) => (
-            <div key={inv.invitation_id} className="nx-ur-invite-row">
-              <div className="nx-ur-cell nx-ur-ltr">{inv.email}</div>
-              <div className="nx-ur-cell">{inv.role.label}</div>
-              <div>
-                <span className={`nx-ur-badge nx-ur-badge--${inv.status.code}`}>{inv.status.label}</span>
-              </div>
-              <div className="nx-ur-sub">{inv.sent_summary}</div>
-              <div className="nx-ur-actions">
-                {inv.available_actions.resend ? (
-                  <button
-                    type="button"
-                    className="nx-btn nx-btn-secondary nx-ur-btn nx-ur-btn--sm nx-ur-btn--action"
-                    disabled={inviteRowBusy === inv.invitation_id}
-                    onClick={() => resendInvite(inv.invitation_id)}
-                  >
-                    {T('resend')}
-                  </button>
-                ) : null}
-                {inv.available_actions.cancel ? (
-                  <button
-                    type="button"
-                    className="nx-btn nx-ur-btn nx-ur-btn--sm nx-ur-btn--action nx-ur-btn--danger"
-                    disabled={inviteRowBusy === inv.invitation_id}
-                    onClick={() => cancelInvite(inv.invitation_id, inv.cancel_confirm)}
-                  >
-                    {T('cancel')}
-                  </button>
-                ) : null}
-              </div>
+          <div className="nx-ur-sheet">
+            <div className="nx-ur-table-scroll">
+              <table className="nx-ur-table">
+                <thead>
+                  <tr>
+                    <th>{T('email')}</th>
+                    <th>{T('role')}</th>
+                    <th>{T('status')}</th>
+                    <th>{T('last_sent')}</th>
+                    <th className="nx-ur-th--actions">{T('actions')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.invitations.map((inv) => (
+                    <tr key={inv.invitation_id}>
+                      <td className="nx-ur-ltr">{inv.email}</td>
+                      <td>{inv.role.label}</td>
+                      <td>
+                        <span className={`nx-ur-badge nx-ur-badge--${inv.status.code}`}>{inv.status.label}</span>
+                      </td>
+                      <td className="nx-ur-sub">{inv.sent_summary}</td>
+                      <td className="nx-ur-td--actions">
+                        <div className="nx-ur-actions">
+                          {inv.available_actions.resend ? (
+                            <button
+                              type="button"
+                              className="nx-btn nx-btn-secondary nx-ur-btn nx-ur-btn--sm nx-ur-btn--action"
+                              disabled={inviteRowBusy === inv.invitation_id}
+                              onClick={() => resendInvite(inv.invitation_id)}
+                            >
+                              {T('resend')}
+                            </button>
+                          ) : null}
+                          {inv.available_actions.cancel ? (
+                            <button
+                              type="button"
+                              className="nx-btn nx-ur-btn nx-ur-btn--sm nx-ur-btn--action nx-ur-btn--danger"
+                              disabled={inviteRowBusy === inv.invitation_id}
+                              onClick={() => cancelInvite(inv.invitation_id, inv.cancel_confirm)}
+                            >
+                              {T('cancel')}
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {data.invitations.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="nx-ur-td--empty">
+                        {T('no_invitations')}
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
             </div>
-          ))}
-          {data.invitations.length === 0 ? <p className="nx-ur-muted">{T('no_invitations')}</p> : null}
+          </div>
         </>
       ) : !error ? (
         <p className="nx-ur-empty">…</p>
