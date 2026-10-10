@@ -126,7 +126,7 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
     supabaseAdmin.from('organizations').select('timezone').eq('id', orgId).maybeSingle(),
     supabaseAdmin
       .from('organization_memberships')
-      .select('id, user_id, role_code, status, joined_at, users(email, full_name)')
+      .select('id, user_id, role_code, status, joined_at, users!organization_memberships_user_id_fkey(email, full_name)')
       .eq('organization_id', orgId)
       .in('status', ['active', 'invited', 'revoked']),
     supabaseAdmin

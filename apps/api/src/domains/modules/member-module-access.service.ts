@@ -191,7 +191,7 @@ export async function buildMemberModuleAssignabilityAggregate(
 
   const { data: target, error: targetError } = await supabaseAdmin
     .from('organization_memberships')
-    .select('id, user_id, role_code, status, users(email, full_name)')
+    .select('id, user_id, role_code, status, users!organization_memberships_user_id_fkey(email, full_name)')
     .eq('organization_id', orgId)
     .eq('id', targetId)
     .maybeSingle();

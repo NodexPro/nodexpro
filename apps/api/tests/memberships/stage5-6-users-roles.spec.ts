@@ -354,3 +354,23 @@ test('23. Migrations 184-186 exist and 187 is the next additive migration', () =
   }
   assert.equal(names.filter((n) => n.startsWith('187_')).length, 1);
 });
+
+test('24. organization_memberships has two FKs to users (user_id, invited_by): embeds must name user_id', () => {
+  const migration021 = readRepo('supabase/migrations/021_rbac_organization_memberships.sql');
+  assert.match(migration021, /user_id uuid not null references public\.users\(id\)/);
+  assert.match(migration021, /invited_by uuid references public\.users\(id\)/);
+  for (const rel of [
+    'apps/api/src/domains/memberships/users-roles-aggregate.service.ts',
+    'apps/api/src/domains/modules/member-module-access.service.ts',
+    'apps/api/src/domains/memberships/memberships-rbac.service.ts',
+  ]) {
+    const src = readRepo(rel);
+    assert.match(src, /users!organization_memberships_user_id_fkey\(/, `${rel}: explicit user_id relation`);
+    // An unhinted `users(...)` embed on organization_memberships is ambiguous in PostgREST (PGRST201 -> 500).
+    assert.doesNotMatch(
+      src,
+      /from\('organization_memberships'\)\s*\.select\(\s*'[^']*[ ,]users\(/,
+      `${rel}: ambiguous users(...) embed on organization_memberships`,
+    );
+  }
+});

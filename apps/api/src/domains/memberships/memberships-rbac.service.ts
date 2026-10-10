@@ -41,11 +41,14 @@ export async function listMembersRbac(ctx: RequestContext, orgId: string) {
   if (ctx.organizationId !== orgId) throw forbidden('Organization context required');
   requireRbacPermission(ctx, orgId, RBAC_PERMISSIONS.view_users);
 
-  let { data } = await supabaseAdmin
+  const { data, error: membersError } = await supabaseAdmin
     .from('organization_memberships')
-    .select('id, user_id, role_code, status, invited_at, joined_at, users(id, email, full_name)')
+    .select(
+      'id, user_id, role_code, status, invited_at, joined_at, users!organization_memberships_user_id_fkey(id, email, full_name)',
+    )
     .eq('organization_id', orgId)
     .eq('status', 'active');
+  if (membersError) throw membersError;
 
   // Legacy OU fallback only when this org has ZERO canonical membership rows
   // (including revoked). Never when canonical revoked members exist — that would
