@@ -31,13 +31,11 @@ export function moduleClientOperationsTodoArchive(params?: ClientOperationsTodoW
   page?: number | null;
   q?: string | null;
   filter_priority?: string | null;
-  filter_assignee?: string | null;
 }): string {
   const sp = new URLSearchParams();
   if (params?.page && params.page > 1) sp.set('page', String(params.page));
   if (params?.q?.trim()) sp.set('q', params.q.trim());
   if (params?.filter_priority?.trim()) sp.set('filter_priority', params.filter_priority.trim());
-  if (params?.filter_assignee?.trim()) sp.set('filter_assignee', params.filter_assignee.trim());
   appendWs(sp, params);
   const qs = sp.toString();
   return qs ? `/m/client-operations/todo/archive?${qs}` : '/m/client-operations/todo/archive';
@@ -55,15 +53,6 @@ export function moduleClientOperationsTodoClientOptions(params?: ClientOperation
   return qs
     ? `/m/client-operations/todo/client-options?${qs}`
     : '/m/client-operations/todo/client-options';
-}
-
-export function moduleClientOperationsTodoAssigneeOptions(params: ClientOperationsTodoWorkspaceQuery & {
-  client_id: string;
-}): string {
-  const sp = new URLSearchParams();
-  sp.set('client_id', params.client_id);
-  appendWs(sp, params);
-  return `/m/client-operations/todo/assignee-options?${sp.toString()}`;
 }
 
 export function moduleClientOperationsTodoCommands(): string {

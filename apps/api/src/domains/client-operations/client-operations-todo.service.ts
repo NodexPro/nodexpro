@@ -106,10 +106,6 @@ export type ClientOperationsTodoBoardAggregate = {
     search_endpoint: 'todo_client_options';
     note_he: string;
   };
-  available_assignees_hint: {
-    search_endpoint: 'todo_assignee_options';
-    note_he: string;
-  };
   allowed_actions: string[];
   query: {
     page: number;
@@ -130,7 +126,6 @@ export type ClientOperationsTodoArchiveAggregate = {
     page: number;
     q: string | null;
     filter_priority: string | null;
-    filter_assignee: string | null;
     workspace_scope: string | null;
     workspace_subject_user_id: string | null;
   };
@@ -140,12 +135,6 @@ export type ClientOperationsTodoClientOption = {
   client_id: string;
   display_name: string | null;
   tax_id: string | null;
-};
-
-export type ClientOperationsTodoAssigneeOption = {
-  user_id: string;
-  display_name: string;
-  role_code: string;
 };
 
 function mapPriorityError(e: unknown): never {
@@ -198,10 +187,22 @@ async function resolveWorkspace(
   return { orgId, workspace, materializationAccess };
 }
 
-/** Workspace assignee filter for board/archive task lists. */
-function workspaceAssigneeFilter(workspace: ClientOperationsWorkspaceResolution): string | null {
-  if (workspace.scope_kind === 'OFFICE') return null;
-  return workspace.workspace_subject_user_id;
+/**
+ * ToDo board owner (subject) for the selected workspace. A ToDo board is ALWAYS private to one user:
+ *  - STAFF: the selected employee (validated by the workspace resolver; actor stays the viewer)
+ *  - MY: the viewer
+ *  - OFFICE (Owner/Admin own workspace): the viewer — the office client scope is NOT a shared ToDo board.
+ * `assigned_to_user_id` (migration 182) is the canonical stored owner; it is derived here, never client-supplied.
+ */
+export function todoBoardSubjectUserId(workspace: {
+  scope_kind: 'OFFICE' | 'MY' | 'STAFF';
+  viewer_user_id: string;
+  workspace_subject_user_id: string | null;
+}): string {
+  if (workspace.scope_kind !== 'OFFICE' && workspace.workspace_subject_user_id) {
+    return workspace.workspace_subject_user_id;
+  }
+  return workspace.viewer_user_id;
 }
 
 function taskMatchesWorkspaceProjection(
@@ -209,8 +210,7 @@ function taskMatchesWorkspaceProjection(
   workspace: ClientOperationsWorkspaceResolution,
   materializationAccess: OrganizationClientAccessScope,
 ): boolean {
-  const assigneeFilter = workspaceAssigneeFilter(workspace);
-  if (assigneeFilter && task.assigned_to_user_id !== assigneeFilter) return false;
+  if (task.assigned_to_user_id !== todoBoardSubjectUserId(workspace)) return false;
   if (!clientIdIsAuthorized(materializationAccess, task.client_id)) return false;
   return true;
 }
@@ -439,10 +439,6 @@ export async function getClientOperationsTodoBoard(
       search_endpoint: 'todo_client_options',
       note_he: 'חיפוש לקוחות מורשה לפי מרחב העבודה',
     },
-    available_assignees_hint: {
-      search_endpoint: 'todo_assignee_options',
-      note_he: 'אפשרויות אחראי לפי לקוח ומרחב עבודה',
-    },
     allowed_actions: boardAllowedActions(ctx),
     query: {
       page: pagination.page,
@@ -464,15 +460,12 @@ export async function getClientOperationsTodoArchive(
     page?: unknown;
     q?: string | null;
     filter_priority?: string | null;
-    filter_assignee?: string | null;
   } = {},
 ): Promise<ClientOperationsTodoArchiveAggregate> {
   const { orgId, workspace, materializationAccess } = await resolveWorkspace(ctx, query);
   const pageReq = normalizeTodoPage(query.page);
   const q = String(query.q ?? '').trim().toLowerCase();
   const filterPriorityRaw = String(query.filter_priority ?? '').trim();
-  const filterAssignee = String(query.filter_assignee ?? '').trim() || null;
-
   let filterPriority: number | null | 'none' | undefined;
   if (!filterPriorityRaw || filterPriorityRaw === 'all') filterPriority = undefined;
   else if (filterPriorityRaw === 'none') filterPriority = 'none';
@@ -489,9 +482,6 @@ export async function getClientOperationsTodoArchive(
   );
   let scoped = filterTodosForWorkspace(allDone, workspace, materializationAccess);
 
-  if (filterAssignee) {
-    scoped = scoped.filter((r) => r.assigned_to_user_id === filterAssignee);
-  }
   if (filterPriority === 'none') {
     scoped = scoped.filter((r) => r.priority == null);
   } else if (typeof filterPriority === 'number') {
@@ -550,7 +540,6 @@ export async function getClientOperationsTodoArchive(
       page: pagination.page,
       q: q || null,
       filter_priority: filterPriorityRaw || null,
-      filter_assignee: filterAssignee,
       workspace_scope:
         workspace.scope_kind === 'OFFICE'
           ? 'office'
@@ -605,74 +594,7 @@ export async function searchClientOperationsTodoClientOptions(
   };
 }
 
-/**
- * Assignees eligible for a client under current workspace + Stage 3 access.
- * Staff: self only. Owner/Admin OFFICE: eligible members who can access client.
- * Owner/Admin MY/STAFF: typically workspace subject (and self if office manager).
- */
-export async function listClientOperationsTodoAssigneeOptions(
-  ctx: RequestContext,
-  query: ClientOperationsWorkspaceRequested & { client_id?: string | null } = {},
-): Promise<{ options: ClientOperationsTodoAssigneeOption[]; default_assignee_user_id: string | null }> {
-  const { orgId, workspace } = await resolveWorkspace(ctx, query);
-  const clientId = String(query.client_id ?? '').trim();
-  if (!clientId) throw badRequest('client_id required', 'TODO_CLIENT_REQUIRED');
-
-  await assertCanAccessClientFromContext(ctx, clientId);
-
-  const role = ctx.membership?.roleCode ?? null;
-  const isOfficeManager = roleHasOfficeClientAccess(role);
-  const eligible = await listActiveHandlerEligibleMembers(orgId);
-
-  const canAccessClientAsAssignee = async (userId: string, roleCode: string): Promise<boolean> => {
-    const scope = await resolveOrganizationClientAccessScope({
-      organizationId: orgId,
-      viewerUserId: userId,
-      roleCode,
-    });
-    if (!clientIdIsAuthorized(scope, clientId)) return false;
-    if (scope.kind === 'OFFICE') return true;
-    const { data } = await supabaseAdmin
-      .from('clients')
-      .select('id')
-      .eq('organization_id', orgId)
-      .eq('id', clientId)
-      .eq('is_archived', false)
-      .maybeSingle();
-    return Boolean(data);
-  };
-
-  let candidates = eligible;
-  if (!isOfficeManager) {
-    candidates = eligible.filter((m) => m.user_id === ctx.user.id);
-  } else if (workspace.scope_kind !== 'OFFICE') {
-    const subject = workspace.workspace_subject_user_id;
-    // Subject + other office managers who retain access; Staff only subject unless reassignment.
-    candidates = eligible.filter(
-      (m) => m.user_id === subject || roleHasOfficeClientAccess(m.role_code),
-    );
-  }
-
-  const options: ClientOperationsTodoAssigneeOption[] = [];
-  for (const m of candidates) {
-    if (!(await canAccessClientAsAssignee(m.user_id, m.role_code))) continue;
-    options.push({
-      user_id: m.user_id,
-      display_name: m.display_name,
-      role_code: m.role_code,
-    });
-  }
-
-  let default_assignee_user_id: string | null = null;
-  if (workspace.scope_kind === 'OFFICE') {
-    default_assignee_user_id = null; // require explicit
-  } else {
-    default_assignee_user_id = workspace.workspace_subject_user_id;
-  }
-
-  return { options, default_assignee_user_id };
-}
-
+/** The ToDo owner (stored in assigned_to_user_id) must be able to see the client of the ToDo. */
 async function assertAssigneeCanAccessClient(params: {
   organizationId: string;
   assigneeUserId: string;
@@ -737,41 +659,12 @@ function assertCanMutateTodo(params: {
   }
 }
 
-function resolveCreateAssignee(params: {
-  ctx: RequestContext;
-  workspace: ClientOperationsWorkspaceResolution;
-  requestedAssignee: string | null;
-}): string {
-  const { ctx, workspace, requestedAssignee } = params;
-  const isOfficeManager = roleHasOfficeClientAccess(ctx.membership?.roleCode);
-
-  if (!isOfficeManager) {
-    // Staff: self only.
-    if (requestedAssignee && requestedAssignee !== ctx.user.id) {
-      throw forbidden('Staff may only assign ToDo to self', 'TODO_ASSIGNEE_FORBIDDEN');
-    }
-    return ctx.user.id;
-  }
-
-  if (workspace.scope_kind === 'OFFICE') {
-    if (!requestedAssignee) {
-      throw badRequest('assigned_to_user_id required in OFFICE workspace', 'TODO_ASSIGNEE_REQUIRED');
-    }
-    return requestedAssignee;
-  }
-
-  // MY / STAFF: default workspace subject; allow explicit override among permitted.
-  const defaultAssignee = workspace.workspace_subject_user_id ?? ctx.user.id;
-  return requestedAssignee || defaultAssignee;
-}
-
 export async function createClientOperationsTodo(
   ctx: RequestContext,
   body: {
     client_id?: unknown;
     task_text?: unknown;
     priority?: unknown;
-    assigned_to_user_id?: unknown;
     workspace_scope?: unknown;
     workspace_subject_user_id?: unknown;
     page?: unknown;
@@ -798,15 +691,8 @@ export async function createClientOperationsTodo(
   const taskText = safeNormalizeText(body.task_text);
   const priority =
     body.priority === undefined ? null : safeNormalizePriority(body.priority === '' ? null : body.priority);
-  const requestedAssigneeRaw =
-    body.assigned_to_user_id == null || body.assigned_to_user_id === undefined
-      ? null
-      : String(body.assigned_to_user_id).trim() || null;
-  const assigneeId = resolveCreateAssignee({
-    ctx,
-    workspace,
-    requestedAssignee: requestedAssigneeRaw,
-  });
+  // Ownership is derived from the authorized workspace — a client-supplied assignee is never read.
+  const assigneeId = todoBoardSubjectUserId(workspace);
 
   await assertAssigneeCanAccessClient({
     organizationId: orgId,
@@ -860,7 +746,6 @@ export async function updateClientOperationsTodo(
     todo_id?: unknown;
     task_text?: unknown;
     priority?: unknown;
-    assigned_to_user_id?: unknown;
     workspace_scope?: unknown;
     workspace_subject_user_id?: unknown;
     page?: unknown;
@@ -886,7 +771,6 @@ export async function updateClientOperationsTodo(
   };
   const before: Record<string, unknown> = {};
   const after: Record<string, unknown> = {};
-  let reassigned = false;
 
   if (body.task_text !== undefined) {
     const text = safeNormalizeText(body.task_text);
@@ -904,25 +788,7 @@ export async function updateClientOperationsTodo(
       patch.priority = priority;
     }
   }
-  if (body.assigned_to_user_id !== undefined) {
-    const isOfficeManager = roleHasOfficeClientAccess(ctx.membership?.roleCode);
-    if (!isOfficeManager) {
-      throw forbidden('Staff cannot reassign ToDo', 'TODO_REASSIGN_FORBIDDEN');
-    }
-    const nextAssignee = String(body.assigned_to_user_id ?? '').trim();
-    if (!nextAssignee) throw badRequest('assigned_to_user_id required', 'TODO_ASSIGNEE_REQUIRED');
-    if (nextAssignee !== task.assigned_to_user_id) {
-      await assertAssigneeCanAccessClient({
-        organizationId: orgId,
-        assigneeUserId: nextAssignee,
-        clientId: task.client_id,
-      });
-      before.assigned_to_user_id = task.assigned_to_user_id;
-      after.assigned_to_user_id = nextAssignee;
-      patch.assigned_to_user_id = nextAssignee;
-      reassigned = true;
-    }
-  }
+  // Ownership never changes through ToDo commands: the board owner is the workspace subject (no reassignment).
 
   if (Object.keys(after).length === 0) {
     return getClientOperationsTodoBoard(ctx, { ...requested, page: body.page, q: typeof body.q === 'string' ? body.q : null });
@@ -941,9 +807,7 @@ export async function updateClientOperationsTodo(
     moduleCode: 'client-operations',
     entityType: 'client_operations_todo',
     entityId: todoId,
-    action: reassigned
-      ? AUDIT_ACTIONS.CLIENT_OPERATIONS_TODO_REASSIGNED
-      : AUDIT_ACTIONS.CLIENT_OPERATIONS_TODO_UPDATED,
+    action: AUDIT_ACTIONS.CLIENT_OPERATIONS_TODO_UPDATED,
     payload: {
       todo_id: todoId,
       client_id: task.client_id,
@@ -1067,8 +931,6 @@ export async function reopenClientOperationsTodo(
           q: typeof body.q === 'string' ? body.q : typeof qObj.q === 'string' ? qObj.q : null,
           filter_priority:
             typeof qObj.filter_priority === 'string' ? qObj.filter_priority : null,
-          filter_assignee:
-            typeof qObj.filter_assignee === 'string' ? qObj.filter_assignee : null,
         }),
       ]);
       return { board, archive };
@@ -1116,8 +978,6 @@ export async function reopenClientOperationsTodo(
         q: typeof body.q === 'string' ? body.q : typeof qObj.q === 'string' ? qObj.q : null,
         filter_priority:
           typeof qObj.filter_priority === 'string' ? qObj.filter_priority : null,
-        filter_assignee:
-          typeof qObj.filter_assignee === 'string' ? qObj.filter_assignee : null,
       }),
     ]);
     return { board, archive };
@@ -1131,7 +991,6 @@ export type ClientOperationsTodoCommandBody = {
   client_id?: unknown;
   task_text?: unknown;
   priority?: unknown;
-  assigned_to_user_id?: unknown;
   workspace_scope?: unknown;
   workspace_subject_user_id?: unknown;
   page?: unknown;

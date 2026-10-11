@@ -24,7 +24,6 @@ import {
 } from '../../lib/client-operations-todo-board.pure';
 import {
   moduleClientOperationsTodoArchive,
-  moduleClientOperationsTodoAssigneeOptions,
   moduleClientOperationsTodoBoard,
   moduleClientOperationsTodoClientOptions,
   moduleClientOperationsTodoCommands,
@@ -37,7 +36,6 @@ export type ClientOperationsTodoCard = {
   task_text: string;
   priority: 1 | 2 | 3 | 4 | null;
   priority_presentation_token?: string;
-  assigned_to: { user_id: string; display_name: string };
   created_at: string;
   created_by?: { user_id: string | null; display_name: string | null };
   completed_at: string | null;
@@ -90,7 +88,6 @@ export type ClientOperationsTodoArchiveAggregate = {
     page: number;
     q: string | null;
     filter_priority: string | null;
-    filter_assignee: string | null;
   };
 };
 
@@ -512,7 +509,6 @@ export function ClientOperationsTodoBoardModal({
                         key={task.id}
                         task={task}
                         accent={lane.accent}
-                        showAssignee={board?.workspace?.scope_kind === 'OFFICE'}
                         busy={busyTodoId === task.id}
                         onDoubleClick={() => setEditTask(task)}
                         onComplete={() => void onComplete(task)}
@@ -530,7 +526,6 @@ export function ClientOperationsTodoBoardModal({
         <TodoFormModal
           mode="create"
           workspaceQuery={workspaceQuery}
-          workspaceScopeKind={board?.workspace?.scope_kind ?? null}
           onClose={() => setCreateOpen(false)}
           onSaved={(agg) => {
             applyBoardAggregate(agg);
@@ -544,7 +539,6 @@ export function ClientOperationsTodoBoardModal({
           mode="edit"
           task={editTask}
           workspaceQuery={workspaceQuery}
-          workspaceScopeKind={board?.workspace?.scope_kind ?? null}
           onClose={() => setEditTask(null)}
           onSaved={(agg) => {
             applyBoardAggregate(agg);
@@ -627,7 +621,6 @@ export function ClientOperationsTodoBoardModal({
                       <th>ת.ז./ח.פ.</th>
                       <th>משימה</th>
                       <th>עדיפות</th>
-                      <th>מטפל</th>
                       <th>נוצר בתאריך</th>
                       <th>הושלם בתאריך</th>
                       <th>הושלם על ידי</th>
@@ -645,7 +638,6 @@ export function ClientOperationsTodoBoardModal({
                             {formatTodoPriorityLabelHe(t.priority)}
                           </span>
                         </td>
-                        <td>{t.assigned_to.display_name}</td>
                         <td>{formatDateHe(t.created_at)}</td>
                         <td>{formatDateHe(t.completed_at)}</td>
                         <td>{t.completed_by?.display_name ?? '—'}</td>
@@ -701,12 +693,11 @@ export function ClientOperationsTodoBoardModal({
 function TodoStickyCard(props: {
   task: ClientOperationsTodoCard;
   accent: 'red' | 'orange' | 'gold' | 'green' | 'blue';
-  showAssignee: boolean;
   busy: boolean;
   onDoubleClick: () => void;
   onComplete: () => void;
 }) {
-  const { task, accent, showAssignee, busy, onDoubleClick, onComplete } = props;
+  const { task, accent, busy, onDoubleClick, onComplete } = props;
   const canComplete = task.allowed_actions.includes('complete_client_operations_todo');
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -736,9 +727,6 @@ function TodoStickyCard(props: {
       <div className="nx-co-todo-sticky__tax">{task.client.tax_id ?? '—'}</div>
       <div className="nx-co-todo-sticky__text">{task.task_text}</div>
       <div className="nx-co-todo-sticky__date">{formatDateHe(task.created_at)}</div>
-      {showAssignee ? (
-        <div className="nx-co-todo-sticky__meta">{task.assigned_to.display_name}</div>
-      ) : null}
       {canComplete ? (
         <button
           type="button"
@@ -762,12 +750,11 @@ function TodoFormModal(props: {
   mode: 'create' | 'edit';
   task?: ClientOperationsTodoCard;
   workspaceQuery: ClientOperationsTodoWorkspaceQuery;
-  workspaceScopeKind: string | null;
   onClose: () => void;
   onSaved: (agg: ClientOperationsTodoBoardAggregate) => void;
   onCompleted?: (agg: ClientOperationsTodoBoardAggregate) => void;
 }) {
-  const { mode, task, workspaceQuery, workspaceScopeKind, onClose, onSaved, onCompleted } = props;
+  const { mode, task, workspaceQuery, onClose, onSaved, onCompleted } = props;
   const [clientId, setClientId] = useState(task?.client.id ?? '');
   const [clientLabel, setClientLabel] = useState(task?.client.display_name ?? '');
   const [taxId, setTaxId] = useState(task?.client.tax_id ?? '');
@@ -775,20 +762,12 @@ function TodoFormModal(props: {
   const [clientOptions, setClientOptions] = useState<
     Array<{ client_id: string; display_name: string | null; tax_id: string | null }>
   >([]);
-  const [assigneeId, setAssigneeId] = useState(task?.assigned_to.user_id ?? '');
-  const [assigneeOptions, setAssigneeOptions] = useState<
-    Array<{ user_id: string; display_name: string; role_code: string }>
-  >([]);
-  const [defaultAssignee, setDefaultAssignee] = useState<string | null>(null);
   const [taskText, setTaskText] = useState(task?.task_text ?? '');
   const [priority, setPriority] = useState(
     task?.priority == null ? 'none' : String(task.priority),
   );
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
-  const isOffice = workspaceScopeKind === 'OFFICE';
-  const showAssigneeSelect = mode === 'create' ? true : task?.allowed_actions.includes('update_client_operations_todo') === true;
-
   useEffect(() => {
     if (mode !== 'create') return;
     let cancelled = false;
@@ -815,40 +794,6 @@ function TodoFormModal(props: {
     };
   }, [clientQ, mode, workspaceQuery]);
 
-  useEffect(() => {
-    if (!clientId || !showAssigneeSelect) return;
-    let cancelled = false;
-    void apiJson<{
-      options: Array<{ user_id: string; display_name: string; role_code: string }>;
-      default_assignee_user_id: string | null;
-    }>(
-      moduleClientOperationsTodoAssigneeOptions({
-        ...workspaceQuery,
-        client_id: clientId,
-      }),
-    )
-      .then((res) => {
-        if (cancelled) return;
-        setAssigneeOptions(res.options ?? []);
-        setDefaultAssignee(res.default_assignee_user_id);
-        if (mode === 'create') {
-          if (res.default_assignee_user_id) setAssigneeId(res.default_assignee_user_id);
-          else if ((res.options ?? []).length === 1) setAssigneeId(res.options[0]!.user_id);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setAssigneeOptions([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [clientId, showAssigneeSelect, workspaceQuery, mode]);
-
-  const hideAssigneeField =
-    !isOffice &&
-    assigneeOptions.length <= 1 &&
-    (defaultAssignee != null || assigneeOptions.length === 1);
-
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setFormError('');
@@ -864,12 +809,6 @@ function TodoFormModal(props: {
           task_text: text,
           priority: encodeTodoPriorityForSubmit(priority),
         };
-        if (isOffice || !hideAssigneeField) {
-          if (!assigneeId) throw new Error('נא לבחור מטפל');
-          body.assigned_to_user_id = assigneeId;
-        } else if (assigneeId) {
-          body.assigned_to_user_id = assigneeId;
-        }
         const data = await apiJson<ClientOperationsTodoBoardAggregate>(
           moduleClientOperationsTodoCommands(),
           {
@@ -894,7 +833,6 @@ function TodoFormModal(props: {
               todo_id: task.id,
               task_text: taskText.trim(),
               priority: encodeTodoPriorityForSubmit(priority),
-              ...(isOffice && assigneeId ? { assigned_to_user_id: assigneeId } : {}),
               query: {
                 workspace_scope: workspaceQuery.workspace_scope,
                 workspace_subject_user_id: workspaceQuery.workspace_subject_user_id,
@@ -1013,23 +951,6 @@ function TodoFormModal(props: {
               })}
             </div>
           </div>
-          {showAssigneeSelect && !hideAssigneeField ? (
-            <label className="nx-co-todo-form__field">
-              <span>מטפל</span>
-              <select
-                value={assigneeId}
-                onChange={(e) => setAssigneeId(e.target.value)}
-                required={isOffice}
-              >
-                <option value="">בחירה…</option>
-                {assigneeOptions.map((a) => (
-                  <option key={a.user_id} value={a.user_id}>
-                    {a.display_name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
           {formError ? (
             <div className="nx-co-todo-board__error" role="alert">
               {formError}

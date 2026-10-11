@@ -79,10 +79,10 @@ test('G/H/I/J — card fields, double-click edit, Done command, no hidden GET af
 
 test('K/L/N/O/P — create uses scoped options; no due/reminder/delete', () => {
   assert.match(modal, /moduleClientOperationsTodoClientOptions/);
-  assert.match(modal, /moduleClientOperationsTodoAssigneeOptions/);
+  // The workspace decides whose board a ToDo belongs to: no assignee (מטפל) picker anywhere in the ToDo UI.
+  assert.doesNotMatch(modal, /moduleClientOperationsTodoAssigneeOptions|assigned_to_user_id|filter_assignee/);
   assert.doesNotMatch(modal, /due_date|reminder|hard.?delete|DELETE/i);
-  assert.match(modal, /isOffice/);
-  assert.match(modal, /נא לבחור מטפל/);
+  assert.doesNotMatch(modal, /<th>מטפל<\/th>|<span>מטפל<\/span>|נא לבחור מטפל/);
 });
 
 test('Q/R/S/T — archive above board; reopen returns board+archive; no corrective GET', () => {

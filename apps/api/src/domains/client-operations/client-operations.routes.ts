@@ -24,7 +24,6 @@ import {
   executeClientOperationsTodoCommand,
   getClientOperationsTodoArchive,
   getClientOperationsTodoBoard,
-  listClientOperationsTodoAssigneeOptions,
   searchClientOperationsTodoClientOptions,
   type ClientOperationsTodoCommandBody,
 } from './client-operations-todo.service.js';
@@ -245,8 +244,6 @@ router.get('/todo/archive', ...withView, async (req, res, next) => {
       q: typeof req.query.q === 'string' ? req.query.q : null,
       filter_priority:
         typeof req.query.filter_priority === 'string' ? req.query.filter_priority : null,
-      filter_assignee:
-        typeof req.query.filter_assignee === 'string' ? req.query.filter_assignee : null,
       workspace_scope: typeof req.query.workspace_scope === 'string' ? req.query.workspace_scope : null,
       workspace_subject_user_id:
         typeof req.query.workspace_subject_user_id === 'string'
@@ -265,23 +262,6 @@ router.get('/todo/client-options', ...withView, async (req, res, next) => {
     const result = await searchClientOperationsTodoClientOptions(ctx, {
       q: typeof req.query.q === 'string' ? req.query.q : null,
       limit: typeof req.query.limit === 'string' ? req.query.limit : null,
-      workspace_scope: typeof req.query.workspace_scope === 'string' ? req.query.workspace_scope : null,
-      workspace_subject_user_id:
-        typeof req.query.workspace_subject_user_id === 'string'
-          ? req.query.workspace_subject_user_id
-          : null,
-    });
-    return res.json(result);
-  } catch (e) {
-    next(e);
-  }
-});
-
-router.get('/todo/assignee-options', ...withView, async (req, res, next) => {
-  try {
-    const ctx = req.context as RequestContext;
-    const result = await listClientOperationsTodoAssigneeOptions(ctx, {
-      client_id: typeof req.query.client_id === 'string' ? req.query.client_id : null,
       workspace_scope: typeof req.query.workspace_scope === 'string' ? req.query.workspace_scope : null,
       workspace_subject_user_id:
         typeof req.query.workspace_subject_user_id === 'string'
