@@ -576,6 +576,32 @@
   color: #5b6b80;
 }
 
+/* One-time client: typed-name option, selected-mode badge and card/archive tag (ToDo-only, never a Core client). */
+.nx-co-todo-form__suggest li.nx-co-todo-form__suggest-one-time {
+  border-top: 1px solid #e5e7eb;
+}
+
+.nx-co-todo-client-picker__mode {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #92400e;
+}
+
+.nx-co-todo-one-time-tag {
+  display: inline-block;
+  margin-inline-start: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #92400e;
+  background: #fef3c7;
+  vertical-align: middle;
+}
+
 /* Archive */
 .nx-co-todo-archive-overlay {
   position: absolute;

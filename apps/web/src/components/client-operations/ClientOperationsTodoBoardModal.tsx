@@ -38,7 +38,8 @@ import {
 
 export type ClientOperationsTodoCard = {
   id: string;
-  client: { id: string; display_name: string | null; tax_id: string | null };
+  /** Backend-ready client presentation; `is_one_time` / `id: null` = one-time client (not a Core client). */
+  client: { id: string | null; display_name: string | null; tax_id: string | null; is_one_time: boolean };
   task_text: string;
   priority: 1 | 2 | 3 | 4 | null;
   priority_presentation_token?: string;
@@ -67,6 +68,10 @@ export type ClientOperationsTodoBoardAggregate = {
     has_next: boolean;
   };
   tasks: ClientOperationsTodoCard[];
+  available_clients_hint?: {
+    search_endpoint?: string;
+    one_time_client?: { allowed: boolean; name_max_length: number; tax_id_max_length: number };
+  };
   allowed_actions?: string[];
   query?: {
     page: number;
@@ -532,6 +537,7 @@ export function ClientOperationsTodoBoardModal({
         <TodoFormModal
           mode="create"
           workspaceQuery={workspaceQuery}
+          oneTimeClient={board?.available_clients_hint?.one_time_client ?? null}
           onClose={() => setCreateOpen(false)}
           onSaved={(agg) => {
             applyBoardAggregate(agg);
@@ -545,6 +551,7 @@ export function ClientOperationsTodoBoardModal({
           mode="edit"
           task={editTask}
           workspaceQuery={workspaceQuery}
+          oneTimeClient={board?.available_clients_hint?.one_time_client ?? null}
           onClose={() => setEditTask(null)}
           onSaved={(agg) => {
             applyBoardAggregate(agg);
@@ -636,7 +643,12 @@ export function ClientOperationsTodoBoardModal({
                   <tbody>
                     {(archive?.tasks ?? []).map((t) => (
                       <tr key={t.id}>
-                        <td>{t.client.display_name ?? '—'}</td>
+                        <td>
+                          {t.client.display_name ?? '—'}
+                          {t.client.is_one_time ? (
+                            <span className="nx-co-todo-one-time-tag">חד פעמי</span>
+                          ) : null}
+                        </td>
                         <td>{t.client.tax_id ?? '—'}</td>
                         <td>{t.task_text}</td>
                         <td>
@@ -729,7 +741,10 @@ function TodoStickyCard(props: {
       }}
     >
       <span className="nx-co-todo-sticky__pip" aria-hidden="true" />
-      <div className="nx-co-todo-sticky__client">{task.client.display_name ?? 'לקוח'}</div>
+      <div className="nx-co-todo-sticky__client">
+        {task.client.display_name ?? 'לקוח'}
+        {task.client.is_one_time ? <span className="nx-co-todo-one-time-tag">חד פעמי</span> : null}
+      </div>
       <div className="nx-co-todo-sticky__tax">{task.client.tax_id ?? '—'}</div>
       <div className="nx-co-todo-sticky__text">{task.task_text}</div>
       <div className="nx-co-todo-sticky__date">{formatDateHe(task.created_at)}</div>
@@ -756,13 +771,20 @@ function TodoFormModal(props: {
   mode: 'create' | 'edit';
   task?: ClientOperationsTodoCard;
   workspaceQuery: ClientOperationsTodoWorkspaceQuery;
+  /** Backend-owned one-time client capability (vailable_clients_hint.one_time_client). */
+  oneTimeClient: { allowed: boolean; name_max_length: number; tax_id_max_length: number } | null;
   onClose: () => void;
   onSaved: (agg: ClientOperationsTodoBoardAggregate) => void;
   onCompleted?: (agg: ClientOperationsTodoBoardAggregate) => void;
 }) {
-  const { mode, task, workspaceQuery, onClose, onSaved, onCompleted } = props;
+  const { mode, task, workspaceQuery, oneTimeClient, onClose, onSaved, onCompleted } = props;
+  const oneTimeAllowed = oneTimeClient?.allowed === true;
+  // Edit: the backend tells which kind of client the ToDo has (client.is_one_time) — never inferred here.
+  const editingOneTime = mode === 'edit' && task?.client.is_one_time === true;
   const [clientId, setClientId] = useState(task?.client.id ?? '');
   const [clientLabel, setClientLabel] = useState(task?.client.display_name ?? '');
+  // One-time client name: chosen via the typed-name option (create) or edited in place (edit).
+  const [oneTimeName, setOneTimeName] = useState(editingOneTime ? (task?.client.display_name ?? '') : '');
   const [taxId, setTaxId] = useState(task?.client.tax_id ?? '');
   const [clientQ, setClientQ] = useState('');
   const [clientOptions, setClientOptions] = useState<TodoClientPickerOption[]>([]);
@@ -776,7 +798,7 @@ function TodoFormModal(props: {
   const [formError, setFormError] = useState('');
   useEffect(() => {
     // Nothing to search once an authorized client is chosen (typing over it clears the choice).
-    if (mode !== 'create' || clientId) return;
+    if (mode !== 'create' || clientId || oneTimeName) return;
     let cancelled = false;
     // Backend-authorized, workspace-scoped search (the endpoint the ToDo aggregate declares as
     // `available_clients_hint.search_endpoint`). Opening the form loads the first page immediately;
@@ -810,7 +832,7 @@ function TodoFormModal(props: {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [clientId, clientQ, mode, workspaceQuery]);
+  }, [clientId, oneTimeName, clientQ, mode, workspaceQuery]);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -818,12 +840,17 @@ function TodoFormModal(props: {
     setSaving(true);
     try {
       if (mode === 'create') {
-        if (!clientId) throw new Error('נא לבחור לקוח');
+        // Canonical client wins; otherwise the typed text is a one-time client name. The backend validates the
+        // identity (and the client ACL for canonical clients) — this only builds the command payload.
+        const typedName = oneTimeName || clientQ.trim();
+        if (!clientId && !typedName) throw new Error('נא לבחור לקוח או להקליד שם לקוח');
         const text = taskText.trim();
         if (!text) throw new Error('נא להזין טקסט משימה');
         const body: Record<string, unknown> = {
           command: 'create_client_operations_todo',
-          client_id: clientId,
+          ...(clientId
+            ? { client_id: clientId }
+            : { external_client_name: typedName, external_client_tax_id: taxId.trim() || null }),
           task_text: text,
           priority: encodeTodoPriorityForSubmit(priority),
         };
@@ -851,6 +878,10 @@ function TodoFormModal(props: {
               todo_id: task.id,
               task_text: taskText.trim(),
               priority: encodeTodoPriorityForSubmit(priority),
+              // One-time client fields belong to the ToDo itself and are edited through this same command.
+              ...(editingOneTime
+                ? { external_client_name: oneTimeName, external_client_tax_id: taxId.trim() || null }
+                : {}),
               query: {
                 workspace_scope: workspaceQuery.workspace_scope,
                 workspace_subject_user_id: workspaceQuery.workspace_subject_user_id,
@@ -894,6 +925,9 @@ function TodoFormModal(props: {
             <ClientOperationsTodoClientPicker
               selectedClientId={clientId}
               selectedLabel={clientLabel}
+              oneTimeName={oneTimeName}
+              oneTimeAllowed={oneTimeAllowed}
+              oneTimeNameMaxLength={oneTimeClient?.name_max_length}
               text={clientQ}
               options={clientOptions}
               loading={clientOptionsLoading}
@@ -903,16 +937,36 @@ function TodoFormModal(props: {
                 setClientId('');
                 setTaxId('');
                 setClientLabel('');
+                setOneTimeName('');
                 setClientQ('');
               }}
               onSelect={(o) => {
                 // The stored value is the canonical client_id the backend sent.
                 setClientId(o.client_id);
                 setClientLabel(o.display_name ?? o.client_id);
+                setOneTimeName('');
                 setTaxId(o.tax_id ?? '');
                 setClientQ('');
               }}
+              onSelectOneTime={(name) => {
+                // ONE-TIME client: no client_id, nothing is created in Core — the name stays on the ToDo.
+                setClientId('');
+                setClientLabel('');
+                setOneTimeName(name);
+                setClientQ('');
+              }}
             />
+          ) : editingOneTime ? (
+            <label className="nx-co-todo-form__field">
+              <span>לקוח (חד פעמי)</span>
+              <input
+                type="text"
+                value={oneTimeName}
+                maxLength={oneTimeClient?.name_max_length}
+                required
+                onChange={(e) => setOneTimeName(e.target.value)}
+              />
+            </label>
           ) : (
             <label className="nx-co-todo-form__field">
               <span>לקוח</span>
@@ -921,7 +975,15 @@ function TodoFormModal(props: {
           )}
           <label className="nx-co-todo-form__field">
             <span>ת.ז./ח.פ.</span>
-            <input type="text" value={taxId} readOnly />
+            {/* Canonical client: read-only, shown from Core. One-time client: optional manual value. */}
+            <input
+              type="text"
+              value={taxId}
+              readOnly={mode === 'create' ? Boolean(clientId) : !editingOneTime}
+              maxLength={oneTimeClient?.tax_id_max_length}
+              placeholder={mode === 'create' ? (clientId ? undefined : 'אופציונלי') : editingOneTime ? 'אופציונלי' : undefined}
+              onChange={(e) => setTaxId(e.target.value)}
+            />
           </label>
           <label className="nx-co-todo-form__field">
             <span>משימה</span>

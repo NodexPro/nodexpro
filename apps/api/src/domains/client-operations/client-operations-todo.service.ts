@@ -27,17 +27,24 @@ import {
 } from './client-operations-workspace.service.js';
 import {
   assigneeWouldRetainClientAccessAfterHandlerChange,
+  buildTodoClientPresentation,
   buildTodoPagination,
+  CLIENT_OPERATIONS_TODO_EXTERNAL_CLIENT_NAME_MAX,
+  CLIENT_OPERATIONS_TODO_EXTERNAL_CLIENT_TAX_ID_MAX,
   CLIENT_OPERATIONS_TODO_PAGE_SIZE,
   compareTodosForBoardOrder,
   normalizeTodoClientOptionsLimit,
   normalizeTodoClientSearchTokens,
+  normalizeTodoExternalClientName,
+  normalizeTodoExternalClientTaxId,
   normalizeTodoPage,
   normalizeTodoPriority,
   normalizeTodoTaskText,
   presentationPriorityToken,
+  resolveTodoClientIdentityInput,
   sliceTodoPage,
   type ClientOperationsTodoPriority,
+  type TodoClientPresentation,
 } from './client-operations-todo.pure.js';
 
 function assertOrg(ctx: RequestContext): string {
@@ -60,7 +67,10 @@ function canViewClientOperations(ctx: RequestContext): boolean {
 type TodoRow = {
   id: string;
   organization_id: string;
-  client_id: string;
+  /** Canonical Core client, or NULL for a one-time/external client (migration 188). */
+  client_id: string | null;
+  external_client_name: string | null;
+  external_client_tax_id: string | null;
   assigned_to_user_id: string;
   task_text: string;
   priority: number | null;
@@ -74,11 +84,8 @@ type TodoRow = {
 
 export type ClientOperationsTodoCard = {
   id: string;
-  client: {
-    id: string;
-    display_name: string | null;
-    tax_id: string | null;
-  };
+  /** Backend-ready client presentation: canonical (is_one_time=false) or one-time (id=null). */
+  client: TodoClientPresentation;
   task_text: string;
   priority: ClientOperationsTodoPriority | null;
   priority_presentation_token: 'p1' | 'p2' | 'p3' | 'p4' | 'none';
@@ -107,6 +114,12 @@ export type ClientOperationsTodoBoardAggregate = {
   available_clients_hint: {
     search_endpoint: 'todo_client_options';
     note_he: string;
+    /** Typed text that matches no authorized client may be kept as a one-time client (ToDo-only, never a Core client). */
+    one_time_client: {
+      allowed: boolean;
+      name_max_length: number;
+      tax_id_max_length: number;
+    };
   };
   allowed_actions: string[];
   query: {
@@ -149,6 +162,21 @@ function mapPriorityError(e: unknown): never {
     }
     if (e.message === 'TODO_TEXT_TOO_LONG') {
       throw badRequest('task_text exceeds maximum length', 'TODO_TEXT_TOO_LONG');
+    }
+    if (e.message === 'TODO_CLIENT_REQUIRED') {
+      throw badRequest('client_id or external_client_name required', 'TODO_CLIENT_REQUIRED');
+    }
+    if (e.message === 'TODO_CLIENT_IDENTITY_CONFLICT') {
+      throw badRequest('Provide either client_id or a one-time client name, not both', 'TODO_CLIENT_IDENTITY_CONFLICT');
+    }
+    if (e.message === 'TODO_EXTERNAL_CLIENT_NAME_REQUIRED') {
+      throw badRequest('external_client_name required', 'TODO_EXTERNAL_CLIENT_NAME_REQUIRED');
+    }
+    if (e.message === 'TODO_EXTERNAL_CLIENT_NAME_TOO_LONG') {
+      throw badRequest('external_client_name exceeds maximum length', 'TODO_EXTERNAL_CLIENT_NAME_TOO_LONG');
+    }
+    if (e.message === 'TODO_EXTERNAL_CLIENT_TAX_ID_TOO_LONG') {
+      throw badRequest('external_client_tax_id exceeds maximum length', 'TODO_EXTERNAL_CLIENT_TAX_ID_TOO_LONG');
     }
   }
   throw e;
@@ -213,16 +241,16 @@ function taskMatchesWorkspaceProjection(
   materializationAccess: OrganizationClientAccessScope,
 ): boolean {
   if (task.assigned_to_user_id !== todoBoardSubjectUserId(workspace)) return false;
-  if (!clientIdIsAuthorized(materializationAccess, task.client_id)) return false;
+  // A one-time client belongs to the workspace subject only (the owner check above is its authorization\n  // boundary); the client ACL applies to canonical clients.\n  if (task.client_id != null && !clientIdIsAuthorized(materializationAccess, task.client_id)) return false;
   return true;
 }
 
 async function loadClientIdentityMap(
   orgId: string,
-  clientIds: string[],
+  clientIds: Array<string | null>,
 ): Promise<Map<string, { display_name: string | null; tax_id: string | null }>> {
   const map = new Map<string, { display_name: string | null; tax_id: string | null }>();
-  const unique = [...new Set(clientIds.filter(Boolean))];
+  const unique = [...new Set(clientIds.filter((id): id is string => Boolean(id)))];
   if (!unique.length) return map;
   const { data, error } = await supabaseAdmin
     .from('clients')
@@ -284,18 +312,14 @@ async function hydrateTodoCards(params: {
   const names = await loadMemberDisplayNamesByUserIds(userIds.filter(Boolean) as string[]);
 
   return rows.map((r) => {
-    const client = clientMap.get(r.client_id);
+    const client = r.client_id ? clientMap.get(r.client_id) : undefined;
     const priority =
       r.priority === 1 || r.priority === 2 || r.priority === 3 || r.priority === 4
         ? (r.priority as ClientOperationsTodoPriority)
         : null;
     return {
       id: r.id,
-      client: {
-        id: r.client_id,
-        display_name: client?.display_name ?? null,
-        tax_id: client?.tax_id ?? null,
-      },
+      client: buildTodoClientPresentation(r, client),
       task_text: r.task_text,
       priority,
       priority_presentation_token: presentationPriorityToken(priority),
@@ -322,25 +346,47 @@ async function hydrateTodoCards(params: {
   });
 }
 
+const TODO_ROW_COLUMNS =
+  'id, organization_id, client_id, external_client_name, external_client_tax_id, assigned_to_user_id, task_text, priority, created_at, created_by_user_id, updated_at, updated_by_user_id, completed_at, completed_by_user_id';
+
+/**
+ * Org ToDos for one board owner (`ownerUserId` = workspace subject, see `todoBoardSubjectUserId`).
+ *
+ * Canonical-client ToDos are limited by the workspace client ACL (`authorizedClientIds`). One-time ToDos
+ * (`client_id IS NULL`) have no client to authorize: the owner filter is their authorization boundary, so
+ * they are read by their own query and are never dropped by the ACL `.in('client_id', …)` filter.
+ */
 async function loadOrgTodos(params: {
   orgId: string;
   active: boolean;
   authorizedClientIds: string[] | null;
+  ownerUserId: string;
 }): Promise<TodoRow[]> {
-  if (params.authorizedClientIds && params.authorizedClientIds.length === 0) return [];
-  let q = supabaseAdmin
-    .from('client_operations_todos')
-    .select(
-      'id, organization_id, client_id, assigned_to_user_id, task_text, priority, created_at, created_by_user_id, updated_at, updated_by_user_id, completed_at, completed_by_user_id',
-    )
-    .eq('organization_id', params.orgId);
-  if (params.authorizedClientIds) q = q.in('client_id', params.authorizedClientIds);
-  if (params.active) q = q.is('completed_at', null);
-  else q = q.not('completed_at', 'is', null);
+  const base = () => {
+    let q = supabaseAdmin
+      .from('client_operations_todos')
+      .select(TODO_ROW_COLUMNS)
+      .eq('organization_id', params.orgId)
+      .eq('assigned_to_user_id', params.ownerUserId);
+    if (params.active) q = q.is('completed_at', null);
+    else q = q.not('completed_at', 'is', null);
+    return q;
+  };
 
-  const { data, error } = await q;
-  if (error) throw new Error(error.message ?? 'Failed to load todos');
-  return (data ?? []) as TodoRow[];
+  const reads: Array<PromiseLike<{ data: unknown; error: { message?: string } | null }>> = [];
+  if (params.authorizedClientIds === null) {
+    reads.push(base());
+  } else {
+    if (params.authorizedClientIds.length > 0) reads.push(base().in('client_id', params.authorizedClientIds));
+    reads.push(base().is('client_id', null));
+  }
+  const results = await Promise.all(reads);
+  const rows: TodoRow[] = [];
+  for (const { data, error } of results) {
+    if (error) throw new Error(error.message ?? 'Failed to load todos');
+    rows.push(...((data ?? []) as TodoRow[]));
+  }
+  return rows;
 }
 
 async function excludeArchivedClientTodos(
@@ -349,8 +395,9 @@ async function excludeArchivedClientTodos(
   access: OrganizationClientAccessScope,
 ): Promise<TodoRow[]> {
   if (access.kind === 'OFFICE' || access.authorized_client_ids !== null || rows.length === 0) return rows;
-  const ids = [...new Set(rows.map((r) => r.client_id).filter(Boolean))];
-  if (ids.length === 0) return [];
+  // One-time ToDos have no Core client to be archived — they are never filtered here.
+  const ids = [...new Set(rows.map((r) => r.client_id).filter((id): id is string => Boolean(id)))];
+  if (ids.length === 0) return rows;
   const { data, error } = await supabaseAdmin
     .from('clients')
     .select('id')
@@ -359,7 +406,7 @@ async function excludeArchivedClientTodos(
     .in('id', ids);
   if (error) throw new Error(error.message ?? 'Failed to filter todo clients');
   const live = new Set((data ?? []).map((row) => String((row as { id: string }).id)));
-  return rows.filter((r) => live.has(r.client_id));
+  return rows.filter((r) => r.client_id == null || live.has(r.client_id));
 }
 
 function filterTodosForWorkspace(
@@ -395,6 +442,7 @@ export async function getClientOperationsTodoBoard(
       orgId,
       active: true,
       authorizedClientIds: materializationAccess.authorized_client_ids,
+      ownerUserId: todoBoardSubjectUserId(workspace),
     }),
     materializationAccess,
   );
@@ -406,8 +454,8 @@ export async function getClientOperationsTodoBoard(
       scoped.map((r) => r.client_id),
     );
     scoped = scoped.filter((r) => {
-      const c = clientMap.get(r.client_id);
-      const hay = [r.task_text, c?.display_name ?? '', c?.tax_id ?? ''].join(' ').toLowerCase();
+      const p = buildTodoClientPresentation(r, r.client_id ? clientMap.get(r.client_id) : undefined);
+      const hay = [r.task_text, p.display_name ?? '', p.tax_id ?? ''].join(' ').toLowerCase();
       return hay.includes(q);
     });
   }
@@ -440,6 +488,11 @@ export async function getClientOperationsTodoBoard(
     available_clients_hint: {
       search_endpoint: 'todo_client_options',
       note_he: 'חיפוש לקוחות מורשה לפי מרחב העבודה',
+      one_time_client: {
+        allowed: canEditClientOperations(ctx),
+        name_max_length: CLIENT_OPERATIONS_TODO_EXTERNAL_CLIENT_NAME_MAX,
+        tax_id_max_length: CLIENT_OPERATIONS_TODO_EXTERNAL_CLIENT_TAX_ID_MAX,
+      },
     },
     allowed_actions: boardAllowedActions(ctx),
     query: {
@@ -479,6 +532,7 @@ export async function getClientOperationsTodoArchive(
       orgId,
       active: false,
       authorizedClientIds: materializationAccess.authorized_client_ids,
+      ownerUserId: todoBoardSubjectUserId(workspace),
     }),
     materializationAccess,
   );
@@ -497,11 +551,11 @@ export async function getClientOperationsTodoArchive(
   );
   if (q) {
     scoped = scoped.filter((r) => {
-      const c = clientMap.get(r.client_id);
+      const p = buildTodoClientPresentation(r, r.client_id ? clientMap.get(r.client_id) : undefined);
       const hay = [
         r.task_text,
-        c?.display_name ?? '',
-        c?.tax_id ?? '',
+        p.display_name ?? '',
+        p.tax_id ?? '',
       ]
         .join(' ')
         .toLowerCase();
@@ -668,6 +722,8 @@ export async function createClientOperationsTodo(
   ctx: RequestContext,
   body: {
     client_id?: unknown;
+    external_client_name?: unknown;
+    external_client_tax_id?: unknown;
     task_text?: unknown;
     priority?: unknown;
     workspace_scope?: unknown;
@@ -686,11 +742,20 @@ export async function createClientOperationsTodo(
   };
   const { orgId, workspace, materializationAccess } = await resolveWorkspace(ctx, requested);
 
-  const clientId = String(body.client_id ?? '').trim();
-  if (!clientId) throw badRequest('client_id required', 'TODO_CLIENT_REQUIRED');
-  await assertCanAccessClientFromContext(ctx, clientId, materializationAccess);
-  if (!clientIdIsAuthorized(materializationAccess, clientId)) {
-    throw forbidden('Client not found');
+  // Exactly one client identity mode, validated here (never by the frontend):
+  //  - canonical: Core client the workspace may access (existing ACL rules, unchanged)
+  //  - one-time: name (+ optional tax id) that lives on the ToDo only — no Core client, profile, ACL or id.
+  let identity: ReturnType<typeof resolveTodoClientIdentityInput>;
+  try {
+    identity = resolveTodoClientIdentityInput(body);
+  } catch (e) {
+    mapPriorityError(e);
+  }
+  if (identity.mode === 'canonical') {
+    await assertCanAccessClientFromContext(ctx, identity.client_id, materializationAccess);
+    if (!clientIdIsAuthorized(materializationAccess, identity.client_id)) {
+      throw forbidden('Client not found');
+    }
   }
 
   const taskText = safeNormalizeText(body.task_text);
@@ -699,11 +764,17 @@ export async function createClientOperationsTodo(
   // Ownership is derived from the authorized workspace — a client-supplied assignee is never read.
   const assigneeId = todoBoardSubjectUserId(workspace);
 
-  await assertAssigneeCanAccessClient({
-    organizationId: orgId,
-    assigneeUserId: assigneeId,
-    clientId,
-  });
+  if (identity.mode === 'canonical') {
+    await assertAssigneeCanAccessClient({
+      organizationId: orgId,
+      assigneeUserId: assigneeId,
+      clientId: identity.client_id,
+    });
+  } else {
+    // No client to authorize — the owner (workspace subject) must still be an eligible active member.
+    await assertUserIsActiveHandlerEligible(orgId, assigneeId);
+  }
+  const clientId = identity.mode === 'canonical' ? identity.client_id : null;
 
   const now = new Date().toISOString();
   const { data, error } = await supabaseAdmin
@@ -711,6 +782,8 @@ export async function createClientOperationsTodo(
     .insert({
       organization_id: orgId,
       client_id: clientId,
+      external_client_name: identity.mode === 'one_time' ? identity.external_client_name : null,
+      external_client_tax_id: identity.mode === 'one_time' ? identity.external_client_tax_id : null,
       assigned_to_user_id: assigneeId,
       task_text: taskText,
       priority,
@@ -735,6 +808,9 @@ export async function createClientOperationsTodo(
     payload: {
       todo_id: (data as { id: string }).id,
       client_id: clientId,
+      is_one_time: identity.mode === 'one_time',
+      external_client_name: identity.mode === 'one_time' ? identity.external_client_name : null,
+      has_external_client_tax_id: identity.mode === 'one_time' && identity.external_client_tax_id != null,
       assigned_to_user_id: assigneeId,
       priority,
       workspace_scope_kind: workspace.scope_kind,
@@ -751,6 +827,8 @@ export async function updateClientOperationsTodo(
     todo_id?: unknown;
     task_text?: unknown;
     priority?: unknown;
+    external_client_name?: unknown;
+    external_client_tax_id?: unknown;
     workspace_scope?: unknown;
     workspace_subject_user_id?: unknown;
     page?: unknown;
@@ -768,6 +846,16 @@ export async function updateClientOperationsTodo(
   assertCanMutateTodo({ ctx, task, workspace, materializationAccess });
   if (task.completed_at != null) {
     throw badRequest('Cannot update completed ToDo; reopen first', 'TODO_ALREADY_COMPLETED');
+  }
+  const isOneTime = task.client_id == null;
+  const externalFieldsSent =
+    body.external_client_name !== undefined || body.external_client_tax_id !== undefined;
+  if (externalFieldsSent && !isOneTime) {
+    // A canonical-client ToDo is never turned into / mixed with a one-time client, and never reassigned.
+    throw badRequest(
+      'external client fields apply to one-time client ToDos only',
+      'TODO_CLIENT_NOT_ONE_TIME',
+    );
   }
 
   const patch: Record<string, unknown> = {
@@ -793,6 +881,34 @@ export async function updateClientOperationsTodo(
       patch.priority = priority;
     }
   }
+  // One-time client fields belong to the ToDo itself (never Core): editable through this named command.
+  if (isOneTime && body.external_client_name !== undefined) {
+    let name: string;
+    try {
+      name = normalizeTodoExternalClientName(body.external_client_name);
+    } catch (e) {
+      mapPriorityError(e);
+    }
+    if (name !== task.external_client_name) {
+      before.external_client_name = task.external_client_name;
+      after.external_client_name = name;
+      patch.external_client_name = name;
+    }
+  }
+  if (isOneTime && body.external_client_tax_id !== undefined) {
+    let taxId: string | null;
+    try {
+      taxId = normalizeTodoExternalClientTaxId(body.external_client_tax_id);
+    } catch (e) {
+      mapPriorityError(e);
+    }
+    if (taxId !== (task.external_client_tax_id ?? null)) {
+      // Value itself is not copied into the audit payload; only that it changed / is now set.
+      before.has_external_client_tax_id = task.external_client_tax_id != null;
+      after.has_external_client_tax_id = taxId != null;
+      patch.external_client_tax_id = taxId;
+    }
+  }
   // Ownership never changes through ToDo commands: the board owner is the workspace subject (no reassignment).
 
   if (Object.keys(after).length === 0) {
@@ -816,6 +932,7 @@ export async function updateClientOperationsTodo(
     payload: {
       todo_id: todoId,
       client_id: task.client_id,
+      is_one_time: task.client_id == null,
       before,
       after,
       workspace_scope_kind: workspace.scope_kind,
@@ -872,6 +989,7 @@ export async function completeClientOperationsTodo(
     payload: {
       todo_id: todoId,
       client_id: task.client_id,
+      is_one_time: task.client_id == null,
       assigned_to_user_id: task.assigned_to_user_id,
       completed_at: now,
       workspace_scope_kind: workspace.scope_kind,
@@ -966,6 +1084,7 @@ export async function reopenClientOperationsTodo(
     payload: {
       todo_id: todoId,
       client_id: task.client_id,
+      is_one_time: task.client_id == null,
       assigned_to_user_id: task.assigned_to_user_id,
       previous_completed_at: task.completed_at,
       previous_completed_by_user_id: task.completed_by_user_id,
@@ -994,6 +1113,8 @@ export type ClientOperationsTodoCommandBody = {
   command?: unknown;
   todo_id?: unknown;
   client_id?: unknown;
+  external_client_name?: unknown;
+  external_client_tax_id?: unknown;
   task_text?: unknown;
   priority?: unknown;
   workspace_scope?: unknown;

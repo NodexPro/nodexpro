@@ -25,6 +25,92 @@ export function normalizeTodoTaskText(raw: unknown): string {
   return text;
 }
 
+// ── One-time / external client (migration 188) ──────────────────────────────────────────────────────
+// Limits mirror the database check constraints.
+export const CLIENT_OPERATIONS_TODO_EXTERNAL_CLIENT_NAME_MAX = 200;
+export const CLIENT_OPERATIONS_TODO_EXTERNAL_CLIENT_TAX_ID_MAX = 50;
+
+/** One-time client name: trimmed, non-empty, ≤ 200. */
+export function normalizeTodoExternalClientName(raw: unknown): string {
+  const text = String(raw ?? '').trim();
+  if (!text) throw new Error('TODO_EXTERNAL_CLIENT_NAME_REQUIRED');
+  if (text.length > CLIENT_OPERATIONS_TODO_EXTERNAL_CLIENT_NAME_MAX) {
+    throw new Error('TODO_EXTERNAL_CLIENT_NAME_TOO_LONG');
+  }
+  return text;
+}
+
+/** Optional manual ת.ז./ח.פ.: blank → null; trimmed; length-limited only (no legal validation here). */
+export function normalizeTodoExternalClientTaxId(raw: unknown): string | null {
+  const text = String(raw ?? '').trim();
+  if (!text) return null;
+  if (text.length > CLIENT_OPERATIONS_TODO_EXTERNAL_CLIENT_TAX_ID_MAX) {
+    throw new Error('TODO_EXTERNAL_CLIENT_TAX_ID_TOO_LONG');
+  }
+  return text;
+}
+
+const isBlank = (v: unknown): boolean => v === undefined || v === null || String(v).trim() === '';
+
+export type TodoClientIdentityInput =
+  | { mode: 'canonical'; client_id: string }
+  | { mode: 'one_time'; external_client_name: string; external_client_tax_id: string | null };
+
+/**
+ * Create-command identity: exactly ONE of
+ *   A) canonical `client_id`            (external fields must be absent)
+ *   B) one-time `external_client_name`  (+ optional `external_client_tax_id`, no `client_id`)
+ * The backend decides; the frontend never needs to know which rules apply.
+ */
+export function resolveTodoClientIdentityInput(body: {
+  client_id?: unknown;
+  external_client_name?: unknown;
+  external_client_tax_id?: unknown;
+}): TodoClientIdentityInput {
+  const hasClientId = !isBlank(body.client_id);
+  const hasExternal = !isBlank(body.external_client_name) || !isBlank(body.external_client_tax_id);
+  if (hasClientId && hasExternal) throw new Error('TODO_CLIENT_IDENTITY_CONFLICT');
+  if (hasClientId) return { mode: 'canonical', client_id: String(body.client_id).trim() };
+  if (isBlank(body.external_client_name)) throw new Error('TODO_CLIENT_REQUIRED');
+  return {
+    mode: 'one_time',
+    external_client_name: normalizeTodoExternalClientName(body.external_client_name),
+    external_client_tax_id: normalizeTodoExternalClientTaxId(body.external_client_tax_id),
+  };
+}
+
+export type TodoClientPresentation = {
+  id: string | null;
+  display_name: string | null;
+  tax_id: string | null;
+  is_one_time: boolean;
+};
+
+/** Backend-ready client presentation for a ToDo (the frontend never infers the client type). */
+export function buildTodoClientPresentation(
+  row: {
+    client_id: string | null;
+    external_client_name?: string | null;
+    external_client_tax_id?: string | null;
+  },
+  canonical: { display_name: string | null; tax_id: string | null } | undefined,
+): TodoClientPresentation {
+  if (row.client_id == null) {
+    return {
+      id: null,
+      display_name: row.external_client_name ?? null,
+      tax_id: row.external_client_tax_id ?? null,
+      is_one_time: true,
+    };
+  }
+  return {
+    id: row.client_id,
+    display_name: canonical?.display_name ?? null,
+    tax_id: canonical?.tax_id ?? null,
+    is_one_time: false,
+  };
+}
+
 export const CLIENT_OPERATIONS_TODO_CLIENT_SEARCH_MAX_TOKENS = 5;
 export const CLIENT_OPERATIONS_TODO_CLIENT_SEARCH_TOKEN_MAX_LENGTH = 60;
 export const CLIENT_OPERATIONS_TODO_CLIENT_OPTIONS_DEFAULT_LIMIT = 20;

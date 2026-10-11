@@ -53,3 +53,36 @@ export function moveTodoClientPickerIndex(current: number, delta: 1 | -1, length
   if (current < 0) return delta === 1 ? 0 : length - 1;
   return (current + delta + length) % length;
 }
+
+/**
+ * One-time client row: the typed text kept as the client name of the ToDo itself.
+ * Choosing it never creates a Core client — the backend stores it on the ToDo (migration 188) and validates it.
+ */
+export type TodoClientPickerRow =
+  | { kind: 'client'; option: TodoClientPickerOption }
+  | { kind: 'one_time'; name: string };
+
+export function todoOneTimeClientOptionLabel(name: string): string {
+  return `השתמש בשם שהוקלד: "${name}"`;
+}
+
+/** Trim only — the backend decides whether the name is valid. */
+export function todoTypedClientName(text: string): string {
+  return String(text ?? '').trim();
+}
+
+/** Backend-authorized matches (bounded) followed by the one-time option when text was typed. */
+export function buildTodoClientPickerRows(
+  options: readonly TodoClientPickerOption[],
+  text: string,
+  params: { allowOneTime: boolean; limit?: number },
+): TodoClientPickerRow[] {
+  const rows: TodoClientPickerRow[] = filterTodoClientOptionsForDisplay(
+    options,
+    text,
+    params.limit ?? TODO_CLIENT_PICKER_VISIBLE_LIMIT,
+  ).map((option) => ({ kind: 'client' as const, option }));
+  const typed = todoTypedClientName(text);
+  if (params.allowOneTime && typed) rows.push({ kind: 'one_time', name: typed });
+  return rows;
+}
