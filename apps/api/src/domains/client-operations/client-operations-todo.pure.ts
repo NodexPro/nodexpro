@@ -25,6 +25,33 @@ export function normalizeTodoTaskText(raw: unknown): string {
   return text;
 }
 
+export const CLIENT_OPERATIONS_TODO_CLIENT_SEARCH_MAX_TOKENS = 5;
+export const CLIENT_OPERATIONS_TODO_CLIENT_SEARCH_TOKEN_MAX_LENGTH = 60;
+export const CLIENT_OPERATIONS_TODO_CLIENT_OPTIONS_DEFAULT_LIMIT = 20;
+export const CLIENT_OPERATIONS_TODO_CLIENT_OPTIONS_MAX_LIMIT = 50;
+
+/**
+ * Typed ToDo client search text → case-insensitive substring tokens (all tokens must match the client
+ * display name or tax id). Characters that are LIKE / PostgREST filter syntax (`% _ \ * , ( ) "`) are
+ * dropped so user text can never alter the filter expression.
+ */
+export function normalizeTodoClientSearchTokens(raw: unknown): string[] {
+  const text = String(raw ?? '')
+    .toLowerCase()
+    .replace(/[%_\\*,()"]/g, ' ');
+  const tokens = text
+    .split(/\s+/)
+    .map((t) => t.trim().slice(0, CLIENT_OPERATIONS_TODO_CLIENT_SEARCH_TOKEN_MAX_LENGTH))
+    .filter(Boolean);
+  return [...new Set(tokens)].slice(0, CLIENT_OPERATIONS_TODO_CLIENT_SEARCH_MAX_TOKENS);
+}
+
+export function normalizeTodoClientOptionsLimit(raw: unknown): number {
+  const n = Number(raw ?? CLIENT_OPERATIONS_TODO_CLIENT_OPTIONS_DEFAULT_LIMIT);
+  if (!Number.isFinite(n)) return CLIENT_OPERATIONS_TODO_CLIENT_OPTIONS_DEFAULT_LIMIT;
+  return Math.min(Math.max(1, Math.floor(n)), CLIENT_OPERATIONS_TODO_CLIENT_OPTIONS_MAX_LIMIT);
+}
+
 /** Sort key: priority 1..4 then null/no-priority last. */
 export function todoPrioritySortRank(priority: number | null | undefined): number {
   if (priority == null) return 5;

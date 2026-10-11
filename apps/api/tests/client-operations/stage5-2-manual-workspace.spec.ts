@@ -173,10 +173,12 @@ test('15 selected ACL with zero grants yields zero clients and five manual slots
   assert.equal(rows.length, 5);
   const aggregate = readRepo('apps/api/src/domains/client-operations/client-operations.service.ts');
   const empty = aggregate.slice(
-    aggregate.indexOf('assignedOnlyIds && assignedOnlyIds.length === 0'),
+    aggregate.indexOf('const emptyAssignedScope'),
     aggregate.indexOf('let activeClientsQuery'),
   );
-  assert.match(empty, /built_rows: \[\]/);
+  // Zero grants ⇒ no client rows (the clients read is never issued) but the manual slots still materialize.
+  assert.match(empty, /if \(emptyAssignedScope\)/);
+  assert.match(empty, /finishMaterialization\(shared, \[\]\)/);
   assert.match(empty, /loadManualRowValuesBySlotColumnForRegistryAggregate/);
   assert.match(empty, /workspace: manualWorkspace/);
 });

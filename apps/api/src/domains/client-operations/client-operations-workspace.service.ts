@@ -10,11 +10,10 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { badRequest, forbidden } from '../../shared/errors.js';
 import type { RequestContext } from '../../shared/context.js';
-import { loadMemberDisplayNamesByUserIds } from '../memberships/organization-membership-access.js';
+import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import {
   loadAssignedClientIdsForHandler,
   resolveOrganizationClientAccessScope,
-  resolveOrganizationClientAccessScopeFromContext,
   type OrganizationClientAccessScope,
 } from './organization-client-access.js';
 import {
@@ -60,22 +59,33 @@ export type ClientOperationsWorkspaceResolution = {
 async function loadActiveOperationalWorkspaceSubjects(
   organizationId: string,
 ): Promise<Array<{ user_id: string; role_code: string; display_name: string }>> {
+  // One round trip: the member's display identity is embedded (same FK hint as the handler options read),
+  // instead of a second sequential `users` lookup. Display = full_name, else email, else the user id.
   const { data, error } = await supabaseAdmin
     .from('organization_memberships')
-    .select('user_id, role_code')
+    .select('user_id, role_code, users!organization_memberships_user_id_fkey(id, email, full_name)')
     .eq('organization_id', organizationId)
     .eq('status', 'active')
     .in('role_code', ['admin', 'staff']);
   if (error) throw new Error(error.message ?? 'Failed to load workspace subjects');
 
-  const rows = (data ?? []) as Array<{ user_id: string; role_code: string }>;
-  const names = await loadMemberDisplayNamesByUserIds(rows.map((r) => r.user_id));
+  type UserEmbed = { id: string; email: string | null; full_name: string | null };
+  const rows = (data ?? []) as unknown as Array<{
+    user_id: string;
+    role_code: string;
+    users: UserEmbed | UserEmbed[] | null;
+  }>;
   return rows
-    .map((r) => ({
-      user_id: r.user_id,
-      role_code: r.role_code,
-      display_name: names.get(r.user_id) ?? r.user_id,
-    }))
+    .map((r) => {
+      const u = supabaseEmbedOne(r.users);
+      const full = u?.full_name?.trim();
+      const display = full ? full : (u?.email ?? '').trim();
+      return {
+        user_id: r.user_id,
+        role_code: r.role_code,
+        display_name: display || r.user_id,
+      };
+    })
     .filter((r) => roleIsSelectableWorkspaceSubject(r.role_code))
     .sort((a, b) => a.display_name.localeCompare(b.display_name, 'he'));
 }
@@ -124,16 +134,18 @@ export async function resolveClientOperationsWorkspaceScope(params: {
     throw forbidden('Organization and viewer required for workspace scope');
   }
 
-  const stage3 =
-    params.stage3Access ??
-    (await resolveOrganizationClientAccessScope({
-      organizationId,
-      viewerUserId,
-      roleCode,
-    }));
-
   const canInspect = canInspectOrganizationWorkspaces(roleCode);
-  const subjects = canInspect ? await loadActiveOperationalWorkspaceSubjects(organizationId) : [];
+  // The viewer's own ACL scope and the org's selectable subjects are independent reads → one round trip.
+  // (Subjects are only ever exposed for roles that may inspect workspaces; nothing is returned otherwise.)
+  const [stage3, subjects] = await Promise.all([
+    params.stage3Access ??
+      resolveOrganizationClientAccessScope({
+        organizationId,
+        viewerUserId,
+        roleCode,
+      }),
+    canInspect ? loadActiveOperationalWorkspaceSubjects(organizationId) : Promise.resolve([]),
+  ]);
   const allowed_scopes = buildAllowedScopes({ roleCode, subjects });
   const available_workspace_subjects = subjects.map((s) => ({
     user_id: s.user_id,
@@ -262,13 +274,13 @@ export async function resolveClientOperationsWorkspaceScopeFromContext(
 }> {
   const organizationId = ctx.organizationId;
   if (!organizationId) throw forbidden('Organization context required');
-  const stage3 = await resolveOrganizationClientAccessScopeFromContext(ctx);
+  // The viewer's ACL scope is resolved INSIDE the resolver (same org / viewer / role inputs as
+  // `resolveOrganizationClientAccessScopeFromContext`) so it can run concurrently with the subjects read.
   return resolveClientOperationsWorkspaceScope({
     organizationId,
     viewerUserId: ctx.user.id,
     roleCode: ctx.membership?.roleCode ?? null,
     requested,
-    stage3Access: stage3,
   });
 }
 

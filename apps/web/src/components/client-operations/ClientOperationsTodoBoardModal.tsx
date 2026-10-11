@@ -23,6 +23,12 @@ import {
   todoPriorityToLaneId,
 } from '../../lib/client-operations-todo-board.pure';
 import {
+  TODO_CLIENT_PICKER_DEBOUNCE_MS,
+  TODO_CLIENT_PICKER_VISIBLE_LIMIT,
+  type TodoClientPickerOption,
+} from '../../lib/client-operations-todo-client-picker.pure';
+import { ClientOperationsTodoClientPicker } from './ClientOperationsTodoClientPicker';
+import {
   moduleClientOperationsTodoArchive,
   moduleClientOperationsTodoBoard,
   moduleClientOperationsTodoClientOptions,
@@ -759,9 +765,9 @@ function TodoFormModal(props: {
   const [clientLabel, setClientLabel] = useState(task?.client.display_name ?? '');
   const [taxId, setTaxId] = useState(task?.client.tax_id ?? '');
   const [clientQ, setClientQ] = useState('');
-  const [clientOptions, setClientOptions] = useState<
-    Array<{ client_id: string; display_name: string | null; tax_id: string | null }>
-  >([]);
+  const [clientOptions, setClientOptions] = useState<TodoClientPickerOption[]>([]);
+  const [clientOptionsHasMore, setClientOptionsHasMore] = useState(false);
+  const [clientOptionsLoading, setClientOptionsLoading] = useState(false);
   const [taskText, setTaskText] = useState(task?.task_text ?? '');
   const [priority, setPriority] = useState(
     task?.priority == null ? 'none' : String(task.priority),
@@ -769,30 +775,42 @@ function TodoFormModal(props: {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   useEffect(() => {
-    if (mode !== 'create') return;
+    // Nothing to search once an authorized client is chosen (typing over it clears the choice).
+    if (mode !== 'create' || clientId) return;
     let cancelled = false;
+    // Backend-authorized, workspace-scoped search (the endpoint the ToDo aggregate declares as
+    // `available_clients_hint.search_endpoint`). Opening the form loads the first page immediately;
+    // typing re-queries shortly after the last keystroke. The picker narrows the already-loaded
+    // options instantly in the meantime (presentation only).
+    const delay = clientQ ? TODO_CLIENT_PICKER_DEBOUNCE_MS : 0;
+    setClientOptionsLoading(true);
     const t = setTimeout(() => {
-      void apiJson<{
-        options: Array<{ client_id: string; display_name: string | null; tax_id: string | null }>;
-      }>(
+      void apiJson<{ options: TodoClientPickerOption[]; has_more?: boolean }>(
         moduleClientOperationsTodoClientOptions({
           ...workspaceQuery,
           q: clientQ || null,
-          limit: 30,
+          limit: TODO_CLIENT_PICKER_VISIBLE_LIMIT,
         }),
       )
         .then((res) => {
-          if (!cancelled) setClientOptions(res.options ?? []);
+          if (cancelled) return;
+          setClientOptions(res.options ?? []);
+          setClientOptionsHasMore(res.has_more === true);
         })
         .catch(() => {
-          if (!cancelled) setClientOptions([]);
+          if (cancelled) return;
+          setClientOptions([]);
+          setClientOptionsHasMore(false);
+        })
+        .finally(() => {
+          if (!cancelled) setClientOptionsLoading(false);
         });
-    }, 200);
+    }, delay);
     return () => {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [clientQ, mode, workspaceQuery]);
+  }, [clientId, clientQ, mode, workspaceQuery]);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -873,42 +891,28 @@ function TodoFormModal(props: {
         </div>
         <div className="nx-co-todo-form__body">
           {mode === 'create' ? (
-            <label className="nx-co-todo-form__field">
-              <span>לקוח</span>
-              <input
-                type="search"
-                value={clientLabel || clientQ}
-                onChange={(e) => {
-                  setClientId('');
-                  setTaxId('');
-                  setClientLabel('');
-                  setClientQ(e.target.value);
-                }}
-                placeholder="חיפוש לקוח…"
-                required
-              />
-              {!clientId && clientOptions.length > 0 ? (
-                <ul className="nx-co-todo-form__suggest" role="listbox">
-                  {clientOptions.map((o) => (
-                    <li key={o.client_id}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setClientId(o.client_id);
-                          setClientLabel(o.display_name ?? o.client_id);
-                          setTaxId(o.tax_id ?? '');
-                          setClientQ('');
-                          setClientOptions([]);
-                        }}
-                      >
-                        <strong>{o.display_name ?? o.client_id}</strong>
-                        <span>{o.tax_id ?? ''}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </label>
+            <ClientOperationsTodoClientPicker
+              selectedClientId={clientId}
+              selectedLabel={clientLabel}
+              text={clientQ}
+              options={clientOptions}
+              loading={clientOptionsLoading}
+              hasMore={clientOptionsHasMore}
+              onTextChange={setClientQ}
+              onClearSelection={() => {
+                setClientId('');
+                setTaxId('');
+                setClientLabel('');
+                setClientQ('');
+              }}
+              onSelect={(o) => {
+                // The stored value is the canonical client_id the backend sent.
+                setClientId(o.client_id);
+                setClientLabel(o.display_name ?? o.client_id);
+                setTaxId(o.tax_id ?? '');
+                setClientQ('');
+              }}
+            />
           ) : (
             <label className="nx-co-todo-form__field">
               <span>לקוח</span>

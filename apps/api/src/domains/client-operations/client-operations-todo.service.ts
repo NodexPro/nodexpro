@@ -30,6 +30,8 @@ import {
   buildTodoPagination,
   CLIENT_OPERATIONS_TODO_PAGE_SIZE,
   compareTodosForBoardOrder,
+  normalizeTodoClientOptionsLimit,
+  normalizeTodoClientSearchTokens,
   normalizeTodoPage,
   normalizeTodoPriority,
   normalizeTodoTaskText,
@@ -554,43 +556,46 @@ export async function getClientOperationsTodoArchive(
 export async function searchClientOperationsTodoClientOptions(
   ctx: RequestContext,
   query: ClientOperationsWorkspaceRequested & { q?: string | null; limit?: unknown } = {},
-): Promise<{ options: ClientOperationsTodoClientOption[] }> {
+): Promise<{ options: ClientOperationsTodoClientOption[]; has_more: boolean }> {
+  // Authorization first: the workspace (OFFICE / MY / STAFF) + client ACL decide the candidate set.
   const { orgId, materializationAccess } = await resolveWorkspace(ctx, query);
-  const q = String(query.q ?? '').trim().toLowerCase();
-  const limitRaw = Number(query.limit ?? 30);
-  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, Math.floor(limitRaw)), 50) : 30;
+  const tokens = normalizeTodoClientSearchTokens(query.q);
+  const limit = normalizeTodoClientOptionsLimit(query.limit);
 
   let clientQuery = supabaseAdmin
     .from('clients')
     .select('id, display_name, tax_id')
     .eq('organization_id', orgId)
-    .eq('is_archived', false)
-    .order('display_name', { ascending: true })
-    .limit(200);
+    .eq('is_archived', false);
 
   if (materializationAccess.authorized_client_ids !== null) {
     if (materializationAccess.authorized_client_ids.length === 0) {
-      return { options: [] };
+      return { options: [], has_more: false };
     }
     clientQuery = clientQuery.in('id', materializationAccess.authorized_client_ids);
   }
 
-  const { data, error } = await clientQuery;
+  // The typed text is matched IN THE DATABASE inside the authorized set (case-insensitive substring on
+  // display name / tax id, every token must match). The previous version read only the first 200 clients
+  // alphabetically and filtered in memory, so clients beyond that were unreachable by typing.
+  for (const token of tokens) {
+    clientQuery = clientQuery.or(`display_name.ilike.%${token}%,tax_id.ilike.%${token}%`);
+  }
+
+  // limit + 1 → `has_more` without a count query. Only the visible page is ever returned/rendered.
+  const { data, error } = await clientQuery
+    .order('display_name', { ascending: true })
+    .limit(limit + 1);
   if (error) throw new Error(error.message ?? 'Failed to search clients');
 
-  let rows = (data ?? []) as Array<{ id: string; display_name: string | null; tax_id: string | null }>;
-  if (q) {
-    rows = rows.filter((r) => {
-      const hay = `${r.display_name ?? ''} ${r.tax_id ?? ''}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }
+  const rows = (data ?? []) as Array<{ id: string; display_name: string | null; tax_id: string | null }>;
   return {
     options: rows.slice(0, limit).map((r) => ({
       client_id: r.id,
       display_name: r.display_name,
       tax_id: r.tax_id,
     })),
+    has_more: rows.length > limit,
   };
 }
 

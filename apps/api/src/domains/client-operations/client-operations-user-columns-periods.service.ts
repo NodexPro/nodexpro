@@ -146,44 +146,48 @@ export async function columnHasMeaningfulLegacyValues(orgId: string, columnId: s
   return rows.some((row) => isMeaningfulTypedValue(row));
 }
 
-export async function loadColumnsWithMeaningfulPriorData(input: {
+/**
+ * Which of the given columns hold at least one meaningful user value.
+ * `period` scans the period-values table (full history of the columns), `legacy` the pre-period table.
+ * Both scans are independent and run in parallel; a scan with no column ids is skipped entirely.
+ * Single batched read per table — no per-column round trips.
+ */
+export async function loadMeaningfulCustomColumnValueSignals(input: {
   organizationId: string;
-  columns: RegistryCustomColumnDefinitionExtended[];
-}): Promise<Set<string>> {
-  const out = new Set<string>();
-  if (!input.columns.length) return out;
-
-  const columnIds = input.columns.map((c) => c.id);
-  const { data: periodData, error: periodError } = await supabaseAdmin
-    .from('client_operations_registry_custom_column_period_values')
-    .select('column_id, value_text, value_number, value_date, value_bool')
-    .eq('organization_id', input.organizationId)
-    .in('column_id', columnIds);
-  assertQueryError(periodError, 'Failed to scan period custom values for eligibility');
-  for (const row of (periodData ?? []) as Array<{ column_id: string } & PeriodTypedValue>) {
-    if (isMeaningfulTypedValue(row)) out.add(row.column_id);
-  }
-
-  const { data: legacyData, error: legacyError } = await supabaseAdmin
-    .from('client_operations_registry_custom_column_values')
-    .select('column_id, value_text, value_number, value_date, value_bool')
-    .eq('organization_id', input.organizationId)
-    .in('column_id', columnIds);
-  assertQueryError(legacyError, 'Failed to scan legacy custom values for eligibility');
-  const legacyMeaningful = new Set<string>();
-  for (const row of (legacyData ?? []) as Array<{ column_id: string } & PeriodTypedValue>) {
-    if (isMeaningfulTypedValue(row)) legacyMeaningful.add(row.column_id);
-  }
-
-  for (const column of input.columns) {
-    if (out.has(column.id)) continue;
-    // Legacy meaningful counts for eligibility only AFTER baseline completed
-    // (baseline itself creates period values at chosen period).
-    if (legacyMeaningful.has(column.id) && column.legacy_baseline_completed_at) {
-      out.add(column.id);
+  periodColumnIds: string[];
+  legacyColumnIds: string[];
+}): Promise<{ period: Set<string>; legacy: Set<string> }> {
+  const scan = async (
+    table: 'client_operations_registry_custom_column_period_values' | 'client_operations_registry_custom_column_values',
+    columnIds: string[],
+    description: string,
+  ): Promise<Set<string>> => {
+    const meaningful = new Set<string>();
+    if (!columnIds.length) return meaningful;
+    const { data, error } = await supabaseAdmin
+      .from(table)
+      .select('column_id, value_text, value_number, value_date, value_bool')
+      .eq('organization_id', input.organizationId)
+      .in('column_id', columnIds);
+    assertQueryError(error, description);
+    for (const row of (data ?? []) as Array<{ column_id: string } & PeriodTypedValue>) {
+      if (isMeaningfulTypedValue(row)) meaningful.add(row.column_id);
     }
-  }
-  return out;
+    return meaningful;
+  };
+  const [period, legacy] = await Promise.all([
+    scan(
+      'client_operations_registry_custom_column_period_values',
+      input.periodColumnIds,
+      'Failed to scan period custom values for eligibility',
+    ),
+    scan(
+      'client_operations_registry_custom_column_values',
+      input.legacyColumnIds,
+      'Failed to scan legacy custom values for eligibility',
+    ),
+  ]);
+  return { period, legacy };
 }
 
 export function columnNeedsLegacyBaseline(
@@ -231,22 +235,40 @@ export async function buildUserColumnsPeriodAggregateExtras(input: {
     available_baseline_periods: string[];
   }>;
 }> {
-  const [visibilityIds, visibilityByColumn, setupComplete, meaningfulPrior] = await Promise.all([
+  // A column needs the legacy-baseline prompt only while `legacy_baseline_completed_at` is unset, so only
+  // those columns need the legacy scan up front (one batched read — never one read per column).
+  const unbaselinedColumnIds = input.columns.filter((c) => !c.legacy_baseline_completed_at).map((c) => c.id);
+  const [visibilityIds, visibilityByColumn, setupComplete, unbaselinedSignals] = await Promise.all([
     loadPeriodVisibilityColumnIds(input.organizationId, input.selectedPeriodKey),
     loadAllVisibilityByColumn(input.organizationId),
     isUserColumnsPeriodSetupComplete(input.organizationId, input.selectedPeriodKey),
-    loadColumnsWithMeaningfulPriorData({
+    loadMeaningfulCustomColumnValueSignals({
       organizationId: input.organizationId,
-      columns: input.columns,
+      periodColumnIds: [],
+      legacyColumnIds: unbaselinedColumnIds,
     }),
   ]);
 
+  // Prior-data eligibility feeds ONLY the pending period-setup dialog. When the selected period setup is
+  // already complete the full-history value scan is not needed at all.
+  const meaningfulPrior = new Set<string>();
+  if (!setupComplete && input.columns.length) {
+    const baselinedColumnIds = input.columns.filter((c) => c.legacy_baseline_completed_at).map((c) => c.id);
+    const prior = await loadMeaningfulCustomColumnValueSignals({
+      organizationId: input.organizationId,
+      periodColumnIds: input.columns.map((c) => c.id),
+      legacyColumnIds: baselinedColumnIds,
+    });
+    for (const id of prior.period) meaningfulPrior.add(id);
+    // Legacy meaningful counts for eligibility only AFTER baseline completed
+    // (baseline itself creates period values at chosen period).
+    for (const id of prior.legacy) meaningfulPrior.add(id);
+  }
+
   const legacyFlags = new Map<string, boolean>();
-  await Promise.all(
-    input.columns.map(async (column) => {
-      legacyFlags.set(column.id, await columnHasMeaningfulLegacyValues(input.organizationId, column.id));
-    }),
-  );
+  for (const column of input.columns) {
+    legacyFlags.set(column.id, unbaselinedSignals.legacy.has(column.id));
+  }
 
   const needingBaseline = new Set<string>();
   const columns_needing_legacy_baseline: Array<{

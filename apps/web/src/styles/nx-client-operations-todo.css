@@ -538,7 +538,7 @@
   top: 100%;
   inset-inline: 0;
   z-index: 5;
-  max-height: 180px;
+  max-height: 240px;
   overflow: auto;
   background: #fff;
   border: 1px solid #d1d5db;
@@ -560,8 +560,20 @@
   color: #0a2d55;
 }
 
-.nx-co-todo-form__suggest button:hover {
+.nx-co-todo-form__suggest button:hover,
+.nx-co-todo-form__suggest li.is-active button {
   background: #f0f7ff;
+}
+
+.nx-co-todo-form__suggest li.is-active button {
+  box-shadow: inset 3px 0 0 #1d6fd1;
+}
+
+.nx-co-todo-form__suggest-note {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #5b6b80;
 }
 
 /* Archive */
