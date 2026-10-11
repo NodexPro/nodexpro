@@ -31,6 +31,7 @@ import { docflowRoutes } from './routes/docflow.routes.js';
 import { workEngineRoutes } from './domains/work-engine/work-engine.routes.js';
 import { incomeRoutes } from './domains/income/income.routes.js';
 import { accountingBaseRoutes } from './domains/accounting-base/accounting-base.routes.js';
+import { publicCatalogRoutes } from './domains/public-catalog/public-catalog.routes.js';
 import {
   logNodexproApiBoot,
   resolveApiDeployMarker,
@@ -155,6 +156,7 @@ app.get('/api/v1/health', async (_req, res) => {
   });
 });
 
+app.use('/api/v1/public', publicCatalogRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/organizations', organizationsRoutes);
 app.use('/api/v1/organizations', membershipsRoutes);

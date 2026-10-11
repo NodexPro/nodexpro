@@ -46,7 +46,11 @@ export function TemplateLayout({
   // Users & Roles is an office working window: same collapsible navy rail as the employee workspace,
   // no generic top header (organization / user / language already live in the sidebar account block).
   const isUsersRolesWorkspace = location.pathname === '/users-roles';
-  const usesCanonicalWorkingShell = isClientOperationsModule || isUsersRolesWorkspace;
+  // Every destination opened from the canonical sidebar uses the same working shell (navy backdrop +
+  // collapsible glass AppSidebar). CO / Users & Roles are navy-native surfaces; every other destination keeps
+  // its own light content inside a light surface (`t1-appShell--general`) so internal content is unchanged.
+  const usesCanonicalWorkingShell = true;
+  const isNavyNativeSurface = isClientOperationsModule || isUsersRolesWorkspace;
   const pageMaxWidth =
     isClientOperationsModule || isIncomeModule || isWorkEngineSection || isUsersRolesWorkspace ? 1600 : 1100;
 
@@ -81,7 +85,7 @@ export function TemplateLayout({
 
   return (
     <div
-      className={`t1-appShell${usesCanonicalWorkingShell ? ' t1-appShell--client-operations' : ''}${isUsersRolesWorkspace ? ' t1-appShell--users-roles' : ''}`}
+      className={`t1-appShell${usesCanonicalWorkingShell ? ' t1-appShell--client-operations' : ''}${isUsersRolesWorkspace ? ' t1-appShell--users-roles' : ''}${isNavyNativeSurface ? '' : ' t1-appShell--general'}`}
       style={{ display: 'flex', minHeight: '100vh' }}
     >
       <AppSidebar
@@ -94,7 +98,7 @@ export function TemplateLayout({
         onSetLanguage={onSetUiLanguage}
         onLogout={onSignOut}
       />
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div className="t1-shellColumn" style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {header}
         <main
           className={

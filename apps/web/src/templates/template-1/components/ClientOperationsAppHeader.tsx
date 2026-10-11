@@ -38,9 +38,14 @@ export function ClientOperationsAppHeader({
           </svg>
         </span>
         {greetingText ? (
-          <h1 className="nx-co-app-header__title" data-testid="client-operations-greeting">
-            {greetingText}
-          </h1>
+          <div className="nx-co-app-header__title-stack">
+            <h1 className="nx-co-app-header__title" data-testid="client-operations-greeting">
+              {greetingText}
+            </h1>
+            <p className="nx-co-app-header__module-title" data-testid="client-operations-module-title">
+              {CLIENT_OPERATIONS_HEADER_TITLE_HE}
+            </p>
+          </div>
         ) : (
           <h1 className="nx-co-app-header__title">{CLIENT_OPERATIONS_HEADER_TITLE_HE}</h1>
         )}

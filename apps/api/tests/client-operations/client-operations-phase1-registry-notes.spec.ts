@@ -77,7 +77,8 @@ test('7 frontend replaces aggregate after note command', () => {
 
 test('8 EMBEDDED_FALLBACK_COLUMNS removed', () => {
   assert.doesNotMatch(view, /EMBEDDED_FALLBACK_COLUMNS/);
-  assert.match(view, /const columns = columnsProp \?\? \[\]/);
+  // Columns still come only from the backend aggregate (the office-only handler column is dropped by flag).
+  assert.match(view, /const all = columnsProp \?\? \[\]/);
 });
 
 test('9 displayForColumn business fallback removed', () => {

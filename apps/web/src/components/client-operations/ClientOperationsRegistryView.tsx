@@ -410,6 +410,9 @@ function displayForColumn(r: ClientOperationsRegistryRow, col: ClientOperationsR
   return value;
 }
 
+/** Row pitch of the spreadsheet grid (matches the canvas row gradient in nx-client-operations-spreadsheet.css). */
+const SHEET_GRID_ROW_PITCH_PX = 31;
+
 export type ClientOperationsRegistryViewProps = {
   rows: ClientOperationsRegistryRow[];
   onRowsChange: (rows: ClientOperationsRegistryRow[]) => void;
@@ -494,6 +497,11 @@ export type ClientOperationsRegistryViewProps = {
       role_code: string;
     }>;
     selector_visible: boolean;
+    selector_options?: Array<{
+      scope_kind: 'OFFICE' | 'MY' | 'STAFF';
+      subject_user_id: string | null;
+      label_he: string;
+    }>;
     /** Backend presentation flag: assigned-handler column / filter is shown in the office workspace only. */
     show_handler?: boolean;
   } | null;
@@ -1072,6 +1080,25 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const visibleColumns = useMemo(
     () => columns.filter((c) => c.visible !== false && !hiddenColumns.has(c.key)),
     [columns, hiddenColumns],
+  );
+
+  // Presentation only: empty grid cells below the real/manual rows so the sheet stays one continuous
+  // cell grid (vertical + horizontal borders) in every workspace, however few rows the viewer has.
+  const [sheetCanvasHeight, setSheetCanvasHeight] = useState(0);
+  const sheetCanvasObserverRef = useRef<ResizeObserver | null>(null);
+  const sheetCanvasRef = useCallback((el: HTMLDivElement | null) => {
+    sheetCanvasObserverRef.current?.disconnect();
+    sheetCanvasObserverRef.current = null;
+    if (!el) return;
+    setSheetCanvasHeight(el.clientHeight);
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => setSheetCanvasHeight(el.clientHeight));
+    observer.observe(el);
+    sheetCanvasObserverRef.current = observer;
+  }, []);
+  const sheetFillerRowCount = Math.min(
+    80,
+    Math.max(0, Math.ceil(sheetCanvasHeight / SHEET_GRID_ROW_PITCH_PX) - 1 - rows.length - manualRows.length),
   );
 
   const persistCellPresentation = (next: Record<string, CellPresentation>) => {
@@ -3416,7 +3443,12 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   };
 
   const renderSpreadsheetTable = () => (
-    <div className="nx-co-sheet__canvas" onContextMenu={onGridContextMenu} data-testid="client-operations-grid-surface">
+    <div
+      ref={sheetCanvasRef}
+      className="nx-co-sheet__canvas"
+      onContextMenu={onGridContextMenu}
+      data-testid="client-operations-grid-surface"
+    >
       <table className={`nx-co-sheet__table${freezeOn ? ' is-frozen' : ''}${bordersOn ? '' : ' is-borders-off'}${isResizingColumn ? ' is-resizing' : ''}`}>
         <colgroup>
           {visibleColumns.map((column) => <col key={column.key} style={{ width: widthForColumn(column) }} />)}
@@ -3771,6 +3803,15 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             </tr>
           ))
             : null}
+          {Array.from({ length: sheetFillerRowCount }, (_, i) => (
+            <tr key={`filler-${i}`} data-row-kind="filler" aria-hidden="true" className="nx-co-sheet__filler-row">
+              {visibleColumns.map((column) => (
+                <td key={column.key} data-col={column.key} data-row-kind="filler" data-freeze={column.freeze_default ? 'true' : 'false'}>
+                  {'\u00a0'}
+                </td>
+              ))}
+            </tr>
+          ))}
         </tbody>
       </table>
       {periodContentPending ? (
@@ -3910,8 +3951,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   );
 
   if (isSpreadsheet) {
+    const workspaceSelectorOptions = workspace?.selector_options ?? workspace?.allowed_scopes ?? [];
     const workspaceSelectorVisible =
-      Boolean(workspace?.selector_visible) && (workspace?.allowed_scopes?.length ?? 0) > 1;
+      Boolean(workspace?.selector_visible) && workspaceSelectorOptions.length > 0;
     const workspaceSelectValue = workspace
       ? encodeClientOperationsWorkspaceOptionValue({
           scope_kind: workspace.scope_kind,
@@ -3931,7 +3973,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           onChange={(event) => onWorkspaceChange?.(event.target.value)}
           aria-label="מרחב עבודה"
         >
-          {(workspace?.allowed_scopes ?? []).map((opt) => {
+          {workspaceSelectorOptions.map((opt) => {
             const value = encodeClientOperationsWorkspaceOptionValue({
               scope_kind: opt.scope_kind,
               subject_user_id: opt.subject_user_id,

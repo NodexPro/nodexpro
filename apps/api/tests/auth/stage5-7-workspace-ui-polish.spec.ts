@@ -98,7 +98,11 @@ test('8. sidebar: no internal scrollbar, language hidden by backend flag, sign-o
 
 test('9. employee greeting is the CO header top line; header + shell typography is Arial', () => {
   const header = web('templates/template-1/components/ClientOperationsAppHeader.tsx');
-  assert.match(header, /\{greetingText \? \(\s*<h1 className="nx-co-app-header__title" data-testid="client-operations-greeting">\s*\{greetingText\}/);
+  // Stage 5.8: the greeting stays the top line; the module title is rendered beneath it.
+  assert.match(
+    header,
+    /\{greetingText \? \(\s*<div className="nx-co-app-header__title-stack">\s*<h1 className="nx-co-app-header__title" data-testid="client-operations-greeting">\s*\{greetingText\}/,
+  );
   assert.match(header, /<h1 className="nx-co-app-header__title">\{CLIENT_OPERATIONS_HEADER_TITLE_HE\}<\/h1>/);
   const layout = web('templates/template-1/TemplateLayout.tsx');
   assert.match(layout, /greetingText=\{sidebarAccountBlock\.workspace_greeting\?\.text \?\? null\}/);

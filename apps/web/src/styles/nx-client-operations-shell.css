@@ -85,9 +85,29 @@
   filter: blur(1.5px);
 }
 
-.t1-appShell--client-operations .t1-pageMain {
+.t1-appShell--client-operations:not(.t1-appShell--general) .t1-pageMain {
   background: transparent;
   padding: 18px 26px 18px;
+}
+
+/*
+ * General destinations (everything else opened from the canonical sidebar): same navy backdrop,
+ * same glass AppSidebar and the same outer shell spacing as Users & Roles. The page's own light content
+ * (header, tables, forms) is untouched — it simply sits on a light surface inside the shell.
+ */
+.t1-appShell--client-operations.t1-appShell--general .t1-shellColumn {
+  margin: 18px 26px;
+  border-radius: 16px;
+  background: var(--t1-bg, #f8fafc);
+  color: var(--t1-text, #111827);
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  box-shadow:
+    0 0 0 1px rgba(125, 236, 247, 0.22),
+    0 12px 36px rgba(2, 20, 45, 0.34);
+}
+
+.t1-appShell--client-operations.t1-appShell--general .t1-shellColumn > header {
+  border-radius: 16px 16px 0 0;
 }
 
 /*
@@ -188,6 +208,31 @@
   color: #ffffff;
   white-space: nowrap;
   text-shadow: 0 1px 2px rgba(2, 20, 45, 0.35);
+}
+
+/* Employee header: greeting line + module title beneath it (module title uses the active month-tab accent). */
+.nx-co-app-header__title-stack {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.nx-co-app-header__title-stack .nx-co-app-header__title {
+  font-size: 19px;
+}
+
+.nx-co-app-header__module-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0;
+  white-space: nowrap;
+  /* Same bright cyan as the active month tab edge (#7decf7), restrained halo only. */
+  color: #7decf7;
+  text-shadow: 0 0 8px rgba(0, 207, 239, 0.45);
 }
 
 .nx-co-app-header__search-slot {
@@ -393,6 +438,13 @@
   color: inherit;
 }
 
+/* "Nodex לקוחות" label (module nav item): text colour only — hover / active keep their own colours. */
+.t1-appShell--client-operations
+  .t1-sidebar__link:not(:hover):not(.is-active)
+  .t1-sidebar__label[data-nav-path^='/m/client-operations'] {
+  color: #ffffff;
+}
+
 /* Hover — glass tile. */
 .t1-appShell--client-operations .t1-sidebar__link:hover {
   color: #7decf7;
@@ -444,10 +496,15 @@
   color: var(--nx-text-on-navy);
 }
 
-.t1-appShell--client-operations button,
-.t1-appShell--client-operations input,
-.t1-appShell--client-operations select,
-.t1-appShell--client-operations textarea {
+.t1-appShell--client-operations:not(.t1-appShell--general) button,
+.t1-appShell--client-operations:not(.t1-appShell--general) input,
+.t1-appShell--client-operations:not(.t1-appShell--general) select,
+.t1-appShell--client-operations:not(.t1-appShell--general) textarea {
+  font-family: inherit;
+}
+
+.t1-appShell--client-operations .t1-sidebar button,
+.t1-appShell--client-operations .t1-sidebar select {
   font-family: inherit;
 }
 

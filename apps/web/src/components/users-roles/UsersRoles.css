@@ -402,8 +402,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 16px;
-  padding: 8px 14px;
+  gap: 10px 20px;
+  padding: 16px 20px;
+  min-height: 72px;
   margin-bottom: 12px;
   border: 1px solid rgba(125, 236, 247, 0.55);
   border-radius: 12px;
@@ -412,13 +413,19 @@
   color: var(--nx-ur-navy-text);
 }
 
-.nx-ur-owner__tag {
-  padding: 2px 10px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, #1477e8, #00cfef);
-  color: #ffffff;
-  font-size: 12px;
+/* Plain text (no pill) in the NodexPro logo violet — token from nx-client-operations-shell.css. */
+.nx-ur-owner__tag,
+.nx-ur-owner__status {
+  color: var(--nx-violet-500, #6657e8);
+  font-size: 16px;
   font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.nx-ur-owner__status.is-closed {
+  color: var(--nx-ur-text-secondary);
 }
 
 .nx-ur-owner__row {
@@ -436,6 +443,10 @@
 
 .nx-ur-owner__who {
   min-width: 180px;
+}
+
+.nx-ur-owner__row {
+  min-height: 40px;
 }
 
 .nx-ur-owner__meta {

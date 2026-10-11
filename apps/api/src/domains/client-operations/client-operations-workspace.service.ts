@@ -21,6 +21,7 @@ import {
   buildMyWorkspaceOption,
   buildOfficeWorkspaceOption,
   buildStaffWorkspaceOption,
+  buildWorkspaceSelectorOptions,
   canInspectOrganizationWorkspaces,
   defaultWorkspaceScopeKind,
   normalizeRequestedWorkspaceScopeKind,
@@ -52,6 +53,8 @@ export type ClientOperationsWorkspaceResolution = {
     display_name: string;
     role_code: string;
   }>;
+  /** Backend role of the viewer — used for presentation projections only. */
+  viewer_role_code: string;
 };
 
 async function loadActiveOperationalWorkspaceSubjects(
@@ -234,6 +237,7 @@ export async function resolveClientOperationsWorkspaceScope(params: {
     label_he,
     allowed_scopes,
     available_workspace_subjects,
+    viewer_role_code: roleCode,
   };
 
   const materializationAccess: OrganizationClientAccessScope = {
@@ -277,12 +281,19 @@ export function workspaceAggregateContract(workspace: ClientOperationsWorkspaceR
   allowed_scopes: ClientOperationsWorkspaceOption[];
   available_workspace_subjects: ClientOperationsWorkspaceResolution['available_workspace_subjects'];
   selector_visible: boolean;
+  /** Presentation only: options the selector renders (Owner: office only, labelled "משרד"). */
+  selector_options: ClientOperationsWorkspaceOption[];
   /**
    * Presentation only: the assigned-handler column / filter (מטפל בתיק) is shown in the office workspace.
    * Employees (no OFFICE scope) do not see it; the assigned-handler truth itself is untouched.
    */
   show_handler: boolean;
 } {
+  const selector_options = buildWorkspaceSelectorOptions({
+    roleCode: workspace.viewer_role_code,
+    allowedScopes: workspace.allowed_scopes,
+    selectedScopeKind: workspace.scope_kind,
+  });
   return {
     scope_kind: workspace.scope_kind,
     viewer_user_id: workspace.viewer_user_id,
@@ -291,7 +302,8 @@ export function workspaceAggregateContract(workspace: ClientOperationsWorkspaceR
     label_he: workspace.label_he,
     allowed_scopes: workspace.allowed_scopes,
     available_workspace_subjects: workspace.available_workspace_subjects,
-    selector_visible: workspace.allowed_scopes.length > 1,
+    selector_visible: selector_options.length > 1 || selector_options.some((o) => o.scope_kind === 'OFFICE'),
+    selector_options,
     show_handler: workspace.allowed_scopes.some((s) => s.scope_kind === 'OFFICE'),
   };
 }

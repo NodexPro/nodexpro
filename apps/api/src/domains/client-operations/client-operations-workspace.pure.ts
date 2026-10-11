@@ -106,3 +106,22 @@ export function buildStaffWorkspaceOption(params: {
     role_code: params.roleCode,
   };
 }
+
+/**
+ * Presentation-only selector projection. Authorization (`allowed_scopes`, scope resolution) is
+ * untouched: the office-level viewer "Owner" works from the office workspace, so the personal
+ * "my clients" option is not offered in the selector (unless it is the currently selected scope).
+ * For the Owner the office option is labelled "משרד" in the selector (other roles keep their labels).
+ */
+export const WORKSPACE_SELECTOR_OFFICE_LABEL_HE = 'משרד';
+
+export function buildWorkspaceSelectorOptions(params: {
+  roleCode: string | null | undefined;
+  allowedScopes: ClientOperationsWorkspaceOption[];
+  selectedScopeKind: ClientOperationsWorkspaceScopeKind;
+}): ClientOperationsWorkspaceOption[] {
+  const isOwner = String(params.roleCode ?? '').trim().toLowerCase() === 'owner';
+  return params.allowedScopes
+    .filter((o) => !(isOwner && o.scope_kind === 'MY' && params.selectedScopeKind !== 'MY'))
+    .map((o) => (isOwner && o.scope_kind === 'OFFICE' ? { ...o, label_he: WORKSPACE_SELECTOR_OFFICE_LABEL_HE } : o));
+}

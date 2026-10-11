@@ -583,6 +583,16 @@
   background: var(--nx-co-accent);
 }
 
+/* Empty grid cells under the real/manual rows: same cell borders + 31px row pitch as the canvas rows. */
+.nx-co-sheet__table tbody tr.nx-co-sheet__filler-row td {
+  height: 31px;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
 .nx-co-sheet__table.is-borders-off th,
 .nx-co-sheet__table.is-borders-off td {
   border-color: transparent;

@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import logoSrc from '../templates/template-1/assets/nodexpro-logo.png';
+import { LandingModuleShowcase } from '../components/landing/LandingModuleShowcase';
 import '../styles/nx-landing.css';
 
 const MODULES = [
@@ -76,6 +77,8 @@ export function LandingPage() {
           </div>
         </div>
       </section>
+
+      <LandingModuleShowcase />
 
       <section className="nx-landing__modules" aria-labelledby="nx-landing-modules-heading">
         <div className="nx-landing__modules-inner">

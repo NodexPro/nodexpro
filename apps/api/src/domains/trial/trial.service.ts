@@ -3,7 +3,8 @@ import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
 import { isTrialAlreadyUsed } from './legal-identity.service.js';
 
-const TRIAL_MONTHS = 2;
+/** Canonical full-platform trial length (also read by the public landing module showcase). */
+export const TRIAL_MONTHS = 2;
 
 export interface TrialStateDto {
   hasLegalIdentity: boolean;

@@ -290,7 +290,13 @@ export function AppSidebar({
                   >
                     {coGlass ? <CoNavGlyph icon={iconForLabel(child.label)} /> : iconForLabel(child.label)}
                   </span>
-                  <span style={{ marginLeft: 8 }}>{child.label}</span>
+                  <span
+                    className={coGlass ? 't1-sidebar__label' : undefined}
+                    data-nav-path={coGlass ? child.to : undefined}
+                    style={{ marginLeft: 8 }}
+                  >
+                    {child.label}
+                  </span>
                 </NavLink>
               ))}
           </React.Fragment>

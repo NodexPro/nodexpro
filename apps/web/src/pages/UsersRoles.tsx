@@ -219,7 +219,7 @@ export function UsersRoles() {
                   </div>
                   {o.profile.phone ? <div className="nx-ur-owner__meta nx-ur-ltr">{o.profile.phone}</div> : null}
                   <div className="nx-ur-owner__meta nx-ur-ltr">{o.membership.start_date ?? '—'}</div>
-                  <span className={`nx-ur-badge nx-ur-badge--${o.membership.status.code}`}>{o.membership.status.label}</span>
+                  <span className={`nx-ur-owner__status${o.membership.status.code === 'active' ? '' : ' is-closed'}`}>{o.membership.status.label}</span>
                   <div className="nx-ur-actions">
                     {o.available_actions.edit_profile ? (
                       <RowIconAction

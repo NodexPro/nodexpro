@@ -45,6 +45,12 @@ type RegistryWorkspaceAggregate = {
     role_code: string;
   }>;
   selector_visible: boolean;
+  /** Backend presentation projection of the selector (Owner: office only). */
+  selector_options?: Array<{
+    scope_kind: 'OFFICE' | 'MY' | 'STAFF';
+    subject_user_id: string | null;
+    label_he: string;
+  }>;
   show_handler?: boolean;
 };
 

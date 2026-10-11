@@ -287,6 +287,12 @@ export type ClientOperationsRegistryResponse = {
       role_code: string;
     }>;
     selector_visible: boolean;
+    selector_options: Array<{
+      scope_kind: 'OFFICE' | 'MY' | 'STAFF';
+      subject_user_id: string | null;
+      label_he: string;
+      role_code: string | null;
+    }>;
     show_handler: boolean;
   };
   query: {
