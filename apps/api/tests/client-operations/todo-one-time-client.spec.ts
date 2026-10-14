@@ -602,8 +602,9 @@ test('N1 null client_id audit: every ToDo path tolerates one-time rows (source g
   assert.match(src, /base\(\)\.is\('client_id', null\)/);
   assert.match(src, /\.eq\('assigned_to_user_id', params\.ownerUserId\)/);
   // Authorization: ACL applies to canonical clients only; archived-client filter keeps one-time rows.
-  assert.match(src, /task\.client_id != null && !clientIdIsAuthorized/);
-  assert.match(src, /r\.client_id == null \|\| live\.has\(r\.client_id\)/);
+  // (anchored at line start: a statement that is accidentally swallowed by a comment must NOT satisfy this guard)
+  assert.match(src, /^\s*if \(task\.client_id != null && !clientIdIsAuthorized\(materializationAccess, task\.client_id\)\) return false;/m);
+  assert.match(src, /^\s*if \(r\.client_id == null\) return true;/m);
   // Writes: client_id is never a string for a one-time row, never generated.
   assert.match(src, /const clientId = identity\.mode === 'canonical' \? identity\.client_id : null;/);
   assert.doesNotMatch(src, /randomUUID|uuid\(\)|crypto\./);

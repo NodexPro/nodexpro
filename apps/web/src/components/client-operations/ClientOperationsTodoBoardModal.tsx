@@ -6,6 +6,8 @@
 import {
   useCallback,
   useEffect,
+  useId,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -27,7 +29,18 @@ import {
   TODO_CLIENT_PICKER_VISIBLE_LIMIT,
   type TodoClientPickerOption,
 } from '../../lib/client-operations-todo-client-picker.pure';
+import {
+  createProgressNoteAutosaver,
+  progressNoteSaveStateLabelHe,
+  type ProgressNoteAutosaver,
+  type ProgressNoteSaveState,
+} from '../../lib/client-operations-todo-progress-note-autosave.pure';
 import { ClientOperationsTodoClientPicker } from './ClientOperationsTodoClientPicker';
+import { ClientOperationsTodoCompleteModal } from './ClientOperationsTodoCompleteModal';
+import {
+  ClientOperationsTodoNotePopover,
+  useDismissOnOutsidePointer,
+} from './ClientOperationsTodoNotePopover';
 import {
   moduleClientOperationsTodoArchive,
   moduleClientOperationsTodoBoard,
@@ -43,6 +56,10 @@ export type ClientOperationsTodoCard = {
   task_text: string;
   priority: 1 | 2 | 3 | 4 | null;
   priority_presentation_token?: string;
+  /** שלב טיפול — optional free text from the backend (never a status). */
+  progress_note: string | null;
+  /** סיבת סגירה — archive column; null for active tasks and tasks closed without a reason. */
+  completion_reason: string | null;
   created_at: string;
   created_by?: { user_id: string | null; display_name: string | null };
   completed_at: string | null;
@@ -68,6 +85,8 @@ export type ClientOperationsTodoBoardAggregate = {
     has_next: boolean;
   };
   tasks: ClientOperationsTodoCard[];
+  /** Backend-owned input limits for שלב טיפול / סיבת סגירה. */
+  field_limits?: { progress_note_max_length: number; completion_reason_max_length: number };
   available_clients_hint?: {
     search_endpoint?: string;
     one_time_client?: { allowed: boolean; name_max_length: number; tax_id_max_length: number };
@@ -120,10 +139,19 @@ function formatDateHe(iso: string | null | undefined): string {
 export function ClientOperationsTodoBoardModal({
   open,
   onClose,
-  workspaceQuery,
+  workspaceQuery: workspaceQueryProp,
   workspaceLabelHe,
   canEdit,
 }: Props) {
+  // The parent passes a fresh object literal on every render. Depending on its identity re-created every
+  // callback below and re-ran the open effect (board refetch + closing open forms) on each parent render.
+  // Only the two primitives are the workspace identity.
+  const wsScope = workspaceQueryProp.workspace_scope ?? null;
+  const wsSubject = workspaceQueryProp.workspace_subject_user_id ?? null;
+  const workspaceQuery = useMemo<ClientOperationsTodoWorkspaceQuery>(
+    () => ({ workspace_scope: wsScope, workspace_subject_user_id: wsSubject }),
+    [wsScope, wsSubject],
+  );
   const [board, setBoard] = useState<ClientOperationsTodoBoardAggregate | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -141,6 +169,11 @@ export function ClientOperationsTodoBoardModal({
   const [archiveSearchQ, setArchiveSearchQ] = useState('');
   const [archivePriority, setArchivePriority] = useState('all');
   const [busyTodoId, setBusyTodoId] = useState<string | null>(null);
+  // Completion confirmation (סיום משימה): the ToDo is completed only after an explicit confirmation.
+  const [completeTask, setCompleteTask] = useState<ClientOperationsTodoCard | null>(null);
+  const [completeReason, setCompleteReason] = useState('');
+  const [completeBusy, setCompleteBusy] = useState(false);
+  const [completeError, setCompleteError] = useState('');
 
   const boardSeqRef = useRef(0);
   const boardAbortRef = useRef<AbortController | null>(null);
@@ -220,6 +253,7 @@ export function ClientOperationsTodoBoardModal({
     setSearchQ('');
     setCreateOpen(false);
     setEditTask(null);
+    setCompleteTask(null);
     setArchiveOpen(false);
     void loadBoard({ page: 1, q: '' });
     return () => {
@@ -238,6 +272,8 @@ export function ClientOperationsTodoBoardModal({
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
     searchTimerRef.current = setTimeout(() => {
       const next = searchDraft.trim();
+      // Nothing new to ask the backend (e.g. the draft was reset on open, or typed back to the applied text).
+      if (next === searchQ) return;
       setSearchQ(next);
       setPage(1);
       void loadBoard({ page: 1, q: next, quiet: true });
@@ -289,20 +325,40 @@ export function ClientOperationsTodoBoardModal({
     [workspaceQuery, page, searchQ],
   );
 
-  const onComplete = async (task: ClientOperationsTodoCard) => {
+  // The complete action only OPENS the confirmation dialog; nothing is sent until the user confirms.
+  const onComplete = (task: ClientOperationsTodoCard) => {
     if (!task.allowed_actions.includes('complete_client_operations_todo')) return;
-    setBusyTodoId(task.id);
-    setError('');
+    setCompleteReason('');
+    setCompleteError('');
+    setCompleteTask(task);
+  };
+
+  const cancelComplete = useCallback(() => {
+    setCompleteTask(null);
+    setCompleteReason('');
+    setCompleteError('');
+  }, []);
+
+  const confirmComplete = async () => {
+    const task = completeTask;
+    if (!task || completeBusy) return;
+    setCompleteBusy(true);
+    setCompleteError('');
     try {
+      // ONE command: completion + the optional reason are persisted atomically by the backend.
       const data = (await runCommand({
         command: 'complete_client_operations_todo',
         todo_id: task.id,
+        completion_reason: completeReason.trim() || null,
       })) as ClientOperationsTodoBoardAggregate;
       applyBoardAggregate(data);
+      setCompleteTask(null);
+      setCompleteReason('');
+      setEditTask(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'שגיאה בסימון הושלם');
+      setCompleteError(e instanceof Error ? e.message : 'שגיאה בסימון הושלם');
     } finally {
-      setBusyTodoId(null);
+      setCompleteBusy(false);
     }
   };
 
@@ -351,6 +407,11 @@ export function ClientOperationsTodoBoardModal({
   const onBoardKeyDown = (event: ReactKeyboardEvent) => {
     if (event.key !== 'Escape') return;
     event.stopPropagation();
+    if (completeTask) {
+      // The confirmation dialog handles its own Escape; this is only a safety net (never completes).
+      if (!completeBusy) cancelComplete();
+      return;
+    }
     if (createOpen) {
       setCreateOpen(false);
       return;
@@ -381,7 +442,7 @@ export function ClientOperationsTodoBoardModal({
       role="presentation"
       data-testid="client-operations-todo-overlay"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget && !createOpen && !editTask && !archiveOpen) onClose();
+        if (e.target === e.currentTarget && !createOpen && !editTask && !archiveOpen && !completeTask) onClose();
       }}
       onKeyDown={onBoardKeyDown}
     >
@@ -522,7 +583,7 @@ export function ClientOperationsTodoBoardModal({
                         accent={lane.accent}
                         busy={busyTodoId === task.id}
                         onDoubleClick={() => setEditTask(task)}
-                        onComplete={() => void onComplete(task)}
+                        onComplete={() => onComplete(task)}
                       />
                     ))}
                   </div>
@@ -538,6 +599,9 @@ export function ClientOperationsTodoBoardModal({
           mode="create"
           workspaceQuery={workspaceQuery}
           oneTimeClient={board?.available_clients_hint?.one_time_client ?? null}
+          fieldLimits={board?.field_limits ?? null}
+          boardView={{ page, q: searchQ || null }}
+          onBoardRefreshed={applyBoardAggregate}
           onClose={() => setCreateOpen(false)}
           onSaved={(agg) => {
             applyBoardAggregate(agg);
@@ -552,15 +616,29 @@ export function ClientOperationsTodoBoardModal({
           task={editTask}
           workspaceQuery={workspaceQuery}
           oneTimeClient={board?.available_clients_hint?.one_time_client ?? null}
+          fieldLimits={board?.field_limits ?? null}
+          boardView={{ page, q: searchQ || null }}
+          onBoardRefreshed={applyBoardAggregate}
           onClose={() => setEditTask(null)}
           onSaved={(agg) => {
             applyBoardAggregate(agg);
             setEditTask(null);
           }}
-          onCompleted={(agg) => {
-            applyBoardAggregate(agg);
-            setEditTask(null);
-          }}
+          onRequestComplete={(t) => onComplete(t)}
+        />
+      ) : null}
+
+      {completeTask ? (
+        <ClientOperationsTodoCompleteModal
+          clientLabel={completeTask.client.display_name}
+          taskText={completeTask.task_text}
+          reason={completeReason}
+          onReasonChange={setCompleteReason}
+          reasonMaxLength={board?.field_limits?.completion_reason_max_length}
+          busy={completeBusy}
+          error={completeError}
+          onConfirm={() => void confirmComplete()}
+          onCancel={cancelComplete}
         />
       ) : null}
 
@@ -637,6 +715,7 @@ export function ClientOperationsTodoBoardModal({
                       <th>נוצר בתאריך</th>
                       <th>הושלם בתאריך</th>
                       <th>הושלם על ידי</th>
+                      <th>סיבת סגירה</th>
                       <th>פעולות</th>
                     </tr>
                   </thead>
@@ -659,6 +738,16 @@ export function ClientOperationsTodoBoardModal({
                         <td>{formatDateHe(t.created_at)}</td>
                         <td>{formatDateHe(t.completed_at)}</td>
                         <td>{t.completed_by?.display_name ?? '—'}</td>
+                        <td
+                          className={
+                            t.completion_reason
+                              ? 'nx-co-todo-archive__reason nx-co-todo-archive__reason--set'
+                              : 'nx-co-todo-archive__reason'
+                          }
+                          data-testid="client-operations-todo-archive-reason"
+                        >
+                          {t.completion_reason ?? '—'}
+                        </td>
                         <td>
                           {t.allowed_actions.includes('reopen_client_operations_todo') ? (
                             <button
@@ -718,6 +807,17 @@ function TodoStickyCard(props: {
   const { task, accent, busy, onDoubleClick, onComplete } = props;
   const canComplete = task.allowed_actions.includes('complete_client_operations_todo');
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cardRef = useRef<HTMLElement | null>(null);
+  const popoverId = useId();
+  // שלב טיפול popover: hover, keyboard focus, or tap/click (pinned). Escape dismisses it.
+  const note = task.progress_note;
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const noteVisible = Boolean(note) && !dismissed && (hovered || focused || pinned);
+  const unpin = useCallback(() => setPinned(false), []);
+  useDismissOnOutsidePointer(pinned, cardRef, unpin);
 
   const onClick = (e: ReactMouseEvent) => {
     // Distinguish single vs double via timer clear on dblclick.
@@ -725,18 +825,46 @@ function TodoStickyCard(props: {
     clickTimer.current = setTimeout(() => {
       clickTimer.current = null;
     }, 250);
+    // Tap / click toggles the note popover (touch has no hover).
+    if (note) {
+      setDismissed(false);
+      setPinned((p) => !p);
+    }
     e.stopPropagation();
   };
 
   return (
     <article
+      ref={cardRef}
       className={`nx-co-todo-sticky nx-co-todo-sticky--${accent}`}
       data-testid="client-operations-todo-card"
       data-todo-id={task.id}
+      data-has-note={note ? 'true' : undefined}
+      tabIndex={note ? 0 : undefined}
+      aria-describedby={noteVisible ? popoverId : undefined}
       onClick={onClick}
+      onMouseEnter={() => {
+        setDismissed(false);
+        setHovered(true);
+      }}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => {
+        setDismissed(false);
+        setFocused(true);
+      }}
+      onBlur={() => setFocused(false)}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && noteVisible) {
+          // Close the popover only — not the board.
+          e.stopPropagation();
+          setDismissed(true);
+          setPinned(false);
+        }
+      }}
       onDoubleClick={(e) => {
         e.preventDefault();
         if (clickTimer.current) clearTimeout(clickTimer.current);
+        setPinned(false);
         onDoubleClick();
       }}
     >
@@ -763,6 +891,9 @@ function TodoStickyCard(props: {
           ✓
         </button>
       ) : null}
+      {noteVisible && note ? (
+        <ClientOperationsTodoNotePopover id={popoverId} note={note} anchorRef={cardRef} />
+      ) : null}
     </article>
   );
 }
@@ -773,11 +904,18 @@ function TodoFormModal(props: {
   workspaceQuery: ClientOperationsTodoWorkspaceQuery;
   /** Backend-owned one-time client capability (vailable_clients_hint.one_time_client). */
   oneTimeClient: { allowed: boolean; name_max_length: number; tax_id_max_length: number } | null;
+  /** Backend-owned input limits (aggregate `field_limits`). */
+  fieldLimits: { progress_note_max_length: number; completion_reason_max_length: number } | null;
+  /** Board page / search the user is looking at — sent with background saves so the view is not reset. */
+  boardView: { page: number; q: string | null };
+  /** A background command (progress-note autosave) returned the full refreshed board aggregate. */
+  onBoardRefreshed: (agg: ClientOperationsTodoBoardAggregate) => void;
   onClose: () => void;
   onSaved: (agg: ClientOperationsTodoBoardAggregate) => void;
-  onCompleted?: (agg: ClientOperationsTodoBoardAggregate) => void;
+  /** Opens the completion confirmation (the form never completes a ToDo by itself). */
+  onRequestComplete?: (task: ClientOperationsTodoCard) => void;
 }) {
-  const { mode, task, workspaceQuery, oneTimeClient, onClose, onSaved, onCompleted } = props;
+  const { mode, task, workspaceQuery, oneTimeClient, fieldLimits, boardView, onBoardRefreshed, onClose, onSaved, onRequestComplete } = props;
   const oneTimeAllowed = oneTimeClient?.allowed === true;
   // Edit: the backend tells which kind of client the ToDo has (client.is_one_time) — never inferred here.
   const editingOneTime = mode === 'edit' && task?.client.is_one_time === true;
@@ -796,6 +934,65 @@ function TodoFormModal(props: {
   );
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+
+  // שלב טיפול: optional free text. Create sends it with the create command; edit AUTO-SAVES it through the
+  // named `update_client_operations_todo_progress_note` command (debounced, serialized, error visible).
+  const [progressNote, setProgressNote] = useState(task?.progress_note ?? '');
+  const [noteSave, setNoteSave] = useState<ProgressNoteSaveState>({ status: 'idle', error: null });
+  const noteStateId = useId();
+  const saverRef = useRef<ProgressNoteAutosaver | null>(null);
+  const noteSaveCommandRef = useRef<(value: string) => Promise<void>>(async () => undefined);
+  noteSaveCommandRef.current = async (value: string) => {
+    if (!task) return;
+    const data = await apiJson<ClientOperationsTodoBoardAggregate>(moduleClientOperationsTodoCommands(), {
+      method: 'POST',
+      body: JSON.stringify({
+        command: 'update_client_operations_todo_progress_note',
+        todo_id: task.id,
+        progress_note: value,
+        query: {
+          workspace_scope: workspaceQuery.workspace_scope,
+          workspace_subject_user_id: workspaceQuery.workspace_subject_user_id,
+          page: boardView.page,
+          q: boardView.q,
+        },
+      }),
+    });
+    // Full refreshed aggregate = the truth; the field itself keeps what the user typed (never overwritten).
+    onBoardRefreshed(data);
+  };
+  const taskId = mode === 'edit' ? task?.id : undefined;
+  useEffect(() => {
+    if (!taskId) return undefined;
+    const saver = createProgressNoteAutosaver({
+      initialValue: task?.progress_note ?? '',
+      save: (value) => noteSaveCommandRef.current(value),
+      onState: setNoteSave,
+    });
+    saverRef.current = saver;
+    return () => {
+      saverRef.current = null;
+      saver.dispose(); // an unsaved value is still delivered
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one saver per edited ToDo
+  }, [taskId]);
+  const canEditNote =
+    mode === 'create' || task?.allowed_actions.includes('update_client_operations_todo_progress_note') === true;
+  const noteStateLabel = mode === 'edit' ? progressNoteSaveStateLabelHe(noteSave) : null;
+
+  /** Settle any pending note save before leaving / completing; a second failed attempt lets the user leave. */
+  const closeAttemptFailedRef = useRef(false);
+  const requestClose = () => {
+    void (async () => {
+      const ok = (await saverRef.current?.flush()) ?? true;
+      if (ok || closeAttemptFailedRef.current) {
+        onClose();
+        return;
+      }
+      closeAttemptFailedRef.current = true;
+    })();
+  };
+
   useEffect(() => {
     // Nothing to search once an authorized client is chosen (typing over it clears the choice).
     if (mode !== 'create' || clientId || oneTimeName) return;
@@ -853,6 +1050,7 @@ function TodoFormModal(props: {
             : { external_client_name: typedName, external_client_tax_id: taxId.trim() || null }),
           task_text: text,
           priority: encodeTodoPriorityForSubmit(priority),
+          progress_note: progressNote.trim() || null,
         };
         const data = await apiJson<ClientOperationsTodoBoardAggregate>(
           moduleClientOperationsTodoCommands(),
@@ -869,6 +1067,10 @@ function TodoFormModal(props: {
         );
         onSaved(data);
       } else if (task) {
+        // Settle a pending שלב טיפול save first so the two commands never race.
+        if (saverRef.current && !(await saverRef.current.flush())) {
+          throw new Error('שגיאה בשמירת שלב טיפול');
+        }
         const data = await apiJson<ClientOperationsTodoBoardAggregate>(
           moduleClientOperationsTodoCommands(),
           {
@@ -904,19 +1106,19 @@ function TodoFormModal(props: {
       role="presentation"
       data-testid={`client-operations-todo-${mode}-modal`}
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) requestClose();
       }}
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.stopPropagation();
-          onClose();
+          requestClose();
         }
       }}
     >
       <form className="nx-co-todo-form" onSubmit={(e) => void onSubmit(e)} dir="rtl">
         <div className="nx-co-todo-form__header">
           <h3>{mode === 'create' ? 'משימה חדשה' : 'עריכת משימה'}</h3>
-          <button type="button" className="nx-co-todo-board__close" onClick={onClose} aria-label="סגור">
+          <button type="button" className="nx-co-todo-board__close" onClick={requestClose} aria-label="סגור">
             ×
           </button>
         </div>
@@ -995,6 +1197,38 @@ function TodoFormModal(props: {
               required
             />
           </label>
+          <label className="nx-co-todo-form__field">
+            <span>שלב טיפול</span>
+            <input
+              type="text"
+              value={progressNote}
+              maxLength={fieldLimits?.progress_note_max_length}
+              readOnly={!canEditNote}
+              placeholder="אופציונלי"
+              aria-describedby={noteStateLabel ? noteStateId : undefined}
+              data-testid="client-operations-todo-progress-note"
+              onChange={(e) => {
+                setProgressNote(e.target.value);
+                if (mode === 'edit') {
+                  closeAttemptFailedRef.current = false;
+                  saverRef.current?.change(e.target.value);
+                }
+              }}
+              onBlur={() => {
+                if (mode === 'edit') void saverRef.current?.flush();
+              }}
+            />
+            {noteStateLabel ? (
+              <span
+                id={noteStateId}
+                className={`nx-co-todo-form__save-state${noteSave.status === 'error' ? ' is-error' : ''}`}
+                role={noteSave.status === 'error' ? 'alert' : 'status'}
+                data-testid="client-operations-todo-progress-note-state"
+              >
+                {noteStateLabel}
+              </span>
+            ) : null}
+          </label>
           <div className="nx-co-todo-form__field">
             <span>עדיפות</span>
             <div className="nx-co-todo-priority" role="radiogroup" aria-label="עדיפות">
@@ -1027,7 +1261,7 @@ function TodoFormModal(props: {
           <button
             type="button"
             className="nx-btn nx-btn-taxes-compact nx-btn-secondary nx-co-todo-btn"
-            onClick={onClose}
+            onClick={requestClose}
             disabled={saving}
           >
             ביטול
@@ -1041,35 +1275,21 @@ function TodoFormModal(props: {
           </button>
           {mode === 'edit' &&
           task?.allowed_actions.includes('complete_client_operations_todo') &&
-          onCompleted ? (
+          onRequestComplete ? (
             <button
               type="button"
               className="nx-btn nx-btn-taxes-compact nx-btn-secondary nx-co-todo-btn"
               disabled={saving}
               onClick={() => {
+                // Opens the completion dialog (סיום משימה); nothing is completed here. A pending
+                // שלב טיפול save is settled first (the command would be rejected on a completed ToDo).
                 void (async () => {
-                  setSaving(true);
-                  try {
-                    const data = await apiJson<ClientOperationsTodoBoardAggregate>(
-                      moduleClientOperationsTodoCommands(),
-                      {
-                        method: 'POST',
-                        body: JSON.stringify({
-                          command: 'complete_client_operations_todo',
-                          todo_id: task.id,
-                          query: {
-                            workspace_scope: workspaceQuery.workspace_scope,
-                            workspace_subject_user_id: workspaceQuery.workspace_subject_user_id,
-                          },
-                        }),
-                      },
-                    );
-                    onCompleted(data);
-                  } catch (e) {
-                    setFormError(e instanceof Error ? e.message : 'שגיאה');
-                  } finally {
-                    setSaving(false);
+                  const ok = (await saverRef.current?.flush()) ?? true;
+                  if (!ok) {
+                    setFormError('שגיאה בשמירת שלב טיפול');
+                    return;
                   }
+                  onRequestComplete(task);
                 })();
               }}
             >

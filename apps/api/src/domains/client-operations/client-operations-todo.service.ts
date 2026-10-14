@@ -29,16 +29,20 @@ import {
   assigneeWouldRetainClientAccessAfterHandlerChange,
   buildTodoClientPresentation,
   buildTodoPagination,
+  CLIENT_OPERATIONS_TODO_COMPLETION_REASON_MAX,
   CLIENT_OPERATIONS_TODO_EXTERNAL_CLIENT_NAME_MAX,
   CLIENT_OPERATIONS_TODO_EXTERNAL_CLIENT_TAX_ID_MAX,
   CLIENT_OPERATIONS_TODO_PAGE_SIZE,
+  CLIENT_OPERATIONS_TODO_PROGRESS_NOTE_MAX,
   compareTodosForBoardOrder,
   normalizeTodoClientOptionsLimit,
   normalizeTodoClientSearchTokens,
   normalizeTodoExternalClientName,
+  normalizeTodoCompletionReason,
   normalizeTodoExternalClientTaxId,
   normalizeTodoPage,
   normalizeTodoPriority,
+  normalizeTodoProgressNote,
   normalizeTodoTaskText,
   presentationPriorityToken,
   resolveTodoClientIdentityInput,
@@ -80,6 +84,10 @@ type TodoRow = {
   updated_by_user_id: string | null;
   completed_at: string | null;
   completed_by_user_id: string | null;
+  /** שלב טיפול — optional free text (migration 189). */
+  progress_note?: string | null;
+  /** סיבת סגירה of the CURRENT completion (migration 189); always NULL while active. */
+  completion_reason?: string | null;
 };
 
 export type ClientOperationsTodoCard = {
@@ -89,6 +97,10 @@ export type ClientOperationsTodoCard = {
   task_text: string;
   priority: ClientOperationsTodoPriority | null;
   priority_presentation_token: 'p1' | 'p2' | 'p3' | 'p4' | 'none';
+  /** שלב טיפול: optional free text, never a status. */
+  progress_note: string | null;
+  /** סיבת סגירה: archive only (null for active ToDos and for tasks completed without a reason). */
+  completion_reason: string | null;
   assigned_to: { user_id: string; display_name: string };
   created_at: string;
   created_by: { user_id: string | null; display_name: string | null };
@@ -111,6 +123,8 @@ export type ClientOperationsTodoBoardAggregate = {
     tertiary: 'id_asc';
   };
   tasks: ClientOperationsTodoCard[];
+  /** Backend-owned free-text limits for the progress-note / completion-reason inputs. */
+  field_limits: { progress_note_max_length: number; completion_reason_max_length: number };
   available_clients_hint: {
     search_endpoint: 'todo_client_options';
     note_he: string;
@@ -168,6 +182,18 @@ function mapPriorityError(e: unknown): never {
     }
     if (e.message === 'TODO_CLIENT_IDENTITY_CONFLICT') {
       throw badRequest('Provide either client_id or a one-time client name, not both', 'TODO_CLIENT_IDENTITY_CONFLICT');
+    }
+    if (e.message === 'TODO_PROGRESS_NOTE_TOO_LONG') {
+      throw badRequest('progress_note exceeds maximum length', 'TODO_PROGRESS_NOTE_TOO_LONG');
+    }
+    if (e.message === 'TODO_PROGRESS_NOTE_INVALID') {
+      throw badRequest('progress_note must be text', 'TODO_PROGRESS_NOTE_INVALID');
+    }
+    if (e.message === 'TODO_COMPLETION_REASON_TOO_LONG') {
+      throw badRequest('completion_reason exceeds maximum length', 'TODO_COMPLETION_REASON_TOO_LONG');
+    }
+    if (e.message === 'TODO_COMPLETION_REASON_INVALID') {
+      throw badRequest('completion_reason must be text', 'TODO_COMPLETION_REASON_INVALID');
     }
     if (e.message === 'TODO_EXTERNAL_CLIENT_NAME_REQUIRED') {
       throw badRequest('external_client_name required', 'TODO_EXTERNAL_CLIENT_NAME_REQUIRED');
@@ -241,33 +267,55 @@ function taskMatchesWorkspaceProjection(
   materializationAccess: OrganizationClientAccessScope,
 ): boolean {
   if (task.assigned_to_user_id !== todoBoardSubjectUserId(workspace)) return false;
-  // A one-time client belongs to the workspace subject only (the owner check above is its authorization\n  // boundary); the client ACL applies to canonical clients.\n  if (task.client_id != null && !clientIdIsAuthorized(materializationAccess, task.client_id)) return false;
+  // A one-time client belongs to the workspace subject only (the owner check above is its authorization
+  // boundary); the client ACL applies to canonical clients.
+  if (task.client_id != null && !clientIdIsAuthorized(materializationAccess, task.client_id)) return false;
   return true;
 }
+
+type ClientIdentity = { display_name: string | null; tax_id: string | null; is_archived: boolean };
+type ClientIdentityMap = Map<string, ClientIdentity>;
+
+/** `.in()` ids travel in the request URL — long lists are split into bounded parallel reads. */
+const CLIENT_IDENTITY_CHUNK_SIZE = 150;
 
 async function loadClientIdentityMap(
   orgId: string,
   clientIds: Array<string | null>,
-): Promise<Map<string, { display_name: string | null; tax_id: string | null }>> {
-  const map = new Map<string, { display_name: string | null; tax_id: string | null }>();
+): Promise<ClientIdentityMap> {
+  const map: ClientIdentityMap = new Map();
   const unique = [...new Set(clientIds.filter((id): id is string => Boolean(id)))];
   if (!unique.length) return map;
-  const { data, error } = await supabaseAdmin
-    .from('clients')
-    .select('id, display_name, tax_id')
-    .eq('organization_id', orgId)
-    .in('id', unique);
-  if (error) throw new Error(error.message ?? 'Failed to load clients');
-  for (const row of (data ?? []) as Array<{
-    id: string;
-    display_name: string | null;
-    tax_id: string | null;
-  }>) {
-    map.set(row.id, { display_name: row.display_name, tax_id: row.tax_id });
+  const chunks: string[][] = [];
+  for (let i = 0; i < unique.length; i += CLIENT_IDENTITY_CHUNK_SIZE) {
+    chunks.push(unique.slice(i, i + CLIENT_IDENTITY_CHUNK_SIZE));
+  }
+  const results = await Promise.all(
+    chunks.map((ids) =>
+      supabaseAdmin
+        .from('clients')
+        .select('id, display_name, tax_id, is_archived')
+        .eq('organization_id', orgId)
+        .in('id', ids),
+    ),
+  );
+  for (const { data, error } of results) {
+    if (error) throw new Error(error.message ?? 'Failed to load clients');
+    for (const row of (data ?? []) as Array<{
+      id: string;
+      display_name: string | null;
+      tax_id: string | null;
+      is_archived?: boolean | null;
+    }>) {
+      map.set(row.id, {
+        display_name: row.display_name,
+        tax_id: row.tax_id,
+        is_archived: row.is_archived === true,
+      });
+    }
   }
   return map;
 }
-
 function taskAllowedActions(params: {
   ctx: RequestContext;
   task: TodoRow;
@@ -285,7 +333,11 @@ function taskAllowedActions(params: {
 
   const actions: string[] = [];
   if (task.completed_at == null) {
-    actions.push('update_client_operations_todo', 'complete_client_operations_todo');
+    actions.push(
+      'update_client_operations_todo',
+      'update_client_operations_todo_progress_note',
+      'complete_client_operations_todo',
+    );
   } else {
     actions.push('reopen_client_operations_todo');
   }
@@ -298,18 +350,21 @@ async function hydrateTodoCards(params: {
   rows: TodoRow[];
   workspace: ClientOperationsWorkspaceResolution;
   materializationAccess: OrganizationClientAccessScope;
+  /** Identities already loaded for a superset of 
+ows (avoids a second read of the same clients). */
+  clientMap?: ClientIdentityMap | null;
 }): Promise<ClientOperationsTodoCard[]> {
   const { ctx, orgId, rows, workspace, materializationAccess } = params;
-  const clientMap = await loadClientIdentityMap(
-    orgId,
-    rows.map((r) => r.client_id),
-  );
+  // Client identities and member names are independent reads — run them together.
   const userIds = rows.flatMap((r) => [
     r.assigned_to_user_id,
     r.created_by_user_id,
     r.completed_by_user_id,
   ]);
-  const names = await loadMemberDisplayNamesByUserIds(userIds.filter(Boolean) as string[]);
+  const [clientMap, names] = await Promise.all([
+    params.clientMap ?? loadClientIdentityMap(orgId, rows.map((r) => r.client_id)),
+    loadMemberDisplayNamesByUserIds(userIds.filter(Boolean) as string[]),
+  ]);
 
   return rows.map((r) => {
     const client = r.client_id ? clientMap.get(r.client_id) : undefined;
@@ -323,6 +378,9 @@ async function hydrateTodoCards(params: {
       task_text: r.task_text,
       priority,
       priority_presentation_token: presentationPriorityToken(priority),
+      progress_note: r.progress_note ?? null,
+      // The reason belongs to the current completion only — never surfaced for an active ToDo.
+      completion_reason: r.completed_at != null ? (r.completion_reason ?? null) : null,
       assigned_to: {
         user_id: r.assigned_to_user_id,
         display_name: names.get(r.assigned_to_user_id) ?? r.assigned_to_user_id,
@@ -347,7 +405,7 @@ async function hydrateTodoCards(params: {
 }
 
 const TODO_ROW_COLUMNS =
-  'id, organization_id, client_id, external_client_name, external_client_tax_id, assigned_to_user_id, task_text, priority, created_at, created_by_user_id, updated_at, updated_by_user_id, completed_at, completed_by_user_id';
+  'id, organization_id, client_id, external_client_name, external_client_tax_id, assigned_to_user_id, task_text, priority, progress_note, completion_reason, created_at, created_by_user_id, updated_at, updated_by_user_id, completed_at, completed_by_user_id';
 
 /**
  * Org ToDos for one board owner (`ownerUserId` = workspace subject, see `todoBoardSubjectUserId`).
@@ -389,24 +447,21 @@ async function loadOrgTodos(params: {
   return rows;
 }
 
-async function excludeArchivedClientTodos(
-  orgId: string,
-  rows: TodoRow[],
-  access: OrganizationClientAccessScope,
-): Promise<TodoRow[]> {
-  if (access.kind === 'OFFICE' || access.authorized_client_ids !== null || rows.length === 0) return rows;
-  // One-time ToDos have no Core client to be archived — they are never filtered here.
-  const ids = [...new Set(rows.map((r) => r.client_id).filter((id): id is string => Boolean(id)))];
-  if (ids.length === 0) return rows;
-  const { data, error } = await supabaseAdmin
-    .from('clients')
-    .select('id')
-    .eq('organization_id', orgId)
-    .eq('is_archived', false)
-    .in('id', ids);
-  if (error) throw new Error(error.message ?? 'Failed to filter todo clients');
-  const live = new Set((data ?? []).map((row) => String((row as { id: string }).id)));
-  return rows.filter((r) => r.client_id == null || live.has(r.client_id));
+/**
+ * Non-OFFICE workspaces with an unlimited ACL must not list ToDos of archived/missing Core clients.
+ * One-time ToDos have no Core client — they are never filtered here. (Other access kinds are already limited
+ * by the ACL read in `loadOrgTodos`.)
+ */
+function archivedClientFilterApplies(access: OrganizationClientAccessScope, rows: TodoRow[]): boolean {
+  return access.kind !== 'OFFICE' && access.authorized_client_ids === null && rows.length > 0;
+}
+
+function excludeArchivedClientTodos(rows: TodoRow[], clientMap: ClientIdentityMap): TodoRow[] {
+  return rows.filter((r) => {
+    if (r.client_id == null) return true;
+    const c = clientMap.get(r.client_id);
+    return c != null && !c.is_archived;
+  });
 }
 
 function filterTodosForWorkspace(
@@ -424,43 +479,66 @@ function boardAllowedActions(ctx: RequestContext): string[] {
     'view_todo_archive',
     'create_client_operations_todo',
     'update_client_operations_todo',
+    'update_client_operations_todo_progress_note',
     'complete_client_operations_todo',
     'reopen_client_operations_todo',
   ];
 }
 
-export async function getClientOperationsTodoBoard(
-  ctx: RequestContext,
-  query: ClientOperationsWorkspaceRequested & { page?: unknown; q?: string | null } = {},
-): Promise<ClientOperationsTodoBoardAggregate> {
-  const { orgId, workspace, materializationAccess } = await resolveWorkspace(ctx, query);
-  const pageReq = normalizeTodoPage(query.page);
-  const q = String(query.q ?? '').trim().toLowerCase();
-  const allActive = await excludeArchivedClientTodos(
-    orgId,
-    await loadOrgTodos({
-      orgId,
-      active: true,
-      authorizedClientIds: materializationAccess.authorized_client_ids,
-      ownerUserId: todoBoardSubjectUserId(workspace),
-    }),
-    materializationAccess,
-  );
-  let scoped = filterTodosForWorkspace(allActive, workspace, materializationAccess);
+type ResolvedTodoWorkspace = Awaited<ReturnType<typeof resolveWorkspace>>;
 
-  if (q) {
-    const clientMap = await loadClientIdentityMap(
+function workspaceScopeToken(workspace: ClientOperationsWorkspaceResolution): 'office' | 'my' | 'staff' {
+  return workspace.scope_kind === 'OFFICE' ? 'office' : workspace.scope_kind === 'MY' ? 'my' : 'staff';
+}
+
+/**
+ * Scoped ToDo rows (owner + ACL + archived-client rules) and the client identities that were already loaded
+ * while scoping/searching. Client identities are read ONCE per aggregate: only when the archived-client rule
+ * or a text search needs the whole scoped set; otherwise only for the visible page (see `hydrateTodoCards`).
+ */
+async function loadScopedTodos(params: {
+  resolved: ResolvedTodoWorkspace;
+  active: boolean;
+  q: string;
+}): Promise<{ rows: TodoRow[]; clientMap: ClientIdentityMap | null }> {
+  const { orgId, workspace, materializationAccess } = params.resolved;
+  let rows = await loadOrgTodos({
+    orgId,
+    active: params.active,
+    authorizedClientIds: materializationAccess.authorized_client_ids,
+    ownerUserId: todoBoardSubjectUserId(workspace),
+  });
+  let clientMap: ClientIdentityMap | null = null;
+  const needsArchiveRule = archivedClientFilterApplies(materializationAccess, rows);
+  if (needsArchiveRule || (params.q && rows.length > 0)) {
+    clientMap = await loadClientIdentityMap(
       orgId,
-      scoped.map((r) => r.client_id),
+      rows.map((r) => r.client_id),
     );
-    scoped = scoped.filter((r) => {
-      const p = buildTodoClientPresentation(r, r.client_id ? clientMap.get(r.client_id) : undefined);
+  }
+  if (needsArchiveRule && clientMap) rows = excludeArchivedClientTodos(rows, clientMap);
+  rows = filterTodosForWorkspace(rows, workspace, materializationAccess);
+  if (params.q) {
+    const map = clientMap;
+    rows = rows.filter((r) => {
+      const p = buildTodoClientPresentation(r, r.client_id ? map?.get(r.client_id) : undefined);
       const hay = [r.task_text, p.display_name ?? '', p.tax_id ?? ''].join(' ').toLowerCase();
-      return hay.includes(q);
+      return hay.includes(params.q);
     });
   }
+  return { rows, clientMap };
+}
 
-  scoped = scoped.sort(compareTodosForBoardOrder);
+async function buildTodoBoardAggregate(
+  ctx: RequestContext,
+  resolved: ResolvedTodoWorkspace,
+  query: { page?: unknown; q?: string | null },
+): Promise<ClientOperationsTodoBoardAggregate> {
+  const { orgId, workspace, materializationAccess } = resolved;
+  const pageReq = normalizeTodoPage(query.page);
+  const q = String(query.q ?? '').trim().toLowerCase();
+  const loaded = await loadScopedTodos({ resolved, active: true, q });
+  const scoped = loaded.rows.sort(compareTodosForBoardOrder);
   const pagination = buildTodoPagination({ total: scoped.length, page: pageReq });
   const pageRows = sliceTodoPage(scoped, pagination.page);
   const tasks = await hydrateTodoCards({
@@ -469,6 +547,7 @@ export async function getClientOperationsTodoBoard(
     rows: pageRows,
     workspace,
     materializationAccess,
+    clientMap: loaded.clientMap,
   });
 
   return {
@@ -485,6 +564,10 @@ export async function getClientOperationsTodoBoard(
       tertiary: 'id_asc',
     },
     tasks,
+    field_limits: {
+      progress_note_max_length: CLIENT_OPERATIONS_TODO_PROGRESS_NOTE_MAX,
+      completion_reason_max_length: CLIENT_OPERATIONS_TODO_COMPLETION_REASON_MAX,
+    },
     available_clients_hint: {
       search_endpoint: 'todo_client_options',
       note_he: 'חיפוש לקוחות מורשה לפי מרחב העבודה',
@@ -498,26 +581,31 @@ export async function getClientOperationsTodoBoard(
     query: {
       page: pagination.page,
       q: q || null,
-      workspace_scope:
-        workspace.scope_kind === 'OFFICE'
-          ? 'office'
-          : workspace.scope_kind === 'MY'
-            ? 'my'
-            : 'staff',
+      workspace_scope: workspaceScopeToken(workspace),
       workspace_subject_user_id: workspace.workspace_subject_user_id,
     },
   };
 }
 
-export async function getClientOperationsTodoArchive(
+export async function getClientOperationsTodoBoard(
   ctx: RequestContext,
-  query: ClientOperationsWorkspaceRequested & {
-    page?: unknown;
-    q?: string | null;
-    filter_priority?: string | null;
-  } = {},
+  query: ClientOperationsWorkspaceRequested & { page?: unknown; q?: string | null } = {},
+): Promise<ClientOperationsTodoBoardAggregate> {
+  return buildTodoBoardAggregate(ctx, await resolveWorkspace(ctx, query), query);
+}
+
+type ArchiveQuery = {
+  page?: unknown;
+  q?: string | null;
+  filter_priority?: string | null;
+};
+
+async function buildTodoArchiveAggregate(
+  ctx: RequestContext,
+  resolved: ResolvedTodoWorkspace,
+  query: ArchiveQuery,
 ): Promise<ClientOperationsTodoArchiveAggregate> {
-  const { orgId, workspace, materializationAccess } = await resolveWorkspace(ctx, query);
+  const { orgId, workspace, materializationAccess } = resolved;
   const pageReq = normalizeTodoPage(query.page);
   const q = String(query.q ?? '').trim().toLowerCase();
   const filterPriorityRaw = String(query.filter_priority ?? '').trim();
@@ -526,41 +614,15 @@ export async function getClientOperationsTodoArchive(
   else if (filterPriorityRaw === 'none') filterPriority = 'none';
   else filterPriority = safeNormalizePriority(filterPriorityRaw);
 
-  const allDone = await excludeArchivedClientTodos(
-    orgId,
-    await loadOrgTodos({
-      orgId,
-      active: false,
-      authorizedClientIds: materializationAccess.authorized_client_ids,
-      ownerUserId: todoBoardSubjectUserId(workspace),
-    }),
-    materializationAccess,
-  );
-  let scoped = filterTodosForWorkspace(allDone, workspace, materializationAccess);
+  // The whole archive is never hydrated just to render one page: client identities are loaded for the full
+  // set only when a text search needs them, otherwise for the 25 visible rows.
+  const loaded = await loadScopedTodos({ resolved, active: false, q });
+  let scoped = loaded.rows;
 
   if (filterPriority === 'none') {
     scoped = scoped.filter((r) => r.priority == null);
   } else if (typeof filterPriority === 'number') {
     scoped = scoped.filter((r) => r.priority === filterPriority);
-  }
-
-  // Hydrate for search on client name / tax_id / task text (authorized set only).
-  const clientMap = await loadClientIdentityMap(
-    orgId,
-    scoped.map((r) => r.client_id),
-  );
-  if (q) {
-    scoped = scoped.filter((r) => {
-      const p = buildTodoClientPresentation(r, r.client_id ? clientMap.get(r.client_id) : undefined);
-      const hay = [
-        r.task_text,
-        p.display_name ?? '',
-        p.tax_id ?? '',
-      ]
-        .join(' ')
-        .toLowerCase();
-      return hay.includes(q);
-    });
   }
 
   scoped = scoped.sort((a, b) => {
@@ -578,6 +640,7 @@ export async function getClientOperationsTodoArchive(
     rows: pageRows,
     workspace,
     materializationAccess,
+    clientMap: loaded.clientMap,
   });
 
   return {
@@ -596,15 +659,17 @@ export async function getClientOperationsTodoArchive(
       page: pagination.page,
       q: q || null,
       filter_priority: filterPriorityRaw || null,
-      workspace_scope:
-        workspace.scope_kind === 'OFFICE'
-          ? 'office'
-          : workspace.scope_kind === 'MY'
-            ? 'my'
-            : 'staff',
+      workspace_scope: workspaceScopeToken(workspace),
       workspace_subject_user_id: workspace.workspace_subject_user_id,
     },
   };
+}
+
+export async function getClientOperationsTodoArchive(
+  ctx: RequestContext,
+  query: ClientOperationsWorkspaceRequested & ArchiveQuery = {},
+): Promise<ClientOperationsTodoArchiveAggregate> {
+  return buildTodoArchiveAggregate(ctx, await resolveWorkspace(ctx, query), query);
 }
 
 export async function searchClientOperationsTodoClientOptions(
@@ -653,33 +718,47 @@ export async function searchClientOperationsTodoClientOptions(
   };
 }
 
+/** Await every promise, then rethrow the FIRST failure in declaration order (deterministic error precedence). */
+async function allInOrder<T extends readonly unknown[]>(
+  promises: readonly [...{ [K in keyof T]: PromiseLike<T[K]> }],
+): Promise<T> {
+  const settled = await Promise.allSettled(promises);
+  for (const s of settled) if (s.status === 'rejected') throw s.reason;
+  return settled.map((s) => (s as PromiseFulfilledResult<unknown>).value) as unknown as T;
+}
+
 /** The ToDo owner (stored in assigned_to_user_id) must be able to see the client of the ToDo. */
 async function assertAssigneeCanAccessClient(params: {
   organizationId: string;
   assigneeUserId: string;
   clientId: string;
 }): Promise<void> {
-  await assertUserIsActiveHandlerEligible(params.organizationId, params.assigneeUserId);
-  const members = await listActiveHandlerEligibleMembers(params.organizationId);
+  // Independent reads — run together (errors keep their original precedence).
+  const [, members] = await allInOrder([
+    assertUserIsActiveHandlerEligible(params.organizationId, params.assigneeUserId),
+    listActiveHandlerEligibleMembers(params.organizationId),
+  ] as const);
   const member = members.find((m) => m.user_id === params.assigneeUserId);
   if (!member) throw forbidden('Assignee not eligible', 'TODO_ASSIGNEE_FORBIDDEN');
   if (roleHasOfficeClientAccess(member.role_code)) return;
-  const scope = await resolveOrganizationClientAccessScope({
-    organizationId: params.organizationId,
-    viewerUserId: params.assigneeUserId,
-    roleCode: member.role_code,
-  });
+  const [scope, clientRow] = await allInOrder([
+    resolveOrganizationClientAccessScope({
+      organizationId: params.organizationId,
+      viewerUserId: params.assigneeUserId,
+      roleCode: member.role_code,
+    }),
+    supabaseAdmin
+      .from('clients')
+      .select('id')
+      .eq('organization_id', params.organizationId)
+      .eq('id', params.clientId)
+      .eq('is_archived', false)
+      .maybeSingle(),
+  ] as const);
   if (!clientIdIsAuthorized(scope, params.clientId)) {
     throw forbidden('Assignee cannot access client', 'TODO_ASSIGNEE_CLIENT_ACCESS_FORBIDDEN');
   }
-  const { data } = await supabaseAdmin
-    .from('clients')
-    .select('id')
-    .eq('organization_id', params.organizationId)
-    .eq('id', params.clientId)
-    .eq('is_archived', false)
-    .maybeSingle();
-  if (!data) throw forbidden('Assignee cannot access client', 'TODO_ASSIGNEE_CLIENT_ACCESS_FORBIDDEN');
+  if (!clientRow.data) throw forbidden('Assignee cannot access client', 'TODO_ASSIGNEE_CLIENT_ACCESS_FORBIDDEN');
 }
 
 async function loadTodoOrForbidden(orgId: string, todoId: string): Promise<TodoRow> {
@@ -687,9 +766,7 @@ async function loadTodoOrForbidden(orgId: string, todoId: string): Promise<TodoR
   if (!id) throw forbidden('ToDo not found');
   const { data, error } = await supabaseAdmin
     .from('client_operations_todos')
-    .select(
-      'id, organization_id, client_id, assigned_to_user_id, task_text, priority, created_at, created_by_user_id, updated_at, updated_by_user_id, completed_at, completed_by_user_id',
-    )
+    .select(TODO_ROW_COLUMNS)
     .eq('organization_id', orgId)
     .eq('id', id)
     .maybeSingle();
@@ -718,29 +795,76 @@ function assertCanMutateTodo(params: {
   }
 }
 
+type TodoCommandBase = {
+  workspace_scope?: unknown;
+  workspace_subject_user_id?: unknown;
+  page?: unknown;
+  q?: unknown;
+};
+
+function requestedWorkspaceOf(body: TodoCommandBase): ClientOperationsWorkspaceRequested {
+  return {
+    workspace_scope: typeof body.workspace_scope === 'string' ? body.workspace_scope : null,
+    workspace_subject_user_id:
+      typeof body.workspace_subject_user_id === 'string' ? body.workspace_subject_user_id : null,
+  };
+}
+
+function boardQueryOf(body: TodoCommandBase): { page: unknown; q: string | null } {
+  return { page: body.page, q: typeof body.q === 'string' ? body.q : null };
+}
+
+/**
+ * Workspace authorization + the target ToDo for a mutation. The ToDo read starts together with the workspace
+ * resolution (independent reads) but is only used after the workspace was authorized, and the workspace
+ * error still takes precedence. The resolved workspace is reused for the refreshed aggregate, so a command
+ * resolves membership/ACL scope once instead of twice.
+ */
+async function resolveWorkspaceAndTodo(
+  ctx: RequestContext,
+  body: TodoCommandBase & { todo_id?: unknown },
+): Promise<{ resolved: ResolvedTodoWorkspace; task: TodoRow; todoId: string; requested: ClientOperationsWorkspaceRequested }> {
+  const requested = requestedWorkspaceOf(body);
+  const todoId = String(body.todo_id ?? '').trim();
+  const taskPromise = loadTodoOrForbidden(assertOrg(ctx), todoId);
+  taskPromise.catch(() => undefined); // surfaced below, after the workspace result
+  const resolved = await resolveWorkspace(ctx, requested);
+  const task = await taskPromise;
+  assertCanMutateTodo({ ctx, task, workspace: resolved.workspace, materializationAccess: resolved.materializationAccess });
+  return { resolved, task, todoId, requested };
+}
+
+/** Audit + full refreshed board aggregate for the same workspace (independent → concurrent). */
+async function auditAndRefreshBoard(
+  ctx: RequestContext,
+  resolved: ResolvedTodoWorkspace,
+  body: TodoCommandBase,
+  audit: Parameters<typeof writeAudit>[0] | null,
+): Promise<ClientOperationsTodoBoardAggregate> {
+  const [, board] = await Promise.all([
+    audit ? writeAudit(audit) : Promise.resolve(),
+    buildTodoBoardAggregate(ctx, resolved, boardQueryOf(body)),
+  ]);
+  return board;
+}
+
 export async function createClientOperationsTodo(
   ctx: RequestContext,
-  body: {
+  body: TodoCommandBase & {
     client_id?: unknown;
     external_client_name?: unknown;
     external_client_tax_id?: unknown;
     task_text?: unknown;
     priority?: unknown;
-    workspace_scope?: unknown;
-    workspace_subject_user_id?: unknown;
-    page?: unknown;
-    q?: unknown;
+    progress_note?: unknown;
   },
 ): Promise<ClientOperationsTodoBoardAggregate> {
   if (!canEditClientOperations(ctx)) {
     throw forbidden('Client Operations edit required', 'CLIENT_OPERATIONS_EDIT_FORBIDDEN');
   }
-  const requested: ClientOperationsWorkspaceRequested = {
-    workspace_scope: typeof body.workspace_scope === 'string' ? body.workspace_scope : null,
-    workspace_subject_user_id:
-      typeof body.workspace_subject_user_id === 'string' ? body.workspace_subject_user_id : null,
-  };
-  const { orgId, workspace, materializationAccess } = await resolveWorkspace(ctx, requested);
+  const requested = requestedWorkspaceOf(body);
+  const resolved = await resolveWorkspace(ctx, requested);
+  const { orgId, workspace, materializationAccess } = resolved;
 
   // Exactly one client identity mode, validated here (never by the frontend):
   //  - canonical: Core client the workspace may access (existing ACL rules, unchanged)
@@ -761,6 +885,12 @@ export async function createClientOperationsTodo(
   const taskText = safeNormalizeText(body.task_text);
   const priority =
     body.priority === undefined ? null : safeNormalizePriority(body.priority === '' ? null : body.priority);
+  let progressNote: string | null;
+  try {
+    progressNote = normalizeTodoProgressNote(body.progress_note);
+  } catch (e) {
+    mapPriorityError(e);
+  }
   // Ownership is derived from the authorized workspace — a client-supplied assignee is never read.
   const assigneeId = todoBoardSubjectUserId(workspace);
 
@@ -787,6 +917,7 @@ export async function createClientOperationsTodo(
       assigned_to_user_id: assigneeId,
       task_text: taskText,
       priority,
+      progress_note: progressNote,
       created_at: now,
       created_by_user_id: ctx.user.id,
       updated_at: now,
@@ -798,7 +929,7 @@ export async function createClientOperationsTodo(
     .single();
   if (error) throw new AppError(500, error.message || 'Failed to create todo', 'SUPABASE_ERROR');
 
-  await writeAudit({
+  return auditAndRefreshBoard(ctx, resolved, body, {
     organizationId: orgId,
     actorUserId: ctx.user.id,
     moduleCode: 'client-operations',
@@ -813,37 +944,25 @@ export async function createClientOperationsTodo(
       has_external_client_tax_id: identity.mode === 'one_time' && identity.external_client_tax_id != null,
       assigned_to_user_id: assigneeId,
       priority,
+      progress_note: progressNote,
       workspace_scope_kind: workspace.scope_kind,
       workspace_subject_user_id: workspace.workspace_subject_user_id,
     },
   });
-
-  return getClientOperationsTodoBoard(ctx, { ...requested, page: body.page, q: typeof body.q === 'string' ? body.q : null });
 }
 
 export async function updateClientOperationsTodo(
   ctx: RequestContext,
-  body: {
+  body: TodoCommandBase & {
     todo_id?: unknown;
     task_text?: unknown;
     priority?: unknown;
     external_client_name?: unknown;
     external_client_tax_id?: unknown;
-    workspace_scope?: unknown;
-    workspace_subject_user_id?: unknown;
-    page?: unknown;
-    q?: unknown;
   },
 ): Promise<ClientOperationsTodoBoardAggregate> {
-  const requested: ClientOperationsWorkspaceRequested = {
-    workspace_scope: typeof body.workspace_scope === 'string' ? body.workspace_scope : null,
-    workspace_subject_user_id:
-      typeof body.workspace_subject_user_id === 'string' ? body.workspace_subject_user_id : null,
-  };
-  const { orgId, workspace, materializationAccess } = await resolveWorkspace(ctx, requested);
-  const todoId = String(body.todo_id ?? '').trim();
-  const task = await loadTodoOrForbidden(orgId, todoId);
-  assertCanMutateTodo({ ctx, task, workspace, materializationAccess });
+  const { resolved, task, todoId } = await resolveWorkspaceAndTodo(ctx, body);
+  const { orgId, workspace } = resolved;
   if (task.completed_at != null) {
     throw badRequest('Cannot update completed ToDo; reopen first', 'TODO_ALREADY_COMPLETED');
   }
@@ -912,7 +1031,7 @@ export async function updateClientOperationsTodo(
   // Ownership never changes through ToDo commands: the board owner is the workspace subject (no reassignment).
 
   if (Object.keys(after).length === 0) {
-    return getClientOperationsTodoBoard(ctx, { ...requested, page: body.page, q: typeof body.q === 'string' ? body.q : null });
+    return buildTodoBoardAggregate(ctx, resolved, boardQueryOf(body));
   }
 
   const { error } = await supabaseAdmin
@@ -922,7 +1041,7 @@ export async function updateClientOperationsTodo(
     .eq('id', todoId);
   if (error) throw new AppError(500, error.message || 'Failed to update todo', 'SUPABASE_ERROR');
 
-  await writeAudit({
+  return auditAndRefreshBoard(ctx, resolved, body, {
     organizationId: orgId,
     actorUserId: ctx.user.id,
     moduleCode: 'client-operations',
@@ -939,47 +1058,103 @@ export async function updateClientOperationsTodo(
       workspace_subject_user_id: workspace.workspace_subject_user_id,
     },
   });
+}
 
-  return getClientOperationsTodoBoard(ctx, { ...requested, page: body.page, q: typeof body.q === 'string' ? body.q : null });
+/**
+ * Named command `update_client_operations_todo_progress_note` — שלב טיפול.
+ * One user action (edit / clear the note) = one command. Free text only: it never changes completion state,
+ * priority or any workflow. Returns the full refreshed board aggregate.
+ */
+export async function updateClientOperationsTodoProgressNote(
+  ctx: RequestContext,
+  body: TodoCommandBase & { todo_id?: unknown; progress_note?: unknown },
+): Promise<ClientOperationsTodoBoardAggregate> {
+  const { resolved, task, todoId } = await resolveWorkspaceAndTodo(ctx, body);
+  const { orgId, workspace } = resolved;
+  if (task.completed_at != null) {
+    throw badRequest('Cannot update completed ToDo; reopen first', 'TODO_ALREADY_COMPLETED');
+  }
+  let note: string | null;
+  try {
+    note = normalizeTodoProgressNote(body.progress_note);
+  } catch (e) {
+    mapPriorityError(e);
+  }
+  const previous = task.progress_note ?? null;
+  if (note === previous) {
+    return buildTodoBoardAggregate(ctx, resolved, boardQueryOf(body));
+  }
+
+  const { error } = await supabaseAdmin
+    .from('client_operations_todos')
+    .update({
+      progress_note: note,
+      updated_at: new Date().toISOString(),
+      updated_by_user_id: ctx.user.id,
+    })
+    .eq('organization_id', orgId)
+    .eq('id', todoId)
+    .is('completed_at', null);
+  if (error) throw new AppError(500, error.message || 'Failed to update todo progress note', 'SUPABASE_ERROR');
+
+  return auditAndRefreshBoard(ctx, resolved, body, {
+    organizationId: orgId,
+    actorUserId: ctx.user.id,
+    moduleCode: 'client-operations',
+    entityType: 'client_operations_todo',
+    entityId: todoId,
+    action: AUDIT_ACTIONS.CLIENT_OPERATIONS_TODO_PROGRESS_NOTE_UPDATED,
+    payload: {
+      todo_id: todoId,
+      client_id: task.client_id,
+      is_one_time: task.client_id == null,
+      before: { progress_note: previous },
+      after: { progress_note: note },
+      workspace_scope_kind: workspace.scope_kind,
+      workspace_subject_user_id: workspace.workspace_subject_user_id,
+    },
+  });
 }
 
 export async function completeClientOperationsTodo(
   ctx: RequestContext,
-  body: {
-    todo_id?: unknown;
-    workspace_scope?: unknown;
-    workspace_subject_user_id?: unknown;
-    page?: unknown;
-    q?: unknown;
-  },
+  body: TodoCommandBase & { todo_id?: unknown; completion_reason?: unknown },
 ): Promise<ClientOperationsTodoBoardAggregate> {
-  const requested: ClientOperationsWorkspaceRequested = {
-    workspace_scope: typeof body.workspace_scope === 'string' ? body.workspace_scope : null,
-    workspace_subject_user_id:
-      typeof body.workspace_subject_user_id === 'string' ? body.workspace_subject_user_id : null,
-  };
-  const { orgId, workspace, materializationAccess } = await resolveWorkspace(ctx, requested);
-  const todoId = String(body.todo_id ?? '').trim();
-  const task = await loadTodoOrForbidden(orgId, todoId);
-  assertCanMutateTodo({ ctx, task, workspace, materializationAccess });
+  const { resolved, task, todoId } = await resolveWorkspaceAndTodo(ctx, body);
+  const { orgId, workspace } = resolved;
   if (task.completed_at != null) {
-    return getClientOperationsTodoBoard(ctx, { ...requested, page: body.page, q: typeof body.q === 'string' ? body.q : null });
+    // Already completed (e.g. double submit): no second completion, the existing reason is never overwritten.
+    return buildTodoBoardAggregate(ctx, resolved, boardQueryOf(body));
+  }
+  let completionReason: string | null;
+  try {
+    completionReason = normalizeTodoCompletionReason(body.completion_reason);
+  } catch (e) {
+    mapPriorityError(e);
   }
 
+  // ONE atomic UPDATE: completion fields + reason together. Guarded by `completed_at IS NULL` so concurrent
+  // submits cannot complete twice or overwrite the first completion's reason / audit.
   const now = new Date().toISOString();
-  const { error } = await supabaseAdmin
+  const { data: updated, error } = await supabaseAdmin
     .from('client_operations_todos')
     .update({
       completed_at: now,
       completed_by_user_id: ctx.user.id,
+      completion_reason: completionReason,
       updated_at: now,
       updated_by_user_id: ctx.user.id,
     })
     .eq('organization_id', orgId)
-    .eq('id', todoId);
+    .eq('id', todoId)
+    .is('completed_at', null)
+    .select('id');
   if (error) throw new AppError(500, error.message || 'Failed to complete todo', 'SUPABASE_ERROR');
+  if (!Array.isArray(updated) || updated.length === 0) {
+    return buildTodoBoardAggregate(ctx, resolved, boardQueryOf(body));
+  }
 
-  await writeAudit({
+  return auditAndRefreshBoard(ctx, resolved, body, {
     organizationId: orgId,
     actorUserId: ctx.user.id,
     moduleCode: 'client-operations',
@@ -992,12 +1167,11 @@ export async function completeClientOperationsTodo(
       is_one_time: task.client_id == null,
       assigned_to_user_id: task.assigned_to_user_id,
       completed_at: now,
+      completion_reason: completionReason,
       workspace_scope_kind: workspace.scope_kind,
       workspace_subject_user_id: workspace.workspace_subject_user_id,
     },
   });
-
-  return getClientOperationsTodoBoard(ctx, { ...requested, page: body.page, q: typeof body.q === 'string' ? body.q : null });
 }
 
 /** Refreshed truth after reopen — both surfaces when archive context is requested. */
@@ -1008,27 +1182,16 @@ export type ClientOperationsTodoReopenResult = {
 
 export async function reopenClientOperationsTodo(
   ctx: RequestContext,
-  body: {
+  body: TodoCommandBase & {
     todo_id?: unknown;
-    workspace_scope?: unknown;
-    workspace_subject_user_id?: unknown;
-    page?: unknown;
-    q?: unknown;
     return_archive?: unknown;
     query?: unknown;
     board_page?: unknown;
     board_q?: unknown;
   },
 ): Promise<ClientOperationsTodoBoardAggregate | ClientOperationsTodoReopenResult> {
-  const requested: ClientOperationsWorkspaceRequested = {
-    workspace_scope: typeof body.workspace_scope === 'string' ? body.workspace_scope : null,
-    workspace_subject_user_id:
-      typeof body.workspace_subject_user_id === 'string' ? body.workspace_subject_user_id : null,
-  };
-  const { orgId, workspace, materializationAccess } = await resolveWorkspace(ctx, requested);
-  const todoId = String(body.todo_id ?? '').trim();
-  const task = await loadTodoOrForbidden(orgId, todoId);
-  assertCanMutateTodo({ ctx, task, workspace, materializationAccess });
+  const { resolved, task, todoId } = await resolveWorkspaceAndTodo(ctx, body);
+  const { orgId, workspace } = resolved;
 
   const qObj =
     body.query && typeof body.query === 'object' && !Array.isArray(body.query)
@@ -1044,37 +1207,49 @@ export async function reopenClientOperationsTodo(
           ? body.q
           : null;
 
-  if (task.completed_at == null) {
+  const refreshed = async (
+    audit: Parameters<typeof writeAudit>[0] | null,
+  ): Promise<ClientOperationsTodoBoardAggregate | ClientOperationsTodoReopenResult> => {
     if (body.return_archive === true) {
-      const [board, archive] = await Promise.all([
-        getClientOperationsTodoBoard(ctx, { ...requested, page: boardPage, q: boardQ }),
-        getClientOperationsTodoArchive(ctx, {
-          ...requested,
+      const [, board, archive] = await Promise.all([
+        audit ? writeAudit(audit) : Promise.resolve(),
+        buildTodoBoardAggregate(ctx, resolved, { page: boardPage, q: boardQ }),
+        buildTodoArchiveAggregate(ctx, resolved, {
           page: body.page,
           q: typeof body.q === 'string' ? body.q : typeof qObj.q === 'string' ? qObj.q : null,
-          filter_priority:
-            typeof qObj.filter_priority === 'string' ? qObj.filter_priority : null,
+          filter_priority: typeof qObj.filter_priority === 'string' ? qObj.filter_priority : null,
         }),
       ]);
       return { board, archive };
     }
-    return getClientOperationsTodoBoard(ctx, { ...requested, page: boardPage, q: boardQ });
-  }
+    const [, board] = await Promise.all([
+      audit ? writeAudit(audit) : Promise.resolve(),
+      buildTodoBoardAggregate(ctx, resolved, { page: boardPage, q: boardQ }),
+    ]);
+    return board;
+  };
 
+  if (task.completed_at == null) return refreshed(null);
+
+  // Reopen clears the closure reason in the SAME update: a reason always belongs to one completion only.
   const now = new Date().toISOString();
-  const { error } = await supabaseAdmin
+  const { data: updated, error } = await supabaseAdmin
     .from('client_operations_todos')
     .update({
       completed_at: null,
       completed_by_user_id: null,
+      completion_reason: null,
       updated_at: now,
       updated_by_user_id: ctx.user.id,
     })
     .eq('organization_id', orgId)
-    .eq('id', todoId);
+    .eq('id', todoId)
+    .not('completed_at', 'is', null)
+    .select('id');
   if (error) throw new AppError(500, error.message || 'Failed to reopen todo', 'SUPABASE_ERROR');
+  if (!Array.isArray(updated) || updated.length === 0) return refreshed(null);
 
-  await writeAudit({
+  return refreshed({
     organizationId: orgId,
     actorUserId: ctx.user.id,
     moduleCode: 'client-operations',
@@ -1088,25 +1263,11 @@ export async function reopenClientOperationsTodo(
       assigned_to_user_id: task.assigned_to_user_id,
       previous_completed_at: task.completed_at,
       previous_completed_by_user_id: task.completed_by_user_id,
+      previous_completion_reason: task.completion_reason ?? null,
       workspace_scope_kind: workspace.scope_kind,
       workspace_subject_user_id: workspace.workspace_subject_user_id,
     },
   });
-
-  if (body.return_archive === true) {
-    const [board, archive] = await Promise.all([
-      getClientOperationsTodoBoard(ctx, { ...requested, page: boardPage, q: boardQ }),
-      getClientOperationsTodoArchive(ctx, {
-        ...requested,
-        page: body.page,
-        q: typeof body.q === 'string' ? body.q : typeof qObj.q === 'string' ? qObj.q : null,
-        filter_priority:
-          typeof qObj.filter_priority === 'string' ? qObj.filter_priority : null,
-      }),
-    ]);
-    return { board, archive };
-  }
-  return getClientOperationsTodoBoard(ctx, { ...requested, page: boardPage, q: boardQ });
 }
 
 export type ClientOperationsTodoCommandBody = {
@@ -1117,6 +1278,8 @@ export type ClientOperationsTodoCommandBody = {
   external_client_tax_id?: unknown;
   task_text?: unknown;
   priority?: unknown;
+  progress_note?: unknown;
+  completion_reason?: unknown;
   workspace_scope?: unknown;
   workspace_subject_user_id?: unknown;
   page?: unknown;
@@ -1170,6 +1333,9 @@ export async function executeClientOperationsTodoCommand(
   if (command === 'update_client_operations_todo') {
     return updateClientOperationsTodo(ctx, { ...body, ...ws });
   }
+  if (command === 'update_client_operations_todo_progress_note') {
+    return updateClientOperationsTodoProgressNote(ctx, { ...body, ...ws });
+  }
   if (command === 'complete_client_operations_todo') {
     return completeClientOperationsTodo(ctx, { ...body, ...ws });
   }
@@ -1178,7 +1344,6 @@ export async function executeClientOperationsTodoCommand(
   }
   throw badRequest(`Unknown ToDo command: ${command || '(empty)'}`);
 }
-
 /**
  * Block client handler reassignment when active ToDos would become inaccessible
  * to their assignees under Stage 3 after the change.

@@ -50,6 +50,39 @@ export function normalizeTodoExternalClientTaxId(raw: unknown): string | null {
   return text;
 }
 
+// ── Progress note (שלב טיפול) + completion reason (סיבת סגירה) — migration 189 ──────────────────────────
+// Free text only: no enum, no workflow meaning. Limits mirror the database check constraints.
+export const CLIENT_OPERATIONS_TODO_PROGRESS_NOTE_MAX = 300;
+export const CLIENT_OPERATIONS_TODO_COMPLETION_REASON_MAX = 300;
+
+/** Optional single-line free text: absent/blank → null; line breaks/tabs → one space; trimmed; bounded. */
+function normalizeOptionalFreeText(raw: unknown, max: number, invalid: string, tooLong: string): string | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw !== 'string') throw new Error(invalid);
+  const text = raw.replace(/[\r\n\t]+/g, ' ').trim();
+  if (!text) return null;
+  if (text.length > max) throw new Error(tooLong);
+  return text;
+}
+
+export function normalizeTodoProgressNote(raw: unknown): string | null {
+  return normalizeOptionalFreeText(
+    raw,
+    CLIENT_OPERATIONS_TODO_PROGRESS_NOTE_MAX,
+    'TODO_PROGRESS_NOTE_INVALID',
+    'TODO_PROGRESS_NOTE_TOO_LONG',
+  );
+}
+
+export function normalizeTodoCompletionReason(raw: unknown): string | null {
+  return normalizeOptionalFreeText(
+    raw,
+    CLIENT_OPERATIONS_TODO_COMPLETION_REASON_MAX,
+    'TODO_COMPLETION_REASON_INVALID',
+    'TODO_COMPLETION_REASON_TOO_LONG',
+  );
+}
+
 const isBlank = (v: unknown): boolean => v === undefined || v === null || String(v).trim() === '';
 
 export type TodoClientIdentityInput =

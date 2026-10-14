@@ -120,6 +120,7 @@ export const AUDIT_ACTIONS = {
   CLIENT_OPERATIONS_CLIENT_HANDLER_BULK_ASSIGNED: 'client_operations.client_handler.bulk_assigned',
   CLIENT_OPERATIONS_TODO_CREATED: 'client_operations.todo.created',
   CLIENT_OPERATIONS_TODO_UPDATED: 'client_operations.todo.updated',
+  CLIENT_OPERATIONS_TODO_PROGRESS_NOTE_UPDATED: 'client_operations.todo.progress_note.updated',
   CLIENT_OPERATIONS_TODO_REASSIGNED: 'client_operations.todo.reassigned',
   CLIENT_OPERATIONS_TODO_COMPLETED: 'client_operations.todo.completed',
   CLIENT_OPERATIONS_TODO_REOPENED: 'client_operations.todo.reopened',
