@@ -733,13 +733,14 @@ async function assertAssigneeCanAccessClient(params: {
   assigneeUserId: string;
   clientId: string;
 }): Promise<void> {
-  // Independent reads — run together (errors keep their original precedence).
-  const [, members] = await allInOrder([
-    assertUserIsActiveHandlerEligible(params.organizationId, params.assigneeUserId),
-    listActiveHandlerEligibleMembers(params.organizationId),
-  ] as const);
+  // ONE read of the eligible members answers both questions (eligibility + role). It used to be issued twice
+  // (once inside `assertUserIsActiveHandlerEligible`, once here) — the same org-wide listing, two round trips'
+  // worth of work. The denial is identical to what `assertUserIsActiveHandlerEligible` throws.
+  const members = await listActiveHandlerEligibleMembers(params.organizationId);
   const member = members.find((m) => m.user_id === params.assigneeUserId);
-  if (!member) throw forbidden('Assignee not eligible', 'TODO_ASSIGNEE_FORBIDDEN');
+  if (!member) {
+    throw forbidden('Assigned handler must be an active organization member with client-handling access');
+  }
   if (roleHasOfficeClientAccess(member.role_code)) return;
   const [scope, clientRow] = await allInOrder([
     resolveOrganizationClientAccessScope({
@@ -875,6 +876,23 @@ export async function createClientOperationsTodo(
   } catch (e) {
     mapPriorityError(e);
   }
+  // Ownership is derived from the authorized workspace — a client-supplied assignee is never read.
+  const assigneeId = todoBoardSubjectUserId(workspace);
+
+  // The actor's client access and the assignee's eligibility/access are independent LIVE reads: they are started
+  // together (one network round trip instead of two in a row) and EVALUATED in the original order below, so every
+  // denial and its precedence is unchanged: client access → input validation → assignee.
+  const assigneeCheck: Promise<void> =
+    identity.mode === 'canonical'
+      ? assertAssigneeCanAccessClient({
+          organizationId: orgId,
+          assigneeUserId: assigneeId,
+          clientId: identity.client_id,
+        })
+      : // No client to authorize — the owner (workspace subject) must still be an eligible active member.
+        assertUserIsActiveHandlerEligible(orgId, assigneeId);
+  assigneeCheck.catch(() => undefined); // observed (and rethrown) below, after the earlier checks
+
   if (identity.mode === 'canonical') {
     await assertCanAccessClientFromContext(ctx, identity.client_id, materializationAccess);
     if (!clientIdIsAuthorized(materializationAccess, identity.client_id)) {
@@ -891,19 +909,8 @@ export async function createClientOperationsTodo(
   } catch (e) {
     mapPriorityError(e);
   }
-  // Ownership is derived from the authorized workspace — a client-supplied assignee is never read.
-  const assigneeId = todoBoardSubjectUserId(workspace);
 
-  if (identity.mode === 'canonical') {
-    await assertAssigneeCanAccessClient({
-      organizationId: orgId,
-      assigneeUserId: assigneeId,
-      clientId: identity.client_id,
-    });
-  } else {
-    // No client to authorize — the owner (workspace subject) must still be an eligible active member.
-    await assertUserIsActiveHandlerEligible(orgId, assigneeId);
-  }
+  await assigneeCheck;
   const clientId = identity.mode === 'canonical' ? identity.client_id : null;
 
   const now = new Date().toISOString();

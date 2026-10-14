@@ -836,24 +836,29 @@
 
 /* ── Priority squares 1–5: glass finish ONLY (colors, size, order, layout unchanged) ─────────────────────
    Base colors stay exactly the ones declared above (background-color is never touched). The finish is a
-   subtle top gloss + soft diagonal reflection + inner highlight/shade + refined light border, painted
-   behind the label (z-index -1 inside an isolated stacking context) so text contrast is not reduced. */
+   glass coat made of layers: (1) a bright curved gloss cap with a crisp lower edge, (2) a diagonal light
+   streak, (3) a soft bottom shade + rim light for depth, (4) inner highlight / shade rings and a light
+   border. Every layer is painted behind the label (z-index -1 inside an isolated stacking context), so
+   the digit stays on top and its contrast is not reduced. */
 .nx-co-todo-priority__btn {
   position: relative;
   isolation: isolate;
   overflow: hidden;
   border-color: rgba(255, 255, 255, 0.4);
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 52%, rgba(0, 0, 0, 0.1) 100%);
+  background-image:
+    radial-gradient(120% 70% at 50% 118%, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0) 62%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 48%, rgba(0, 0, 0, 0.2) 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.14),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 2px 5px rgba(10, 45, 85, 0.18);
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.16);
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.22),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    0 1px 2px rgba(10, 45, 85, 0.3),
+    0 4px 9px rgba(10, 45, 85, 0.26);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.28);
 }
 
 .nx-co-todo-priority__btn--gold {
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.28);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .nx-co-todo-priority__btn::before,
@@ -864,23 +869,30 @@
   pointer-events: none;
 }
 
-/* glossy cap */
+/* glossy cap: bright curved highlight over the upper half with a crisp lower edge */
 .nx-co-todo-priority__btn::before {
-  inset: 1px 1px 54% 1px;
-  border-radius: 4px 4px 12px 12px / 4px 4px 7px 7px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.34) 0%, rgba(255, 255, 255, 0.06) 100%);
+  inset: 1px 2px 48% 2px;
+  border-radius: 4px 4px 16px 16px / 4px 4px 8px 8px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.24) 100%);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.45);
 }
 
-/* layered diagonal reflection */
+/* layered diagonal light streak */
 .nx-co-todo-priority__btn::after {
   inset: 0;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 36%);
+  background: linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0) 34%,
+    rgba(255, 255, 255, 0.34) 46%,
+    rgba(255, 255, 255, 0.08) 58%,
+    rgba(255, 255, 255, 0) 64%
+  );
 }
 
 .nx-co-todo-priority__btn.is-selected {
   border-color: #0a2d55;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.22),
     0 0 0 2px rgba(29, 125, 255, 0.35);
 }

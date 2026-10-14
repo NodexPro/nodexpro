@@ -48,13 +48,22 @@ async function loadHandlerEligibleRoleCodes(): Promise<Set<string>> {
  * Single source for CO handler options + update_profile validation.
  */
 export async function listActiveHandlerEligibleMembers(organizationId: string): Promise<OrgHandlerOption[]> {
-  const eligibleRoles = await loadHandlerEligibleRoleCodes();
-  const { data, error } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('user_id, role_code, users!organization_memberships_user_id_fkey(id, email, full_name)')
-    .eq('organization_id', organizationId)
-    .eq('status', 'active')
-    .in('role_code', [...eligibleRoles]);
+  // The role matrix and the org's active memberships are independent reads: start both together (one network
+  // round trip instead of two in a row). The role filter is applied below, in code, exactly as before
+  // (`eligibleRoles.has(row.role_code)`); an org has a handful of members, so no extra payload of note.
+  const rolesRead = loadHandlerEligibleRoleCodes();
+  rolesRead.catch(() => undefined);
+  // Query builders are lazy thenables: Promise.resolve() is what actually starts the request now.
+  const membersRead = Promise.resolve(
+    supabaseAdmin
+      .from('organization_memberships')
+      .select('user_id, role_code, users!organization_memberships_user_id_fkey(id, email, full_name)')
+      .eq('organization_id', organizationId)
+      .eq('status', 'active'),
+  );
+  membersRead.catch(() => undefined);
+  const eligibleRoles = await rolesRead;
+  const { data, error } = await membersRead;
   if (error) throw new Error(error.message ?? 'Failed to list handler-eligible members');
 
   type UserEmbed = { id: string; email: string | null; full_name: string | null };

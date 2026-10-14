@@ -312,10 +312,37 @@ async function loadExplicitMemberModuleGrantIdSet(organizationId: string, userId
  * Staff/Viewer require an enabled grant on this module id.
  * Owner/Admin return without a row. Revoked membership has no active row, so deny.
  */
-export async function assertStaffViewerMayUseModule(ctx: RequestContext, moduleId: string): Promise<void> {
+export async function assertStaffViewerMayUseModule(
+  ctx: RequestContext,
+  moduleId: string,
+  /**
+   * Optional LIVE reads started earlier by `prefetchStaffViewerModuleGrant` (same request). They only overlap the
+   * round trips with other independent reads of the gate; decisions, errors and their order are unchanged and
+   * nothing is cached across requests.
+   */
+  prefetched?: StaffViewerModuleGrantPrefetch | null,
+): Promise<void> {
   if (roleHasOfficeClientAccess(ctx.membership?.roleCode)) return;
   if (!ctx.organizationId || !ctx.user?.id) throw forbidden('Organization context required');
 
+  const granted = await (prefetched ? prefetched.granted : loadStaffViewerGrantedModuleIds(ctx));
+
+  // Direct grant on a user-facing module, or infrastructure reached through a granted host.
+  const effective = prefetched
+    ? deriveEffectiveMemberModuleIds(await prefetched.catalog, granted)
+    : deriveEffectiveMemberModuleIds(await loadModuleCatalog(), granted);
+  if (!effective.has(moduleId)) {
+    throw forbidden('Module access is not granted', 'MEMBER_MODULE_ACCESS_DENIED');
+  }
+}
+
+export type StaffViewerModuleGrantPrefetch = {
+  granted: Promise<Set<string>>;
+  catalog: Promise<ModuleCatalogRow[]>;
+};
+
+/** Staff/Viewer: the member's live enabled module grants (membership → grants). Throws exactly like the gate. */
+async function loadStaffViewerGrantedModuleIds(ctx: RequestContext): Promise<Set<string>> {
   const { data: membership, error: membershipError } = await supabaseAdmin
     .from('organization_memberships')
     .select('id, status')
@@ -336,12 +363,23 @@ export async function assertStaffViewerMayUseModule(ctx: RequestContext, moduleI
     .eq('membership_id', membership.id)
     .eq('enabled', true);
   if (grantError) throw grantError;
-  const granted = new Set((grant ?? []).map((row) => String(row.module_id)));
-  // Direct grant on a user-facing module, or infrastructure reached through a granted host.
-  const effective = deriveEffectiveMemberModuleIds(await loadModuleCatalog(), granted);
-  if (!effective.has(moduleId)) {
-    throw forbidden('Module access is not granted', 'MEMBER_MODULE_ACCESS_DENIED');
-  }
+  return new Set((grant ?? []).map((row) => String(row.module_id)));
+}
+
+/**
+ * Starts the Staff/Viewer reads of `assertStaffViewerMayUseModule` (grants chain + module catalog) WITHOUT
+ * waiting, so a caller can overlap them with its other independent reads. Returns null when no staff check
+ * applies (Owner/Admin, or no org context — the assert itself reports that). The promises never produce an
+ * unhandled rejection; the assert awaits them in its original order (grants first, then catalog).
+ */
+export function prefetchStaffViewerModuleGrant(ctx: RequestContext): StaffViewerModuleGrantPrefetch | null {
+  if (roleHasOfficeClientAccess(ctx.membership?.roleCode)) return null;
+  if (!ctx.organizationId || !ctx.user?.id) return null;
+  const granted = loadStaffViewerGrantedModuleIds(ctx);
+  const catalog = loadModuleCatalog();
+  granted.catch(() => undefined);
+  catalog.catch(() => undefined);
+  return { granted, catalog };
 }
 
 /** Staff/Viewer DocFlow paths that skip requireModuleActive still require entitlement and a grant. */

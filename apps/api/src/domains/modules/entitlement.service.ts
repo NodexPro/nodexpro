@@ -10,14 +10,28 @@ import { hasValidTrial } from '../trial/trial.service.js';
  */
 export async function resolveEntitlement(
   organizationId: string,
-  moduleId: string
+  moduleId: string,
+  /**
+   * The module row (`id`, `is_system`) when the caller has JUST read it (e.g. the request gate). Skips one
+   * redundant, sequential `modules` read. Omitted => the row is read here, exactly as before.
+   */
+  knownModule?: { id: string; is_system?: boolean | null }
 ): Promise<{ status: EntitlementStatus; reason?: string }> {
-  const mod = await supabaseAdmin.from('modules').select('id, is_system').eq('id', moduleId).single();
+  const mod =
+    knownModule && knownModule.id === moduleId
+      ? { data: { id: knownModule.id, is_system: knownModule.is_system === true } }
+      : await supabaseAdmin.from('modules').select('id, is_system').eq('id', moduleId).single();
   if (!mod.data) return { status: 'not_entitled', reason: 'Module not found' };
 
   if (mod.data.is_system) {
     return { status: 'entitled' };
   }
+
+  // Request-gate path only (`knownModule` given): the trial read does not depend on the subscription read, so
+  // start it together with it — trial organizations (no subscription row) save one sequential round trip.
+  // Callers that resolve many modules in a loop keep the original lazy, subscription-first behavior.
+  const trialRead = knownModule ? hasValidTrial(organizationId) : null;
+  trialRead?.catch(() => undefined);
 
   const sub = await supabaseAdmin
     .from('organization_module_subscriptions')
@@ -41,7 +55,7 @@ export async function resolveEntitlement(
     return { status: 'expired', reason: `Subscription status: ${s.status}` };
   }
 
-  const validTrial = await hasValidTrial(organizationId);
+  const validTrial = await (trialRead ?? hasValidTrial(organizationId));
   if (validTrial) {
     return { status: 'trial' };
   }

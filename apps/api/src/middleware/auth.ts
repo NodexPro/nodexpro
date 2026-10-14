@@ -3,11 +3,13 @@ import { createClient } from '@supabase/supabase-js';
 import { config } from '../config.js';
 import { supabaseAdmin } from '../db/client.js';
 import { unauthorized } from '../shared/errors.js';
+import { timedFetch } from '../shared/request-timing.js';
 import type { AppUser, OrgMembership, RequestContext } from '../shared/context.js';
 import { ensureAppUser } from '../domains/auth/auth.service.js';
 import { loadOrgMembershipForUser, resolveStoredOrSingleAutoOrgContext } from '../domains/auth/active-organization.service.js';
 
-const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey);
+// `timedFetch` only adds per-request call accounting for the Server-Timing header (measurement, no behavior).
+const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey, { global: { fetch: timedFetch } });
 
 export async function authMiddleware(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const authHeader = req.headers.authorization;

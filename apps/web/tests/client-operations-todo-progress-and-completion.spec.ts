@@ -295,8 +295,15 @@ test('D — priority squares keep colors / size / meaning; glass finish is CSS-o
   assert.match(glass, /\.nx-co-todo-priority__btn::after/);
   assert.match(glass, /z-index: -1;/);
   assert.match(glass, /isolation: isolate;/);
-  assert.match(glass, /inset 0 1px 0 rgba\(255, 255, 255, 0\.5\)/);
+  assert.match(glass, /inset 0 1px 0 rgba\(255, 255, 255, 0\.8\)/);
   assert.match(glass, /border-color: rgba\(255, 255, 255, 0\.4\)/);
+  // Clearly visible gloss: bright cap (>= .6 white at its top), diagonal streak (>= .3), bottom rim light + depth shade.
+  assert.match(glass, /__btn::before \{[^}]*rgba\(255, 255, 255, 0\.7\) 0%/);
+  assert.match(glass, /__btn::after \{[^}]*115deg[\s\S]*?rgba\(255, 255, 255, 0\.34\) 46%/);
+  assert.match(glass, /radial-gradient\(120% 70% at 50% 118%/);
+  assert.match(glass, /inset 0 -2px 3px rgba\(0, 0, 0, 0\.22\)/);
+  // Digit stays above every layer: layers are behind (z-index -1), the label has no overlay in front of it.
+  assert.doesNotMatch(glass, /z-index:\s*[1-9]/);
   // Selected state still shows the selection ring + dark border.
   assert.match(glass, /\.nx-co-todo-priority__btn\.is-selected \{\s*border-color: #0a2d55;[\s\S]*?0 0 0 2px rgba\(29, 125, 255, 0\.35\)/);
   // No generated images / icon libraries; the markup (numbers, order, roles) is unchanged.

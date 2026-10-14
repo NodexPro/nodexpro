@@ -85,22 +85,34 @@ export async function resolveOrganizationClientAccessScope(params: {
 
   // Staff/Viewer/unknown: policy table only. Missing policy is fail closed to assigned-only.
   // Do not fall back to assigned_handler_user_id.
-  const { data: policy, error: policyError } = await supabaseAdmin
-    .from('organization_member_client_access')
-    .select('access_mode')
-    .eq('organization_id', organization_id)
-    .eq('user_id', viewer_user_id)
-    .maybeSingle();
+  // The grants read does not depend on the policy read (same org + user keys), so both start together: one network
+  // round trip instead of two in a row for `selected` members. The grants are only USED — and their failure only
+  // surfaces — when the policy says `selected`, exactly as before. (Builders are lazy: Promise.resolve starts them.)
+  const policyRead = Promise.resolve(
+    supabaseAdmin
+      .from('organization_member_client_access')
+      .select('access_mode')
+      .eq('organization_id', organization_id)
+      .eq('user_id', viewer_user_id)
+      .maybeSingle(),
+  );
+  const grantsRead = Promise.resolve(
+    supabaseAdmin
+      .from('organization_member_client_grants')
+      .select('client_id')
+      .eq('organization_id', organization_id)
+      .eq('user_id', viewer_user_id),
+  ).catch((e: unknown) => ({
+    data: null,
+    error: { message: e instanceof Error ? e.message : 'Failed to load client access grants' },
+  }));
+  const { data: policy, error: policyError } = await policyRead;
   if (policyError) throw new Error(policyError.message ?? 'Failed to load client access policy');
 
   const accessMode = String((policy as { access_mode?: string } | null)?.access_mode ?? '').trim().toLowerCase();
   let grantedActiveClientIds: string[] = [];
   if (accessMode === 'selected') {
-    const { data: grants, error: grantError } = await supabaseAdmin
-      .from('organization_member_client_grants')
-      .select('client_id')
-      .eq('organization_id', organization_id)
-      .eq('user_id', viewer_user_id);
+    const { data: grants, error: grantError } = await grantsRead;
     if (grantError) throw new Error(grantError.message ?? 'Failed to load client access grants');
     const grantIds = (grants ?? [])
       .map((row) => String((row as { client_id: string }).client_id ?? '').trim())

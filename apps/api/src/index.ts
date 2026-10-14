@@ -44,6 +44,7 @@ import {
   refreshPdfEngineCapability,
 } from './domains/income/income-document-pdf-browser.service.js';
 import { correlationMiddleware, getRequestCorrelationId } from './middleware/correlation.js';
+import { requestTimingMiddleware } from './shared/request-timing.js';
 import { supabaseAdmin } from './db/client.js';
 
 ensureDefaultPuppeteerCacheDir();
@@ -67,6 +68,8 @@ async function logModuleLoaded(): Promise<void> {
 const app = express();
 app.use(helmet());
 app.use(correlationMiddleware);
+// Measurement only: `Server-Timing` response header (API time + Supabase call count/avg/max). No behavior.
+app.use(requestTimingMiddleware);
 const corsAllowedOriginsRaw = process.env.CORS_ALLOWED_ORIGINS ?? '';
 /** Each configured origin plus its www ↔ apex twin (same scheme/port) to avoid prod footguns. */
 function expandCorsOriginsWithWwwVariants(origins: string[]): string[] {
