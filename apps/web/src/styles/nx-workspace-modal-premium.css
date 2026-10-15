@@ -1,0 +1,204 @@
+/* Client Details modal (`.nx-modal.nx-workspace-modal`) — visual materials only.
+   Does not change tabs, fields, save commands, or the non-modal workspace page. */
+
+.nx-modal.nx-workspace-modal {
+  container-type: inline-size;
+  container-name: nx-workspace-modal;
+  border-radius: 22px !important;
+  border: 1px solid rgba(102, 207, 255, 0.85) !important;
+  background:
+    radial-gradient(ellipse at 82% 4%, rgba(28, 104, 255, 0.48) 0%, transparent 48%),
+    linear-gradient(135deg, #04152f 0%, #082b59 48%, #103c87 78%, #061d45 100%) !important;
+  box-shadow:
+    0 24px 65px rgba(0, 10, 38, 0.42),
+    0 0 22px rgba(0, 163, 255, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+  overflow: hidden;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-header {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 22px 22px 0 0 !important;
+  background:
+    radial-gradient(ellipse at 82% 0%, rgba(35, 110, 255, 0.55), transparent 52%),
+    linear-gradient(105deg, #031936 0%, #06326a 55%, #153fbb 100%) !important;
+  box-shadow: none !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 92% 8%, rgba(168, 85, 247, 0.38) 0%, transparent 42%),
+    radial-gradient(ellipse at 74% -10%, rgba(0, 217, 255, 0.32) 0%, transparent 46%);
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-header::after {
+  content: '';
+  position: absolute;
+  inset: auto -8% -55% 35%;
+  height: 140%;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 0%, rgba(80, 160, 255, 0.45) 0%, rgba(120, 90, 255, 0.18) 38%, transparent 68%);
+  opacity: 0.9;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-header-left,
+.nx-modal.nx-workspace-modal .nx-workspace-header-right,
+.nx-modal.nx-workspace-modal .nx-workspace-close {
+  position: relative;
+  z-index: 1;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-header-divider {
+  height: 1px;
+  background: linear-gradient(90deg, rgba(0, 217, 255, 0.15) 0%, rgba(0, 217, 255, 0.65) 50%, rgba(168, 85, 247, 0.45) 100%);
+  box-shadow: 0 0 12px rgba(0, 200, 255, 0.35);
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-panel-root .nx-workspace-tabs-bar {
+  background: linear-gradient(180deg, #061733 0%, #020d24 100%) !important;
+  border-bottom: 1px solid rgba(0, 185, 255, 0.18) !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-panel-root .nx-workspace-tab-link {
+  color: rgba(235, 248, 255, 0.72) !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-panel-root .nx-workspace-tab-link:hover {
+  background: rgba(70, 150, 255, 0.12) !important;
+  color: #ffffff !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-panel-root .nx-workspace-tab-link-active {
+  background: rgba(70, 150, 255, 0.22) !important;
+  color: #ffffff !important;
+  box-shadow:
+    inset 0 -3px 0 #00d9ff,
+    0 3px 12px rgba(0, 200, 255, 0.16) !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-panel-root .nx-workspace-tab-link::after {
+  left: 12%;
+  right: 12%;
+  bottom: 0;
+  height: 3px;
+  border-radius: 2px 2px 0 0;
+  background: #00d9ff;
+  box-shadow: 0 0 10px rgba(0, 217, 255, 0.55);
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-panel-root .nx-workspace-tab-link:focus-visible {
+  outline: 2px solid rgba(0, 217, 255, 0.9);
+  outline-offset: -2px;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-panel-root .nx-workspace-content {
+  background: transparent;
+  overflow-x: hidden;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card {
+  background:
+    radial-gradient(ellipse at 20% 12%, rgba(255, 255, 255, 0.55), transparent 55%),
+    linear-gradient(135deg, #b9d9ff 0%, #8dbaf2 48%, #a9d5ff 100%) !important;
+  border-radius: 19px !important;
+  border: 1px solid rgba(235, 250, 255, 0.92) !important;
+  box-shadow:
+    0 0 0 1px rgba(0, 185, 255, 0.3),
+    0 0 19px rgba(0, 185, 255, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65) !important;
+  overflow-x: hidden;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card > .client-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 30px !important;
+  row-gap: 24px !important;
+  min-width: 0;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-label {
+  color: #244b82 !important;
+  font-weight: 600 !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box {
+  background: linear-gradient(145deg, rgba(245, 251, 255, 0.74) 0%, rgba(209, 232, 255, 0.66) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.95) !important;
+  border-radius: 14px !important;
+  color: #071c3d !important;
+  font-weight: 500 !important;
+  box-shadow:
+    0 0 0 1px rgba(95, 225, 255, 0.24),
+    0 0 13px rgba(68, 204, 255, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    inset 0 -1px 0 rgba(110, 165, 225, 0.14) !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box:hover {
+  border-color: rgba(255, 255, 255, 1) !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box:focus-within {
+  border-color: #28d8ff !important;
+  box-shadow:
+    0 0 0 2px rgba(0, 209, 255, 0.34),
+    0 0 19px rgba(0, 193, 255, 0.48),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92) !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box:has(input[readonly]),
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box:has(select:disabled) {
+  opacity: 0.92;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box input,
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box select {
+  color: #071c3d;
+  font-weight: 500;
+  min-width: 0;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box input[aria-label='אימייל'],
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box input[type='date'],
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box input[aria-label='ת.ז / ח.פ'],
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box input[aria-label='טלפון'] {
+  direction: ltr;
+  text-align: start;
+}
+
+@container nx-workspace-modal (max-width: 860px) {
+  .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card > .client-profile-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 18px !important;
+    row-gap: 18px !important;
+  }
+}
+
+@container nx-workspace-modal (max-width: 520px) {
+  .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card > .client-profile-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 860px) {
+  .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card > .client-profile-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 18px !important;
+    row-gap: 18px !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card > .client-profile-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

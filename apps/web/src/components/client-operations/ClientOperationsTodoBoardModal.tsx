@@ -455,7 +455,7 @@ export function ClientOperationsTodoBoardModal({
         tabIndex={-1}
       >
         <div className="nx-co-todo-board__topbar">
-          <div className="nx-co-todo-board__topbar-start">
+          <div className="nx-co-todo-board__brand">
             <span className="nx-co-todo-board__mark" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
                 <path
@@ -465,6 +465,8 @@ export function ClientOperationsTodoBoardModal({
               </svg>
             </span>
             <h2 className="nx-co-todo-board__title">ToDo List</h2>
+          </div>
+          <div className="nx-co-todo-board__topbar-start">
             {label ? <span className="nx-co-todo-board__workspace">{label}</span> : null}
             {canCreate ? (
               <button
@@ -532,16 +534,16 @@ export function ClientOperationsTodoBoardModal({
                 ›
               </button>
             </div>
-            <button
-              type="button"
-              className="nx-co-todo-board__close"
-              onClick={onClose}
-              aria-label="סגור"
-              data-testid="client-operations-todo-board-close"
-            >
-              ×
-            </button>
           </div>
+          <button
+            type="button"
+            className="nx-co-todo-board__close"
+            onClick={onClose}
+            aria-label="סגור"
+            data-testid="client-operations-todo-board-close"
+          >
+            ×
+          </button>
         </div>
 
         {error ? (

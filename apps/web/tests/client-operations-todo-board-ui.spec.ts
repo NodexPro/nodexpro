@@ -190,3 +190,45 @@ test('visual board — five compact rows, fixed cards, null is visual 5', () => 
   assert.match(modal, /reopen_client_operations_todo/);
   assert.match(modal, /onDoubleClick/);
 });
+
+test('header brand sits on the physical left; other clusters stay RTL', () => {
+  assert.match(modal, /nx-co-todo-board__brand/);
+  assert.match(modal, /<h2 className="nx-co-todo-board__title">ToDo List<\/h2>/);
+  assert.match(css, /\.nx-co-todo-board__brand \{[\s\S]*?direction: ltr;/);
+  assert.match(css, /\.nx-co-todo-board__brand \{[\s\S]*?order: 1;/);
+  assert.match(css, /\.nx-co-todo-board \{[^}]*direction: rtl;/);
+  assert.doesNotMatch(css, /\.nx-co-todo-board__topbar \{[^}]*direction:\s*ltr;/);
+  assert.doesNotMatch(css, /\.nx-co-todo-lanes \{[^}]*direction:\s*ltr;/);
+});
+
+test('header Close sits on the physical right; one button, same handler', () => {
+  const topbar = modal.slice(modal.indexOf('nx-co-todo-board__topbar'), modal.indexOf('nx-co-todo-board__error'));
+  assert.match(topbar, /data-testid="client-operations-todo-board-close"/);
+  assert.equal((topbar.match(/nx-co-todo-board__close/g) ?? []).length, 1);
+  assert.match(topbar, /aria-label="סגור"/);
+  assert.match(topbar, /onClick=\{onClose\}/);
+  const endBlock = modal.slice(modal.indexOf('nx-co-todo-board__topbar-end'), modal.indexOf('nx-co-todo-board__close'));
+  assert.doesNotMatch(endBlock, /__close/);
+  assert.match(css, /\.nx-co-todo-board__topbar > \.nx-co-todo-board__close \{[\s\S]*?order: -1;/);
+});
+
+test('large priority rails keep colors/size/side and add a CSS-only outer glass strip', () => {
+  assert.match(css, /\.nx-co-todo-lane__rail \{\s*flex: 0 0 76px;\s*width: 76px;/);
+  assert.match(css, /\.nx-co-todo-lane--red \.nx-co-todo-lane__rail \{\s*background: #ef4444;/);
+  assert.match(css, /\.nx-co-todo-lane--orange \.nx-co-todo-lane__rail \{\s*background: #f97316;/);
+  assert.match(css, /\.nx-co-todo-lane--gold \.nx-co-todo-lane__rail \{\s*background: #eab308;/);
+  assert.match(css, /\.nx-co-todo-lane--green \.nx-co-todo-lane__rail \{\s*background: #22c55e;/);
+  assert.match(css, /\.nx-co-todo-lane--blue \.nx-co-todo-lane__rail \{\s*background: #3b82f6;/);
+  const glassStart = css.lastIndexOf('Large priority rails');
+  assert.ok(glassStart > 0);
+  const glassEnd = css.indexOf('.nx-co-todo-lane__cards {', glassStart);
+  const glass = css.slice(glassStart, glassEnd).replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.match(glass, /\.nx-co-todo-lane__rail::before/);
+  assert.match(glass, /\.nx-co-todo-lane__rail::after/);
+  assert.match(glass, /inset-inline-start: 0;/);
+  assert.match(glass, /border-inline-end: 1px solid rgba\(255, 255, 255, 0\.78\)/);
+  assert.match(glass, /to inline-end/);
+  assert.doesNotMatch(glass, /(^|[^-])background:\s*#|background-color/m);
+  assert.doesNotMatch(glass, /\b(width:\s*76px|flex:|margin|transform|animation)\b/);
+  assert.doesNotMatch(glass, /url\(|\.png|\.svg/);
+});

@@ -61,6 +61,30 @@ test('full-width equal distribution CSS for remaining modal top tabs', () => {
   assert.match(modalCss, /:focus-visible/);
 });
 
+test('client profile still persists only through the existing save command; footer is not hidden', () => {
+  assert.match(panelSrc, /moduleClientOperationsUpdateClientProfile/);
+  assert.match(panelSrc, /const handleSave = async/);
+  assert.match(panelSrc, />\s*שמירה\s*</);
+  assert.match(panelSrc, />\s*ביטול\s*</);
+  assert.match(panelSrc, /nx-workspace-client-footer/);
+  assert.doesNotMatch(panelSrc, /autosave|autoSave|auto-save/i);
+  const premium = readFileSync(join(dir, '../src/styles/nx-workspace-modal-premium.css'), 'utf8');
+  assert.doesNotMatch(premium, /nx-workspace-client-footer[^{]*\{[^}]*display:\s*none/);
+  assert.doesNotMatch(premium, /שמירה|ביטול/);
+});
+
+test('premium modal skin is scoped and keeps a 3-column client-profile grid on desktop', () => {
+  assert.match(panelSrc, /nx-workspace-modal-premium\.css/);
+  const premium = readFileSync(join(dir, '../src/styles/nx-workspace-modal-premium.css'), 'utf8');
+  assert.match(premium, /\.nx-modal\.nx-workspace-modal \{/);
+  assert.match(premium, /grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/);
+  assert.match(premium, /@container nx-workspace-modal \(max-width: 860px\)/);
+  assert.match(premium, /@container nx-workspace-modal \(max-width: 520px\)/);
+  assert.doesNotMatch(premium, /url\(|\.png|\.svg|animation:/);
+  assert.match(premium, /0 0 13px rgba\(68, 204, 255, 0\.4\)/);
+  assert.match(premium, /:focus-within/);
+});
+
 test('bottom month period tabs are a separate navigation system (untouched contract)', () => {
   assert.match(periodTabsSrc, /selectedPeriodKey/);
   assert.match(periodTabsSrc, /available_periods|availablePeriods/);

@@ -18,6 +18,7 @@ import { ClientHistoryTab } from './ClientHistoryTab';
 import type { ClientHistoryTabModel } from './client-history-tab-types';
 import { ClientObligationsTab, type ClientObligationsTabModel } from './ClientObligationsTab';
 import { ClientDocflowTab } from './ClientDocflowTab';
+import '../styles/nx-workspace-modal-premium.css';
 
 function feesTabVersion(tab: FeesTabModel | null | undefined): number {
   const v = tab?.read_model_version;
