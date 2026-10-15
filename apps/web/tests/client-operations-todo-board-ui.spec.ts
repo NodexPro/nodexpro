@@ -212,7 +212,7 @@ test('header Close sits on the physical right; one button, same handler', () => 
   assert.match(css, /\.nx-co-todo-board__topbar > \.nx-co-todo-board__close \{[\s\S]*?order: -1;/);
 });
 
-test('large priority rails keep colors/size/side and add a CSS-only outer glass strip', () => {
+test('large priority rails keep colors/size/side and use an integrated glass-edge, not a pale stripe', () => {
   assert.match(css, /\.nx-co-todo-lane__rail \{\s*flex: 0 0 76px;\s*width: 76px;/);
   assert.match(css, /\.nx-co-todo-lane--red \.nx-co-todo-lane__rail \{\s*background: #ef4444;/);
   assert.match(css, /\.nx-co-todo-lane--orange \.nx-co-todo-lane__rail \{\s*background: #f97316;/);
@@ -223,11 +223,10 @@ test('large priority rails keep colors/size/side and add a CSS-only outer glass 
   assert.ok(glassStart > 0);
   const glassEnd = css.indexOf('.nx-co-todo-lane__cards {', glassStart);
   const glass = css.slice(glassStart, glassEnd).replace(/\/\*[\s\S]*?\*\//g, '');
-  assert.match(glass, /\.nx-co-todo-lane__rail::before/);
-  assert.match(glass, /\.nx-co-todo-lane__rail::after/);
-  assert.match(glass, /inset-inline-start: 0;/);
-  assert.match(glass, /border-inline-end: 1px solid rgba\(255, 255, 255, 0\.78\)/);
-  assert.match(glass, /to inline-end/);
+  assert.match(glass, /\.nx-co-todo-lane__rail::before \{[^}]*inset: 0;/);
+  assert.match(glass, /\.nx-co-todo-lane__rail::after \{[^}]*width: 3px;[\s\S]*?border-radius: 999px;/);
+  assert.match(glass, /right: 3px;/);
+  assert.doesNotMatch(glass, /width:\s*20px|to inline-end|inset-inline-start/);
   assert.doesNotMatch(glass, /(^|[^-])background:\s*#|background-color/m);
   assert.doesNotMatch(glass, /\b(width:\s*76px|flex:|margin|transform|animation)\b/);
   assert.doesNotMatch(glass, /url\(|\.png|\.svg/);

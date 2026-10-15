@@ -81,8 +81,10 @@ test('premium modal skin is scoped and keeps a 3-column client-profile grid on d
   assert.match(premium, /@container nx-workspace-modal \(max-width: 860px\)/);
   assert.match(premium, /@container nx-workspace-modal \(max-width: 520px\)/);
   assert.doesNotMatch(premium, /url\(|\.png|\.svg|animation:/);
-  assert.match(premium, /0 0 13px rgba\(68, 204, 255, 0\.4\)/);
+  assert.match(premium, /0 0 16px rgba\(68, 204, 255, 0\.55\)/);
   assert.match(premium, /:focus-within/);
+  assert.match(premium, /linear-gradient\(\s*180deg,\s*#061733 0%,\s*#020d24 100%\)/);
+  assert.match(premium, /-webkit-text-fill-color:\s*#eaf6ff/);
 });
 
 test('bottom month period tabs are a separate navigation system (untouched contract)', () => {
