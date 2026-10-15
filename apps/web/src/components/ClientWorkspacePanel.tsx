@@ -20,6 +20,82 @@ import { ClientObligationsTab, type ClientObligationsTabModel } from './ClientOb
 import { ClientDocflowTab } from './ClientDocflowTab';
 import '../styles/nx-workspace-modal-premium.css';
 
+type ClientFieldDecorKind =
+  | 'building'
+  | 'id-card'
+  | 'briefcase'
+  | 'status'
+  | 'user'
+  | 'phone'
+  | 'mail'
+  | 'pin'
+  | 'calendar';
+
+function ClientFieldDecorIcon({ kind }: { kind: ClientFieldDecorKind }) {
+  return (
+    <svg
+      className={`client-field-decor-icon${kind === 'status' ? ' client-field-decor-icon--status' : ''}`}
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {kind === 'building' ? (
+        <path d="M4 20V7l8-3 8 3v13H4zM9 20v-6h6v6M9 10h.01M15 10h.01M12 10h.01" />
+      ) : null}
+      {kind === 'id-card' ? (
+        <>
+          <rect x="3" y="6" width="18" height="12" rx="2" />
+          <circle cx="9" cy="12" r="2" />
+          <path d="M13 11h5M13 14h4" />
+        </>
+      ) : null}
+      {kind === 'briefcase' ? (
+        <>
+          <rect x="3" y="8" width="18" height="12" rx="2" />
+          <path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 13h18" />
+        </>
+      ) : null}
+      {kind === 'status' ? (
+        <circle cx="12" cy="12" r="5" fill="currentColor" stroke="none" />
+      ) : null}
+      {kind === 'user' ? (
+        <>
+          <circle cx="12" cy="8" r="3.2" />
+          <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
+        </>
+      ) : null}
+      {kind === 'phone' ? (
+        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.37 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.33 1.85.57 2.81.7A2 2 0 0 1 22 16.92z" />
+      ) : null}
+      {kind === 'mail' ? (
+        <>
+          <rect x="3.5" y="6" width="17" height="12" rx="2" />
+          <path d="M4 8l8 6 8-6" />
+        </>
+      ) : null}
+      {kind === 'pin' ? (
+        <>
+          <path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z" />
+          <circle cx="12" cy="10" r="2.2" />
+        </>
+      ) : null}
+      {kind === 'calendar' ? (
+        <>
+          <rect x="4" y="6" width="16" height="14" rx="2" />
+          <path d="M8 4v4M16 4v4M4 11h16" />
+        </>
+      ) : null}
+    </svg>
+  );
+}
+
 function feesTabVersion(tab: FeesTabModel | null | undefined): number {
   const v = tab?.read_model_version;
   return typeof v === 'number' && Number.isFinite(v) ? v : -1;
@@ -548,6 +624,7 @@ export function ClientWorkspacePanel({
           <div className="client-field-label">שם לקוח</div>
           {isClientTab ? (
             <div className="client-field-box">
+              <ClientFieldDecorIcon kind="building" />
               <input
                 value={draft.client_name}
                 onChange={(e) => setDraft((s) => ({ ...s, client_name: e.target.value }))}
@@ -566,7 +643,10 @@ export function ClientWorkspacePanel({
               />
             </div>
           ) : (
-            <div className="client-field-box">{localWorkspace.client.client_name ?? '—'}</div>
+            <div className="client-field-box">
+              <ClientFieldDecorIcon kind="building" />
+              {localWorkspace.client.client_name ?? '—'}
+            </div>
           )}
         </div>
 
@@ -574,6 +654,7 @@ export function ClientWorkspacePanel({
           <div className="client-field-label">ת.ז / ח.פ</div>
           {isClientTab ? (
             <div className="client-field-box">
+              <ClientFieldDecorIcon kind="id-card" />
               <input
                 value={draft.government_id}
                 onChange={(e) => setDraft((s) => ({ ...s, government_id: e.target.value }))}
@@ -592,7 +673,10 @@ export function ClientWorkspacePanel({
               />
             </div>
           ) : (
-            <div className="client-field-box">{localWorkspace.client.tax_id ?? '—'}</div>
+            <div className="client-field-box">
+              <ClientFieldDecorIcon kind="id-card" />
+              {localWorkspace.client.tax_id ?? '—'}
+            </div>
           )}
         </div>
 
@@ -600,6 +684,7 @@ export function ClientWorkspacePanel({
           <div className="client-field-label">סוג עסק</div>
           {isClientTab ? (
             <div className="client-field-box">
+              <ClientFieldDecorIcon kind="briefcase" />
               <select
                 value={draft.business_type}
                 onChange={(e) => setDraft((s) => ({ ...s, business_type: e.target.value }))}
@@ -626,7 +711,10 @@ export function ClientWorkspacePanel({
               </select>
             </div>
           ) : (
-            <div className="client-field-box">{localWorkspace.profile.business_type ?? '—'}</div>
+            <div className="client-field-box">
+              <ClientFieldDecorIcon kind="briefcase" />
+              {localWorkspace.profile.business_type ?? '—'}
+            </div>
           )}
         </div>
 
@@ -634,6 +722,7 @@ export function ClientWorkspacePanel({
           <div className="client-field-label">סטטוס לקוח</div>
           {isClientTab ? (
             <div className="client-field-box">
+              <ClientFieldDecorIcon kind="status" />
               <select
                 value={draft.status}
                 onChange={(e) => setDraft((s) => ({ ...s, status: e.target.value }))}
@@ -657,7 +746,10 @@ export function ClientWorkspacePanel({
               </select>
             </div>
           ) : (
-            <div className="client-field-box">{localWorkspace.client.status ?? '—'}</div>
+            <div className="client-field-box">
+              <ClientFieldDecorIcon kind="status" />
+              {localWorkspace.client.status ?? '—'}
+            </div>
           )}
         </div>
 
@@ -665,6 +757,7 @@ export function ClientWorkspacePanel({
           <div className="client-field-label">איש קשר</div>
           {isClientTab ? (
             <div className="client-field-box">
+              <ClientFieldDecorIcon kind="user" />
               <input
                 value={draft.contact_person}
                 onChange={(e) => setDraft((s) => ({ ...s, contact_person: e.target.value }))}
@@ -683,7 +776,10 @@ export function ClientWorkspacePanel({
               />
             </div>
           ) : (
-            <div className="client-field-box">{primaryContact?.full_name ?? '—'}</div>
+            <div className="client-field-box">
+              <ClientFieldDecorIcon kind="user" />
+              {primaryContact?.full_name ?? '—'}
+            </div>
           )}
         </div>
 
@@ -691,6 +787,7 @@ export function ClientWorkspacePanel({
           <div className="client-field-label">טלפון</div>
           {isClientTab ? (
             <div className="client-field-box">
+              <ClientFieldDecorIcon kind="phone" />
               <input
                 value={draft.phone}
                 onChange={(e) => setDraft((s) => ({ ...s, phone: e.target.value }))}
@@ -709,7 +806,10 @@ export function ClientWorkspacePanel({
               />
             </div>
           ) : (
-            <div className="client-field-box">{displayPhone || '—'}</div>
+            <div className="client-field-box">
+              <ClientFieldDecorIcon kind="phone" />
+              {displayPhone || '—'}
+            </div>
           )}
         </div>
 
@@ -717,6 +817,7 @@ export function ClientWorkspacePanel({
           <div className="client-field-label">אימייל</div>
           {isClientTab ? (
             <div className="client-field-box">
+              <ClientFieldDecorIcon kind="mail" />
               <input
                 value={draft.email}
                 onChange={(e) => setDraft((s) => ({ ...s, email: e.target.value }))}
@@ -735,7 +836,10 @@ export function ClientWorkspacePanel({
               />
             </div>
           ) : (
-            <div className="client-field-box">{displayEmail || '—'}</div>
+            <div className="client-field-box">
+              <ClientFieldDecorIcon kind="mail" />
+              {displayEmail || '—'}
+            </div>
           )}
         </div>
 
@@ -743,6 +847,7 @@ export function ClientWorkspacePanel({
           <div className="client-field-label">כתובת</div>
           {isClientTab ? (
             <div className="client-field-box">
+              <ClientFieldDecorIcon kind="pin" />
               <input
                 value={draft.address_text}
                 onChange={(e) => setDraft((s) => ({ ...s, address_text: e.target.value }))}
@@ -761,7 +866,10 @@ export function ClientWorkspacePanel({
               />
             </div>
           ) : (
-            <div className="client-field-box">{displayAddress || '—'}</div>
+            <div className="client-field-box">
+              <ClientFieldDecorIcon kind="pin" />
+              {displayAddress || '—'}
+            </div>
           )}
         </div>
 
@@ -769,6 +877,7 @@ export function ClientWorkspacePanel({
           <div className="client-field-label">מטפל בתיק</div>
           {isClientTab ? (
             <div className="client-field-box">
+              <ClientFieldDecorIcon kind="user" />
               <select
                 value={draft.assigned_handler_user_id ?? ''}
                 onChange={(e) =>
@@ -798,19 +907,26 @@ export function ClientWorkspacePanel({
               </select>
             </div>
           ) : (
-            <div className="client-field-box">{handlerValue || '—'}</div>
+            <div className="client-field-box">
+              <ClientFieldDecorIcon kind="user" />
+              {handlerValue || '—'}
+            </div>
           )}
         </div>
 
         <div className="client-field">
           <div className="client-field-label">תאריך תחילת טיפול</div>
-          <div className="client-field-box">{formatDateHe(localWorkspace.client.started_at)}</div>
+          <div className="client-field-box">
+            <ClientFieldDecorIcon kind="calendar" />
+            {formatDateHe(localWorkspace.client.started_at)}
+          </div>
         </div>
 
         <div className="client-field">
           <div className="client-field-label">תאריך סיום טיפול</div>
           {isClientTab ? (
             <div className="client-field-box">
+              <ClientFieldDecorIcon kind="calendar" />
               <input
                 type="date"
                 value={draft.ended_at}
@@ -829,7 +945,10 @@ export function ClientWorkspacePanel({
               />
             </div>
           ) : (
-            <div className="client-field-box">{formatDateHe(localWorkspace.client.ended_at)}</div>
+            <div className="client-field-box">
+              <ClientFieldDecorIcon kind="calendar" />
+              {formatDateHe(localWorkspace.client.ended_at)}
+            </div>
           )}
         </div>
       </div>

@@ -81,10 +81,31 @@ test('premium modal skin is scoped and keeps a 3-column client-profile grid on d
   assert.match(premium, /@container nx-workspace-modal \(max-width: 860px\)/);
   assert.match(premium, /@container nx-workspace-modal \(max-width: 520px\)/);
   assert.doesNotMatch(premium, /url\(|\.png|\.svg|animation:/);
-  assert.match(premium, /0 0 16px rgba\(68, 204, 255, 0\.55\)/);
+  assert.match(premium, /0 0 14px rgba\(68, 204, 255, 0\.48\)/);
   assert.match(premium, /:focus-within/);
   assert.match(premium, /linear-gradient\(\s*180deg,\s*#061733 0%,\s*#020d24 100%\)/);
   assert.match(premium, /-webkit-text-fill-color:\s*#eaf6ff/);
+  assert.match(premium, /column-gap:\s*22px/);
+  assert.match(premium, /row-gap:\s*12px/);
+  assert.match(premium, /padding:\s*16px 20px/);
+  assert.match(premium, /border-radius:\s*11px/);
+  assert.match(premium, /height:\s*38px/);
+  assert.doesNotMatch(premium, /margin-bottom:\s*-/);
+});
+
+test('client details field icons are decorative only and do not add a Notes field', () => {
+  assert.match(panelSrc, /function ClientFieldDecorIcon/);
+  assert.match(panelSrc, /aria-hidden="true"/);
+  assert.match(panelSrc, /kind="building"/);
+  assert.match(panelSrc, /kind="id-card"/);
+  assert.match(panelSrc, /kind="briefcase"/);
+  assert.match(panelSrc, /kind="calendar"/);
+  assert.match(panelSrc, /client-field-decor-icon--status/);
+  const premium = readFileSync(join(dir, '../src/styles/nx-workspace-modal-premium.css'), 'utf8');
+  assert.match(premium, /\.client-field-decor-icon \{[^}]*order:\s*2;/);
+  assert.match(premium, /client-field-decor-icon--status/);
+  assert.doesNotMatch(panelSrc, /kind="notes"|kind="document"/);
+  assert.doesNotMatch(panelSrc, /client-field-label">הערות</);
 });
 
 test('bottom month period tabs are a separate navigation system (untouched contract)', () => {

@@ -7,7 +7,7 @@
   border-radius: 22px !important;
   border: 1px solid rgba(102, 207, 255, 0.85) !important;
   background:
-    radial-gradient(ellipse at 82% 4%, rgba(28, 104, 255, 0.48) 0%, transparent 48%),
+    radial-gradient(ellipse at 78% 0%, rgba(45, 115, 255, 0.52), transparent 52%),
     linear-gradient(135deg, #04152f 0%, #082b59 48%, #103c87 78%, #061d45 100%) !important;
   box-shadow:
     0 24px 65px rgba(0, 10, 38, 0.42),
@@ -22,7 +22,7 @@
   overflow: hidden;
   border-radius: 22px 22px 0 0 !important;
   background:
-    radial-gradient(ellipse at 82% 0%, rgba(35, 110, 255, 0.58), transparent 52%),
+    radial-gradient(ellipse at 80% 0%, rgba(45, 115, 255, 0.6), transparent 50%),
     linear-gradient(105deg, #031936 0%, #06326a 55%, #153fbb 100%) !important;
   box-shadow: none !important;
 }
@@ -113,42 +113,63 @@
   overflow-x: visible;
 }
 
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .client-profile-card > .client-profile-grid) {
+  padding: 14px 18px 16px;
+}
+
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card {
   background:
-    radial-gradient(ellipse at 20% 12%, rgba(255, 255, 255, 0.52), transparent 55%),
+    radial-gradient(ellipse at 18% 10%, rgba(255, 255, 255, 0.42), transparent 52%),
     linear-gradient(135deg, #b9d9ff 0%, #8dbaf2 48%, #a9d5ff 100%) !important;
-  border-radius: 19px !important;
+  border-radius: 16px !important;
   border: 1px solid rgba(235, 250, 255, 0.96) !important;
   box-shadow:
     0 0 0 1px rgba(0, 185, 255, 0.36),
     0 0 22px rgba(0, 185, 255, 0.42),
     inset 0 1px 0 rgba(255, 255, 255, 0.72) !important;
   overflow: visible;
+  padding: 16px 20px !important;
+  margin-bottom: 0 !important;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card > .client-profile-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  column-gap: 30px !important;
-  row-gap: 24px !important;
+  column-gap: 22px !important;
+  row-gap: 12px !important;
   min-width: 0;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field {
+  gap: 5px !important;
+  margin: 0;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-label {
   color: #244b82 !important;
   font-weight: 600 !important;
+  margin: 0;
+  padding: 0;
+  line-height: 1.2;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box {
-  background: linear-gradient(145deg, rgba(245, 251, 255, 0.82) 0%, rgba(209, 232, 255, 0.7) 100%) !important;
+  position: relative;
+  background: linear-gradient(145deg, rgba(245, 251, 255, 0.9) 0%, rgba(209, 232, 255, 0.76) 100%) !important;
   border: 1px solid rgba(255, 255, 255, 0.98) !important;
-  border-radius: 14px !important;
+  border-radius: 11px !important;
   color: #071c3d !important;
   font-weight: 500 !important;
   overflow: visible;
+  height: 38px;
+  min-height: 38px;
+  max-height: 40px;
+  padding: 0 12px;
+  gap: 8px;
+  box-sizing: border-box;
   box-shadow:
     0 0 0 1px rgba(95, 225, 255, 0.42),
-    0 0 16px rgba(68, 204, 255, 0.55),
+    0 0 14px rgba(68, 204, 255, 0.48),
     inset 0 1px 0 rgba(255, 255, 255, 0.92),
     inset 0 -1px 0 rgba(110, 165, 225, 0.18) !important;
 }
@@ -161,7 +182,7 @@
   border-color: #28d8ff !important;
   box-shadow:
     0 0 0 2px rgba(0, 209, 255, 0.42),
-    0 0 22px rgba(0, 193, 255, 0.62),
+    0 0 20px rgba(0, 193, 255, 0.6),
     inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
 }
 
@@ -175,6 +196,27 @@
   color: #071c3d;
   font-weight: 500;
   min-width: 0;
+  flex: 1 1 auto;
+  height: 100%;
+  order: 1;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box:has(select) {
+  padding-inline-start: 22px;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box:has(select)::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: 10px;
+  top: 50%;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid #3d6aa8;
+  border-bottom: 1.5px solid #3d6aa8;
+  transform: translateY(-70%) rotate(45deg);
+  pointer-events: none;
+  opacity: 0.5;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box input[aria-label='אימייל'],
@@ -185,11 +227,35 @@
   text-align: start;
 }
 
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-decor-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  order: 2;
+  margin-inline-start: auto;
+  color: #3d6aa8;
+  opacity: 0.78;
+  pointer-events: none;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-decor-icon--status {
+  width: 10px;
+  height: 10px;
+  flex-basis: 10px;
+  color: #22c55e;
+  opacity: 1;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .nx-workspace-client-footer {
+  padding-top: 14px;
+  margin-top: 0;
+}
+
 @container nx-workspace-modal (max-width: 860px) {
   .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card > .client-profile-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 18px !important;
-    row-gap: 18px !important;
+    column-gap: 16px !important;
+    row-gap: 12px !important;
   }
 }
 
@@ -202,8 +268,8 @@
 @media (max-width: 860px) {
   .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card > .client-profile-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    column-gap: 18px !important;
-    row-gap: 18px !important;
+    column-gap: 16px !important;
+    row-gap: 12px !important;
   }
 }
 
