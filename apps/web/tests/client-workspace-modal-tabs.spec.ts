@@ -79,13 +79,14 @@ test('premium modal skin is scoped and keeps a 3-column client-profile grid on d
   assert.match(premium, /\.nx-modal-overlay:has\(>\s*\.nx-modal\.nx-workspace-modal\)/);
   assert.match(premium, /\.nx-modal\.nx-workspace-modal/);
   assert.match(premium, /height:\s*auto\s*!important/);
-  assert.match(premium, /max-height:\s*calc\(100dvh - 32px\)/);
+  assert.match(premium, /max-height:\s*100%\s*!important/);
+  assert.doesNotMatch(premium, /height:\s*100dvh/);
   assert.match(premium, /grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(premium, /@container nx-workspace-modal \(max-width: 860px\)/);
   assert.match(premium, /@container nx-workspace-modal \(max-width: 520px\)/);
   assert.doesNotMatch(premium, /url\(|\.png|\.svg|animation:/);
   assert.match(premium, /0 0 18px rgba\(44, 196, 255, 0\.62\)/);
-  assert.match(premium, /linear-gradient\(\s*125deg,\s*#c4e1ff 0%,\s*#91bef8 45%,\s*#a3d0ff 100%\)/);
+  assert.match(premium, /linear-gradient\(\s*145deg,\s*#4e8ad4 0%,\s*#2c68b4 48%,\s*#3a78c4 100%\)/);
   assert.match(premium, /linear-gradient\(\s*110deg,\s*#008dff 0%,\s*#165dff 55%,\s*#792cff 100%\)/);
   assert.match(premium, /:focus-within/);
   assert.match(premium, /linear-gradient\(\s*180deg,\s*#061733 0%,\s*#020d24 100%\)/);

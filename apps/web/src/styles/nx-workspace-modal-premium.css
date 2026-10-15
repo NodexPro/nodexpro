@@ -3,13 +3,14 @@
 
 .nx-modal-overlay:has(> .nx-modal.nx-workspace-modal) {
   align-items: center;
-  align-items: safe center;
   justify-content: center;
-  padding: 16px 24px;
+  padding: 24px;
   overflow: hidden;
   box-sizing: border-box;
-  height: 100dvh;
-  max-height: 100dvh;
+  inset: 0;
+  height: unset;
+  max-height: unset;
+  background: rgba(3, 8, 22, 0.58);
 }
 
 .nx-modal.nx-workspace-modal,
@@ -19,18 +20,19 @@
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  margin: auto;
   height: auto !important;
-  max-height: calc(100dvh - 32px) !important;
+  max-height: 100% !important;
   min-height: 0;
   border-radius: 22px !important;
-  border: 1px solid rgba(73, 201, 255, 0.88) !important;
+  border: 1px solid rgba(70, 190, 255, 0.72) !important;
   background:
-    radial-gradient(ellipse at 76% 4%, rgba(25, 110, 255, 0.5), transparent 52%),
-    linear-gradient(135deg, #03142e 0%, #07316a 52%, #103d90 80%, #061b43 100%) !important;
+    radial-gradient(ellipse at 82% 0%, rgba(18, 90, 210, 0.42), transparent 48%),
+    linear-gradient(145deg, #020817 0%, #041428 42%, #082456 78%, #030c1c 100%) !important;
   box-shadow:
-    0 24px 65px rgba(0, 8, 35, 0.5),
-    0 0 26px rgba(0, 164, 255, 0.38),
-    inset 0 1px 0 rgba(255, 255, 255, 0.24) !important;
+    0 28px 70px rgba(0, 4, 18, 0.58),
+    0 0 28px rgba(0, 150, 255, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16) !important;
   overflow: hidden;
 }
 
@@ -40,8 +42,9 @@
   overflow: hidden;
   border-radius: 22px 22px 0 0 !important;
   background:
-    radial-gradient(ellipse at 78% 0%, rgba(52, 122, 255, 0.72), transparent 52%),
-    linear-gradient(110deg, #031735 0%, #063779 56%, #1947c6 100%) !important;
+    radial-gradient(ellipse at 88% -8%, rgba(0, 190, 255, 0.62), transparent 46%),
+    radial-gradient(ellipse at 96% 18%, rgba(120, 70, 255, 0.38), transparent 40%),
+    linear-gradient(110deg, #020a18 0%, #031830 50%, #0a2f7a 100%) !important;
   box-shadow: none !important;
 }
 
@@ -52,8 +55,8 @@
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse at 92% 8%, rgba(168, 85, 247, 0.5) 0%, transparent 42%),
-    radial-gradient(ellipse at 74% -10%, rgba(0, 217, 255, 0.48) 0%, transparent 46%);
+    radial-gradient(ellipse at 94% 6%, rgba(140, 70, 255, 0.36) 0%, transparent 40%),
+    radial-gradient(ellipse at 78% -12%, rgba(0, 200, 255, 0.34) 0%, transparent 44%);
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-header::after {
@@ -148,14 +151,14 @@
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card {
   background:
-    radial-gradient(ellipse at 16% 8%, rgba(255, 255, 255, 0.52), transparent 52%),
-    linear-gradient(125deg, #c4e1ff 0%, #91bef8 45%, #a3d0ff 100%) !important;
+    radial-gradient(ellipse at 14% 6%, rgba(170, 215, 255, 0.28), transparent 48%),
+    linear-gradient(145deg, #4e8ad4 0%, #2c68b4 48%, #3a78c4 100%) !important;
   border-radius: 16px !important;
-  border: 1px solid rgba(240, 252, 255, 0.98) !important;
+  border: 1px solid rgba(150, 225, 255, 0.78) !important;
   box-shadow:
-    0 0 0 1px rgba(0, 195, 255, 0.42),
-    0 0 24px rgba(0, 190, 255, 0.52),
-    inset 0 2px 0 rgba(255, 255, 255, 0.78) !important;
+    0 0 0 1px rgba(0, 190, 255, 0.38),
+    0 0 26px rgba(0, 170, 255, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38) !important;
   overflow: visible;
   padding: 16px 20px !important;
   margin-bottom: 0 !important;
@@ -175,7 +178,7 @@
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-label {
-  color: #244b82 !important;
+  color: #eaf4ff !important;
   font-weight: 600 !important;
   margin: 0;
   padding: 0;
