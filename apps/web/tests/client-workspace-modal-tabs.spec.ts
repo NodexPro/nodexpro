@@ -76,12 +76,17 @@ test('client profile still persists only through the existing save command; foot
 test('premium modal skin is scoped and keeps a 3-column client-profile grid on desktop', () => {
   assert.match(panelSrc, /nx-workspace-modal-premium\.css/);
   const premium = readFileSync(join(dir, '../src/styles/nx-workspace-modal-premium.css'), 'utf8');
-  assert.match(premium, /\.nx-modal\.nx-workspace-modal \{/);
+  assert.match(premium, /\.nx-modal-overlay:has\(>\s*\.nx-modal\.nx-workspace-modal\)/);
+  assert.match(premium, /\.nx-modal\.nx-workspace-modal/);
+  assert.match(premium, /height:\s*auto\s*!important/);
+  assert.match(premium, /max-height:\s*calc\(100dvh - 32px\)/);
   assert.match(premium, /grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(premium, /@container nx-workspace-modal \(max-width: 860px\)/);
   assert.match(premium, /@container nx-workspace-modal \(max-width: 520px\)/);
   assert.doesNotMatch(premium, /url\(|\.png|\.svg|animation:/);
-  assert.match(premium, /0 0 14px rgba\(68, 204, 255, 0\.48\)/);
+  assert.match(premium, /0 0 18px rgba\(44, 196, 255, 0\.62\)/);
+  assert.match(premium, /linear-gradient\(\s*125deg,\s*#c4e1ff 0%,\s*#91bef8 45%,\s*#a3d0ff 100%\)/);
+  assert.match(premium, /linear-gradient\(\s*110deg,\s*#008dff 0%,\s*#165dff 55%,\s*#792cff 100%\)/);
   assert.match(premium, /:focus-within/);
   assert.match(premium, /linear-gradient\(\s*180deg,\s*#061733 0%,\s*#020d24 100%\)/);
   assert.match(premium, /-webkit-text-fill-color:\s*#eaf6ff/);
@@ -91,6 +96,7 @@ test('premium modal skin is scoped and keeps a 3-column client-profile grid on d
   assert.match(premium, /border-radius:\s*11px/);
   assert.match(premium, /height:\s*38px/);
   assert.doesNotMatch(premium, /margin-bottom:\s*-/);
+  assert.doesNotMatch(premium, /^\s*top:\s*-?\d+px/m);
 });
 
 test('client details field icons are decorative only and do not add a Notes field', () => {

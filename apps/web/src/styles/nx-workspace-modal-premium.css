@@ -1,18 +1,36 @@
 /* Client Details modal (`.nx-modal.nx-workspace-modal`) — visual materials only.
    Does not change tabs, fields, save commands, or the non-modal workspace page. */
 
-.nx-modal.nx-workspace-modal {
+.nx-modal-overlay:has(> .nx-modal.nx-workspace-modal) {
+  align-items: center;
+  align-items: safe center;
+  justify-content: center;
+  padding: 16px 24px;
+  overflow: hidden;
+  box-sizing: border-box;
+  height: 100dvh;
+  max-height: 100dvh;
+}
+
+.nx-modal.nx-workspace-modal,
+.nx-modal-overlay > .nx-modal.nx-workspace-modal {
   container-type: inline-size;
   container-name: nx-workspace-modal;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: auto !important;
+  max-height: calc(100dvh - 32px) !important;
+  min-height: 0;
   border-radius: 22px !important;
-  border: 1px solid rgba(102, 207, 255, 0.85) !important;
+  border: 1px solid rgba(73, 201, 255, 0.88) !important;
   background:
-    radial-gradient(ellipse at 78% 0%, rgba(45, 115, 255, 0.52), transparent 52%),
-    linear-gradient(135deg, #04152f 0%, #082b59 48%, #103c87 78%, #061d45 100%) !important;
+    radial-gradient(ellipse at 76% 4%, rgba(25, 110, 255, 0.5), transparent 52%),
+    linear-gradient(135deg, #03142e 0%, #07316a 52%, #103d90 80%, #061b43 100%) !important;
   box-shadow:
-    0 24px 65px rgba(0, 10, 38, 0.42),
-    0 0 24px rgba(0, 163, 255, 0.34),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+    0 24px 65px rgba(0, 8, 35, 0.5),
+    0 0 26px rgba(0, 164, 255, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24) !important;
   overflow: hidden;
 }
 
@@ -22,8 +40,8 @@
   overflow: hidden;
   border-radius: 22px 22px 0 0 !important;
   background:
-    radial-gradient(ellipse at 80% 0%, rgba(45, 115, 255, 0.6), transparent 50%),
-    linear-gradient(105deg, #031936 0%, #06326a 55%, #153fbb 100%) !important;
+    radial-gradient(ellipse at 78% 0%, rgba(52, 122, 255, 0.72), transparent 52%),
+    linear-gradient(110deg, #031735 0%, #063779 56%, #1947c6 100%) !important;
   box-shadow: none !important;
 }
 
@@ -34,8 +52,8 @@
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse at 92% 8%, rgba(168, 85, 247, 0.38) 0%, transparent 42%),
-    radial-gradient(ellipse at 74% -10%, rgba(0, 217, 255, 0.32) 0%, transparent 46%);
+    radial-gradient(ellipse at 92% 8%, rgba(168, 85, 247, 0.5) 0%, transparent 42%),
+    radial-gradient(ellipse at 74% -10%, rgba(0, 217, 255, 0.48) 0%, transparent 46%);
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-header::after {
@@ -108,9 +126,20 @@
   outline-offset: -2px;
 }
 
+.nx-modal.nx-workspace-modal .nx-workspace-panel-root {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
 .nx-modal.nx-workspace-modal .nx-workspace-panel-root .nx-workspace-content {
   background: transparent;
   overflow-x: visible;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content:has(> .client-profile-card > .client-profile-grid) {
@@ -119,14 +148,14 @@
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card {
   background:
-    radial-gradient(ellipse at 18% 10%, rgba(255, 255, 255, 0.42), transparent 52%),
-    linear-gradient(135deg, #b9d9ff 0%, #8dbaf2 48%, #a9d5ff 100%) !important;
+    radial-gradient(ellipse at 16% 8%, rgba(255, 255, 255, 0.52), transparent 52%),
+    linear-gradient(125deg, #c4e1ff 0%, #91bef8 45%, #a3d0ff 100%) !important;
   border-radius: 16px !important;
-  border: 1px solid rgba(235, 250, 255, 0.96) !important;
+  border: 1px solid rgba(240, 252, 255, 0.98) !important;
   box-shadow:
-    0 0 0 1px rgba(0, 185, 255, 0.36),
-    0 0 22px rgba(0, 185, 255, 0.42),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72) !important;
+    0 0 0 1px rgba(0, 195, 255, 0.42),
+    0 0 24px rgba(0, 190, 255, 0.52),
+    inset 0 2px 0 rgba(255, 255, 255, 0.78) !important;
   overflow: visible;
   padding: 16px 20px !important;
   margin-bottom: 0 !important;
@@ -155,7 +184,7 @@
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box {
   position: relative;
-  background: linear-gradient(145deg, rgba(245, 251, 255, 0.9) 0%, rgba(209, 232, 255, 0.76) 100%) !important;
+  background: linear-gradient(145deg, rgba(248, 253, 255, 0.92), rgba(208, 233, 255, 0.78)) !important;
   border: 1px solid rgba(255, 255, 255, 0.98) !important;
   border-radius: 11px !important;
   color: #071c3d !important;
@@ -168,10 +197,10 @@
   gap: 8px;
   box-sizing: border-box;
   box-shadow:
-    0 0 0 1px rgba(95, 225, 255, 0.42),
-    0 0 14px rgba(68, 204, 255, 0.48),
-    inset 0 1px 0 rgba(255, 255, 255, 0.92),
-    inset 0 -1px 0 rgba(110, 165, 225, 0.18) !important;
+    0 0 0 1px rgba(83, 219, 255, 0.52),
+    0 0 18px rgba(44, 196, 255, 0.62),
+    inset 0 1px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -1px 0 rgba(75, 139, 216, 0.18) !important;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box:hover {
@@ -181,9 +210,9 @@
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box:focus-within {
   border-color: #28d8ff !important;
   box-shadow:
-    0 0 0 2px rgba(0, 209, 255, 0.42),
-    0 0 20px rgba(0, 193, 255, 0.6),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
+    0 0 0 1px rgba(40, 220, 255, 0.78),
+    0 0 22px rgba(0, 210, 255, 0.72),
+    inset 0 1px 0 rgba(255, 255, 255, 0.98) !important;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box:has(input[readonly]),
@@ -249,6 +278,22 @@
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .nx-workspace-client-footer {
   padding-top: 14px;
   margin-top: 0;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .nx-workspace-client-footer .nx-btn-primary {
+  background: linear-gradient(110deg, #008dff 0%, #165dff 55%, #792cff 100%) !important;
+  box-shadow:
+    0 0 12px rgba(0, 155, 255, 0.42),
+    0 0 18px rgba(110, 55, 255, 0.25) !important;
+  color: #ffffff;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .nx-workspace-client-footer .nx-btn-primary:hover:not(:disabled) {
+  filter: saturate(1.08) brightness(1.04);
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .nx-workspace-client-footer .nx-btn-primary:disabled {
+  opacity: 0.55;
 }
 
 @container nx-workspace-modal (max-width: 860px) {
