@@ -85,9 +85,9 @@ test('premium modal skin is scoped and keeps a 3-column client-profile grid on d
   assert.match(premium, /@container nx-workspace-modal \(max-width: 860px\)/);
   assert.match(premium, /@container nx-workspace-modal \(max-width: 520px\)/);
   assert.doesNotMatch(premium, /url\(|\.png|\.svg|animation:/);
-  assert.match(premium, /0 0 18px rgba\(44, 196, 255, 0\.62\)/);
-  assert.match(premium, /linear-gradient\(\s*145deg,\s*#4e8ad4 0%,\s*#2c68b4 48%,\s*#3a78c4 100%\)/);
-  assert.match(premium, /linear-gradient\(\s*110deg,\s*#008dff 0%,\s*#165dff 55%,\s*#792cff 100%\)/);
+  assert.match(premium, /0 0 12px rgba\(44, 196, 255, 0\.4\)/);
+  assert.match(premium, /linear-gradient\(\s*180deg,\s*#659ad8 0%,\s*#457fca 52%,\s*#2c65ae 100%\)/);
+  assert.match(premium, /linear-gradient\(\s*115deg,\s*#277cff 0%,\s*#165dff 52%,\s*#6558e8 100%\)/);
   assert.match(premium, /:focus-within/);
   assert.match(premium, /linear-gradient\(\s*180deg,\s*#061733 0%,\s*#020d24 100%\)/);
   assert.match(premium, /-webkit-text-fill-color:\s*#eaf6ff/);
