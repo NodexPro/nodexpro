@@ -81,6 +81,9 @@ test('premium modal skin is scoped and keeps a 3-column client-profile grid on d
   assert.match(premium, /height:\s*auto\s*!important/);
   assert.match(premium, /max-height:\s*100%\s*!important/);
   assert.doesNotMatch(premium, /height:\s*100dvh/);
+  assert.match(premium, /flex-direction:\s*column/);
+  assert.match(premium, /\.nx-modal-overlay:has\(>\s*\.nx-modal\.nx-workspace-modal\)::after/);
+  assert.match(premium, /flex:\s*0 1 120px/);
   assert.match(premium, /grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(premium, /@container nx-workspace-modal \(max-width: 860px\)/);
   assert.match(premium, /@container nx-workspace-modal \(max-width: 520px\)/);

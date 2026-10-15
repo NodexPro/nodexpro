@@ -2,6 +2,8 @@
    Does not change tabs, fields, save commands, or the non-modal workspace page. */
 
 .nx-modal-overlay:has(> .nx-modal.nx-workspace-modal) {
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 24px;
@@ -13,6 +15,16 @@
   background: rgba(4, 12, 28, 0.52);
 }
 
+/* Raises the dialog ~60px above center. Shrinks on short viewports so 16px+ clearance remains. */
+.nx-modal-overlay:has(> .nx-modal.nx-workspace-modal)::after {
+  content: '';
+  flex: 0 1 120px;
+  width: 0;
+  height: 120px;
+  min-height: 0;
+  pointer-events: none;
+}
+
 .nx-modal.nx-workspace-modal,
 .nx-modal-overlay > .nx-modal.nx-workspace-modal {
   container-type: inline-size;
@@ -20,7 +32,9 @@
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  margin: auto;
+  flex: 0 0 auto;
+  margin-inline: auto;
+  margin-block: 0;
   height: auto !important;
   max-height: 100% !important;
   min-height: 0;
