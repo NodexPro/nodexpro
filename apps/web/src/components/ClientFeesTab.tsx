@@ -13,6 +13,7 @@ import type {
   FeesTableSectionModel,
 } from './fees-tab-types';
 import '../styles/nx-fees-tab.css';
+import '../styles/nx-workspace-fees-tab.css';
 import '../styles/nx-modal.css';
 
 export type { FeesTabModel } from './fees-tab-types';
@@ -787,7 +788,7 @@ export function ClientFeesTab({
   const openFeesModal = () => setFeesEditOpen(true);
 
   return (
-    <div className="nx-fees-tab-root">
+    <div className="nx-fees-tab-root nx-ws-fees">
       <div className="nx-fees-tab-shell">
         <div className="nx-fees-container">
           <p className="nx-fees-meta-strip">

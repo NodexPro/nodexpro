@@ -1,0 +1,168 @@
+/* שכ״ט tab interior inside the Client Workspace modal only.
+   Reuses the מיסים / הגדרות הנה״ח glass tokens. Nested fees editors stay on their own overlay. */
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-fees) {
+  padding: 14px 18px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(125, 236, 247, 0.5) rgba(8, 38, 82, 0.28);
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-fees)::-webkit-scrollbar {
+  width: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-fees)::-webkit-scrollbar-track {
+  background: rgba(8, 38, 82, 0.22);
+  border-radius: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-fees)::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(125, 236, 247, 0.7), rgba(38, 140, 255, 0.55));
+  border-radius: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees {
+  direction: rtl;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-tab-shell,
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-container {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+  max-width: none;
+  width: 100%;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-grid {
+  min-width: 0;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-meta-strip {
+  color: rgba(238, 246, 255, 0.72);
+  margin: 0 0 12px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-tab-shell .nx-fees-card,
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-card {
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.2), transparent 48%),
+    linear-gradient(180deg, rgba(248, 252, 255, 0.2) 0%, rgba(186, 216, 246, 0.14) 100%);
+  border: 1px solid rgba(210, 238, 255, 0.5);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.14),
+    0 8px 18px rgba(8, 38, 82, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-card.nx-fees-rail--financial,
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-tab-shell .nx-fees-card.nx-fees-rail--financial {
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.2), transparent 48%),
+    linear-gradient(180deg, rgba(248, 252, 255, 0.2) 0%, rgba(186, 216, 246, 0.14) 100%);
+  border: 1px solid rgba(210, 238, 255, 0.5);
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.14),
+    0 8px 18px rgba(8, 38, 82, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-card-title,
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-summary-label,
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-kv-label,
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-empty,
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-recent-item time,
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-link-like {
+  color: #eef6ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-summary-line,
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-kv-row {
+  border-bottom-color: rgba(232, 244, 255, 0.18);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-tab-shell .nx-fees-summary-value,
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-tab-shell .nx-fees-kv-value {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 10px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  color: #0b2248;
+  font-weight: 600;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-status-chip {
+  background: rgba(8, 38, 82, 0.28);
+  border: 1px solid rgba(210, 238, 255, 0.5);
+  color: #eef6ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-pencil-btn {
+  color: #7decf7;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-pencil-btn:hover:not(:disabled) {
+  background: rgba(70, 213, 255, 0.16);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-tab-shell .nx-fees-table-wrap {
+  background: transparent;
+  border-color: rgba(210, 238, 255, 0.28);
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-tab-shell .nx-fees-data-table th {
+  background: transparent;
+  color: rgba(238, 246, 255, 0.78);
+  border-bottom-color: rgba(232, 244, 255, 0.22);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-tab-shell .nx-fees-data-table td {
+  color: #e8f4ff;
+  border-bottom-color: rgba(232, 244, 255, 0.14);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-excel-cell {
+  border-color: rgba(210, 238, 255, 0.28);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-excel-cell--label,
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-excel-row--total .nx-fees-excel-cell--label {
+  background: rgba(8, 38, 82, 0.28);
+  color: #eef6ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-excel-cell--amount,
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-excel-row:nth-child(even) .nx-fees-excel-cell--amount {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
+  color: #0b2248;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-excel-row--total .nx-fees-excel-cell--amount {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(232, 244, 255, 0.88));
+  color: #0b2248;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-recent-item {
+  color: #e8f4ff;
+}
+
+@media (max-width: 1024px) {
+  .nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

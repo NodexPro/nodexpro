@@ -45,6 +45,9 @@ test('Annual premium skin is scoped to the workspace modal and reused for הצה
   assert.match(annualCss, /background:\s*transparent/);
   assert.match(annualCss, /radial-gradient\(ellipse at 12% 0%, rgba\(255, 255, 255, 0\.2\)/);
   assert.match(annualCss, /overflow-y:\s*auto/);
+  assert.match(annualCss, /col\.nx-annual-col--note/);
+  assert.match(annualCss, /box-sizing:\s*border-box/);
+  assert.match(annualSrc, /nx-annual-note-inp/);
   assert.doesNotMatch(annualCss, /createPortal|translateY\(max\(-60px/);
   assert.match(annualBase, /\.nx-annual-root/);
 });

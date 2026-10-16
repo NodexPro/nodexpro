@@ -175,3 +175,64 @@
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-empty-cell {
   color: rgba(238, 246, 255, 0.78);
 }
+
+/* הערת שורה: keep the note input inside the documents table (Annual + Capital). */
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table-wrap {
+  overflow-x: hidden;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table--documents {
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+  box-sizing: border-box;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table--documents col.nx-annual-col--received {
+  width: 34px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table--documents col.nx-annual-col--doc-name {
+  width: 46%;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table--documents col.nx-annual-col--file {
+  width: 72px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table--documents col.nx-annual-col--status {
+  width: 96px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table--documents col.nx-annual-col--note {
+  width: 22%;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table--documents th,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table--documents td {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table--documents td:last-child,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table--documents th:last-child {
+  overflow: hidden;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-name {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-note-inp {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}

@@ -7,6 +7,7 @@ import type { ClientHistorySectionKey, ClientHistoryTabModel } from './client-hi
 import '../styles/nx-fees-tab.css';
 import '../styles/nx-modal.css';
 import '../styles/nx-history-tab.css';
+import '../styles/nx-workspace-history-tab.css';
 
 /** Two-column rows: equal width + gap (see .nx-history-section-pair-row) */
 const HISTORY_SECTION_PAIR_ROWS: ClientHistorySectionKey[][] = [
@@ -140,7 +141,7 @@ export function ClientHistoryTab({
   const restSections = historyTab.sections.filter((s) => !pairedKeys.has(s.section_key));
 
   return (
-    <div className="nx-history-root">
+    <div className="nx-history-root nx-ws-history">
       <header className="nx-history-hero">
         <div className="nx-history-hero-top">
           <div>

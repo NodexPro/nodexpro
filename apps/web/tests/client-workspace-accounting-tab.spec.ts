@@ -61,6 +61,11 @@ test('Accounting Settings premium skin is scoped to the workspace modal Accounti
   assert.match(accountingCss, /nx-ws-accounting-profile-groups/);
   assert.match(accountingCss, /--nx-ws-acc-row:\s*minmax\(0,\s*0\.72fr\)\s*minmax\(8rem,\s*1\.4fr\)/);
   assert.match(accountingCss, /repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(accountingCss, /grid-template-areas:/);
+  assert.match(accountingCss, /grid-area:\s*income/);
+  assert.match(accountingCss, /grid-area:\s*expense_management/);
+  assert.match(accountingCss, /grid-area:\s*expenses/);
+  assert.match(accountingCss, /grid-area:\s*vehicles/);
   assert.match(accountingCss, /overflow-y:\s*auto/);
   assert.match(accountingCss, /nx-taxes-section-edit-btn/);
   assert.doesNotMatch(accountingCss, /grid-template-columns:\s*subgrid/);

@@ -1,0 +1,110 @@
+/* היסטוריה tab interior inside the Client Workspace modal only.
+   Reuses the מיסים / הגדרות הנה״ח glass tokens. Nested section modals stay portaled. */
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-history) {
+  padding: 14px 18px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(125, 236, 247, 0.5) rgba(8, 38, 82, 0.28);
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-history)::-webkit-scrollbar {
+  width: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-history)::-webkit-scrollbar-track {
+  background: rgba(8, 38, 82, 0.22);
+  border-radius: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-history)::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(125, 236, 247, 0.7), rgba(38, 140, 255, 0.55));
+  border-radius: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .nx-history-root.nx-ws-history {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+  max-width: none;
+  min-width: 0;
+  direction: rtl;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-history .nx-history-hero,
+.nx-modal.nx-workspace-modal .nx-ws-history .nx-history-section-card {
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.2), transparent 48%),
+    linear-gradient(180deg, rgba(248, 252, 255, 0.2) 0%, rgba(186, 216, 246, 0.14) 100%);
+  border: 1px solid rgba(210, 238, 255, 0.5);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.14),
+    0 8px 18px rgba(8, 38, 82, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-history .nx-history-section-card:hover {
+  border-color: rgba(70, 213, 255, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.28),
+    0 0 14px rgba(44, 196, 255, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-history .nx-history-title,
+.nx-modal.nx-workspace-modal .nx-ws-history .nx-fees-card-title,
+.nx-modal.nx-workspace-modal .nx-ws-history .nx-history-event-summary {
+  color: #eef6ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-history .nx-history-retention,
+.nx-modal.nx-workspace-modal .nx-ws-history .nx-history-todo,
+.nx-modal.nx-workspace-modal .nx-ws-history .nx-history-event-meta,
+.nx-modal.nx-workspace-modal .nx-ws-history .nx-history-period-field {
+  color: rgba(238, 246, 255, 0.78);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-history .nx-history-period-bar {
+  background: rgba(8, 38, 82, 0.22);
+  border: 1px solid rgba(210, 238, 255, 0.4);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-history .nx-fees-inp {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  color: #0b2248;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-history .nx-history-count-badge {
+  background: rgba(8, 38, 82, 0.28);
+  border: 1px solid rgba(210, 238, 255, 0.5);
+  color: #eef6ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-history .nx-history-section-empty {
+  background: rgba(8, 38, 82, 0.18);
+  border: 1px dashed rgba(210, 238, 255, 0.4);
+  color: rgba(238, 246, 255, 0.78);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-history .nx-history-event + .nx-history-event {
+  border-top-color: rgba(232, 244, 255, 0.18);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-history .nx-history-section-pair-row {
+  min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .nx-modal.nx-workspace-modal .nx-ws-history .nx-history-section-pair-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

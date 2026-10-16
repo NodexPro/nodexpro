@@ -52,6 +52,7 @@
 .nx-modal.nx-workspace-modal .nx-ws-accounting-card {
   display: flex;
   flex-direction: column;
+  direction: rtl;
   min-width: 0;
   min-height: 0;
   padding: 12px 14px 10px;
@@ -270,12 +271,35 @@
   line-height: 1.25;
 }
 
+/* Physical LTR placement so RTL reading still shows הכנסות on the right.
+   Do not rely on auto-placement / DOM order: רכבים must span both columns. */
 .nx-modal.nx-workspace-modal .nx-ws-accounting .nx-accounting-cards-grid {
   display: grid;
+  direction: ltr;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas:
+    "expense_management income"
+    "expense_management expenses"
+    "vehicles vehicles";
   gap: 12px;
   min-width: 0;
   align-items: start;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-accounting .nx-accounting-cards-grid > [data-block-key='income'] {
+  grid-area: income;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-accounting .nx-accounting-cards-grid > [data-block-key='expense_management'] {
+  grid-area: expense_management;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-accounting .nx-accounting-cards-grid > [data-block-key='expenses'] {
+  grid-area: expenses;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-accounting .nx-accounting-cards-grid > [data-block-key='vehicles'] {
+  grid-area: vehicles;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-accounting .nx-accounting-card {
@@ -404,11 +428,27 @@
   .nx-modal.nx-workspace-modal .nx-ws-accounting .nx-accounting-cards-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .nx-modal.nx-workspace-modal .nx-ws-accounting .nx-accounting-cards-grid {
+    grid-template-areas:
+      "income"
+      "expense_management"
+      "expenses"
+      "vehicles";
+  }
 }
 
 @media (max-width: 720px) {
   .nx-modal.nx-workspace-modal .nx-ws-accounting-profile-groups,
   .nx-modal.nx-workspace-modal .nx-ws-accounting .nx-accounting-cards-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .nx-modal.nx-workspace-modal .nx-ws-accounting .nx-accounting-cards-grid {
+    grid-template-areas:
+      "income"
+      "expense_management"
+      "expenses"
+      "vehicles";
   }
 }

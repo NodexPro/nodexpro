@@ -4,6 +4,7 @@ import { moduleClientOperationsPayrollCommands } from '../api/endpoints';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
 import type { PayrollFieldModel, PayrollSectionModel, PayrollTabModel } from './payroll-tab-types';
 import '../styles/nx-payroll-tab.css';
+import '../styles/nx-workspace-payroll-tab.css';
 
 function IconPencil() {
   return (
@@ -277,7 +278,7 @@ export function ClientPayrollTab({
   };
 
   return (
-    <div className="nx-payroll-tab-root" style={{ direction: 'rtl' }}>
+    <div className="nx-payroll-tab-root nx-ws-payroll" style={{ direction: 'rtl' }}>
       <div className="nx-payroll-tab-shell">
         <div className="nx-payroll-root">
           <div className="nx-payroll-meta-strip">
