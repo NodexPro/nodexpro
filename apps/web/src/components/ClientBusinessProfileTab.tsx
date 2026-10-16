@@ -3,6 +3,7 @@ import { apiJson, type ApiError } from '../api/client';
 import { moduleClientOperationsAccountingCommands } from '../api/endpoints';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
 import '../styles/nx-modal.css';
+import '../styles/nx-workspace-accounting-tab.css';
 
 export type BusinessProfileSectionFieldKey =
   | 'business_domain'
@@ -107,6 +108,35 @@ export function ClientBusinessProfileTab({
     return section.fields.filter((f) => f.visible);
   }, [section.fields]);
 
+  const profileGroups = useMemo(() => {
+    const grouped = section.fields
+      .filter((f) => f.visible)
+      .reduce<Map<string, { key: string; title: string; order: number; fields: ClientBusinessProfileField[] }>>(
+        (acc, f) => {
+          const ex = acc.get(f.group_key);
+          if (ex) {
+            ex.fields.push(f);
+            return acc;
+          }
+          acc.set(f.group_key, {
+            key: f.group_key,
+            title: f.group_label,
+            order: f.group_order,
+            fields: [f],
+          });
+          return acc;
+        },
+        new Map(),
+      );
+
+    return Array.from(grouped.values())
+      .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title))
+      .map((g) => ({
+        ...g,
+        fields: g.fields.sort((a, b) => a.row_order - b.row_order || a.label.localeCompare(b.label)),
+      }));
+  }, [section.fields]);
+
   const resetFromSection = () => {
     const init: Record<BusinessProfileSectionFieldKey, unknown> = {} as any;
     for (const f of section.fields) init[f.key] = f.value;
@@ -178,102 +208,29 @@ export function ClientBusinessProfileTab({
   };
 
   const renderReadOnlyGrid = () => (
-    (() => {
-      const grouped = section.fields
-        .filter((f) => f.visible)
-        .reduce<Map<string, { key: string; title: string; order: number; fields: ClientBusinessProfileField[] }>>((acc, f) => {
-          const ex = acc.get(f.group_key);
-          if (ex) {
-            ex.fields.push(f);
-            return acc;
-          }
-          acc.set(f.group_key, {
-            key: f.group_key,
-            title: f.group_label,
-            order: f.group_order,
-            fields: [f],
-          });
-          return acc;
-        }, new Map());
-
-      const groups = Array.from(grouped.values())
-        .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title))
-        .map((g) => ({
-          ...g,
-          fields: g.fields.sort((a, b) => a.row_order - b.row_order || a.label.localeCompare(b.label)),
-        }));
-
-      const columns = groups.map((g) => g.fields);
-      const gridTemplateColumns = groups.length ? `repeat(${groups.length}, minmax(0,1fr))` : '1fr';
-      const maxRows = Math.max(0, ...columns.map((c) => c.length));
-
-      return (
-        <>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns,
-              columnGap: 12,
-              background: '#f8fafc',
-              borderBottom: '1px solid #67e8f9',
-            }}
-          >
-            {groups.map((g) => (
-              <div key={g.key} style={{ padding: '10px 12px', fontSize: 16, fontWeight: 700 }}>
-                {g.title}
+    <div className="nx-ws-accounting-profile-groups">
+      {profileGroups.map((g) => (
+        <div key={g.key} className="nx-ws-accounting-profile-group">
+          <h4 className="nx-ws-accounting-profile-group__title">{g.title}</h4>
+          <dl className="nx-ws-accounting-card__rows">
+            {g.fields.map((f) => (
+              <div key={f.key} className="nx-ws-accounting-row">
+                <dt className="nx-ws-accounting-row__label">
+                  {f.label}
+                  {f.required ? ' *' : null}
+                </dt>
+                <dd
+                  className="nx-ws-accounting-row__value"
+                  style={f.type === 'textarea' ? { whiteSpace: 'pre-wrap' } : undefined}
+                >
+                  {formatDisplayValue(f, f.value)}
+                </dd>
               </div>
             ))}
-          </div>
-
-          {Array.from({ length: maxRows }).map((_, idx) => (
-            <div
-              key={`bizprofile-row-${idx}`}
-              style={{
-                display: 'grid',
-                gridTemplateColumns,
-                columnGap: 12,
-                borderTop: idx > 0 ? '1px solid #67e8f9' : 'none',
-              }}
-            >
-              {columns.map((col, colIdx) => {
-                const f = col[idx];
-                return (
-                  <div
-                    key={`bizprofile-cell-${colIdx}-${idx}`}
-                    style={{
-                      minHeight: 52,
-                      padding: '8px 12px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'center',
-                      gap: 2,
-                    }}
-                  >
-                    {f ? (
-                      <>
-                        <div style={{ fontSize: 12, color: '#64748b' }}>
-                          {f.label}
-                          {f.required ? ' *' : null}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 14,
-                            fontWeight: 600,
-                            whiteSpace: f.type === 'textarea' ? 'pre-wrap' : 'normal',
-                          }}
-                        >
-                          {formatDisplayValue(f, f.value)}
-                        </div>
-                      </>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </>
-      );
-    })()
+          </dl>
+        </div>
+      ))}
+    </div>
   );
 
   const renderEditorGrid = () => (
@@ -456,20 +413,9 @@ export function ClientBusinessProfileTab({
 
   return (
     <>
-      <div className="client-profile-card nx-taxes-workspace" style={{ maxWidth: '100%', direction: 'rtl' }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            flexWrap: 'wrap',
-            marginBottom: 12,
-          }}
-        >
-          <h3 className="nx-accounting-section-title" style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
-            {section.section_label}
-          </h3>
+      <section className="nx-ws-accounting-card" data-section-key="business_profile">
+        <div className="nx-ws-accounting-card__head">
+          <h3 className="nx-ws-accounting-card__title">{section.section_label}</h3>
           {canEdit ? (
             <button
               type="button"
@@ -501,18 +447,8 @@ export function ClientBusinessProfileTab({
             {saveSuccessHe}
           </span>
         ) : null}
-        <section
-          style={{
-            border: '1px solid #e5e7eb',
-            borderRadius: 8,
-            padding: 14,
-            background: '#fafafa',
-            minWidth: 0,
-          }}
-        >
-          {renderReadOnlyGrid()}
-        </section>
-      </div>
+        {renderReadOnlyGrid()}
+      </section>
 
       {editOpen ? (
         <div

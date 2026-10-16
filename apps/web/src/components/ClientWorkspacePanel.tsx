@@ -1140,21 +1140,17 @@ export function ClientWorkspacePanel({
         ) : activeTab === 'docflow' ? (
           <ClientDocflowTab clientId={localWorkspace.client.id} />
         ) : activeTab === 'accounting' && localWorkspace.accounting ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div>
-              <ClientBusinessProfileTab
-                clientId={localWorkspace.client.id}
-                section={localWorkspace.accounting}
-                onCaseUpdated={(next) => setLocalWorkspace(next)}
-              />
-            </div>
-            <div>
-              <ClientAccountingSettingsTab
-                clientId={localWorkspace.client.id}
-                initialAccountingTab={localWorkspace.accounting_settings_tab ?? null}
-                onAccountingCaseUpdated={(next) => setLocalWorkspace(next)}
-              />
-            </div>
+          <div className="nx-ws-accounting">
+            <ClientBusinessProfileTab
+              clientId={localWorkspace.client.id}
+              section={localWorkspace.accounting}
+              onCaseUpdated={(next) => setLocalWorkspace(next)}
+            />
+            <ClientAccountingSettingsTab
+              clientId={localWorkspace.client.id}
+              initialAccountingTab={localWorkspace.accounting_settings_tab ?? null}
+              onAccountingCaseUpdated={(next) => setLocalWorkspace(next)}
+            />
           </div>
         ) : activeTab === 'history' && localWorkspace.client_history_tab ? (
           <ClientHistoryTab

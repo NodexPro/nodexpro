@@ -12,6 +12,7 @@ import {
   moduleClientOperationsVehicleFleetItemModalVisibility,
 } from '../api/endpoints';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
+import '../styles/nx-workspace-accounting-tab.css';
 
 type VehicleFleetUploadApiResponse = {
   file_asset_id: string;
@@ -1027,17 +1028,35 @@ export function ClientAccountingSettingsTab({
       ) : null}
       <div className="nx-accounting-cards-grid">
         {blocks.map((b) => (
-          <div key={b.block_key} className="nx-accounting-card">
-            {b.block_key === 'income' ||
-            b.block_key === 'expenses' ||
-            b.block_key === 'expense_management' ||
-            b.block_key === 'vehicles' ? (
-              <h3 className="nx-accounting-section-title" style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 700 }}>
-                {b.block_label}
-              </h3>
-            ) : (
-              <div className="nx-accounting-card-title">{b.block_label}</div>
-            )}
+          <div key={b.block_key} className="nx-ws-accounting-card" data-block-key={b.block_key}>
+            <div className="nx-ws-accounting-card__head">
+              <h3 className="nx-ws-accounting-card__title">{b.block_label}</h3>
+              {b.block_key !== 'vehicles' && b.can_edit ? (
+                <button
+                  type="button"
+                  className="nx-taxes-section-edit-btn"
+                  onClick={() => void openModal(b)}
+                  aria-label={`עריכת ${b.block_label}`}
+                  title={`עריכת ${b.block_label}`}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                  </svg>
+                </button>
+              ) : null}
+            </div>
             {b.block_key === 'expense_management' && b.expense_management_zones ? (
               <ExpenseManagementZonesPanel zones={b.expense_management_zones} />
             ) : b.excel_grid && b.block_key !== 'vehicles' ? (
@@ -1325,32 +1344,6 @@ export function ClientAccountingSettingsTab({
                 ) : null}
               </>
             )}
-            {b.block_key !== 'vehicles' && b.can_edit ? (
-              <button
-                type="button"
-                className="nx-taxes-section-edit-btn"
-                onClick={() => void openModal(b)}
-                aria-label={`עריכת ${b.block_label}`}
-                title={`עריכת ${b.block_label}`}
-                style={{ marginTop: 8 }}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden
-                >
-                  <path d="M12 20h9" />
-                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                </svg>
-              </button>
-            ) : null}
           </div>
         ))}
       </div>
