@@ -7,6 +7,7 @@ import {
 } from '../api/endpoints';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
 import type { AnnualDocumentRowDto, AnnualSubmissionRowDto, AnnualTabModel } from './annual-tab-types';
+import { WorkspaceNestedDialogClose } from './WorkspaceNestedDialogClose';
 import '../styles/nx-annual-report-tab.css';
 import '../styles/nx-workspace-annual-tab.css';
 
@@ -646,6 +647,7 @@ function SubmissionDialog({
   return (
     <div className="nx-annual-dialog-backdrop" role="presentation" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="nx-annual-dialog" role="dialog" aria-modal onMouseDown={(e) => e.stopPropagation()}>
+        <WorkspaceNestedDialogClose disabled={busy} onClick={onClose} />
         <h4>{isEdit ? 'עריכת הגשה' : 'הוספת תאריך הגשה'}</h4>
         <label>שנת מס</label>
         <input type="number" value={taxYear} onChange={(e) => setTaxYear(e.target.value)} disabled={busy} />

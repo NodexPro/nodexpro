@@ -1396,14 +1396,6 @@ export function ClientFeesTab({
               {saveError ? <p className="nx-fees-save-error">{saveError}</p> : null}
             </div>
             <div className="nx-modal-footer nx-tax-nested-modal-footer">
-              <button
-                type="button"
-                className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
-                disabled={saveBusy}
-                onClick={() => setFeesEditOpen(false)}
-              >
-                סגירה
-              </button>
               <button type="button" className="nx-btn nx-btn-primary nx-btn-taxes-compact" disabled={saveBusy} onClick={() => void handleSave()}>
                 {saveBusy ? 'שומר…' : 'שמירה'}
               </button>

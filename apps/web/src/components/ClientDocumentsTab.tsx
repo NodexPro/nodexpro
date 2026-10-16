@@ -7,6 +7,7 @@ import {
 } from '../api/endpoints';
 import type { ClientDocumentsTabModel, ClientDocumentsTabFolderCardDto } from './client-documents-tab-types';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
+import { WorkspaceNestedDialogClose } from './WorkspaceNestedDialogClose';
 import '../styles/nx-client-documents-tab.css';
 import '../styles/nx-workspace-documents-tab.css';
 
@@ -314,9 +315,11 @@ export function ClientDocumentsTab({
                     + {documentsTab.ui.add_document_label_he}
                   </button>
                 ) : null}
-                <button type="button" className="nx-btn nx-btn-secondary nx-btn-taxes-compact" disabled={busy} onClick={closeFolder}>
-                  סגירה
-                </button>
+                <WorkspaceNestedDialogClose
+                  className="nx-cdocs-folder-panel-close"
+                  disabled={busy}
+                  onClick={closeFolder}
+                />
               </div>
             </div>
 

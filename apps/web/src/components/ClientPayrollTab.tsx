@@ -350,9 +350,6 @@ export function ClientPayrollTab({
               {err ? <p className="nx-fees-save-error">{err}</p> : null}
             </div>
             <div className="nx-modal-footer nx-tax-nested-modal-footer">
-              <button type="button" className="nx-btn nx-btn-secondary nx-btn-taxes-compact" disabled={busy} onClick={() => setEditSection(null)}>
-                סגירה
-              </button>
               <button type="button" className="nx-btn nx-btn-primary nx-btn-taxes-compact" disabled={busy} onClick={() => void saveSection()}>
                 {busy ? 'שומר…' : 'שמירה'}
               </button>

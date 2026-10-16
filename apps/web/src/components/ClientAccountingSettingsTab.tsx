@@ -12,6 +12,7 @@ import {
   moduleClientOperationsVehicleFleetItemModalVisibility,
 } from '../api/endpoints';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
+import { WorkspaceNestedDialogClose } from './WorkspaceNestedDialogClose';
 import '../styles/nx-workspace-accounting-tab.css';
 
 type VehicleFleetUploadApiResponse = {
@@ -1346,6 +1347,7 @@ export function ClientAccountingSettingsTab({
           >
             <div className="nx-modal-header">
               <h3 className="nx-modal-title">{modal?.modal_label ?? modalTitle}</h3>
+              <WorkspaceNestedDialogClose disabled={modalSaving} onClick={() => setModalOpen(false)} />
             </div>
             <div className="nx-modal-body">
               {modalLoading ? (
@@ -1932,9 +1934,6 @@ export function ClientAccountingSettingsTab({
                   {modalSaving ? 'שומר…' : 'שמירה'}
                 </button>
               ) : null}
-              <button type="button" className="nx-btn nx-btn-secondary" onClick={() => setModalOpen(false)} disabled={modalSaving}>
-                סגירה
-              </button>
             </div>
           </div>
         </div>
@@ -1956,6 +1955,7 @@ export function ClientAccountingSettingsTab({
           >
             <div className="nx-modal-header">
               <h3 className="nx-modal-title">{vehicleItemModal?.modal_label ?? 'הוספת רכב'}</h3>
+              <WorkspaceNestedDialogClose onClick={() => setVehicleItemOpen(false)} />
             </div>
             <div className="nx-modal-body" style={{ flex: '0 1 auto' }}>
               {vehicleItemModal ? (
@@ -2222,14 +2222,6 @@ export function ClientAccountingSettingsTab({
                   שמירה
                 </button>
               ) : null}
-              <button
-                type="button"
-                className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
-                style={{ minWidth: 96 }}
-                onClick={() => setVehicleItemOpen(false)}
-              >
-                סגירה
-              </button>
             </div>
           </div>
         </div>
@@ -2253,6 +2245,13 @@ export function ClientAccountingSettingsTab({
           >
             <div className="nx-modal-header">
               <h3 className="nx-modal-title">הוספת שדה</h3>
+              <WorkspaceNestedDialogClose
+                disabled={emAddSaving}
+                onClick={() => {
+                  setEmAddFieldOpen(false);
+                  setEmAddFieldError('');
+                }}
+              />
             </div>
             <div
               className="nx-modal-body"
@@ -2412,18 +2411,6 @@ export function ClientAccountingSettingsTab({
               ) : null}
             </div>
             <div className="nx-modal-footer nx-tax-nested-modal-footer" style={{ justifyContent: 'center', gap: 10 }}>
-              <button
-                type="button"
-                className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
-                onClick={() => {
-                  setEmAddFieldOpen(false);
-                  setEmAddFieldError('');
-                }}
-                disabled={emAddSaving}
-                style={{ minWidth: 96 }}
-              >
-                סגירה
-              </button>
               <button
                 type="button"
                 className="nx-btn nx-btn-primary nx-btn-taxes-compact"

@@ -49,6 +49,14 @@ test('Fees, payroll and history premium skins are scoped to the workspace modal 
   }
 });
 
+test('Fees editor keeps named save and replaces redundant סגירה with the existing X', () => {
+  assert.match(feesSrc, /moduleClientOperationsFeesCommands/);
+  assert.match(feesSrc, /className="nx-modal-close"/);
+  assert.match(feesSrc, /שמירה/);
+  assert.match(feesSrc, /fxMeta\.cancel_he/);
+  assert.doesNotMatch(feesSrc, /nx-modal-footer[\s\S]*סגירה[\s\S]*שמירה/);
+});
+
 test('Client Details, Taxes, portal and raise are not altered by remaining-tab restyles', () => {
   assert.match(panelSrc, /createPortal\(\s*overlay,\s*document\.body\s*\)/);
   assert.match(

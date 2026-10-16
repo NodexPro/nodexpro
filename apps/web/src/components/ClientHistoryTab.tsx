@@ -254,9 +254,6 @@ export function ClientHistoryTab({
                       </button>
                     </>
                   ) : null}
-                  <button type="button" className="nx-btn nx-btn-secondary nx-btn-taxes-compact" disabled={busy} onClick={closeSectionModal}>
-                    סגירה
-                  </button>
                 </div>
               </div>
             </div>,

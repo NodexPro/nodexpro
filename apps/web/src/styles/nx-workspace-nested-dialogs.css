@@ -1,0 +1,257 @@
+/* Nested dialogs, folder overlays, and editors opened from Client Workspace.
+   Scoped to workspace descendants + the History section portal.
+   Does not change the primary workspace portal, raise, header, logo, tabs, or Close. */
+
+.nx-modal.nx-workspace-modal,
+.nx-modal.nx-workspace-modal *,
+.nx-modal-overlay.nx-history-section-overlay .nx-history-section-modal,
+.nx-modal-overlay.nx-history-section-overlay .nx-history-section-modal * {
+  font-family: Arial, sans-serif !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay {
+  z-index: 10050;
+  background: rgba(4, 12, 28, 0.52);
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay.nx-fees-fx-overlay {
+  z-index: 10100;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal),
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal,
+.nx-modal.nx-workspace-modal .nx-annual-dialog {
+  position: relative;
+  background:
+    radial-gradient(ellipse at 92% 0%, rgba(101, 88, 232, 0.16), transparent 36%),
+    radial-gradient(ellipse at 78% 0%, rgba(39, 124, 255, 0.26), transparent 48%),
+    linear-gradient(165deg, #04152f 0%, #082652 46%, #124c9a 78%, #04152f 100%);
+  border: 1px solid rgba(70, 213, 255, 0.42);
+  border-radius: 16px;
+  color: #eef6ff;
+  box-shadow:
+    0 24px 56px rgba(2, 8, 24, 0.5),
+    0 0 18px rgba(70, 213, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  font-family: Arial, sans-serif;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-modal-header,
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal .nx-modal-header {
+  position: relative;
+  background: transparent;
+  border-bottom: 1px solid rgba(210, 238, 255, 0.28);
+  padding: 14px 48px 12px 16px;
+  min-height: 0;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-modal-title,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-modal-title-wrap,
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal .nx-modal-title,
+.nx-modal.nx-workspace-modal .nx-annual-dialog h4 {
+  color: #eef6ff !important;
+  font-family: Arial, sans-serif !important;
+  font-weight: 700;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-modal-close,
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal .nx-modal-close,
+.nx-modal.nx-workspace-modal .nx-annual-dialog > .nx-modal-close,
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-panel-close {
+  position: absolute;
+  inset: 12px 12px auto auto;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 8px;
+  font-size: 20px;
+  line-height: 1;
+  color: #e8f4ff;
+  background: rgba(8, 38, 82, 0.35);
+  border: 1px solid rgba(210, 238, 255, 0.4);
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-modal-close:hover:not(:disabled),
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal .nx-modal-close:hover:not(:disabled),
+.nx-modal.nx-workspace-modal .nx-annual-dialog > .nx-modal-close:hover:not(:disabled),
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-panel-close:hover:not(:disabled) {
+  background: rgba(70, 213, 255, 0.2);
+  color: #ffffff;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-modal-body,
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal .nx-modal-body {
+  color: #e8f4ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-modal-footer,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-tax-nested-modal-footer,
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal .nx-modal-footer,
+.nx-modal.nx-workspace-modal .nx-annual-dialog-footer {
+  background: transparent !important;
+  border-top: 1px solid rgba(210, 238, 255, 0.28);
+  justify-content: center !important;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-modal-footer:empty {
+  display: none;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) label,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .client-field-label,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-cdocs-field-label,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-fees-modal-section-title,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-fees-modal-hint,
+.nx-modal.nx-workspace-modal .nx-annual-dialog label,
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal .client-field-label,
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal .nx-history-modal-meta {
+  color: #eef6ff !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) p {
+  color: rgba(238, 246, 255, 0.86);
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) input,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) select,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) textarea,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-fees-inp,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-cdocs-text-inp,
+.nx-modal.nx-workspace-modal .nx-annual-dialog input,
+.nx-modal.nx-workspace-modal .nx-annual-dialog select,
+.nx-modal.nx-workspace-modal .nx-annual-dialog textarea,
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal input,
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal select,
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal textarea {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.72) !important;
+  color: #0b2248 !important;
+  -webkit-text-fill-color: #0b2248;
+  border-radius: 8px;
+  font-family: Arial, sans-serif !important;
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .client-field-box {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  color: #0b2248;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .client-field-box input,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .client-field-box select,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .client-field-box textarea {
+  background: transparent !important;
+  border: none !important;
+  color: #0b2248 !important;
+  -webkit-text-fill-color: #0b2248;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-btn,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-tax-nested-modal-footer .nx-btn,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-tax-nested-modal-footer .nx-btn:only-child,
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal .nx-btn,
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal .nx-tax-nested-modal-footer .nx-btn,
+.nx-modal.nx-workspace-modal .nx-annual-dialog .nx-btn,
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-panel .nx-btn {
+  flex: 0 0 auto !important;
+  width: auto !important;
+  min-width: 96px;
+  height: auto !important;
+  min-height: 36px !important;
+  padding: 8px 20px !important;
+  font-size: 14px !important;
+  font-weight: 600;
+  line-height: 1.2;
+  border-radius: 6px !important;
+  font-family: Arial, sans-serif !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-annual-dialog-backdrop {
+  background: rgba(4, 12, 28, 0.52);
+  z-index: 10050;
+}
+
+.nx-modal.nx-workspace-modal .nx-annual-dialog {
+  position: relative;
+  padding: 16px 48px 16px 16px;
+  min-width: min(400px, 100%);
+  max-width: 480px;
+}
+
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal {
+  width: min(1120px, calc(100vw - 48px));
+  max-width: 100%;
+  min-width: 0;
+}
+
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal .nx-fees-editor-modal-body {
+  overflow-x: auto;
+  overflow-y: auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal .nx-fees-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal .nx-fees-data-table {
+  width: 100%;
+  min-width: 0;
+}
+
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal .nx-fees-data-table th {
+  color: #eef6ff;
+  background: transparent;
+}
+
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal .nx-fees-td-readonly,
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal .nx-fees-price-chart-toggle,
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal .nx-fees-price-chart-toolbar-meta {
+  color: #d6e8ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal .nx-fees-price-chart-toggle--active {
+  color: #eef6ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal .nx-fees-inp--table {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 1100px) {
+  .nx-modal.nx-workspace-modal .nx-fees-editor-modal .nx-fees-table-wrap {
+    overflow-x: auto;
+  }
+}
+
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal .nx-history-event-summary {
+  color: #eef6ff;
+}
+
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal .nx-history-event-meta {
+  color: rgba(238, 246, 255, 0.72);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-card,
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-name,
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-meta,
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-updated,
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-count,
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-doc-label,
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-doc-sub,
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-panel,
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-btn {
+  font-family: Arial, sans-serif !important;
+}

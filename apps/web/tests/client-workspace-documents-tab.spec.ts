@@ -14,6 +14,7 @@ const baseCss = readFileSync(join(dir, '../src/styles/nx-client-documents-tab.cs
 const premium = readFileSync(join(dir, '../src/styles/nx-workspace-modal-premium.css'), 'utf8');
 const panelSrc = readFileSync(join(dir, '../src/components/ClientWorkspacePanel.tsx'), 'utf8');
 const taxesCss = readFileSync(join(dir, '../src/styles/nx-workspace-taxes-tab.css'), 'utf8');
+const nestedCss = readFileSync(join(dir, '../src/styles/nx-workspace-nested-dialogs.css'), 'utf8');
 
 test('Documents tab still reads the case aggregate and writes named document commands', () => {
   assert.match(docsSrc, /documentsTab\.folders_grid\.folders/);
@@ -44,6 +45,15 @@ test('Documents premium skin is scoped to the workspace modal Documents interior
   assert.doesNotMatch(docsCss, /display:\s*none/);
   assert.doesNotMatch(docsCss, /createPortal|translateY\(max\(-60px/);
   assert.match(baseCss, /\.nx-cdocs-root/);
+});
+
+test('Documents folder overlay uses the nested glass close control and Arial', () => {
+  assert.match(docsSrc, /nx-cdocs-folder-panel-close/);
+  assert.match(docsSrc, /WorkspaceNestedDialogClose/);
+  assert.doesNotMatch(docsSrc, /onClick=\{closeFolder\}>\s*סגירה/);
+  assert.match(docsCss, /font-family:\s*Arial, sans-serif/i);
+  assert.match(nestedCss, /font-family:\s*Arial, sans-serif/);
+  assert.match(docsCss, /linear-gradient\(165deg, #04152f 0%, #082652 46%, #124c9a 78%, #04152f 100%\)/);
 });
 
 test('Client Details, Taxes, portal and raise are not altered by the Documents restyle', () => {

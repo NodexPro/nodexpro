@@ -20,6 +20,7 @@ import type { ClientHistoryTabModel } from './client-history-tab-types';
 import { ClientObligationsTab, type ClientObligationsTabModel } from './ClientObligationsTab';
 import { ClientDocflowTab } from './ClientDocflowTab';
 import '../styles/nx-workspace-modal-premium.css';
+import '../styles/nx-workspace-nested-dialogs.css';
 
 type ClientFieldDecorKind =
   | 'building'

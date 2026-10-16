@@ -11,6 +11,7 @@ import {
   moduleClientOperationsTaxSettingsRevealPaymentSecret,
 } from '../api/endpoints';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
+import { WorkspaceNestedDialogClose } from './WorkspaceNestedDialogClose';
 import type {
   ClientTaxSettingsPublic,
   TaxTabCommandType,
@@ -1069,6 +1070,7 @@ export function ClientTaxesTab({
           <div className="nx-modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
               <h3 className="nx-modal-title">רישום מע״מ</h3>
+              <WorkspaceNestedDialogClose disabled={isSaving} onClick={() => setActiveSectionModal(null)} />
             </div>
             <div className="nx-modal-body">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1154,6 +1156,7 @@ export function ClientTaxesTab({
           <div className="nx-modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
               <h3 className="nx-modal-title">הערות</h3>
+              <WorkspaceNestedDialogClose disabled={isSaving} onClick={() => setActiveSectionModal(null)} />
             </div>
             <div className="nx-modal-body">
               <textarea
@@ -1190,6 +1193,13 @@ export function ClientTaxesTab({
           <div className="nx-modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
               <h3 className="nx-modal-title">תשלום מע״מ</h3>
+              <WorkspaceNestedDialogClose
+                disabled={isSaving}
+                onClick={() => {
+                  setActiveSectionModal(null);
+                  setModalDraft(cloneSettings(snapshot));
+                }}
+              />
             </div>
             <div className="nx-modal-body">
               <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 12 }}>
@@ -1251,6 +1261,13 @@ export function ClientTaxesTab({
           <div className="nx-modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
               <h3 className="nx-modal-title">תשלום מס הכנסה</h3>
+              <WorkspaceNestedDialogClose
+                disabled={isSaving}
+                onClick={() => {
+                  setActiveSectionModal(null);
+                  setModalDraft(cloneSettings(snapshot));
+                }}
+              />
             </div>
             <div className="nx-modal-body">
               <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 12 }}>
@@ -1341,6 +1358,7 @@ export function ClientTaxesTab({
               >
                 מקדמות מס הכנסה
               </h3>
+              <WorkspaceNestedDialogClose disabled={isSaving} onClick={handleAdvanceModalCancel} />
             </div>
             <div className="nx-modal-body" style={{ paddingTop: 4 }}>
               <label
@@ -1512,6 +1530,7 @@ export function ClientTaxesTab({
               >
                 מס הכנסה ניכויים
               </h3>
+              <WorkspaceNestedDialogClose disabled={isSaving} onClick={handleDeductionsModalCancel} />
             </div>
             <div className="nx-modal-body" style={{ paddingTop: 4 }}>
               <label
@@ -1682,6 +1701,7 @@ export function ClientTaxesTab({
               >
                 ביטוח לאומי עצמאי
               </h3>
+              <WorkspaceNestedDialogClose disabled={isSaving} onClick={handleNationalInsuranceModalCancel} />
             </div>
             <div className="nx-modal-body" style={{ paddingTop: 4 }}>
               <label
@@ -1780,23 +1800,7 @@ export function ClientTaxesTab({
           <div className="nx-modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
               <h3 className="nx-modal-title">פרטי אשראי — מע״מ</h3>
-              <button
-                type="button"
-                className="nx-modal-close"
-                onClick={handleVatCreditModalCancel}
-                disabled={isSaving}
-                aria-label="סגור"
-                title="סגור"
-              >
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                  <path
-                    d="M5 5L15 15M15 5L5 15"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </button>
+              <WorkspaceNestedDialogClose disabled={isSaving} onClick={handleVatCreditModalCancel} />
             </div>
             <div className="nx-modal-body">
               <p style={{ fontSize: 12, color: '#374151', margin: '0 0 10px' }}>
@@ -1882,23 +1886,7 @@ export function ClientTaxesTab({
           <div className="nx-modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
               <h3 className="nx-modal-title">פרטי אשראי — מס הכנסה</h3>
-              <button
-                type="button"
-                className="nx-modal-close"
-                onClick={handleItCreditModalCancel}
-                disabled={isSaving}
-                aria-label="סגור"
-                title="סגור"
-              >
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                  <path
-                    d="M5 5L15 15M15 5L5 15"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </button>
+              <WorkspaceNestedDialogClose disabled={isSaving} onClick={handleItCreditModalCancel} />
             </div>
             <div className="nx-modal-body">
               <p style={{ fontSize: 12, color: '#374151', margin: '0 0 6px' }}>
@@ -1987,6 +1975,7 @@ export function ClientTaxesTab({
           <div className="nx-modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
               <h3 className="nx-modal-title">תיאור תשלום מע״מ</h3>
+              <WorkspaceNestedDialogClose disabled={isSaving} onClick={handleVatOtherModalCancel} />
             </div>
             <div className="nx-modal-body">
               <textarea
@@ -2025,6 +2014,7 @@ export function ClientTaxesTab({
           <div className="nx-modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
               <h3 className="nx-modal-title">תיאור תשלום מס הכנסה</h3>
+              <WorkspaceNestedDialogClose disabled={isSaving} onClick={handleItOtherModalCancel} />
             </div>
             <div className="nx-modal-body">
               <textarea
@@ -2066,6 +2056,14 @@ export function ClientTaxesTab({
           <div className="nx-modal" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
               <h3 className="nx-modal-title">הזן קוד אימות</h3>
+              <WorkspaceNestedDialogClose
+                disabled={verifyBusy}
+                onClick={() => {
+                  setVerifyModalOpen(false);
+                  setPendingVerify(null);
+                  setVerifyCodeInput('');
+                }}
+              />
             </div>
             <div className="nx-modal-body">
               <p style={{ fontSize: 13, color: '#374151', marginBottom: 12 }}>

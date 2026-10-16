@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiJson, type ApiError } from '../api/client';
 import { moduleClientOperationsAccountingCommands } from '../api/endpoints';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
+import { WorkspaceNestedDialogClose } from './WorkspaceNestedDialogClose';
 import '../styles/nx-modal.css';
 import '../styles/nx-workspace-accounting-tab.css';
 
@@ -462,6 +463,7 @@ export function ClientBusinessProfileTab({
           <div className="nx-modal nx-accounting-editor-modal" role="dialog" aria-modal="true" style={{ maxWidth: 720 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
               <h3 className="nx-modal-title">{section.section_label}</h3>
+              <WorkspaceNestedDialogClose disabled={saveBusy} onClick={closeEditModal} />
             </div>
             <div className="nx-modal-body" style={{ flex: '0 1 auto' }}>
               {renderEditorGrid()}
@@ -479,11 +481,7 @@ export function ClientBusinessProfileTab({
                     ביטול
                   </button>
                 </>
-              ) : (
-                <button type="button" className="nx-btn nx-btn-secondary nx-btn-taxes-compact" style={{ minWidth: 96 }} onClick={closeEditModal}>
-                  סגירה
-                </button>
-              )}
+              ) : null}
             </div>
           </div>
         </div>

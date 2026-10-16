@@ -748,7 +748,7 @@ function basePayload(): Record<string, unknown> {
 
 function selectThenDump(): void {
   const dumpKey = new URLSearchParams(location.search).get('dump') || 'accounting';
-  const spec = DUMP_TARGETS[dumpKey] ?? DUMP_TARGETS.accounting;
+  const spec = dumpKey === 'fees-editor' ? DUMP_TARGETS.fees : DUMP_TARGETS[dumpKey] ?? DUMP_TARGETS.accounting;
   if (!clickTab(spec.label) || !document.querySelector(spec.ready)) {
     requestAnimationFrame(selectThenDump);
     return;
@@ -782,7 +782,55 @@ function selectThenDump(): void {
       heroBg: computedBg('.nx-ws-history .nx-history-hero') || stylesheetBackground('.nx-ws-history .nx-history-hero') || '',
     };
   }
+  if (dumpKey === 'fees-editor') {
+    if (!document.querySelector('.nx-fees-editor-modal')) {
+      const pencil = document.querySelector('.nx-fees-pencil-btn') as HTMLButtonElement | null;
+      pencil?.click();
+      requestAnimationFrame(selectThenDump);
+      return;
+    }
+    payload.feesEditor = measureFeesEditor();
+  }
   writeDump(payload);
+}
+
+function measureFeesEditor(): Record<string, unknown> {
+  const modal = document.querySelector('.nx-fees-editor-modal') as HTMLElement | null;
+  const close = modal?.querySelector('.nx-modal-close') as HTMLElement | null;
+  const wrap = modal?.querySelector('.nx-fees-table-wrap') as HTMLElement | null;
+  const workspace = document.querySelector('.nx-modal.nx-workspace-modal') as HTMLElement | null;
+  const wsClose = document.querySelector('.nx-workspace-close') as HTMLElement | null;
+  const mr = modal?.getBoundingClientRect();
+  const cr = close?.getBoundingClientRect();
+  const wr = workspace?.getBoundingClientRect();
+  const wcr = wsClose?.getBoundingClientRect();
+  const mcs = modal ? getComputedStyle(modal) : null;
+  return {
+    modal: modal && mr && mcs
+      ? {
+          w: mr.width,
+          h: mr.height,
+          x: mr.x,
+          y: mr.y,
+          font: mcs.fontFamily,
+          backgroundImage: mcs.backgroundImage,
+          overflowX: mcs.overflowX,
+        }
+      : null,
+    close: close && cr ? { w: cr.width, h: cr.height, x: cr.x, y: cr.y } : null,
+    tableWrap: wrap
+      ? {
+          clientWidth: wrap.clientWidth,
+          scrollWidth: wrap.scrollWidth,
+          overflowX: getComputedStyle(wrap).overflowX,
+        }
+      : null,
+    footerBtns: Array.from(modal?.querySelectorAll('.nx-modal-footer .nx-btn') ?? []).map((b) =>
+      (b.textContent || '').trim(),
+    ),
+    workspace: workspace && wr ? { w: wr.width, h: wr.height, x: wr.x, y: wr.y, font: getComputedStyle(workspace).fontFamily } : null,
+    workspaceClose: wsClose && wcr ? { w: wcr.width, h: wcr.height, x: wcr.x, y: wcr.y } : null,
+  };
 }
 
 requestAnimationFrame(selectThenDump);
