@@ -40,6 +40,31 @@ test('Accounting Settings tab still renders existing business-profile fields fro
   assert.match(profileSrc, /formatDisplayValue\(f, f\.value\)/);
 });
 
+test('nested business-profile editor hides peak months and open/close dates but still posts stored values', () => {
+  assert.match(profileSrc, /BUSINESS_PROFILE_EDITOR_HIDDEN_KEYS/);
+  assert.match(profileSrc, /!BUSINESS_PROFILE_EDITOR_HIDDEN_KEYS\.has\(f\.key\)/);
+  assert.match(profileSrc, /peak_months: Array\.isArray\(draft\.peak_months\)/);
+  assert.match(profileSrc, /business_open_date: \(draft\.business_open_date/);
+  assert.match(profileSrc, /business_close_date: \(draft\.business_close_date/);
+  assert.match(profileSrc, /for \(const f of section\.fields\) init\[f\.key\] = f\.value/);
+});
+
+test('Expense Management editor keeps named commands and a harness-seeded populated modal path', () => {
+  assert.match(accountingSrc, /save_accounting_expense_management_block/);
+  assert.match(accountingSrc, /nx-em-modal-2col/);
+  assert.match(accountingSrc, /__NX_HARNESS_EXPENSE_MODAL__/);
+  assert.match(accountingSrc, /harnessShouldAutopenExpenseEditor/);
+  assert.match(accountingSrc, /get\('dump'\) === 'expense-editor'/);
+  assert.match(accountingSrc, /WorkspaceNestedDialogClose/);
+  const nestedCss = readFileSync(join(dir, '../src/styles/nx-workspace-nested-dialogs.css'), 'utf8');
+  assert.match(nestedCss, /\.nx-em-modal-2col/);
+  assert.match(nestedCss, /linear-gradient\(180deg, rgba\(8, 38, 82, 0\.42\)/);
+  const harness = readFileSync(join(dir, 'client-workspace-accounting-tab-harness.tsx'), 'utf8');
+  assert.match(harness, /dump=expense-editor|expense-editor/);
+  assert.match(harness, /עריכת ניהול הוצאות/);
+  assert.match(harness, /expense_software_password/);
+});
+
 test('Accounting Settings blocks stay in existing order with named commands and full-case refresh', () => {
   assert.match(accountingSrc, /blockOrder:\s*BlockKey\[\]\s*=\s*\['income',\s*'expense_management',\s*'expenses',\s*'vehicles'\]/);
   assert.match(accountingSrc, /documents.*מוסתר/);

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiError, apiJson } from '../api/client';
 import { docflowClientTabAggregate, moduleClientOperationsUpdateClientProfile } from '../api/endpoints';
@@ -19,6 +19,17 @@ import { ClientHistoryTab } from './ClientHistoryTab';
 import type { ClientHistoryTabModel } from './client-history-tab-types';
 import { ClientObligationsTab, type ClientObligationsTabModel } from './ClientObligationsTab';
 import { ClientDocflowTab } from './ClientDocflowTab';
+import {
+  CLIENT_PROFILE_AUTOSAVE_DEBOUNCE_MS,
+  buildClientProfileUpdatePayload,
+  clientProfileNeedsLeaveGuard,
+  clientProfileSaveStateLabelHe,
+  createClientProfileAutosaver,
+  draftFromClientOperationsCase,
+  shouldIgnoreStaleProfileResponse,
+  type ClientProfileDraft,
+  type ClientProfileSaveState,
+} from './client-workspace-profile-autosave.pure';
 import '../styles/nx-workspace-modal-premium.css';
 import '../styles/nx-workspace-nested-dialogs.css';
 
@@ -349,16 +360,6 @@ const CLIENT_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'pending', label: 'ממתין' },
 ];
 
-function isoToDateInputValue(iso: string | null | undefined): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const yyyy = d.getUTCFullYear();
-  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const dd = String(d.getUTCDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
 function formatDateHe(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
@@ -366,71 +367,51 @@ function formatDateHe(iso: string | null | undefined): string {
   return d.toLocaleDateString('he-IL');
 }
 
-type ClientProfileDraft = {
-  client_name: string;
-  government_id: string;
-  business_type: string;
-  status: string;
-  contact_person: string;
-  phone: string;
-  email: string;
-  address_text: string;
-  assigned_handler_user_id: string | null;
-  ended_at: string; // YYYY-MM-DD or ''
-};
-
 export function ClientWorkspacePanel({
   workspace,
   showClose,
   onClose,
-  onSaveSuccess,
+  onClientProfileSaved,
   onTaxSettingsSaved,
   caseHydrating,
   hydrationError,
+  profileFlushRef,
 }: {
   workspace: ClientOperationsCaseResponse;
   showClose?: boolean;
   onClose?: () => void;
-  /** When set (e.g. modal), called after successful save — parent may show toast and close. */
-  onSaveSuccess?: () => void;
+  /** After a confirmed update_profile command — refresh registry without closing the workspace. */
+  onClientProfileSaved?: () => void;
   /** After מיסים save (tax command → full case) — e.g. refresh registry list. */
   onTaxSettingsSaved?: () => void;
   /** True while the full case aggregate is still loading — client tab uses registry snapshot; other tabs wait. */
   caseHydrating?: boolean;
   /** Shown under the tab bar (e.g. failed case fetch while placeholder is visible). */
   hydrationError?: string;
+  /** Lets the parent overlay flush pending edits before dismissing the workspace. */
+  profileFlushRef?: MutableRefObject<(() => Promise<boolean>) | null>;
 }) {
   const [activeTab, setActiveTab] = useState<WorkspaceTabKey>('client');
   const [localWorkspace, setLocalWorkspace] = useState(workspace);
   const [docflowTabVisible, setDocflowTabVisible] = useState(false);
 
-  const initialDraft = useMemo<ClientProfileDraft>(() => {
-    const displayAddress = [workspace.client.address, workspace.client.city].filter(Boolean).join(' · ');
-    return {
-      client_name: workspace.client.client_name ?? '',
-      government_id: workspace.client.tax_id ?? '',
-      business_type: workspace.profile.business_type ?? '',
-      status: workspace.client.status ?? 'active',
-      contact_person: workspace.primary_contact?.full_name ?? '',
-      phone: workspace.primary_contact?.phone ?? workspace.client.phone ?? '',
-      email: workspace.primary_contact?.email ?? workspace.client.email ?? '',
-      address_text: displayAddress,
-      assigned_handler_user_id: workspace.profile.assigned_handler_user_id ?? null,
-      ended_at: isoToDateInputValue(workspace.client.ended_at),
-    };
-  }, [workspace]);
-
-  const [draft, setDraft] = useState<ClientProfileDraft>(initialDraft);
-  const [saveError, setSaveError] = useState<string>('');
-  const [saveSuccess, setSaveSuccess] = useState<string>('');
-  const [isSaving, setIsSaving] = useState(false);
-  const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [draft, setDraft] = useState<ClientProfileDraft>(() => draftFromClientOperationsCase(workspace));
+  const [profileSaveState, setProfileSaveState] = useState<ClientProfileSaveState>({ status: 'idle', error: null });
   const workspaceClientIdRef = useRef<string | null>(null);
+  const clientIdRef = useRef(workspace.client.id);
+  const lockedRef = useRef(Boolean(caseHydrating));
+  const onClientProfileSavedRef = useRef(onClientProfileSaved);
+  const autosaverRef = useRef<ReturnType<typeof createClientProfileAutosaver> | null>(null);
+  const pendingConfirmedCaseRef = useRef<ClientOperationsCaseResponse | null>(null);
   const clientFieldsLocked = Boolean(caseHydrating);
+  clientIdRef.current = workspace.client.id;
+  lockedRef.current = clientFieldsLocked;
+  onClientProfileSavedRef.current = onClientProfileSaved;
 
   useEffect(() => {
     const cid = workspace.client.id;
-    if (workspaceClientIdRef.current !== null && workspaceClientIdRef.current !== cid) {
+    const clientChanged = workspaceClientIdRef.current !== null && workspaceClientIdRef.current !== cid;
+    if (clientChanged) {
       setActiveTab('client');
     }
     workspaceClientIdRef.current = cid;
@@ -468,15 +449,15 @@ export function ClientWorkspacePanel({
       }
       return workspace;
     });
-    setDraft(initialDraft);
-    setSaveError('');
-    setSaveSuccess('');
-    setIsSaving(false);
-    if (saveSuccessTimerRef.current) {
-      clearTimeout(saveSuccessTimerRef.current);
-      saveSuccessTimerRef.current = null;
+    if (!clientChanged) {
+      const incoming = draftFromClientOperationsCase(workspace);
+      const saver = autosaverRef.current;
+      if (!saver || !saver.isDirty()) {
+        setDraft(incoming);
+        saver?.resetFromServer(incoming);
+      }
     }
-  }, [workspace.client.id, initialDraft, workspace]);
+  }, [workspace]);
 
   useEffect(() => {
     let cancelled = false;
@@ -501,13 +482,107 @@ export function ClientWorkspacePanel({
   }, [workspace.client.id]);
 
   useEffect(() => {
+    const previous = autosaverRef.current;
+    if (previous) {
+      previous.dispose();
+      void previous.flush();
+    }
+    const cid = workspace.client.id;
+    const saver = createClientProfileAutosaver({
+      initial: draftFromClientOperationsCase(workspace),
+      debounceMs: CLIENT_PROFILE_AUTOSAVE_DEBOUNCE_MS,
+      isLocked: () => lockedRef.current,
+      save: async (sent) => {
+        const requestClientId = cid;
+        try {
+          const updated = await apiJson<ClientOperationsCaseResponse>(
+            moduleClientOperationsUpdateClientProfile(requestClientId),
+            {
+              method: 'POST',
+              body: JSON.stringify(buildClientProfileUpdatePayload(sent)),
+            },
+          );
+          if (shouldIgnoreStaleProfileResponse(requestClientId, clientIdRef.current)) {
+            return;
+          }
+          pendingConfirmedCaseRef.current = updated;
+        } catch (e) {
+          const todoConflict =
+            e instanceof ApiError && e.code === 'CLIENT_HANDLER_TODO_CONFLICT'
+              ? typeof e.details?.conflicting_todo_count === 'number'
+                ? `לא ניתן לשנות מטפל בתיק — קיימות ${e.details.conflicting_todo_count} משימות ToDo פעילות שאינן תואמות. יש להשלים או להעביר את המשימות תחילה.`
+                : 'לא ניתן לשנות מטפל בתיק — קיימות משימות ToDo פעילות. יש להשלים או להעביר את המשימות תחילה.'
+              : null;
+          throw new Error(todoConflict ?? (e instanceof Error ? e.message : 'Failed to save'));
+        }
+      },
+      onConfirmed: () => {
+        const updated = pendingConfirmedCaseRef.current;
+        if (!updated || updated.client.id !== clientIdRef.current) return;
+        setLocalWorkspace(updated);
+        const next = draftFromClientOperationsCase(updated);
+        setDraft(next);
+        autosaverRef.current?.resetFromServer(next);
+        onClientProfileSavedRef.current?.();
+      },
+      onState: (next) => {
+        setProfileSaveState(next);
+      },
+    });
+    autosaverRef.current = saver;
+    pendingConfirmedCaseRef.current = null;
+    setDraft(draftFromClientOperationsCase(workspace));
+    setProfileSaveState({ status: 'idle', error: null });
     return () => {
-      if (saveSuccessTimerRef.current) {
-        clearTimeout(saveSuccessTimerRef.current);
-        saveSuccessTimerRef.current = null;
-      }
+      saver.dispose();
     };
+    // Recreate only when the open client case changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace.client.id]);
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      const s = autosaverRef.current;
+      if (!s || !clientProfileNeedsLeaveGuard(s.getState(), s.isDirty())) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, []);
+
+  const flushProfileAutosave = async (): Promise<boolean> => {
+    const saver = autosaverRef.current;
+    if (!saver) return true;
+    return saver.flush();
+  };
+
+  useEffect(() => {
+    if (!profileFlushRef) return;
+    profileFlushRef.current = flushProfileAutosave;
+    return () => {
+      if (profileFlushRef.current === flushProfileAutosave) profileFlushRef.current = null;
+    };
+  });
+
+  const applyDraftPatch = (patch: (s: ClientProfileDraft) => ClientProfileDraft) => {
+    setDraft((s) => {
+      const next = patch(s);
+      autosaverRef.current?.change(next);
+      return next;
+    });
+  };
+
+  const requestWorkspaceClose = async () => {
+    const ok = await flushProfileAutosave();
+    if (ok) onClose?.();
+  };
+
+  const requestTabChange = async (key: WorkspaceTabKey) => {
+    if (key === activeTab) return;
+    const ok = await flushProfileAutosave();
+    if (ok) setActiveTab(key);
+  };
 
   const tabs = useMemo(
     () => TAB_ORDER.filter((t) => isWorkspaceNavTabVisible(t.key, docflowTabVisible)),
@@ -526,93 +601,8 @@ export function ClientWorkspacePanel({
   const handlerValue = localWorkspace.profile.assigned_handler_user_full_name ?? localWorkspace.profile.assigned_handler_user_id;
 
   const handlerOptions = localWorkspace.handler_user_options ?? [];
-
-  const handleCancel = () => {
-    setDraft(initialDraft);
-    setSaveError('');
-    setSaveSuccess('');
-    if (saveSuccessTimerRef.current) {
-      clearTimeout(saveSuccessTimerRef.current);
-      saveSuccessTimerRef.current = null;
-    }
-  };
-
-  const handleSave = async () => {
-    if (clientFieldsLocked) return;
-    if (!localWorkspace.client?.id) return;
-    setSaveError('');
-
-    const phoneTrim = draft.phone.trim();
-    const emailTrim = draft.email.trim();
-    const businessOk = Boolean(draft.business_type.trim());
-    const contactOk = phoneTrim.length > 0 || emailTrim.length > 0;
-    const missingLabels: string[] = [];
-    if (!businessOk) missingLabels.push('סוג עסק');
-    if (!contactOk) missingLabels.push('טלפון או אימייל');
-    if (missingLabels.length > 0) {
-      setSaveError(`נא למלא פרטים : ${missingLabels.join(', ')}`);
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const payload = {
-        client_name: draft.client_name,
-        government_id: draft.government_id,
-        business_type: draft.business_type,
-        status: draft.status,
-        contact_person: draft.contact_person,
-        phone: draft.phone,
-        email: draft.email,
-        address: draft.address_text,
-        assigned_handler_user_id: draft.assigned_handler_user_id,
-        ended_at: draft.ended_at ? draft.ended_at : null,
-      };
-
-      const updated = await apiJson<ClientOperationsCaseResponse>(
-        moduleClientOperationsUpdateClientProfile(localWorkspace.client.id),
-        {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        }
-      );
-
-      setLocalWorkspace(updated);
-      setDraft({
-        client_name: updated.client.client_name ?? '',
-        government_id: updated.client.tax_id ?? '',
-        business_type: updated.profile.business_type ?? '',
-        status: updated.client.status ?? 'active',
-        contact_person: updated.primary_contact?.full_name ?? '',
-        phone: updated.primary_contact?.phone ?? updated.client.phone ?? '',
-        email: updated.primary_contact?.email ?? updated.client.email ?? '',
-        address_text: [updated.client.address, updated.client.city].filter(Boolean).join(' · '),
-        assigned_handler_user_id: updated.profile.assigned_handler_user_id ?? null,
-        ended_at: isoToDateInputValue(updated.client.ended_at),
-      });
-      setSaveError('');
-      setSaveSuccess('נשמר בהצלחה');
-
-      if (onSaveSuccess) {
-        if (saveSuccessTimerRef.current) clearTimeout(saveSuccessTimerRef.current);
-        saveSuccessTimerRef.current = setTimeout(() => {
-          saveSuccessTimerRef.current = null;
-          onSaveSuccess();
-        }, 1600);
-        return;
-      }
-    } catch (e) {
-      const todoConflict =
-        e instanceof ApiError && e.code === 'CLIENT_HANDLER_TODO_CONFLICT'
-          ? typeof e.details?.conflicting_todo_count === 'number'
-            ? `לא ניתן לשנות מטפל בתיק — קיימות ${e.details.conflicting_todo_count} משימות ToDo פעילות שאינן תואמות. יש להשלים או להעביר את המשימות תחילה.`
-            : 'לא ניתן לשנות מטפל בתיק — קיימות משימות ToDo פעילות. יש להשלים או להעביר את המשימות תחילה.'
-          : null;
-      setSaveError(todoConflict ?? (e instanceof Error ? e.message : 'Failed to save'));
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  const saveError = profileSaveState.status === 'error' ? profileSaveState.error ?? '' : '';
+  const profileSaveLabel = clientProfileSaveStateLabelHe(profileSaveState);
 
   const clientProfileCard = (
     <div className="client-profile-card">
@@ -629,7 +619,7 @@ export function ClientWorkspacePanel({
               <ClientFieldDecorIcon kind="building" />
               <input
                 value={draft.client_name}
-                onChange={(e) => setDraft((s) => ({ ...s, client_name: e.target.value }))}
+                onChange={(e) => applyDraftPatch((s) => ({ ...s, client_name: e.target.value }))}
                 readOnly={clientFieldsLocked}
                 className="client-field-box-input"
                 aria-label="שם לקוח"
@@ -659,7 +649,7 @@ export function ClientWorkspacePanel({
               <ClientFieldDecorIcon kind="id-card" />
               <input
                 value={draft.government_id}
-                onChange={(e) => setDraft((s) => ({ ...s, government_id: e.target.value }))}
+                onChange={(e) => applyDraftPatch((s) => ({ ...s, government_id: e.target.value }))}
                 readOnly={clientFieldsLocked}
                 className="client-field-box-input"
                 aria-label="ת.ז / ח.פ"
@@ -689,7 +679,7 @@ export function ClientWorkspacePanel({
               <ClientFieldDecorIcon kind="briefcase" />
               <select
                 value={draft.business_type}
-                onChange={(e) => setDraft((s) => ({ ...s, business_type: e.target.value }))}
+                onChange={(e) => applyDraftPatch((s) => ({ ...s, business_type: e.target.value }))}
                 disabled={clientFieldsLocked}
                 aria-label="סוג עסק"
                 style={{
@@ -727,7 +717,7 @@ export function ClientWorkspacePanel({
               <ClientFieldDecorIcon kind="status" />
               <select
                 value={draft.status}
-                onChange={(e) => setDraft((s) => ({ ...s, status: e.target.value }))}
+                onChange={(e) => applyDraftPatch((s) => ({ ...s, status: e.target.value }))}
                 disabled={clientFieldsLocked}
                 aria-label="סטטוס לקוח"
                 style={{
@@ -762,7 +752,7 @@ export function ClientWorkspacePanel({
               <ClientFieldDecorIcon kind="user" />
               <input
                 value={draft.contact_person}
-                onChange={(e) => setDraft((s) => ({ ...s, contact_person: e.target.value }))}
+                onChange={(e) => applyDraftPatch((s) => ({ ...s, contact_person: e.target.value }))}
                 readOnly={clientFieldsLocked}
                 className="client-field-box-input"
                 aria-label="איש קשר"
@@ -792,7 +782,7 @@ export function ClientWorkspacePanel({
               <ClientFieldDecorIcon kind="phone" />
               <input
                 value={draft.phone}
-                onChange={(e) => setDraft((s) => ({ ...s, phone: e.target.value }))}
+                onChange={(e) => applyDraftPatch((s) => ({ ...s, phone: e.target.value }))}
                 readOnly={clientFieldsLocked}
                 className="client-field-box-input"
                 aria-label="טלפון"
@@ -822,7 +812,7 @@ export function ClientWorkspacePanel({
               <ClientFieldDecorIcon kind="mail" />
               <input
                 value={draft.email}
-                onChange={(e) => setDraft((s) => ({ ...s, email: e.target.value }))}
+                onChange={(e) => applyDraftPatch((s) => ({ ...s, email: e.target.value }))}
                 readOnly={clientFieldsLocked}
                 className="client-field-box-input"
                 aria-label="אימייל"
@@ -852,7 +842,7 @@ export function ClientWorkspacePanel({
               <ClientFieldDecorIcon kind="pin" />
               <input
                 value={draft.address_text}
-                onChange={(e) => setDraft((s) => ({ ...s, address_text: e.target.value }))}
+                onChange={(e) => applyDraftPatch((s) => ({ ...s, address_text: e.target.value }))}
                 readOnly={clientFieldsLocked}
                 className="client-field-box-input"
                 aria-label="כתובת"
@@ -883,7 +873,7 @@ export function ClientWorkspacePanel({
               <select
                 value={draft.assigned_handler_user_id ?? ''}
                 onChange={(e) =>
-                  setDraft((s) => ({
+                  applyDraftPatch((s) => ({
                     ...s,
                     assigned_handler_user_id: e.target.value ? e.target.value : null,
                   }))
@@ -932,7 +922,7 @@ export function ClientWorkspacePanel({
               <input
                 type="date"
                 value={draft.ended_at}
-                onChange={(e) => setDraft((s) => ({ ...s, ended_at: e.target.value }))}
+                onChange={(e) => applyDraftPatch((s) => ({ ...s, ended_at: e.target.value }))}
                 readOnly={clientFieldsLocked}
                 aria-label="תאריך סיום טיפול"
                 style={{
@@ -962,32 +952,33 @@ export function ClientWorkspacePanel({
           pointerEvents: isClientTab ? 'auto' : 'none',
         }}
       >
-        {saveSuccess ? (
-          <span className="nx-workspace-save-success" role="status" aria-live="polite">
-            {saveSuccess}
+        {profileSaveLabel && profileSaveState.status !== 'error' ? (
+          <span
+            className={`nx-workspace-profile-autosave nx-workspace-profile-autosave--${profileSaveState.status}`}
+            role="status"
+            aria-live="polite"
+          >
+            {profileSaveLabel}
           </span>
         ) : null}
-        <button
-          type="button"
-          className="nx-btn nx-btn-primary nx-btn-taxes-compact"
-          onClick={handleSave}
-          disabled={isSaving || clientFieldsLocked}
-        >
-          שמירה
-        </button>
-        <button
-          type="button"
-          className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
-          onClick={handleCancel}
-          disabled={isSaving || clientFieldsLocked}
-        >
-          ביטול
-        </button>
+        {saveError ? (
+          <>
+            <span className="nx-workspace-profile-autosave nx-workspace-profile-autosave--error" role="alert">
+              {saveError}
+            </span>
+            <button
+              type="button"
+              className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
+              onClick={() => {
+                void flushProfileAutosave();
+              }}
+              disabled={clientFieldsLocked}
+            >
+              נסה שוב
+            </button>
+          </>
+        ) : null}
       </div>
-
-      {saveError ? (
-        <p style={{ color: '#b91c1c', fontWeight: 700, margin: '10px 0 0', fontSize: 14 }}>{saveError}</p>
-      ) : null}
     </div>
   );
 
@@ -1004,7 +995,7 @@ export function ClientWorkspacePanel({
         <div className="nx-workspace-header-right" aria-hidden="true" />
 
         {showClose && (
-          <button type="button" className="nx-workspace-close" onClick={onClose} aria-label="סגור" title="סגור">
+          <button type="button" className="nx-workspace-close" onClick={() => void requestWorkspaceClose()} aria-label="סגור" title="סגור">
             ×
           </button>
         )}
@@ -1019,7 +1010,7 @@ export function ClientWorkspacePanel({
             role="tab"
             aria-selected={activeTab === t.key}
             className={`nx-workspace-tab-link ${activeTab === t.key ? 'nx-workspace-tab-link-active' : ''}`}
-            onClick={() => setActiveTab(t.key)}
+            onClick={() => void requestTabChange(t.key)}
           >
             {t.label}
           </button>
@@ -1232,7 +1223,7 @@ export function ClientWorkspaceModal({
   loading,
   error,
   onClose,
-  onSaveSuccess,
+  onClientProfileSaved,
   onTaxSettingsSaved,
 }: {
   open: boolean;
@@ -1240,30 +1231,43 @@ export function ClientWorkspaceModal({
   loading: boolean;
   error: string;
   onClose: () => void;
-  onSaveSuccess?: () => void;
+  onClientProfileSaved?: () => void;
   /** After מיסים save — e.g. refresh registry without closing modal. */
   onTaxSettingsSaved?: () => void;
 }) {
+  const profileFlushRef = useRef<(() => Promise<boolean>) | null>(null);
   if (!open) return null;
 
   const showPanel = Boolean(workspace);
+
+  const requestModalClose = async () => {
+    const ok = profileFlushRef.current ? await profileFlushRef.current() : true;
+    if (ok) onClose();
+  };
 
   // Portal to document.body. The registry mounts this overlay inside `.nx-co-sheet`,
   // which uses backdrop-filter and therefore becomes the containing block for
   // position:fixed — the dimmer would otherwise cover only the spreadsheet and
   // sit under the Client Operations header/sidebar.
   const overlay = (
-    <div className="nx-modal-overlay" role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div
+      className="nx-modal-overlay"
+      role="presentation"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) void requestModalClose();
+      }}
+    >
       <div className="nx-modal nx-workspace-modal" role="dialog" aria-modal="true">
         {showPanel ? (
           <ClientWorkspacePanel
             workspace={workspace!}
             showClose
             onClose={onClose}
-            onSaveSuccess={onSaveSuccess}
+            onClientProfileSaved={onClientProfileSaved}
             onTaxSettingsSaved={onTaxSettingsSaved}
             caseHydrating={loading}
             hydrationError={!loading ? error : ''}
+            profileFlushRef={profileFlushRef}
           />
         ) : (
           <WorkspaceModalShell onClose={onClose} tabState={loading ? 'loading' : 'idle'}>

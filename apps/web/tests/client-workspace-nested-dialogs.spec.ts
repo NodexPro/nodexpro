@@ -35,7 +35,11 @@ test('Nested dialog skin is scoped and imported from the workspace panel', () =>
   assert.match(nestedCss, /color:\s*#0b2248/);
   assert.match(nestedCss, /\.nx-history-section-modal/);
   assert.match(nestedCss, /\.nx-annual-dialog/);
-  assert.match(nestedCss, /inset:\s*12px 12px auto auto/);
+  assert.match(nestedCss, /inset:\s*12px auto auto 12px/);
+  assert.match(nestedCss, /min-height:\s*56px/);
+  assert.match(nestedCss, /#B8D9FF/);
+  assert.match(nestedCss, /\.nx-em-modal-2col/);
+  assert.match(nestedCss, /#0B2248/);
   assert.doesNotMatch(nestedCss, /createPortal|translateY\(max\(-60px/);
   assert.doesNotMatch(nestedCss, /\.nx-workspace-close\s*\{[^}]*inset:\s*(?!14px 16px auto auto)/);
 });
@@ -51,7 +55,7 @@ test('Primary workspace portal, raise and Close stay on the premium shell', () =
   assert.match(globalModal, /\.nx-modal\s*\{[^}]*background:\s*#fff/s);
 });
 
-test('Redundant footer סגירה is replaced with a top-right X; functional actions remain', () => {
+test('Redundant footer סגירה is replaced with a top-left X; functional actions remain', () => {
   assert.match(closeSrc, /className=.*nx-modal-close/);
   assert.match(closeSrc, /aria-label=\{labelHe\}/);
   assert.match(feesSrc, /className="nx-modal-close"/);

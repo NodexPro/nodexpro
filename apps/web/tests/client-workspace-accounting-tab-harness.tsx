@@ -558,6 +558,55 @@ workspace.fees_tab = feesFixture();
 workspace.payroll_tab = payrollFixture();
 workspace.client_history_tab = historyFixture();
 
+(window as Window & { __NX_HARNESS_EXPENSE_MODAL__?: unknown }).__NX_HARNESS_EXPENSE_MODAL__ = {
+  modal_key: 'accounting_settings_expense_management',
+  modal_label: 'עריכת ניהול הוצאות',
+  block_key: 'expense_management',
+  version: 1,
+  can_edit: true,
+  fields: [
+    { key: 'expense_software_name', label: 'שם תוכנת הוצאות', type: 'text', value: 'חשבשבת', required: false, visible: true, editable: true },
+    { key: 'expense_software_username', label: 'קוד משתמש למערכת הוצאות', type: 'text', value: 'demo-user', required: false, visible: true, editable: true },
+    { key: 'expense_software_password', label: 'סיסמה', type: 'secure_text', value: 'secret-pass', required: false, visible: true, editable: true },
+    { key: 'expense_software_url', label: 'כתובת מערכת', type: 'text', value: 'https://expenses.example.com', required: false, visible: true, editable: true },
+    {
+      key: 'expense_delivery_method',
+      label: 'קבלת הוצאות',
+      type: 'enum_single',
+      value: 'email',
+      required: false,
+      visible: true,
+      editable: true,
+      options: [
+        { value: 'email', label: 'מייל' },
+        { value: 'upload', label: 'העלאה' },
+      ],
+    },
+    { key: 'expense_uploaded_by', label: 'הועלה על ידי', type: 'text', value: 'ישראל ישראלי', required: false, visible: true, editable: true },
+    {
+      key: 'expense_documents_order_level',
+      label: 'רמת סדר',
+      type: 'enum_single',
+      value: 'high',
+      required: false,
+      visible: true,
+      editable: true,
+      options: [{ value: 'high', label: 'גבוהה' }],
+    },
+    { key: 'expense_management_notes', label: 'הערות על ניהול הוצאות', type: 'textarea', value: 'הערות לדוגמה לבדיקת ניגודיות', required: false, visible: true, editable: true },
+    { key: 'em_cf_1', label: 'שדה מותאם', type: 'text', value: 'מותאם', required: false, visible: true, editable: true },
+  ],
+  expense_management_modal_meta: {
+    custom_field_capacity: 5,
+    custom_field_count: 1,
+    custom_field_type_default: 'text',
+    custom_field_type_placeholder_he: 'בחר סוג',
+    custom_field_type_options: [{ value: 'text', label: 'טקסט' }],
+    custom_field_types_requiring_options: ['select'],
+    custom_field_options_max_count: 8,
+  },
+};
+
 createRoot(document.getElementById('root')!).render(
   <div className="t1-appShell t1-appShell--client-operations" style={{ display: 'flex', minHeight: '100vh' }}>
     <aside className="t1-sidebar" style={{ width: 64, flex: '0 0 64px' }}>
@@ -746,9 +795,17 @@ function basePayload(): Record<string, unknown> {
   };
 }
 
+let expenseEditorOpened = false;
+let expenseEditorWaitFrames = 0;
+
 function selectThenDump(): void {
   const dumpKey = new URLSearchParams(location.search).get('dump') || 'accounting';
-  const spec = dumpKey === 'fees-editor' ? DUMP_TARGETS.fees : DUMP_TARGETS[dumpKey] ?? DUMP_TARGETS.accounting;
+  const spec =
+    dumpKey === 'fees-editor'
+      ? DUMP_TARGETS.fees
+      : dumpKey === 'profile-editor' || dumpKey === 'expense-editor'
+        ? DUMP_TARGETS.accounting
+        : DUMP_TARGETS[dumpKey] ?? DUMP_TARGETS.accounting;
   if (!clickTab(spec.label) || !document.querySelector(spec.ready)) {
     requestAnimationFrame(selectThenDump);
     return;
@@ -791,7 +848,101 @@ function selectThenDump(): void {
     }
     payload.feesEditor = measureFeesEditor();
   }
+  if (dumpKey === 'profile-editor') {
+    if (!document.querySelector('.nx-accounting-editor-modal')) {
+      const btn = document.querySelector('[aria-label="עריכת פרופיל עסקי"]') as HTMLButtonElement | null;
+      btn?.click();
+      requestAnimationFrame(selectThenDump);
+      return;
+    }
+    payload.profileEditor = measureProfileEditor();
+  }
+  if (dumpKey === 'expense-editor') {
+    if (!document.querySelector('.nx-em-modal-2col') && expenseEditorWaitFrames < 90) {
+      expenseEditorWaitFrames += 1;
+      if (!expenseEditorOpened) {
+        const btn = document.querySelector('[aria-label="עריכת הוצאות"]') as HTMLButtonElement | null;
+        if (btn) {
+          expenseEditorOpened = true;
+          btn.click();
+        }
+      }
+      requestAnimationFrame(selectThenDump);
+      return;
+    }
+    payload.expenseEditor = measureExpenseEditor();
+  }
   writeDump(payload);
+}
+
+function rgbChannels(color: string): number[] {
+  return (color.match(/\d+/g) || []).map(Number);
+}
+
+function measureExpenseEditor(): Record<string, unknown> {
+  const modal = document.querySelector('.nx-accounting-editor-modal') as HTMLElement | null;
+  const col = document.querySelector('.nx-em-modal-2col') as HTMLElement | null;
+  const header = modal?.querySelector('.nx-modal-header') as HTMLElement | null;
+  const close = modal?.querySelector('.nx-modal-close') as HTMLElement | null;
+  const label = modal?.querySelector('.client-field-label') as HTMLElement | null;
+  const input = modal?.querySelector('.nx-em-modal-2col input, .nx-em-modal-2col select, .nx-em-modal-2col textarea') as HTMLElement | null;
+  const workspaceClose = document.querySelector('.nx-workspace-close') as HTMLElement | null;
+  const mr = modal?.getBoundingClientRect();
+  const cr = close?.getBoundingClientRect();
+  const hr = header?.getBoundingClientRect();
+  const wcr = workspaceClose?.getBoundingClientRect();
+  const colCs = col ? getComputedStyle(col) : null;
+  const labelCs = label ? getComputedStyle(label) : null;
+  const inputCs = input ? getComputedStyle(input) : null;
+  const bg = colCs ? `${colCs.backgroundImage} ${colCs.backgroundColor}` : '';
+  return {
+    title: modal?.querySelector('.nx-modal-title')?.textContent?.trim() ?? '',
+    colCount: document.querySelectorAll('.nx-em-modal-col').length,
+    labels: Array.from(modal?.querySelectorAll('.client-field-label') ?? []).map((el) => (el.textContent || '').trim()),
+    footerBtns: Array.from(modal?.querySelectorAll('.nx-modal-footer .nx-btn') ?? []).map((b) => (b.textContent || '').trim()),
+    background: bg,
+    labelColor: labelCs?.color ?? '',
+    inputColor: inputCs?.color ?? '',
+    inputBg: inputCs ? `${inputCs.backgroundImage} ${inputCs.backgroundColor}` : '',
+    font: colCs?.fontFamily ?? '',
+    overflowX: colCs?.overflowX ?? '',
+    scrollWidth: col?.scrollWidth ?? 0,
+    clientWidth: col?.clientWidth ?? 0,
+    header: header && hr ? { w: hr.width, h: hr.height, x: hr.x, y: hr.y } : null,
+    close: close && cr ? { w: cr.width, h: cr.height, x: cr.x, y: cr.y } : null,
+    workspaceClose: workspaceClose && wcr ? { w: wcr.width, h: wcr.height, x: wcr.x, y: wcr.y } : null,
+    modal: modal && mr ? { w: mr.width, h: mr.height, x: mr.x, y: mr.y } : null,
+    whitePanel: /rgb\(\s*255,\s*255,\s*255\s*\)|#fff|#ffffff/i.test(bg) && !/linear-gradient/i.test(bg),
+    labelRgb: rgbChannels(labelCs?.color ?? ''),
+    inputRgb: rgbChannels(inputCs?.color ?? ''),
+  };
+}
+
+function measureProfileEditor(): Record<string, unknown> {
+  const modal = document.querySelector('.nx-accounting-editor-modal') as HTMLElement | null;
+  const header = modal?.querySelector('.nx-modal-header') as HTMLElement | null;
+  const close = modal?.querySelector('.nx-modal-close') as HTMLElement | null;
+  const body = modal?.querySelector('.nx-modal-body') as HTMLElement | null;
+  const workspaceClose = document.querySelector('.nx-workspace-close') as HTMLElement | null;
+  const labels = Array.from(modal?.querySelectorAll('.client-field-label') ?? []).map((el) => (el.textContent || '').trim());
+  const bodyText = body?.textContent || '';
+  const mr = modal?.getBoundingClientRect();
+  const hr = header?.getBoundingClientRect();
+  const cr = close?.getBoundingClientRect();
+  const wcr = workspaceClose?.getBoundingClientRect();
+  return {
+    hiddenOpenDate: !labels.some((l) => l.includes('פתיחת עסק')) && !bodyText.includes('פתיחת עסק'),
+    hiddenCloseDate: !labels.some((l) => l.includes('סגירת עסק')) && !bodyText.includes('סגירת עסק'),
+    hiddenPeakMonths: !labels.some((l) => l.includes('חודשי עומס')) && !bodyText.includes('חודשי עומס'),
+    labels,
+    header: header && hr ? { w: hr.width, h: hr.height, x: hr.x, y: hr.y } : null,
+    close: close && cr ? { w: cr.width, h: cr.height, x: cr.x, y: cr.y } : null,
+    workspaceClose: workspaceClose && wcr ? { w: wcr.width, h: wcr.height, x: wcr.x, y: wcr.y } : null,
+    overflowX: body ? getComputedStyle(body).overflowX : '',
+    bodyScrollWidth: body?.scrollWidth ?? 0,
+    bodyClientWidth: body?.clientWidth ?? 0,
+    modal: modal && mr ? { w: mr.width, h: mr.height, x: mr.x, y: mr.y } : null,
+  };
 }
 
 function measureFeesEditor(): Record<string, unknown> {

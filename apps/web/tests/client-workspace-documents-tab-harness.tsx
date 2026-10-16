@@ -155,6 +155,7 @@ function dumpDocumentsOverlay(): void {
   const name = document.querySelector('.nx-cdocs-folder-name') as HTMLElement | null;
   const count = document.querySelector('.nx-cdocs-folder-count') as HTMLElement | null;
   const date = document.querySelector('.nx-cdocs-folder-updated') as HTMLElement | null;
+  const cards = Array.from(document.querySelectorAll('.nx-cdocs-folder-card')).map((el) => el.textContent || '');
   const pre = document.getElementById('nx-layout-dump');
   if (pre) {
     pre.textContent = JSON.stringify({
@@ -171,7 +172,8 @@ function dumpDocumentsOverlay(): void {
       workspace: { w: wr.width, h: wr.height, x: wr.x, y: wr.y, font: getComputedStyle(workspace).fontFamily },
       folderNameFont: name ? getComputedStyle(name).fontFamily : '',
       folderCountFont: count ? getComputedStyle(count).fontFamily : '',
-      folderDateFont: date ? getComputedStyle(date).fontFamily : '',
+      folderDateVisible: Boolean(date && (date.textContent || '').trim()),
+      folderCardHasDate: cards.some((t) => /\d{1,2}\/\d{1,2}\/\d{2,4}|עודכן/.test(t)),
       addLabel: document.querySelector('.nx-cdocs-folder-panel-head-actions .nx-btn-primary')?.textContent?.trim() ?? '',
       footerClose: Array.from(panel.querySelectorAll('.nx-btn')).some((b) => b.textContent?.trim() === 'סגירה'),
     });

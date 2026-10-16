@@ -148,7 +148,8 @@
 
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-panel-head {
   border-bottom-color: rgba(210, 238, 255, 0.28);
-  padding-right: 44px;
+  padding-left: 52px;
+  padding-right: 8px;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-panel-title {

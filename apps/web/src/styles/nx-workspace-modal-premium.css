@@ -337,6 +337,24 @@
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .nx-workspace-client-footer {
   padding-top: 14px;
   margin-top: 0;
+  min-height: 36px;
+  justify-content: flex-start;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .nx-workspace-profile-autosave {
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #B8D9FF;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .nx-workspace-profile-autosave--saved {
+  color: #86efac;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .nx-workspace-profile-autosave--error {
+  color: #fecaca;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .nx-workspace-client-footer .nx-btn-primary {

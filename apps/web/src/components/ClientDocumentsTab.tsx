@@ -265,7 +265,6 @@ export function ClientDocumentsTab({
                   <span className="nx-cdocs-folder-name">{f.name_he}</span>
                   <span className="nx-cdocs-folder-meta">
                     <span className="nx-cdocs-folder-count">{f.document_count} מסמכים</span>
-                    <span className="nx-cdocs-folder-updated">{f.last_updated_display_he}</span>
                   </span>
                 </button>
                 {(f.actions.can_rename || f.actions.can_archive_or_delete) && canEdit ? (

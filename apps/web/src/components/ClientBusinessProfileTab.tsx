@@ -62,6 +62,12 @@ function asDateInputValue(v: string | null | undefined): string {
   return v ?? '';
 }
 
+const BUSINESS_PROFILE_EDITOR_HIDDEN_KEYS = new Set<BusinessProfileSectionFieldKey>([
+  'peak_months',
+  'business_open_date',
+  'business_close_date',
+]);
+
 function formatDisplayValue(f: ClientBusinessProfileField, value: unknown): string {
   if (value === null || value === undefined || value === '') return '—';
   if (f.type === 'boolean') {
@@ -106,7 +112,7 @@ export function ClientBusinessProfileTab({
   const canEdit = section.permissions.can_edit_business_profile;
 
   const fieldOrder = useMemo(() => {
-    return section.fields.filter((f) => f.visible);
+    return section.fields.filter((f) => f.visible && !BUSINESS_PROFILE_EDITOR_HIDDEN_KEYS.has(f.key));
   }, [section.fields]);
 
   const profileGroups = useMemo(() => {

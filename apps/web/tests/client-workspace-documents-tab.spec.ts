@@ -54,6 +54,10 @@ test('Documents folder overlay uses the nested glass close control and Arial', (
   assert.match(docsCss, /font-family:\s*Arial, sans-serif/i);
   assert.match(nestedCss, /font-family:\s*Arial, sans-serif/);
   assert.match(docsCss, /linear-gradient\(165deg, #04152f 0%, #082652 46%, #124c9a 78%, #04152f 100%\)/);
+  assert.match(docsSrc, /nx-cdocs-folder-count/);
+  assert.doesNotMatch(docsSrc, /nx-cdocs-folder-updated/);
+  const docsTypes = readFileSync(join(dir, '../src/components/client-documents-tab-types.ts'), 'utf8');
+  assert.match(docsTypes, /last_updated_display_he/);
 });
 
 test('Client Details, Taxes, portal and raise are not altered by the Documents restyle', () => {

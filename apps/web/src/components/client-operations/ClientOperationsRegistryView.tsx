@@ -3839,10 +3839,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           loading={modalLoading}
           error={modalError}
           onClose={() => setModalOpen(false)}
-          onSaveSuccess={() => {
-            setModalOpen(false);
-            reloadRegistry();
-          }}
+          onClientProfileSaved={reloadRegistry}
           onTaxSettingsSaved={reloadRegistry}
         />
       )}

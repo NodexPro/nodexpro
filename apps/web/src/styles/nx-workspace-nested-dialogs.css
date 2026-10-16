@@ -39,10 +39,13 @@
 .nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-modal-header,
 .nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal .nx-modal-header {
   position: relative;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
   background: transparent;
   border-bottom: 1px solid rgba(210, 238, 255, 0.28);
-  padding: 14px 48px 12px 16px;
-  min-height: 0;
+  padding: 12px 16px 12px 52px;
+  min-height: 56px;
 }
 
 .nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-modal-title,
@@ -52,6 +55,12 @@
   color: #eef6ff !important;
   font-family: Arial, sans-serif !important;
   font-weight: 700;
+  font-size: 16px;
+  line-height: 1.2;
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
 }
 
 .nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-modal-close,
@@ -59,7 +68,7 @@
 .nx-modal.nx-workspace-modal .nx-annual-dialog > .nx-modal-close,
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-panel-close {
   position: absolute;
-  inset: 12px 12px auto auto;
+  inset: 12px auto auto 12px;
   z-index: 2;
   width: 32px;
   height: 32px;
@@ -112,8 +121,24 @@
   color: #eef6ff !important;
 }
 
-.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) p {
-  color: rgba(238, 246, 255, 0.86);
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) p,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-fees-modal-hint,
+.nx-modal.nx-workspace-modal .nx-annual-dialog p,
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal p {
+  color: #B8D9FF !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) [style*="#b91c1c"],
+.nx-modal.nx-workspace-modal .nx-annual-dialog [style*="#b91c1c"],
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal [style*="#b91c1c"] {
+  color: #b91c1c !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) [style*="#6b7280"],
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) [style*="#64748b"],
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) [style*="#374151"],
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) [style*="#1f2937"] {
+  color: #B8D9FF !important;
 }
 
 .nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) input,
@@ -181,7 +206,7 @@
 
 .nx-modal.nx-workspace-modal .nx-annual-dialog {
   position: relative;
-  padding: 16px 48px 16px 16px;
+  padding: 16px 16px 16px 52px;
   min-width: min(400px, 100%);
   max-width: 480px;
 }
@@ -247,11 +272,47 @@
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-card,
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-name,
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-meta,
-.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-updated,
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-count,
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-doc-label,
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-doc-sub,
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-panel,
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-btn {
   font-family: Arial, sans-serif !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-em-modal-2col {
+  background:
+    linear-gradient(180deg, rgba(8, 38, 82, 0.42), rgba(4, 21, 47, 0.32));
+  border: 1px solid rgba(210, 238, 255, 0.28);
+  overflow: visible;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-em-modal-col-left,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-em-modal-col-right {
+  background: transparent !important;
+  border-color: rgba(210, 238, 255, 0.22) !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-peak-months-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: 8px 10px;
+  flex-wrap: wrap;
+  overflow-x: visible;
+  overflow-y: visible;
+  white-space: normal;
+  max-width: 100%;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-peak-months-row,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-peak-months-row label,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-peak-months-row span {
+  color: #0B2248 !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-panel-head {
+  min-height: 52px;
+  padding-left: 52px;
+  padding-right: 8px;
+  box-sizing: border-box;
 }

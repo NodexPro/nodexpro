@@ -61,16 +61,16 @@ test('full-width equal distribution CSS for remaining modal top tabs', () => {
   assert.match(modalCss, /:focus-visible/);
 });
 
-test('client profile still persists only through the existing save command; footer is not hidden', () => {
+test('client profile persists only through the existing update_profile command with serialized autosave', () => {
   assert.match(panelSrc, /moduleClientOperationsUpdateClientProfile/);
-  assert.match(panelSrc, /const handleSave = async/);
-  assert.match(panelSrc, />\s*שמירה\s*</);
-  assert.match(panelSrc, />\s*ביטול\s*</);
+  assert.match(panelSrc, /createClientProfileAutosaver/);
+  assert.match(panelSrc, /CLIENT_PROFILE_AUTOSAVE_DEBOUNCE_MS/);
+  assert.doesNotMatch(panelSrc, />\s*שמירה\s*</);
+  assert.doesNotMatch(panelSrc, />\s*ביטול\s*</);
   assert.match(panelSrc, /nx-workspace-client-footer/);
-  assert.doesNotMatch(panelSrc, /autosave|autoSave|auto-save/i);
+  assert.match(panelSrc, /נסה שוב/);
   const premium = readFileSync(join(dir, '../src/styles/nx-workspace-modal-premium.css'), 'utf8');
   assert.doesNotMatch(premium, /nx-workspace-client-footer[^{]*\{[^}]*display:\s*none/);
-  assert.doesNotMatch(premium, /שמירה|ביטול/);
 });
 
 test('premium modal skin is scoped and keeps a 3-column client-profile grid on desktop', () => {

@@ -280,6 +280,20 @@ function buildDraftFromModal(out: AccountingBlockModalResponse): Record<string, 
   return d;
 }
 
+function harnessExpenseModalSeed(): AccountingBlockModalResponse | null {
+  const seeded = (globalThis as { __NX_HARNESS_EXPENSE_MODAL__?: AccountingBlockModalResponse })
+    .__NX_HARNESS_EXPENSE_MODAL__;
+  return seeded?.block_key === 'expense_management' ? seeded : null;
+}
+
+function harnessShouldAutopenExpenseEditor(): boolean {
+  try {
+    return new URLSearchParams(globalThis.location?.search ?? '').get('dump') === 'expense-editor';
+  } catch {
+    return false;
+  }
+}
+
 export function ClientAccountingSettingsTab({
   clientId,
   initialAccountingTab,
@@ -291,17 +305,25 @@ export function ClientAccountingSettingsTab({
   /** After accounting command — full case replace (NodexPro truth flow). */
   onAccountingCaseUpdated: (next: ClientOperationsCaseResponse) => void;
 }) {
+  const seededExpenseModal = harnessExpenseModalSeed();
+  const autopenExpenseEditor = Boolean(seededExpenseModal) && harnessShouldAutopenExpenseEditor();
   const [tab, setTab] = useState<AccountingTabResponse | null>(() => initialAccountingTab);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [modal, setModal] = useState<AccountingBlockModalResponse | null>(null);
-  const [draft, setDraft] = useState<Record<string, unknown>>({});
-  const [modalOpen, setModalOpen] = useState(false);
+  const [modal, setModal] = useState<AccountingBlockModalResponse | null>(() =>
+    autopenExpenseEditor ? seededExpenseModal : null,
+  );
+  const [draft, setDraft] = useState<Record<string, unknown>>(() =>
+    autopenExpenseEditor && seededExpenseModal ? buildDraftFromModal(seededExpenseModal) : {},
+  );
+  const [modalOpen, setModalOpen] = useState(autopenExpenseEditor);
   const [modalLoading, setModalLoading] = useState(false);
-  const [modalTitle, setModalTitle] = useState('עריכה');
+  const [modalTitle, setModalTitle] = useState(autopenExpenseEditor ? seededExpenseModal?.modal_label ?? 'עריכה' : 'עריכה');
   const [modalSaving, setModalSaving] = useState(false);
   const [modalError, setModalError] = useState('');
-  const [fieldVisibility, setFieldVisibility] = useState<Record<string, boolean> | null>(null);
+  const [fieldVisibility, setFieldVisibility] = useState<Record<string, boolean> | null>(() =>
+    autopenExpenseEditor && seededExpenseModal ? visibilityFromModal(seededExpenseModal) : null,
+  );
   const [revealedSecureFields, setRevealedSecureFields] = useState<Record<string, boolean>>({});
 
   const [vehicleItemOpen, setVehicleItemOpen] = useState(false);
@@ -324,7 +346,9 @@ export function ClientAccountingSettingsTab({
   const [vehiclesYesNoBusy, setVehiclesYesNoBusy] = useState(false);
 
   /** Modal payloads loaded on demand (עריכה); cache avoids refetch for same block version. */
-  const modalCacheRef = useRef<Partial<Record<BlockKey, AccountingBlockModalResponse>>>({});
+  const modalCacheRef = useRef<Partial<Record<BlockKey, AccountingBlockModalResponse>>>(
+    seededExpenseModal ? { expense_management: seededExpenseModal } : {},
+  );
   const modalInflightRef = useRef<Partial<Record<BlockKey, Promise<AccountingBlockModalResponse>>>>({});
   /** מסך הוספת רכב — טופס מלא כשגרסת כרטיס רכבים תואמת (ללא המתנה ל-HTTP בפתיחה). */
   const vehicleFleetAddModalCacheRef = useRef<{ version: number; payload: VehicleFleetItemModalResponse } | null>(null);
