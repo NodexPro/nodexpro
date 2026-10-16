@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import '../styles/nx-modal.css';
+import '../styles/nx-workspace-taxes-tab.css';
 import { ApiError, apiJson } from '../api/client';
 import { isCardExpiryInPast } from '../utils/card-expiry';
 import { inferCardBrand as inferCardBrandClient } from '../utils/card-brand';
@@ -349,25 +350,9 @@ function TaxWorkspaceSectionCard({
   onSecureCopy: (paymentType: PaymentType, secretKind: SecretKind) => void;
 }) {
   return (
-    <section
-      style={{
-        border: '1px solid #e5e7eb',
-        borderRadius: 8,
-        padding: 14,
-        background: '#fafafa',
-        minWidth: 0,
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 10,
-          marginBottom: 10,
-        }}
-      >
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{sec.title_he}</h3>
+    <section className="nx-ws-taxes-card" data-section-key={sec.section_key}>
+      <div className="nx-ws-taxes-card__head">
+        <h3 className="nx-ws-taxes-card__title">{sec.title_he}</h3>
         {sec.edit.enabled ? (
           <button
             type="button"
@@ -381,41 +366,26 @@ function TaxWorkspaceSectionCard({
           </button>
         ) : null}
       </div>
-      <dl style={{ margin: 0 }}>
+      <dl className="nx-ws-taxes-card__rows">
         {sec.display_rows.map((row) => (
           <div
             key={row.row_key}
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.4fr)',
-              gap: 8,
-              padding: '6px 0',
-              borderBottom: '1px solid #f1f5f9',
-            }}
+            className={`nx-ws-taxes-row${row.tone ? ` nx-ws-taxes-row--${row.tone}` : ''}`}
           >
-            <dt style={{ margin: 0, fontSize: 13, color: '#64748b' }}>{row.label_he}</dt>
-            <dd
-              style={{
-                margin: 0,
-                fontSize: 14,
-                fontWeight: 600,
-                color: row.tone === 'not_relevant' || row.tone === 'muted' ? '#94a3b8' : '#0f172a',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-word',
-              }}
-            >
-              {row.value_he}
-            </dd>
+            <dt className="nx-ws-taxes-row__label">{row.label_he}</dt>
+            <dd className="nx-ws-taxes-row__value">{row.value_he}</dd>
           </div>
         ))}
       </dl>
       {sec.payment_panel?.visible ? (
-        <TaxTabPaymentPanelBlock
-          panel={sec.payment_panel}
-          revealBusy={revealBusy}
-          onPlainCopy={onPlainCopy}
-          onSecureCopy={onSecureCopy}
-        />
+        <div className="nx-ws-taxes-payment">
+          <TaxTabPaymentPanelBlock
+            panel={sec.payment_panel}
+            revealBusy={revealBusy}
+            onPlainCopy={onPlainCopy}
+            onSecureCopy={onSecureCopy}
+          />
+        </div>
       ) : null}
     </section>
   );
@@ -1060,32 +1030,18 @@ export function ClientTaxesTab({
   };
 
   return (
-    <div className="client-profile-card">
+    <div className="client-profile-card nx-ws-taxes">
       {!taxTab ? (
-        <p style={{ padding: 16, color: '#64748b', fontWeight: 600 }}>טוען תצוגת מיסים מהשרת…</p>
+        <p className="nx-ws-taxes-loading">טוען תצוגת מיסים מהשרת…</p>
       ) : (
-        <div className="nx-taxes-workspace" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div
-            style={{
-              paddingBottom: 12,
-              borderBottom: '1px solid #e2e8f0',
-            }}
-          >
-            <h2 style={{ margin: '0 0 10px', fontSize: 18, fontWeight: 700 }}>{taxTab.header.title_he}</h2>
-            <dl style={{ margin: 0 }}>
+        <div className="nx-taxes-workspace nx-ws-taxes-body">
+          <div className="nx-ws-taxes-summary">
+            <h2 className="nx-ws-taxes-summary__title">{taxTab.header.title_he}</h2>
+            <dl className="nx-ws-taxes-summary__grid">
               {taxTab.header.summary_rows.map((row) => (
-                <div
-                  key={row.row_key}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.4fr)',
-                    gap: 8,
-                    padding: '6px 0',
-                    borderBottom: '1px solid #f1f5f9',
-                  }}
-                >
-                  <dt style={{ margin: 0, fontSize: 13, color: '#64748b' }}>{row.label_he}</dt>
-                  <dd style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{row.value_he}</dd>
+                <div key={row.row_key} className="nx-ws-taxes-summary__cell">
+                  <dt className="nx-ws-taxes-summary__label">{row.label_he}</dt>
+                  <dd className="nx-ws-taxes-summary__value">{row.value_he}</dd>
                 </div>
               ))}
             </dl>

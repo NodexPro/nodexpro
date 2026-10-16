@@ -1,0 +1,274 @@
+/* מיסים tab interior inside the Client Workspace modal only.
+   Does not restyle פרטי לקוח, nested tax editors, or other modules. */
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-taxes) {
+  padding: 14px 18px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(125, 236, 247, 0.5) rgba(8, 38, 82, 0.28);
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-taxes)::-webkit-scrollbar {
+  width: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-taxes)::-webkit-scrollbar-track {
+  background: rgba(8, 38, 82, 0.22);
+  border-radius: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-taxes)::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(125, 236, 247, 0.7), rgba(38, 140, 255, 0.55));
+  border-radius: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes {
+  direction: rtl;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-loading {
+  margin: 0;
+  padding: 18px 4px;
+  color: #e8f4ff;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-summary__title {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #eef6ff;
+  line-height: 1.2;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-summary__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 22px;
+  row-gap: 10px;
+  margin: 0;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-summary__cell {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-summary__label {
+  margin: 0;
+  color: #eef6ff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-summary__value {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 8px 12px;
+  box-sizing: border-box;
+  border-radius: 11px;
+  color: #0b2248;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(232, 244, 255, 0.88));
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.28),
+    0 0 12px rgba(44, 196, 255, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 rgba(75, 139, 216, 0.12);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes .nx-taxes-section-pair-row {
+  gap: 12px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 14px 10px;
+  border-radius: 14px;
+  box-sizing: border-box;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.2), transparent 48%),
+    linear-gradient(180deg, rgba(248, 252, 255, 0.2) 0%, rgba(186, 216, 246, 0.14) 100%);
+  border: 1px solid rgba(210, 238, 255, 0.5);
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.14),
+    0 8px 18px rgba(8, 38, 82, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-card__title {
+  margin: 0;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #eef6ff;
+  line-height: 1.25;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes .nx-taxes-section-edit-btn {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  margin: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(232, 244, 255, 0.88));
+  color: #165dff;
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.28),
+    0 0 10px rgba(44, 196, 255, 0.28);
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes .nx-taxes-section-edit-btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffffff, rgba(232, 244, 255, 0.96));
+  border-color: #ffffff;
+  color: #0b3a8a;
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.4),
+    0 0 14px rgba(44, 196, 255, 0.42);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes .nx-taxes-section-edit-btn:focus-visible {
+  outline: 2px solid rgba(70, 213, 255, 0.9);
+  outline-offset: 2px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes .nx-taxes-section-edit-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-card__rows {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.15fr);
+  gap: 8px;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(232, 244, 255, 0.18);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-row:last-child {
+  border-bottom: none;
+  padding-bottom: 2px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-row__label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(238, 246, 255, 0.78);
+  line-height: 1.3;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-row__value {
+  margin: 0;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #0b2248;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-row--muted .nx-ws-taxes-row__value,
+.nx-modal.nx-workspace-modal .nx-ws-taxes-row--not_relevant .nx-ws-taxes-row__value {
+  color: #5b7190;
+  font-weight: 500;
+  opacity: 0.92;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-row--warning .nx-ws-taxes-row__value {
+  color: #9a3412;
+  background: linear-gradient(180deg, rgba(255, 247, 237, 0.96), rgba(254, 215, 170, 0.55));
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-payment {
+  margin-top: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-payment .payment-summary-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.86));
+  border: 1px solid rgba(210, 238, 255, 0.7);
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 1);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-payment .payment-summary-label {
+  color: #4a74a8;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-payment .payment-copy-btn {
+  color: #165dff;
+  border-color: rgba(70, 213, 255, 0.35);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-payment .payment-copy-btn:hover:not(:disabled) {
+  color: #0b3a8a;
+  border-color: rgba(70, 213, 255, 0.55);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-taxes-payment > p {
+  color: rgba(238, 246, 255, 0.72) !important;
+}
+
+@container nx-workspace-modal (max-width: 720px) {
+  .nx-modal.nx-workspace-modal .nx-ws-taxes-summary__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .nx-modal.nx-workspace-modal .nx-ws-taxes-summary__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
