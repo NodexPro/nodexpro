@@ -8,6 +8,7 @@ import {
 import type { ClientDocumentsTabModel, ClientDocumentsTabFolderCardDto } from './client-documents-tab-types';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
 import '../styles/nx-client-documents-tab.css';
+import '../styles/nx-workspace-documents-tab.css';
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -217,7 +218,7 @@ export function ClientDocumentsTab({
   const folderPanelLoading = !openFolderView && Boolean(pendingOpenFolder);
 
   return (
-    <div className="nx-cdocs-root">
+    <div className="nx-cdocs-root nx-ws-documents">
       <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={onFileChange} />
 
       {err ? (

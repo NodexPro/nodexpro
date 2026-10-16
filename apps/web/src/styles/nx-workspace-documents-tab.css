@@ -1,0 +1,182 @@
+/* מסמכים tab interior inside the Client Workspace modal only.
+   Reuses the מיסים / הגדרות הנה״ח glass tokens. Does not restyle פרטי לקוח, מיסים, or nested folder-name editors. */
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-documents) {
+  padding: 14px 18px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(125, 236, 247, 0.5) rgba(8, 38, 82, 0.28);
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-documents)::-webkit-scrollbar {
+  width: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-documents)::-webkit-scrollbar-track {
+  background: rgba(8, 38, 82, 0.22);
+  border-radius: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-documents)::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(125, 236, 247, 0.7), rgba(38, 140, 255, 0.55));
+  border-radius: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .nx-cdocs-root.nx-ws-documents {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  max-width: none;
+  margin: 0;
+  min-height: 0;
+  direction: rtl;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-surface {
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.2), transparent 48%),
+    linear-gradient(180deg, rgba(248, 252, 255, 0.2) 0%, rgba(186, 216, 246, 0.14) 100%);
+  border: 1px solid rgba(210, 238, 255, 0.5);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.14),
+    0 8px 18px rgba(8, 38, 82, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  padding: 14px 16px 16px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-head {
+  margin-bottom: 14px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-title {
+  color: #eef6ff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-empty {
+  color: rgba(238, 246, 255, 0.78);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-card {
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.16), transparent 48%),
+    linear-gradient(180deg, rgba(248, 252, 255, 0.16) 0%, rgba(186, 216, 246, 0.1) 100%);
+  border: 1px solid rgba(210, 238, 255, 0.5);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-card:hover {
+  border-color: rgba(70, 213, 255, 0.55);
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.28),
+    0 0 14px rgba(44, 196, 255, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-icon-wrap {
+  color: #7decf7;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-name {
+  color: #eef6ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-meta,
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-updated {
+  color: rgba(238, 246, 255, 0.72);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-count {
+  color: rgba(238, 246, 255, 0.86);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-actions {
+  background: rgba(8, 38, 82, 0.22);
+  border-top-color: rgba(210, 238, 255, 0.28);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-linkish {
+  color: #b9ecff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-linkish--danger {
+  color: #fecaca;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-icon-action {
+  color: #7decf7;
+  border-radius: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-icon-action:hover:not(:disabled) {
+  background: rgba(70, 213, 255, 0.16);
+  color: #e8f4ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-overlay {
+  background: rgba(4, 12, 28, 0.42);
+  border-radius: 14px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-panel {
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.18), transparent 48%),
+    linear-gradient(180deg, rgba(8, 38, 82, 0.92) 0%, rgba(4, 21, 47, 0.94) 100%);
+  border: 1px solid rgba(210, 238, 255, 0.5);
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.16),
+    0 18px 40px rgba(2, 8, 24, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-panel-head {
+  border-bottom-color: rgba(210, 238, 255, 0.28);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-panel-title {
+  color: #eef6ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-panel-loading {
+  color: rgba(238, 246, 255, 0.78);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-doc-row {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-doc-icon {
+  color: #165dff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-doc-label {
+  color: #0b2248;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-doc-sub {
+  color: #4a74a8;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-doc-actions .nx-cdocs-icon-action {
+  color: #165dff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-doc-actions .nx-cdocs-icon-action[aria-label='מחיקת מסמך'] {
+  color: #b91c1c;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-err {
+  background: rgba(254, 242, 242, 0.92);
+  border-color: rgba(252, 165, 165, 0.9);
+}

@@ -106,6 +106,9 @@ test('premium modal skin is scoped and keeps a 3-column client-profile grid on d
   assert.match(premium, /height:\s*38px/);
   assert.doesNotMatch(premium, /margin-bottom:\s*-/);
   assert.doesNotMatch(premium, /^\s*top:\s*-?\d+px/m);
+  assert.match(premium, /padding:\s*14px 16px 12px\s*!important/);
+  assert.match(premium, /inset:\s*14px 16px auto auto/);
+  assert.match(premium, /\.nx-workspace-logo \{[\s\S]*?width:\s*44px/);
 });
 
 test('client details field icons are decorative only and do not add a Notes field', () => {

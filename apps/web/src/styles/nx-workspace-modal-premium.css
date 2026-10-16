@@ -50,6 +50,8 @@
   position: relative;
   isolation: isolate;
   overflow: hidden;
+  padding: 14px 16px 12px !important;
+  min-height: 0;
   border-radius: 22px 22px 0 0 !important;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 28%),
@@ -81,10 +83,31 @@
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-header-left,
-.nx-modal.nx-workspace-modal .nx-workspace-header-right,
-.nx-modal.nx-workspace-modal .nx-workspace-close {
+.nx-modal.nx-workspace-modal .nx-workspace-header-right {
   position: relative;
   z-index: 1;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-logo {
+  width: 44px;
+  height: 44px;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-logo-text {
+  font-size: 16px !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-close {
+  position: absolute;
+  z-index: 2;
+  inset: 14px 16px auto auto;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 8px;
+  font-size: 20px;
+  line-height: 1;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-header-divider {

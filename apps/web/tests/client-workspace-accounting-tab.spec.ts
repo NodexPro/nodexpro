@@ -59,6 +59,8 @@ test('Accounting Settings premium skin is scoped to the workspace modal Accounti
   assert.match(accountingCss, /\.nx-modal\.nx-workspace-modal \.nx-ws-accounting/);
   assert.match(accountingCss, /nx-ws-accounting-card/);
   assert.match(accountingCss, /nx-ws-accounting-profile-groups/);
+  assert.match(accountingCss, /grid-template-columns:\s*subgrid/);
+  assert.match(accountingCss, /--nx-ws-acc-label-value/);
   assert.match(accountingCss, /repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(accountingCss, /overflow-y:\s*auto/);
   assert.match(accountingCss, /nx-taxes-section-edit-btn/);
