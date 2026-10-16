@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { ApiError, apiJson } from '../api/client';
 import { docflowClientTabAggregate, moduleClientOperationsUpdateClientProfile } from '../api/endpoints';
 import logoSrc from '../templates/template-1/assets/nodexpro-logo.png';
@@ -1250,7 +1251,11 @@ export function ClientWorkspaceModal({
 
   const showPanel = Boolean(workspace);
 
-  return (
+  // Portal to document.body. The registry mounts this overlay inside `.nx-co-sheet`,
+  // which uses backdrop-filter and therefore becomes the containing block for
+  // position:fixed — the dimmer would otherwise cover only the spreadsheet and
+  // sit under the Client Operations header/sidebar.
+  const overlay = (
     <div className="nx-modal-overlay" role="presentation" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="nx-modal nx-workspace-modal" role="dialog" aria-modal="true">
         {showPanel ? (
@@ -1285,6 +1290,8 @@ export function ClientWorkspaceModal({
       </div>
     </div>
   );
+
+  return createPortal(overlay, document.body);
 }
 
 export function ClientWorkspacePage({

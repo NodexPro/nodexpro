@@ -75,6 +75,8 @@ test('client profile still persists only through the existing save command; foot
 
 test('premium modal skin is scoped and keeps a 3-column client-profile grid on desktop', () => {
   assert.match(panelSrc, /nx-workspace-modal-premium\.css/);
+  assert.match(panelSrc, /createPortal/);
+  assert.match(panelSrc, /createPortal\(\s*overlay,\s*document\.body\s*\)/);
   const premium = readFileSync(join(dir, '../src/styles/nx-workspace-modal-premium.css'), 'utf8');
   assert.match(premium, /\.nx-modal-overlay:has\(>\s*\.nx-modal\.nx-workspace-modal\)/);
   assert.match(premium, /\.nx-modal\.nx-workspace-modal/);

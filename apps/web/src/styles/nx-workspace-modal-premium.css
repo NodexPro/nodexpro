@@ -6,7 +6,9 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  overflow: hidden;
+  /* Visible so the 60px raise is not clipped by this overlay. The dialog is
+     portaled to document.body, so inset:0 is the real viewport. */
+  overflow: visible;
   box-sizing: border-box;
   inset: 0;
   height: unset;
@@ -155,6 +157,10 @@
 
 .nx-modal.nx-workspace-modal .nx-workspace-content:has(> .client-profile-card > .client-profile-grid) {
   padding: 14px 18px 16px;
+  /* overlay does not reserve a gutter when content fits; auto remains for engines
+     that do not support overlay. Scrolling stays available when content overflows. */
+  overflow-y: auto;
+  overflow-y: overlay;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card {
