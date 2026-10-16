@@ -38,6 +38,7 @@ import {
   CLIENT_OPERATIONS_DEFAULT_TEXT_COLOR,
   clientOperationsTextColorPaletteRows,
 } from '../../lib/client-operations-text-color-palette.pure';
+import { resolveRegistryCellTextColor } from '../../lib/client-operations-registry-text-color.pure';
 import {
   CLIENT_OPERATIONS_FONT_SIZES,
   CLIENT_OPERATIONS_DEFAULT_FONT_SIZE,
@@ -3622,7 +3623,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       fontWeight: presentation?.bold ? 700 : undefined,
                       fontStyle: presentation?.italic ? 'italic' : undefined,
                       textDecoration: presentation?.underline ? 'underline' : undefined,
-                      color: presentation?.color,
+                      color: resolveRegistryCellTextColor(presentation?.color),
                       // Apply explicit font-size only when user has chosen one for this cell.
                       fontSize: presentation?.fontSize != null ? `${presentation.fontSize}px` : undefined,
                       // Manual status owns the cell fill while set.
@@ -3757,7 +3758,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       fontWeight: presentation?.bold ? 700 : undefined,
                       fontStyle: presentation?.italic ? 'italic' : undefined,
                       textDecoration: presentation?.underline ? 'underline' : undefined,
-                      color: presentation?.color,
+                      color: resolveRegistryCellTextColor(presentation?.color),
                       fontSize: presentation?.fontSize != null ? `${presentation.fontSize}px` : undefined,
                       background: presentation?.fill,
                     }}

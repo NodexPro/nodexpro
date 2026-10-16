@@ -60,6 +60,13 @@ test('Documents folder overlay uses the nested glass close control and Arial', (
   assert.match(docsTypes, /last_updated_display_he/);
 });
 
+test('Documents folder titles and nested panel force Arial Bold instead of ExtraBold serif fallback', () => {
+  assert.match(docsCss, /\.nx-cdocs-folder-name[\s\S]*font-family: Arial, sans-serif !important/);
+  assert.match(docsCss, /\.nx-cdocs-folder-panel,[\s\S]*font-family: Arial, sans-serif !important/);
+  assert.match(baseCss, /\.nx-cdocs-folder-name \{[\s\S]*font-family: Arial, sans-serif;[\s\S]*font-weight: 700/);
+  assert.match(baseCss, /\.nx-cdocs-folder-panel-title \{[\s\S]*font-family: Arial, sans-serif;[\s\S]*font-weight: 700/);
+});
+
 test('Client Details, Taxes, portal and raise are not altered by the Documents restyle', () => {
   assert.match(panelSrc, /createPortal\(\s*overlay,\s*document\.body\s*\)/);
   assert.match(

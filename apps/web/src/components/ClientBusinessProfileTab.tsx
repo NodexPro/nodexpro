@@ -68,6 +68,13 @@ const BUSINESS_PROFILE_EDITOR_HIDDEN_KEYS = new Set<BusinessProfileSectionFieldK
   'business_close_date',
 ]);
 
+function formatDateHe(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('he-IL');
+}
+
 function formatDisplayValue(f: ClientBusinessProfileField, value: unknown): string {
   if (value === null || value === undefined || value === '') return '—';
   if (f.type === 'boolean') {
@@ -85,7 +92,7 @@ function formatDisplayValue(f: ClientBusinessProfileField, value: unknown): stri
       .map((n) => (f.options ?? []).find((o) => Number(o.value) === n)?.label ?? String(n))
       .join(', ');
   }
-  if (f.type === 'date') return String(value);
+  if (f.type === 'date') return formatDateHe(String(value));
   return String(value);
 }
 

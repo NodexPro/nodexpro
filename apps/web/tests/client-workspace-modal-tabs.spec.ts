@@ -61,6 +61,15 @@ test('full-width equal distribution CSS for remaining modal top tabs', () => {
   assert.match(modalCss, /:focus-visible/);
 });
 
+test('workspace tab labels are slightly larger Arial without wrapping', () => {
+  assert.match(modalCss, /\.nx-workspace-panel-root \.nx-workspace-tab-link \{[\s\S]*font-family: Arial, sans-serif !important;[\s\S]*font-size: 13px !important;/);
+  assert.match(modalCss, /white-space: nowrap/);
+  assert.match(modalCss, /overflow: hidden/);
+  assert.match(modalCss, /text-overflow: ellipsis/);
+  assert.match(modalCss, /font-family: Arial, sans-serif;/);
+  assert.doesNotMatch(modalCss, /font-family: Inter, system-ui, sans-serif;/);
+});
+
 test('client profile persists only through the existing update_profile command with serialized autosave', () => {
   assert.match(panelSrc, /moduleClientOperationsUpdateClientProfile/);
   assert.match(panelSrc, /createClientProfileAutosaver/);

@@ -32,6 +32,7 @@ import {
 } from './client-workspace-profile-autosave.pure';
 import '../styles/nx-workspace-modal-premium.css';
 import '../styles/nx-workspace-nested-dialogs.css';
+import '../styles/nx-premium-check.css';
 
 type ClientFieldDecorKind =
   | 'building'

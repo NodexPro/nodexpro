@@ -1,0 +1,288 @@
+/**
+ * Dashboard inner surface — navy glass matching Client Workspace מיסים.
+ * Does not restyle the global sidebar.
+ */
+
+.nx-dashboard {
+  font-family: Arial, sans-serif;
+  color: #eef6ff;
+  background: transparent;
+  min-height: 100%;
+  padding: 8px 4px 24px;
+  box-sizing: border-box;
+}
+
+.nx-dashboard,
+.nx-dashboard * {
+  font-family: Arial, sans-serif;
+}
+
+.nx-dashboard__inner {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.nx-dashboard__title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #eef6ff;
+  margin: 0 0 6px;
+  letter-spacing: 0.01em;
+}
+
+.nx-dashboard__subtitle {
+  font-size: 13px;
+  color: rgba(238, 246, 255, 0.72);
+  margin: 0 0 18px;
+}
+
+.nx-dashboard__status {
+  padding: 24px 8px;
+  color: #eef6ff;
+  font-weight: 600;
+}
+
+.nx-dashboard__status--error {
+  color: #fecaca;
+}
+
+.nx-dashboard__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.nx-dashboard-card {
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.2), transparent 48%),
+    linear-gradient(180deg, rgba(248, 252, 255, 0.2) 0%, rgba(186, 216, 246, 0.14) 100%);
+  border: 1px solid rgba(210, 238, 255, 0.5);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.14),
+    0 8px 18px rgba(8, 38, 82, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  padding: 16px 18px;
+  min-width: 0;
+}
+
+.nx-dashboard-card__label {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(238, 246, 255, 0.72);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+
+.nx-dashboard-card__value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #eef6ff;
+  line-height: 1.15;
+  margin-bottom: 6px;
+}
+
+.nx-dashboard-card__secondary {
+  font-size: 12px;
+  color: rgba(238, 246, 255, 0.72);
+  line-height: 1.35;
+}
+
+.nx-dashboard__row {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.nx-dashboard__row--chart {
+  grid-template-columns: 2fr 1fr;
+}
+
+.nx-dashboard__row--split {
+  grid-template-columns: 1fr 1fr;
+}
+
+.nx-dashboard-card__title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #eef6ff;
+  margin: 0 0 6px;
+}
+
+.nx-dashboard-card__hint {
+  font-size: 13px;
+  color: rgba(238, 246, 255, 0.72);
+  margin-bottom: 10px;
+}
+
+.nx-dashboard-empty__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #eef6ff;
+  margin-bottom: 6px;
+}
+
+.nx-dashboard-empty__subtitle {
+  font-size: 13px;
+  color: rgba(238, 246, 255, 0.72);
+  line-height: 1.4;
+}
+
+.nx-dashboard-field__label {
+  font-size: 12px;
+  color: rgba(238, 246, 255, 0.72);
+}
+
+.nx-dashboard-field__value {
+  font-size: 14px;
+  color: #eef6ff;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.nx-dashboard-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nx-dashboard-assign-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(210, 238, 255, 0.18);
+  font-size: 14px;
+  color: #eef6ff;
+}
+
+.nx-dashboard-assign-row:last-child {
+  border-bottom: none;
+}
+
+.nx-dashboard-deadlines__lead {
+  font-size: 14px;
+  color: #eef6ff;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.nx-dashboard-deadlines__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.nx-dashboard-deadlines__row span:first-child {
+  font-size: 13px;
+  color: rgba(238, 246, 255, 0.72);
+}
+
+.nx-dashboard-deadlines__row span:last-child {
+  font-size: 13px;
+  font-weight: 600;
+  color: #eef6ff;
+}
+
+.nx-dashboard-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.nx-dashboard-btn {
+  height: auto;
+  min-height: 36px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  font-family: Arial, sans-serif;
+}
+
+.nx-dashboard-btn--primary {
+  border: 1px solid rgba(70, 213, 255, 0.42);
+  color: #ffffff;
+  background: linear-gradient(115deg, #277cff 0%, #165dff 52%, #268cff 100%);
+  box-shadow: 0 6px 14px rgba(18, 76, 154, 0.28);
+}
+
+.nx-dashboard-btn--secondary {
+  border: 1px solid rgba(210, 238, 255, 0.45);
+  color: #eef6ff;
+  background: rgba(8, 38, 82, 0.35);
+}
+
+.nx-dashboard-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.nx-dashboard-chart-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  gap: 12px;
+}
+
+.nx-dashboard-legend {
+  margin-top: 10px;
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.nx-dashboard-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #eef6ff;
+  font-weight: 600;
+}
+
+.nx-dashboard-legend__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.nx-dashboard-donut {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.nx-dashboard-donut__total {
+  text-align: center;
+  font-size: 14px;
+  color: #eef6ff;
+  font-weight: 600;
+}
+
+.t1-pageMain--dashboard {
+  padding-top: 18px;
+}
+
+@media (max-width: 1100px) {
+  .nx-dashboard__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nx-dashboard__row--chart,
+  .nx-dashboard__row--split {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .nx-dashboard__metrics {
+    grid-template-columns: 1fr;
+  }
+}

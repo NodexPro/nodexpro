@@ -144,8 +144,9 @@
 }
 
 .nx-cdocs-folder-name {
+  font-family: Arial, sans-serif;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
   color: #0f172a;
   line-height: 1.25;
   word-break: break-word;
@@ -266,8 +267,9 @@
 
 .nx-cdocs-folder-panel-title {
   margin: 0;
+  font-family: Arial, sans-serif;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 700;
   color: #0f172a;
 }
 

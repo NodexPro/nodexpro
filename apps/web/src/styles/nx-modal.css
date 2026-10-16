@@ -2177,9 +2177,10 @@
   color: #ffffff !important;
 }
 
-/* Premium Dark shell (client workspace only) */
+/* Premium Dark shell (client workspace only).
+   Inter / ui-sans lack Hebrew glyphs → UA serif fallback. Force Arial. */
 .nx-modal.nx-workspace-modal {
-  font-family: Inter, system-ui, sans-serif;
+  font-family: Arial, sans-serif;
   background: linear-gradient(135deg, #08162f 0%, #0b1a3a 35%, #3b2b74 100%);
   color: #ffffff;
   box-shadow:
@@ -2189,7 +2190,7 @@
 }
 
 .nx-modal.nx-workspace-modal * {
-  font-family: inherit;
+  font-family: Arial, sans-serif;
 }
 
 .nx-workspace-header {
@@ -2686,7 +2687,8 @@
   background: transparent !important;
   box-shadow: none !important;
   color: rgba(255, 255, 255, 0.68) !important;
-  font-size: 12px !important;
+  font-family: Arial, sans-serif !important;
+  font-size: 13px !important;
   font-weight: 600 !important;
   line-height: 1.2 !important;
   letter-spacing: 0 !important;

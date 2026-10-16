@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { AppError, badRequest, forbidden } from '../../shared/errors.js';
 import type { RequestContext } from '../../shared/context.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
+import { projectBusinessProfileCanonicalDates } from './client-business-profile.pure.js';
 
 export type BusinessOperationMode = 'services' | 'trade' | 'online' | 'freelancer' | 'manufacturing' | 'mixed';
 export type PrimaryCustomerType = 'private' | 'business' | 'mixed';
@@ -183,28 +184,40 @@ export async function getClientBusinessProfileSection(
   const canView = perms.includes('business_profile.view') || perms.includes('client_operations.view');
   const canEdit = perms.includes('business_profile.edit') || perms.includes('client_operations.edit');
 
-  const { data: row, error } = await supabaseAdmin
-    .from('client_accounting_settings')
-    .select(
-      'business_domain, business_activity_description, business_address, private_address, business_operation_mode, primary_customer_type, is_seasonal_business, peak_months, business_open_date, business_close_date, has_business_vehicles, version'
-    )
-    .eq('organization_id', orgId)
-    .eq('client_id', clientId)
-    .maybeSingle();
+  const [{ data: row, error }, { data: clientRow, error: clientErr }] = await Promise.all([
+    supabaseAdmin
+      .from('client_accounting_settings')
+      .select(
+        'business_domain, business_activity_description, business_address, private_address, business_operation_mode, primary_customer_type, is_seasonal_business, peak_months, business_open_date, business_close_date, has_business_vehicles, version'
+      )
+      .eq('organization_id', orgId)
+      .eq('client_id', clientId)
+      .maybeSingle(),
+    supabaseAdmin
+      .from('clients')
+      .select('created_at, ended_at')
+      .eq('organization_id', orgId)
+      .eq('id', clientId)
+      .maybeSingle(),
+  ]);
 
   if (error) throw new AppError(500, error.message ?? 'client_accounting_settings read failed', 'SUPABASE_ERROR');
+  if (clientErr) throw new AppError(500, clientErr.message ?? 'clients read failed', 'SUPABASE_ERROR');
 
   const r = (row ?? {}) as Record<string, unknown>;
-  const isSeasonal = Boolean((r.is_seasonal_business as boolean | null) ?? false);
   const peakMonthsRaw = (r.peak_months as number[] | null) ?? [];
   const peakMonths = uniqueSortedMonths(Array.isArray(peakMonthsRaw) ? peakMonthsRaw : []);
+  const canonicalDates = projectBusinessProfileCanonicalDates({
+    clientCreatedAt: (clientRow as { created_at?: string | null } | null)?.created_at ?? null,
+    clientEndedAt: (clientRow as { ended_at?: string | null } | null)?.ended_at ?? null,
+  });
 
   const version = typeof r.version === 'number' ? r.version : 0;
 
-  // UI: hide only "עסק עונתי" toggle (per request).
-  // UX: keep "חודשי עומס" editable; backend will infer seasonality from chosen months on save.
+  // UI: hide "עסק עונתי" and "חודשי עומס" (stored values are preserved on save).
+  // Opening / closing dates are projected from Client Details — display-only.
   const seasonalToggleVisible = false;
-  const visiblePeakMonths = true;
+  const visiblePeakMonths = false;
 
   const section: ClientBusinessProfileSectionResponse = {
     section_key: 'business_profile',
@@ -318,11 +331,11 @@ export async function getClientBusinessProfileSection(
         key: 'peak_months',
         label: 'חודשי עומס',
         type: 'multi_enum',
-        value: visiblePeakMonths ? peakMonths : [],
+        value: peakMonths,
         options: PEAK_MONTHS_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
         required: false,
-        // Validation rule is enforced on backend; UI remains backend-driven and doesn't encode business logic.
-        editable: canEdit,
+        // Hidden from UI; stored value is preserved on save (not cleared).
+        editable: false,
         visible: visiblePeakMonths,
         validation: [
           {
@@ -339,9 +352,9 @@ export async function getClientBusinessProfileSection(
         key: 'business_open_date',
         label: 'פתיחת עסק',
         type: 'date',
-        value: (r.business_open_date as string | null) ?? null,
+        value: canonicalDates.business_open_date,
         required: false,
-        editable: canEdit,
+        editable: false,
         visible: true,
         group_key: 'general_info',
         group_label: BUSINESS_PROFILE_GROUPS.general_info.label,
@@ -352,9 +365,9 @@ export async function getClientBusinessProfileSection(
         key: 'business_close_date',
         label: 'סגירת עסק',
         type: 'date',
-        value: (r.business_close_date as string | null) ?? null,
+        value: canonicalDates.business_close_date,
         required: false,
-        editable: canEdit,
+        editable: false,
         visible: true,
         validation: [
           {
@@ -398,8 +411,9 @@ export async function saveClientBusinessProfileSection(
   let private_address: string | null = null;
   let business_operation_mode: BusinessOperationMode | null = null;
   let primary_customer_type: PrimaryCustomerType | null = null;
-  let peak_months = Array.isArray(body.peak_months) ? body.peak_months : [];
-  // Field "עסק עונתי" is hidden in UI; backend infers it from peak_months.
+  // peak_months / open / close are no longer edited here. Preserve stored DB values
+  // so hiding the fields cannot clear them, and Client Details remains the date source.
+  let peak_months: number[] = [];
   let is_seasonal_business = false;
   let business_open_date: string | null = null;
   let business_close_date: string | null = null;
@@ -447,36 +461,6 @@ export async function saveClientBusinessProfileSection(
     }
   }
 
-  try {
-    business_open_date = parseDateOnlyOptional(body.business_open_date);
-  } catch {
-    validationErrors.push({ key: 'business_open_date', message_he: 'תאריך פתיחת עסק לא חוקי' });
-  }
-  try {
-    business_close_date = parseDateOnlyOptional(body.business_close_date);
-  } catch {
-    validationErrors.push({ key: 'business_close_date', message_he: 'תאריך סגירת עסק לא חוקי' });
-  }
-
-  // peak_months: sanitize and validate; determines seasonality on backend.
-  peak_months = uniqueSortedMonths(peak_months.map((m) => Number(m)).filter((n) => !Number.isNaN(n)));
-  for (const m of peak_months) {
-    if (m < 1 || m > 12) {
-      validationErrors.push({ key: 'peak_months', message_he: 'חודש בעומס לא חוקי' });
-      break;
-    }
-  }
-  is_seasonal_business = peak_months.length > 0;
-
-  if (business_open_date && business_close_date) {
-    if (business_close_date < business_open_date) {
-      validationErrors.push({
-        key: 'business_close_date',
-        message_he: 'תאריך סגירת העסק לא יכול להיות לפני תאריך פתיחת העסק.',
-      });
-    }
-  }
-
   if (validationErrors.length) {
     const section = await getClientBusinessProfileSection(ctx, clientId);
     return {
@@ -489,21 +473,39 @@ export async function saveClientBusinessProfileSection(
 
   const { data: existing, error: readErr } = await supabaseAdmin
     .from('client_accounting_settings')
-    .select('id, version, has_business_vehicles')
+    .select(
+      'id, version, has_business_vehicles, peak_months, is_seasonal_business, business_open_date, business_close_date'
+    )
     .eq('organization_id', orgId)
     .eq('client_id', clientId)
     .maybeSingle();
 
   if (readErr) throw new AppError(500, readErr.message ?? 'client_accounting_settings read failed', 'SUPABASE_ERROR');
 
+  const existingRec = (existing ?? null) as {
+    id?: string;
+    version?: number;
+    has_business_vehicles?: boolean | null;
+    peak_months?: number[] | null;
+    is_seasonal_business?: boolean | null;
+    business_open_date?: string | null;
+    business_close_date?: string | null;
+  } | null;
+
   let has_business_vehicles: boolean;
   if (body.has_business_vehicles !== undefined) {
     has_business_vehicles = Boolean(body.has_business_vehicles);
-  } else if (existing) {
-    has_business_vehicles = Boolean((existing as { has_business_vehicles?: boolean | null }).has_business_vehicles);
+  } else if (existingRec) {
+    has_business_vehicles = Boolean(existingRec.has_business_vehicles);
   } else {
     has_business_vehicles = false;
   }
+
+  const preservedPeakRaw = existingRec?.peak_months;
+  peak_months = uniqueSortedMonths(Array.isArray(preservedPeakRaw) ? preservedPeakRaw : []);
+  is_seasonal_business = Boolean(existingRec?.is_seasonal_business ?? peak_months.length > 0);
+  business_open_date = existingRec?.business_open_date ?? null;
+  business_close_date = existingRec?.business_close_date ?? null;
 
   const actorUserId = ctx.user.id;
 

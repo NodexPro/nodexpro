@@ -49,6 +49,19 @@ test('nested business-profile editor hides peak months and open/close dates but 
   assert.match(profileSrc, /for \(const f of section\.fields\) init\[f\.key\] = f\.value/);
 });
 
+test('Business Profile card hides peak months via visible and formats dates like Client Details', () => {
+  assert.match(profileSrc, /filter\(\(f\) => f\.visible\)/);
+  assert.match(profileSrc, /function formatDateHe/);
+  assert.match(profileSrc, /if \(f\.type === 'date'\) return formatDateHe/);
+  const harness = readFileSync(join(dir, 'client-workspace-accounting-tab-harness.tsx'), 'utf8');
+  assert.match(harness, /key: 'peak_months'[\s\S]*visible: false/);
+  assert.match(harness, /key: 'business_open_date'[\s\S]*editable: false/);
+  assert.doesNotMatch(
+    harness,
+    /key: 'peak_months'[\s\S]*visible: true[\s\S]*key: 'business_open_date'/,
+  );
+});
+
 test('Expense Management editor keeps named commands and a harness-seeded populated modal path', () => {
   assert.match(accountingSrc, /save_accounting_expense_management_block/);
   assert.match(accountingSrc, /nx-em-modal-2col/);

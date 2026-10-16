@@ -23,6 +23,11 @@
   border-radius: 8px;
 }
 
+.nx-modal.nx-workspace-modal .nx-ws-history,
+.nx-modal.nx-workspace-modal .nx-ws-history * {
+  font-family: Arial, sans-serif !important;
+}
+
 .nx-modal.nx-workspace-modal .nx-workspace-content > .nx-history-root.nx-ws-history {
   background: transparent;
   border: none;

@@ -33,6 +33,13 @@ test('Fees, payroll and history still read aggregates and write named commands',
   assert.doesNotMatch(historySrc, /method:\s*'PATCH'/);
 });
 
+test('History tab forces Arial throughout the workspace interior', () => {
+  assert.match(historyCss, /\.nx-modal\.nx-workspace-modal \.nx-ws-history \* \{\s*font-family: Arial, sans-serif !important;/);
+  const historyBase = readFileSync(join(dir, '../src/styles/nx-history-tab.css'), 'utf8');
+  assert.match(historyBase, /font-family: Arial, sans-serif/);
+  assert.match(historyBase, /font-weight: 700/);
+});
+
 test('Fees, payroll and history premium skins are scoped to the workspace modal interiors', () => {
   assert.match(feesSrc, /nx-workspace-fees-tab\.css/);
   assert.match(feesSrc, /nx-fees-tab-root nx-ws-fees/);

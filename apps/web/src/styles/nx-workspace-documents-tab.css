@@ -91,8 +91,19 @@
   color: #7decf7;
 }
 
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-name,
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-count,
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-meta,
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-card,
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-card-main {
+  font-family: Arial, sans-serif !important;
+  font-weight: 700;
+}
+
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-name {
   color: #eef6ff;
+  font-family: Arial, sans-serif !important;
+  font-weight: 700;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-meta,
@@ -152,8 +163,15 @@
   padding-right: 8px;
 }
 
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-panel,
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-panel * {
+  font-family: Arial, sans-serif !important;
+}
+
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-panel-title {
   color: #eef6ff;
+  font-family: Arial, sans-serif !important;
+  font-weight: 700;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-panel-loading {

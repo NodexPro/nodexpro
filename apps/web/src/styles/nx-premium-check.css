@@ -1,0 +1,134 @@
+/**
+ * NodexPro premium checkbox — reusable navy/cyan control.
+ * Apply via `.nx-premium-check` or automatically on Client Operations /
+ * Client Workspace native checkboxes. Does not encode domain meaning.
+ */
+
+.nx-premium-check,
+.nx-co-sheet input[type='checkbox'],
+.nx-workspace-panel-root input[type='checkbox'],
+.nx-modal.nx-workspace-modal input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 16px;
+  vertical-align: middle;
+  border: 1.5px solid rgba(57, 230, 244, 0.85);
+  border-radius: 4px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(232, 244, 255, 0.92) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 0 0 1px rgba(8, 38, 82, 0.04);
+  color: #102a4c;
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.nx-premium-check:hover:not(:disabled),
+.nx-co-sheet input[type='checkbox']:hover:not(:disabled),
+.nx-workspace-panel-root input[type='checkbox']:hover:not(:disabled),
+.nx-modal.nx-workspace-modal input[type='checkbox']:hover:not(:disabled) {
+  border-color: #00cfef;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 0 0 3px rgba(0, 207, 239, 0.16);
+}
+
+.nx-premium-check:checked,
+.nx-co-sheet input[type='checkbox']:checked,
+.nx-workspace-panel-root input[type='checkbox']:checked,
+.nx-modal.nx-workspace-modal input[type='checkbox']:checked {
+  background: linear-gradient(180deg, #268cff 0%, #123756 100%);
+  border-color: #00cfef;
+}
+
+.nx-premium-check:checked::after,
+.nx-co-sheet input[type='checkbox']:checked::after,
+.nx-workspace-panel-root input[type='checkbox']:checked::after,
+.nx-modal.nx-workspace-modal input[type='checkbox']:checked::after {
+  content: '';
+  width: 9px;
+  height: 5px;
+  border-inline-end: 2px solid #ffffff;
+  border-bottom: 2px solid #ffffff;
+  transform: rotate(45deg) translateY(-1px);
+  margin-top: -2px;
+}
+
+.nx-premium-check:indeterminate,
+.nx-co-sheet input[type='checkbox']:indeterminate,
+.nx-workspace-panel-root input[type='checkbox']:indeterminate,
+.nx-modal.nx-workspace-modal input[type='checkbox']:indeterminate {
+  background: linear-gradient(180deg, #42a5ff 0%, #0d3764 100%);
+  border-color: #00cfef;
+}
+
+.nx-premium-check:indeterminate::after,
+.nx-co-sheet input[type='checkbox']:indeterminate::after,
+.nx-workspace-panel-root input[type='checkbox']:indeterminate::after,
+.nx-modal.nx-workspace-modal input[type='checkbox']:indeterminate::after {
+  content: '';
+  width: 8px;
+  height: 2px;
+  background: #ffffff;
+  border-radius: 1px;
+}
+
+.nx-premium-check:focus-visible,
+.nx-co-sheet input[type='checkbox']:focus-visible,
+.nx-workspace-panel-root input[type='checkbox']:focus-visible,
+.nx-modal.nx-workspace-modal input[type='checkbox']:focus-visible {
+  outline: 2px solid #00cfef;
+  outline-offset: 2px;
+}
+
+.nx-premium-check:disabled,
+.nx-co-sheet input[type='checkbox']:disabled,
+.nx-workspace-panel-root input[type='checkbox']:disabled,
+.nx-modal.nx-workspace-modal input[type='checkbox']:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  border-color: rgba(135, 154, 176, 0.7);
+  background: #eef3f8;
+}
+
+.nx-premium-check:disabled:checked,
+.nx-co-sheet input[type='checkbox']:disabled:checked,
+.nx-workspace-panel-root input[type='checkbox']:disabled:checked,
+.nx-modal.nx-workspace-modal input[type='checkbox']:disabled:checked {
+  background: linear-gradient(180deg, rgba(38, 140, 255, 0.55) 0%, rgba(18, 55, 86, 0.55) 100%);
+  border-color: rgba(0, 207, 239, 0.45);
+}
+
+/* Fees uses a visually hidden native checkbox behind a switch slider. */
+.nx-fees-switch input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  display: block;
+}
+
+.nx-fees-switch input[type='checkbox']:checked::after,
+.nx-fees-switch input[type='checkbox']:indeterminate::after,
+.nx-fees-switch input[type='checkbox']:hover:not(:disabled) {
+  content: none;
+  box-shadow: none;
+  border: 0;
+}

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../api/client';
 import { dashboardOverview } from '../api/endpoints';
+import '../styles/nx-dashboard.css';
 
 type DashboardOverviewData = {
   summary: {
@@ -50,13 +51,6 @@ type DashboardOverviewData = {
     can_upload_document: boolean;
     can_invite_member: boolean;
   };
-};
-
-const cardStyleBase: CSSProperties = {
-  background: '#FFFFFF',
-  border: '1px solid #E5E7EB',
-  borderRadius: 14,
-  padding: 20,
 };
 
 function formatCurrency(amount: unknown, currency: unknown): string {
@@ -118,22 +112,22 @@ function DonutChart({
     return {
       label: s.label,
       path,
-      color: colors[s.label] ?? '#9CA3AF',
+      color: colors[s.label] ?? '#7decf7',
       value: s.value,
     };
   });
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ textAlign: 'center', fontSize: 14, color: '#111827', fontWeight: 600 }}>{`${total} clients`}</div>
+    <div className="nx-dashboard-donut">
+      <div className="nx-dashboard-donut__total">{`${total} clients`}</div>
       <svg width="100%" height={size} viewBox={`0 0 ${size} ${size}`}>
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#EEF2F7" strokeWidth={strokeWidth} />
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(210, 238, 255, 0.18)" strokeWidth={strokeWidth} />
         {arcs
           .filter((a) => a.value > 0)
           .map((a) => (
             <path key={a.label} d={a.path} fill="none" stroke={a.color} strokeWidth={strokeWidth} strokeLinecap="round" />
           ))}
-        <circle cx={cx} cy={cy} r={r - strokeWidth / 2 - 1} fill="#FFFFFF" stroke="#F3F4F6" strokeWidth={1} opacity={0.9} />
+        <circle cx={cx} cy={cy} r={r - strokeWidth / 2 - 1} fill="rgba(8, 38, 82, 0.55)" stroke="rgba(70, 213, 255, 0.22)" strokeWidth={1} />
       </svg>
     </div>
   );
@@ -178,22 +172,22 @@ function LineChart({ points }: { points: Array<{ xLabel: string; count: number }
   return (
     <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`}>
       {gridLines.map((g, idx) => (
-        <line key={idx} x1={paddingLeft} x2={w - paddingRight} y1={g.y} y2={g.y} stroke="#EEF2F7" strokeWidth={1} />
+        <line key={idx} x1={paddingLeft} x2={w - paddingRight} y1={g.y} y2={g.y} stroke="rgba(210, 238, 255, 0.16)" strokeWidth={1} />
       ))}
       {coords.length > 1 && (
-        <path d={areaPath} fill="rgba(59, 130, 246, 0.10)" stroke="none" />
+        <path d={areaPath} fill="rgba(0, 207, 239, 0.16)" stroke="none" />
       )}
       {coords.length > 0 && (
-        <polyline points={polyline} fill="none" stroke="#3B82F6" strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" />
+        <polyline points={polyline} fill="none" stroke="#39e6f4" strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" />
       )}
       {coords.map((c, i) => (
         <g key={`${c.xLabel}-${i}`}>
-          <circle cx={c.x} cy={c.y} r={4} fill="#3B82F6" stroke="#FFFFFF" strokeWidth={2} />
+          <circle cx={c.x} cy={c.y} r={4} fill="#39e6f4" stroke="#04152f" strokeWidth={2} />
         </g>
       ))}
       {coords.map((c, i) =>
         i % labelEvery === 0 || i === coords.length - 1 ? (
-          <text key={c.xLabel + i} x={c.x} y={h - 18} textAnchor="middle" fontSize={12} fill="#6B7280">
+          <text key={c.xLabel + i} x={c.x} y={h - 18} textAnchor="middle" fontSize={12} fill="rgba(238, 246, 255, 0.72)" fontFamily="Arial, sans-serif">
             {c.xLabel}
           </text>
         ) : null
@@ -204,44 +198,40 @@ function LineChart({ points }: { points: Array<{ xLabel: string; count: number }
 
 function EmptyState({ title, subtitle }: { title: string; subtitle: string }) {
   return (
-    <div style={{ paddingTop: 4, paddingBottom: 6 }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: '#111827', marginBottom: 6 }}>{title}</div>
-      <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.4 }}>{subtitle}</div>
+    <div>
+      <div className="nx-dashboard-empty__title">{title}</div>
+      <div className="nx-dashboard-empty__subtitle">{subtitle}</div>
     </div>
   );
 }
 
 function SectionTitle({ title }: { title: string }) {
-  return <div style={{ fontSize: 16, fontWeight: 700, color: '#111827', marginBottom: 6 }}>{title}</div>;
+  return <div className="nx-dashboard-card__title">{title}</div>;
 }
 
 function SummaryCard({
   label,
   value,
   secondary,
-  minHeight,
 }: {
   label: string;
   value: ReactNode;
   secondary: ReactNode;
-  minHeight?: number;
 }) {
   return (
-    <div style={{ ...cardStyleBase, minHeight: minHeight ?? 116 }}>
-      <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: 10 }}>
-        {label}
-      </div>
-      <div style={{ fontSize: 38, fontWeight: 700, color: '#111827', lineHeight: 1.1, marginBottom: 8 }}>{value}</div>
-      <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.3 }}>{secondary}</div>
+    <div className="nx-dashboard-card">
+      <div className="nx-dashboard-card__label">{label}</div>
+      <div className="nx-dashboard-card__value">{value}</div>
+      <div className="nx-dashboard-card__secondary">{secondary}</div>
     </div>
   );
 }
 
 function FieldRow({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ fontSize: 12, color: '#6B7280' }}>{label}</div>
-      <div style={{ fontSize: 14, color: '#111827', fontWeight: 500, lineHeight: 1.3 }}>{value}</div>
+    <div className="nx-dashboard-field">
+      <div className="nx-dashboard-field__label">{label}</div>
+      <div className="nx-dashboard-field__value">{value}</div>
     </div>
   );
 }
@@ -280,8 +270,6 @@ export function Dashboard() {
     };
   }, [auth.status, orgId]);
 
-  // Important: hooks must be called in a stable order across renders.
-  // We compute chart points even while `overview` is still null.
   const trendPoints = useMemo(() => {
     const arr = overview?.charts.new_clients_by_month ?? [];
     return arr.map((p) => ({
@@ -291,8 +279,8 @@ export function Dashboard() {
   }, [overview?.charts.new_clients_by_month]);
 
   if (auth.status !== 'authenticated') return null;
-  if (loading) return <div style={{ padding: 24 }}>Loading…</div>;
-  if (error) return <div style={{ padding: 24, color: '#b91c1c' }}>{error}</div>;
+  if (loading) return <div className="nx-dashboard__status">Loading…</div>;
+  if (error) return <div className="nx-dashboard__status nx-dashboard__status--error">{error}</div>;
   if (!overview) return null;
 
   const { summary, charts, operations, organization, quick_actions } = overview;
@@ -322,38 +310,19 @@ export function Dashboard() {
             ? 'not started'
             : organization.trial_status;
 
-  const primaryBtnStyle: CSSProperties = {
-    background: 'linear-gradient(135deg, #38BDF8 0%, #3B82F6 30%, #4F46E5 65%, #7C3AED 100%)',
-    color: 'white',
-    border: 'none',
-    borderRadius: 10,
-    height: 40,
-    padding: '0 16px',
-    fontSize: 14,
-    fontWeight: 500,
-  };
-
-  const secondaryBtnStyle: CSSProperties = {
-    background: '#FFFFFF',
-    color: '#111827',
-    border: '1px solid #D1D5DB',
-    borderRadius: 10,
-    height: 40,
-    padding: '0 16px',
-    fontSize: 14,
-    fontWeight: 500,
+  const filingColors = {
+    Monthly: '#268cff',
+    'Every 2 months': '#39e6f4',
+    Mikdamot: '#7decf7',
   };
 
   return (
-    <div style={{ background: '#F8FAFC', minHeight: '100%', padding: 24 }}>
-      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 32, fontWeight: 700, color: '#111827', margin: 0, marginBottom: 8 }}>Dashboard</h1>
-          <div style={{ fontSize: 15, color: '#6B7280' }}>Overview of your organization.</div>
-        </div>
+    <div className="nx-dashboard" data-testid="nx-dashboard">
+      <div className="nx-dashboard__inner">
+        <h1 className="nx-dashboard__title">Dashboard</h1>
+        <div className="nx-dashboard__subtitle">Overview of your organization.</div>
 
-        {/* 2. Top summary cards row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 16, marginBottom: 24 }}>
+        <div className="nx-dashboard__metrics">
           <SummaryCard label="New clients" value={newClientsThisMonth} secondary={`vs last month: ${deltaSecondary}`} />
           <SummaryCard
             label="Active Total clients"
@@ -372,27 +341,28 @@ export function Dashboard() {
           <SummaryCard
             label="Total revenue"
             value={revenueReady && summary.monthly_revenue != null ? formatCurrency(summary.monthly_revenue.amount, summary.monthly_revenue.currency) : '—'}
-            secondary={revenueReady ? 'current month' : 'Available after Client Operations data is connected'}
+            secondary={
+              revenueReady
+                ? 'current month · office-earned revenue'
+                : 'Office-earned revenue is not available yet. Accounting Base does not expose this metric.'
+            }
           />
         </div>
 
-        {/* 3. Main chart row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16, marginBottom: 24 }}>
-          {/* LEFT: New clients chart */}
-          <div style={cardStyleBase}>
+        <div className="nx-dashboard__row nx-dashboard__row--chart">
+          <div className="nx-dashboard-card">
             <SectionTitle title="New clients" />
-            <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 12 }}>Created clients by month</div>
+            <div className="nx-dashboard-card__hint">Created clients by month</div>
             <LineChart points={trendPoints} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: -2 }}>
-              <div style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>This month: {newClientsThisMonth}</div>
-              <div style={{ fontSize: 13, color: '#6B7280' }}>
+            <div className="nx-dashboard-chart-meta">
+              <div className="nx-dashboard-field__value">This month: {newClientsThisMonth}</div>
+              <div className="nx-dashboard-card__hint" style={{ marginBottom: 0 }}>
                 {showPct ? `vs last month: ${summary.new_clients_vs_last_month_pct! >= 0 ? '+' : ''}${summary.new_clients_vs_last_month_pct!.toFixed(0)}%` : `vs last month: ${summary.new_clients_vs_last_month_abs}`}
               </div>
             </div>
           </div>
 
-          {/* RIGHT: Filing schedules breakdown */}
-          <div style={cardStyleBase}>
+          <div className="nx-dashboard-card">
             {!filingSegmentsReady ? (
               <EmptyState title="Filing schedules" subtitle="Will be available after Client Operations module is connected" />
             ) : (
@@ -405,21 +375,17 @@ export function Dashboard() {
                     { label: 'Every 2 months', value: charts.filing_schedules.every_2_months ?? 0 },
                     { label: 'Mikdamot', value: charts.filing_schedules.mikdamot ?? 0 },
                   ]}
-                  colors={{
-                    Monthly: '#7C3AED',
-                    'Every 2 months': '#38BDF8',
-                    Mikdamot: '#8B5CF6',
-                  }}
+                  colors={filingColors}
                 />
-                <div style={{ marginTop: 10, display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+                <div className="nx-dashboard-legend">
                   {[
-                    { label: 'Monthly', color: '#7C3AED' },
-                    { label: 'Every 2 months', color: '#38BDF8' },
-                    { label: 'Mikdamot', color: '#8B5CF6' },
+                    { label: 'Monthly', color: filingColors.Monthly },
+                    { label: 'Every 2 months', color: filingColors['Every 2 months'] },
+                    { label: 'Mikdamot', color: filingColors.Mikdamot },
                   ].map((l) => (
-                    <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 10, height: 10, borderRadius: 999, background: l.color, display: 'inline-block' }} />
-                      <span style={{ fontSize: 13, color: '#111827', fontWeight: 600 }}>{l.label}</span>
+                    <div key={l.label} className="nx-dashboard-legend__item">
+                      <span className="nx-dashboard-legend__swatch" style={{ background: l.color }} />
+                      <span>{l.label}</span>
                     </div>
                   ))}
                 </div>
@@ -428,10 +394,8 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* 4. Secondary insight row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
-          {/* LEFT: Client assignments */}
-          <div style={cardStyleBase}>
+        <div className="nx-dashboard__row nx-dashboard__row--split">
+          <div className="nx-dashboard-card">
             <SectionTitle title="Client assignments" />
             {!assignmentsReady ? (
               <EmptyState
@@ -441,32 +405,22 @@ export function Dashboard() {
             ) : (
               <div>
                 {(operations.clients_per_worker ?? []).map((r) => (
-                  <div
-                    key={r.worker_name}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px 0',
-                      borderBottom: '1px solid #F3F4F6',
-                    }}
-                  >
-                    <div style={{ fontSize: 14, color: '#111827' }}>{r.worker_name}</div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: '#111827' }}>{r.clients_count}</div>
+                  <div key={r.worker_name} className="nx-dashboard-assign-row">
+                    <div>{r.worker_name}</div>
+                    <div>{r.clients_count}</div>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          {/* RIGHT: Report deadlines */}
-          <div style={cardStyleBase}>
+          <div className="nx-dashboard-card">
             <SectionTitle title="Report deadlines" />
             {!deadlinesReady ? (
               <EmptyState title="No reporting deadline data yet" subtitle="Deadline monitoring will appear after Client Operations module is connected" />
             ) : (
               <div>
-                <div style={{ fontSize: 14, color: '#111827', fontWeight: 700, marginBottom: 12 }}>
+                <div className="nx-dashboard-deadlines__lead">
                   {operations.report_deadlines.as_of_date
                     ? `As of ${new Date(operations.report_deadlines.as_of_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}, ${
                         operations.report_deadlines.overdue_total != null ? operations.report_deadlines.overdue_total : '—'
@@ -474,17 +428,17 @@ export function Dashboard() {
                     : `As of —, ${operations.report_deadlines.overdue_total != null ? operations.report_deadlines.overdue_total : '—'} clients have overdue reports`}
                 </div>
                 <div style={{ display: 'grid', gap: 10 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, color: '#6B7280' }}>Monthly filings overdue</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{operations.report_deadlines.monthly_overdue ?? '—'}</span>
+                  <div className="nx-dashboard-deadlines__row">
+                    <span>Monthly filings overdue</span>
+                    <span>{operations.report_deadlines.monthly_overdue ?? '—'}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, color: '#6B7280' }}>Bi-monthly filings overdue</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{operations.report_deadlines.bimonthly_overdue ?? '—'}</span>
+                  <div className="nx-dashboard-deadlines__row">
+                    <span>Bi-monthly filings overdue</span>
+                    <span>{operations.report_deadlines.bimonthly_overdue ?? '—'}</span>
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, color: '#6B7280' }}>Mikdamot overdue</span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{operations.report_deadlines.mikdamot_overdue ?? '—'}</span>
+                  <div className="nx-dashboard-deadlines__row">
+                    <span>Mikdamot overdue</span>
+                    <span>{operations.report_deadlines.mikdamot_overdue ?? '—'}</span>
                   </div>
                 </div>
               </div>
@@ -492,10 +446,8 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* 5. Lower support row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          {/* LEFT: Organization */}
-          <div style={cardStyleBase}>
+        <div className="nx-dashboard__row nx-dashboard__row--split">
+          <div className="nx-dashboard-card">
             <SectionTitle title="Organization" />
             <div style={{ display: 'grid', gap: 16 }}>
               <FieldRow label="Organization name" value={organization.name ?? '—'} />
@@ -505,43 +457,30 @@ export function Dashboard() {
             </div>
           </div>
 
-          {/* RIGHT: Quick actions */}
-          <div style={cardStyleBase}>
+          <div className="nx-dashboard-card">
             <SectionTitle title="Quick actions" />
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <div className="nx-dashboard-actions">
               <button
                 type="button"
+                className="nx-dashboard-btn nx-dashboard-btn--primary"
                 onClick={() => navigate('/clients')}
                 disabled={!quick_actions.can_create_client}
-                style={{
-                  ...primaryBtnStyle,
-                  opacity: quick_actions.can_create_client ? 1 : 0.55,
-                  cursor: quick_actions.can_create_client ? 'pointer' : 'not-allowed',
-                }}
               >
                 New client
               </button>
               <button
                 type="button"
+                className="nx-dashboard-btn nx-dashboard-btn--secondary"
                 onClick={() => navigate('/documents')}
                 disabled={!quick_actions.can_upload_document}
-                style={{
-                  ...secondaryBtnStyle,
-                  opacity: quick_actions.can_upload_document ? 1 : 0.55,
-                  cursor: quick_actions.can_upload_document ? 'pointer' : 'not-allowed',
-                }}
               >
                 Upload document
               </button>
               <button
                 type="button"
+                className="nx-dashboard-btn nx-dashboard-btn--secondary"
                 onClick={() => navigate('/users-roles')}
                 disabled={!quick_actions.can_invite_member}
-                style={{
-                  ...secondaryBtnStyle,
-                  opacity: quick_actions.can_invite_member ? 1 : 0.55,
-                  cursor: quick_actions.can_invite_member ? 'pointer' : 'not-allowed',
-                }}
               >
                 Invite member
               </button>

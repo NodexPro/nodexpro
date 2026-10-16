@@ -1,3 +1,5 @@
+@import './nx-premium-check.css';
+
 /* Client Operations spreadsheet workspace — premium navy / cyan glass presentation */
 
 .nx-co-sheet {
@@ -534,6 +536,10 @@
   direction: rtl;
 }
 
+.nx-co-sheet__table td {
+  color: var(--nx-text-primary);
+}
+
 .nx-co-sheet__table th,
 .nx-co-sheet__table td {
   border: 1px solid var(--nx-grid);
@@ -834,18 +840,13 @@
   opacity: 1;
 }
 
+/* Native checkboxes restyled by nx-premium-check.css (shared navy/cyan control). */
 .nx-co-sheet__checkbox {
   width: 16px;
   height: 16px;
   margin: 0;
   vertical-align: middle;
-  accent-color: var(--nx-co-brand);
   cursor: pointer;
-}
-
-.nx-co-sheet__checkbox:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
 }
 
 .nx-co-sheet__material-header {

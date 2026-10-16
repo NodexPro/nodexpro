@@ -46,13 +46,16 @@ export function TemplateLayout({
   // Users & Roles is an office working window: same collapsible navy rail as the employee workspace,
   // no generic top header (organization / user / language already live in the sidebar account block).
   const isUsersRolesWorkspace = location.pathname === '/users-roles';
+  const isDashboard = location.pathname === '/dashboard';
   // Every destination opened from the canonical sidebar uses the same working shell (navy backdrop +
-  // collapsible glass AppSidebar). CO / Users & Roles are navy-native surfaces; every other destination keeps
+  // collapsible glass AppSidebar). CO / Users & Roles / Dashboard are navy-native surfaces; every other destination keeps
   // its own light content inside a light surface (`t1-appShell--general`) so internal content is unchanged.
   const usesCanonicalWorkingShell = true;
-  const isNavyNativeSurface = isClientOperationsModule || isUsersRolesWorkspace;
+  const isNavyNativeSurface = isClientOperationsModule || isUsersRolesWorkspace || isDashboard;
   const pageMaxWidth =
-    isClientOperationsModule || isIncomeModule || isWorkEngineSection || isUsersRolesWorkspace ? 1600 : 1100;
+    isClientOperationsModule || isIncomeModule || isWorkEngineSection || isUsersRolesWorkspace || isDashboard
+      ? 1600
+      : 1100;
 
   // CO route only: header centre slot that receives the registry's existing search field (portal).
   const [coHeaderSearchSlot, setCoHeaderSearchSlot] = useState<HTMLElement | null>(null);
@@ -65,8 +68,8 @@ export function TemplateLayout({
 
   let header: React.ReactNode = null;
   if (!isWorkEngineQueuePage) {
-    // Users & Roles renders no header strip at all (account / org / language live in the sidebar).
-    header = isUsersRolesWorkspace ? null : isClientOperationsModule ? (
+    // Users & Roles and Dashboard render no header strip (account / org / language live in the sidebar).
+    header = isUsersRolesWorkspace || isDashboard ? null : isClientOperationsModule ? (
       <ClientOperationsAppHeader
         searchSlotRef={coHeaderSearchSlotRef}
         workspaceSlotRef={coHeaderWorkspaceSlotRef}
@@ -102,7 +105,11 @@ export function TemplateLayout({
         {header}
         <main
           className={
-            isWorkEngineQueuePage ? 't1-pageMain t1-pageMain--work-engine-queue' : 't1-pageMain'
+            isWorkEngineQueuePage
+              ? 't1-pageMain t1-pageMain--work-engine-queue'
+              : isDashboard
+                ? 't1-pageMain t1-pageMain--dashboard'
+                : 't1-pageMain'
           }
         >
           <div

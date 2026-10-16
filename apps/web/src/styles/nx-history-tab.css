@@ -57,8 +57,9 @@
 /* Hero title; section names use .nx-fees-card-title like Fees tab blocks */
 .nx-history-title {
   margin: 0 0 6px;
+  font-family: Arial, sans-serif;
   font-size: 17px;
-  font-weight: 800;
+  font-weight: 700;
   color: #0f172a;
   letter-spacing: -0.02em;
   line-height: 1.25;

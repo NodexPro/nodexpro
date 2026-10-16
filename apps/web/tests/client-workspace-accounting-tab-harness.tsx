@@ -141,11 +141,11 @@ const accounting: ClientBusinessProfileSectionResponse = {
       key: 'peak_months',
       label: 'חודשי עומס',
       type: 'multi_enum',
-      value: [],
+      value: [1],
       options: [{ value: 1, label: 'ינואר' }],
       required: false,
-      editable: true,
-      visible: true,
+      editable: false,
+      visible: false,
       group_key: 'general_info',
       group_label: 'מידע כללי',
       group_order: 3,
@@ -157,7 +157,7 @@ const accounting: ClientBusinessProfileSectionResponse = {
       type: 'date',
       value: '2019-03-01',
       required: false,
-      editable: true,
+      editable: false,
       visible: true,
       group_key: 'general_info',
       group_label: 'מידע כללי',
@@ -170,7 +170,7 @@ const accounting: ClientBusinessProfileSectionResponse = {
       type: 'date',
       value: null,
       required: false,
-      editable: true,
+      editable: false,
       visible: true,
       group_key: 'general_info',
       group_label: 'מידע כללי',
@@ -676,7 +676,27 @@ function measureAccounting() {
   const gcs = grid ? getComputedStyle(grid) : null;
   const keys = ['income', 'expense_management', 'expenses', 'vehicles'] as const;
   const cards = Object.fromEntries(keys.map((k) => [k, box(document.querySelector(`[data-block-key="${k}"]`))]));
+  const profileRows = Array.from(document.querySelectorAll('.nx-ws-accounting-row')).map((row) => {
+    const label = (row.querySelector('.nx-ws-accounting-row__label')?.textContent || '').trim();
+    const value = (row.querySelector('.nx-ws-accounting-row__value')?.textContent || '').trim();
+    return { label, value };
+  });
+  const tabs = Array.from(document.querySelectorAll('.nx-workspace-panel-root .nx-workspace-tab-link')).map((el) => {
+    const cs = getComputedStyle(el);
+    return {
+      text: (el.textContent || '').trim(),
+      font: cs.fontFamily,
+      size: cs.fontSize,
+      wrap: cs.whiteSpace,
+      overflow: (el as HTMLElement).scrollWidth > (el as HTMLElement).clientWidth + 1,
+    };
+  });
   return {
+    profileRows,
+    peakMonthsVisible: profileRows.some((r) => r.label.includes('חודשי עומס')),
+    openDate: profileRows.find((r) => r.label.includes('פתיחת עסק'))?.value ?? null,
+    closeDate: profileRows.find((r) => r.label.includes('סגירת עסק'))?.value ?? null,
+    tabs,
     viewport: { w: window.innerWidth, h: window.innerHeight },
     content: contentBox(),
     split,
@@ -834,9 +854,18 @@ function selectThenDump(): void {
     };
   }
   if (dumpKey === 'history') {
+    const hero = document.querySelector('.nx-ws-history .nx-history-title') as HTMLElement | null;
+    const meta = document.querySelector('.nx-ws-history .nx-history-event-meta, .nx-ws-history .nx-history-retention') as HTMLElement | null;
     payload.history = {
       ...measureGlassTab('.nx-ws-history'),
       heroBg: computedBg('.nx-ws-history .nx-history-hero') || stylesheetBackground('.nx-ws-history .nx-history-hero') || '',
+      titleFont: hero ? getComputedStyle(hero).fontFamily : '',
+      titleWeight: hero ? getComputedStyle(hero).fontWeight : '',
+      metaFont: meta ? getComputedStyle(meta).fontFamily : '',
+      rootFont: (() => {
+        const root = document.querySelector('.nx-ws-history') as HTMLElement | null;
+        return root ? getComputedStyle(root).fontFamily : '';
+      })(),
     };
   }
   if (dumpKey === 'fees-editor') {
