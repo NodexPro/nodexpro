@@ -47,6 +47,10 @@ test('Taxes premium skin is scoped to the workspace modal Taxes interior', () =>
   assert.match(taxesCss, /nx-ws-taxes-card/);
   assert.match(taxesCss, /nx-taxes-section-edit-btn/);
   assert.match(taxesCss, /overflow-y:\s*auto/);
+  assert.match(taxesCss, /\.nx-workspace-content > \.client-profile-card\.nx-ws-taxes/);
+  assert.match(taxesCss, /background:\s*transparent\s*!important/);
+  assert.match(taxesCss, /border-color:\s*transparent\s*!important/);
+  assert.match(taxesCss, /box-shadow:\s*none\s*!important/);
   assert.doesNotMatch(taxesCss, /display:\s*none/);
   assert.doesNotMatch(taxesCss, /createPortal|translateY\(max\(-60px/);
 });

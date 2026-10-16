@@ -27,6 +27,14 @@
   direction: rtl;
 }
 
+/* Use the modal navy (same as הגדרות הנה״ח) instead of the lighter Client Details inner panel.
+   Section-card glass tokens already match accounting; they read darker once the parent is navy. */
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card.nx-ws-taxes {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
 .nx-modal.nx-workspace-modal .nx-ws-taxes-loading {
   margin: 0;
   padding: 18px 4px;
