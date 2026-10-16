@@ -8,6 +8,7 @@ import {
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
 import type { AnnualDocumentRowDto, AnnualSubmissionRowDto, AnnualTabModel } from './annual-tab-types';
 import '../styles/nx-annual-report-tab.css';
+import '../styles/nx-workspace-annual-tab.css';
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -191,7 +192,7 @@ export function ClientAnnualReportTab({
   const subHeaders = annualTab.submissions_table.column_headers_he;
 
   return (
-    <div className="nx-annual-root">
+    <div className="nx-annual-root nx-ws-annual">
       <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={onFileChange} />
 
       {err ? (
@@ -315,7 +316,7 @@ export function ClientAnnualReportTab({
               <tbody>
                 {annualTab.documents_table.rows.length === 0 ? (
                   <tr>
-                    <td colSpan={docHeaders.length} style={{ textAlign: 'center', color: '#64748b', padding: 20 }}>
+                    <td colSpan={docHeaders.length} className="nx-annual-empty-cell">
                       {annualTab.documents_table.empty_state_he}
                     </td>
                   </tr>
@@ -387,7 +388,7 @@ export function ClientAnnualReportTab({
                 <tbody>
                   {annualTab.submissions_table.rows.length === 0 ? (
                     <tr>
-                      <td colSpan={subHeaders.length} style={{ textAlign: 'center', color: '#64748b', padding: 20 }}>
+                      <td colSpan={subHeaders.length} className="nx-annual-empty-cell">
                         {annualTab.submissions_table.empty_state_he}
                       </td>
                     </tr>

@@ -188,18 +188,21 @@
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card {
   background:
-    radial-gradient(ellipse at 16% 0%, rgba(255, 255, 255, 0.26), transparent 46%),
-    linear-gradient(180deg, #659ad8 0%, #457fca 52%, #2c65ae 100%) !important;
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.2), transparent 48%),
+    linear-gradient(180deg, rgba(248, 252, 255, 0.2) 0%, rgba(186, 216, 246, 0.14) 100%) !important;
   border-radius: 16px !important;
-  border: 1px solid rgba(210, 238, 255, 0.58) !important;
+  border: 1px solid rgba(210, 238, 255, 0.5) !important;
   box-shadow:
-    0 0 0 1px rgba(70, 213, 255, 0.2),
-    0 10px 24px rgba(8, 38, 82, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    inset 0 -14px 22px rgba(16, 52, 110, 0.16) !important;
+    0 0 0 1px rgba(70, 213, 255, 0.14),
+    0 8px 18px rgba(8, 38, 82, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32) !important;
   overflow: visible;
   padding: 16px 20px !important;
   margin-bottom: 0 !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .nx-fees-empty {
+  color: #e8f4ff;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card > .client-profile-grid {

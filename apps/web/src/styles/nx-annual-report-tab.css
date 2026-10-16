@@ -570,6 +570,12 @@
   resize: none;
 }
 
+.nx-annual-empty-cell {
+  text-align: center;
+  color: #64748b;
+  padding: 20px;
+}
+
 .nx-annual-err {
   color: #b91c1c;
   font-weight: 600;

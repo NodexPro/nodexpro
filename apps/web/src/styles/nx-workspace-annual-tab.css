@@ -1,0 +1,177 @@
+/* דוח שנתי / הצהרת הון interiors inside the Client Workspace modal only.
+   Reuses the מיסים glass tokens. Does not invent fields or restyle nested dialogs' behavior. */
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-annual) {
+  padding: 14px 18px 16px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(125, 236, 247, 0.5) rgba(8, 38, 82, 0.28);
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-annual)::-webkit-scrollbar {
+  width: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-annual)::-webkit-scrollbar-track {
+  background: rgba(8, 38, 82, 0.22);
+  border-radius: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content:has(> .nx-ws-annual)::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(125, 236, 247, 0.7), rgba(38, 140, 255, 0.55));
+  border-radius: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-workspace-content > .nx-annual-root.nx-ws-annual {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+  max-width: none;
+  min-width: 0;
+  direction: rtl;
+  color: #e8f4ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-meta {
+  color: rgba(238, 246, 255, 0.72);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-dash-card,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table-wrap,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-notes-card,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-summary-bar {
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.2), transparent 48%),
+    linear-gradient(180deg, rgba(248, 252, 255, 0.2) 0%, rgba(186, 216, 246, 0.14) 100%);
+  border: 1px solid rgba(210, 238, 255, 0.5);
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.14),
+    0 8px 18px rgba(8, 38, 82, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-dash-card-title,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-card-title {
+  color: #eef6ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-dash-status-label--green {
+  color: #86efac;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-dash-status-label--yellow {
+  color: #fde047;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-dash-status-label--red {
+  color: #fca5a5;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-dash-risk,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-dash-deadline,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-cal-icon {
+  color: rgba(238, 246, 255, 0.82);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-missing-dropdown,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-notes-ta,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-note-inp {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  color: #0b2248;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-dash-progress {
+  background: rgba(8, 38, 82, 0.35);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-summary-label {
+  color: rgba(238, 246, 255, 0.72);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-summary-value,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-summary-value--muted {
+  color: #eef6ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-summary-sep {
+  background: rgba(210, 238, 255, 0.35);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table th {
+  background: transparent;
+  color: rgba(238, 246, 255, 0.78);
+  border-bottom: 1px solid rgba(232, 244, 255, 0.22);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table td.nx-annual-td,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table--submissions td {
+  border-bottom: 1px solid rgba(232, 244, 255, 0.14);
+  color: #e8f4ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-row--neutral,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-row--neutral:hover {
+  background: transparent;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-row--warning {
+  background: rgba(250, 204, 21, 0.12);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-row--warning:hover {
+  background: rgba(250, 204, 21, 0.18);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-row--success {
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-row--success:hover {
+  background: rgba(34, 197, 94, 0.18);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-name {
+  color: #eef6ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-inline-action {
+  color: rgba(210, 238, 255, 0.7);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-file-name {
+  color: #7decf7;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-file-cell-icon,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-dash {
+  color: rgba(238, 246, 255, 0.62);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-folder-btn,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-icon-action,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-report-file-action {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  color: #165dff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-icon-action:hover:not(:disabled),
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-folder-btn:hover:not(:disabled),
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-report-file-action:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffffff, rgba(232, 244, 255, 0.96));
+  border-color: #ffffff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-err {
+  color: #fecaca;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-empty-cell {
+  color: rgba(238, 246, 255, 0.78);
+}

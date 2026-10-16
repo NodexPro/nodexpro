@@ -1304,25 +1304,11 @@ export function ClientAccountingSettingsTab({
                       );
                     })
                   : vehiclesEmptyFleetShell && b.excel_grid ? (
-                      <div className="nx-em-two-col" style={{ marginTop: 8 }}>
-                        <div className="nx-em-col nx-em-col-access" dir="rtl">
-                          <div className="nx-income-table">
-                            <div className="nx-fe-fixed-exp-colhead">{b.excel_grid.column_headers[0]}</div>
-                            <div className="nx-income-table-row nx-income-table-row-split">
-                              <span>רשימת רכבים</span>
-                              <span style={{ color: '#6b7280' }}>אין רכבים — השתמשו ב״הוסף רכב״</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="nx-em-col nx-em-col-ops" dir="rtl">
-                          <div className="nx-income-table">
-                            <div className="nx-fe-fixed-exp-colhead">{b.excel_grid.column_headers[1]}</div>
-                            <div className="nx-income-table-row nx-income-table-row-split">
-                              <span>—</span>
-                              <span>—</span>
-                            </div>
-                          </div>
-                        </div>
+                      <div className="nx-ws-accounting-empty-fleet" role="status">
+                        <div className="nx-fe-fixed-exp-colhead">{b.excel_grid.column_headers[0]}</div>
+                        <p className="nx-ws-accounting-empty-fleet__message">
+                          אין רכבים — השתמשו ב״הוסף רכב״
+                        </p>
                       </div>
                     ) : null}
                     </>

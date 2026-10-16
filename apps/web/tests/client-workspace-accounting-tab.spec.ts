@@ -59,13 +59,27 @@ test('Accounting Settings premium skin is scoped to the workspace modal Accounti
   assert.match(accountingCss, /\.nx-modal\.nx-workspace-modal \.nx-ws-accounting/);
   assert.match(accountingCss, /nx-ws-accounting-card/);
   assert.match(accountingCss, /nx-ws-accounting-profile-groups/);
-  assert.match(accountingCss, /grid-template-columns:\s*subgrid/);
-  assert.match(accountingCss, /--nx-ws-acc-label-value/);
+  assert.match(accountingCss, /--nx-ws-acc-row:\s*minmax\(0,\s*0\.72fr\)\s*minmax\(8rem,\s*1\.4fr\)/);
   assert.match(accountingCss, /repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(accountingCss, /overflow-y:\s*auto/);
   assert.match(accountingCss, /nx-taxes-section-edit-btn/);
-  assert.doesNotMatch(accountingCss, /display:\s*none/);
+  assert.doesNotMatch(accountingCss, /grid-template-columns:\s*subgrid/);
+  assert.doesNotMatch(accountingCss, /--nx-ws-acc-label-value/);
+  assert.doesNotMatch(accountingCss, /overflow-wrap:\s*anywhere/);
   assert.doesNotMatch(accountingCss, /createPortal|translateY\(max\(-60px/);
+});
+
+test('Accounting Settings empty fleet and split rows do not use a parent two-column subgrid', () => {
+  assert.match(accountingSrc, /nx-ws-accounting-empty-fleet/);
+  assert.match(accountingSrc, /אין רכבים — השתמשו ב״הוסף רכב״/);
+  assert.match(accountingSrc, /vehicles_yes_no/);
+  assert.match(accountingSrc, /add_vehicle/);
+  assert.match(accountingCss, /nx-ws-accounting-empty-fleet__message/);
+  assert.match(accountingCss, /min-width:\s*12rem/);
+  assert.match(accountingCss, /min-width:\s*8rem/);
+  assert.match(accountingCss, /\.nx-income-table-stretch[\s\S]*display:\s*flex/);
+  assert.match(accountingCss, /\.nx-income-table-row-split[\s\S]*grid-template-columns:\s*var\(--nx-ws-acc-row\)/);
+  assert.doesNotMatch(accountingSrc, /nx-income-table-row-split[\s\S]{0,80}אין רכבים/);
 });
 
 test('Client Details, Taxes, portal and raise are not altered by the Accounting Settings restyle', () => {
