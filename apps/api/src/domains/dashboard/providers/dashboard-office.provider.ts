@@ -817,7 +817,12 @@ export async function getOfficeFeeBreakdownAggregate(
       note_he: note,
     },
     columns: [],
-    filters: [{ key: 'all', label_he: copy.breakdown_filter_all }],
+    filters: [
+      { key: 'all', label_he: copy.breakdown_filter_all },
+      { key: 'no_fee', label_he: copy.breakdown_filter_no_fee },
+      { key: 'configured_zero', label_he: copy.breakdown_filter_zero_fee },
+      { key: 'one_time_only', label_he: copy.breakdown_filter_one_time },
+    ],
     search_placeholder_he: copy.breakdown_search,
     empty_he: note,
     page_label_he: copy.breakdown_page(1, 1, 0),
@@ -844,25 +849,13 @@ export async function getOfficeFeeBreakdownAggregate(
 
   const accessScope = await resolveOrganizationClientAccessScopeFromContext(ctx);
   const authorizedSet = accessScope.authorized_client_ids ? new Set(accessScope.authorized_client_ids) : null;
-  const clientRows = await fetchAllOrgRows<Record<string, unknown>>(
-    'clients',
-    'id, display_name, status, is_archived, created_at, ended_at',
-    'organization_id',
-    orgId,
-  );
-  const clients: DashboardFeeClientInput[] = clientRows
-    .map((r) => ({
-      id: String(r.id),
-      display_name: r.display_name != null ? String(r.display_name) : null,
-      status: r.status != null ? String(r.status) : null,
-      is_archived: asBool(r.is_archived),
-      created_at: r.created_at != null ? String(r.created_at) : null,
-      ended_at: r.ended_at != null ? String(r.ended_at) : null,
-    }))
-    .filter((c) => (authorizedSet ? authorizedSet.has(c.id) : true))
-    .filter((c) => !c.is_archived && String(c.status ?? '') === 'active');
-
-  const [agreementRows, lineRows, vatRate] = await Promise.all([
+  const [clientRows, agreementRows, lineRows, vatRate] = await Promise.all([
+    fetchAllOrgRows<Record<string, unknown>>(
+      'clients',
+      'id, display_name, status, is_archived, created_at, ended_at',
+      'organization_id',
+      orgId,
+    ),
     fetchAllOrgRows<Record<string, unknown>>(
       'client_fee_agreements',
       'id, client_id, agreement_status, agreement_start_date, agreement_end_date, discount_has, discount_type, discount_percent, discount_amount_ils',
@@ -877,6 +870,17 @@ export async function getOfficeFeeBreakdownAggregate(
     ),
     resolveOfficeCountryPackVatRate(orgId, today.date),
   ]);
+  const clients: DashboardFeeClientInput[] = clientRows
+    .map((r) => ({
+      id: String(r.id),
+      display_name: r.display_name != null ? String(r.display_name) : null,
+      status: r.status != null ? String(r.status) : null,
+      is_archived: asBool(r.is_archived),
+      created_at: r.created_at != null ? String(r.created_at) : null,
+      ended_at: r.ended_at != null ? String(r.ended_at) : null,
+    }))
+    .filter((c) => (authorizedSet ? authorizedSet.has(c.id) : true))
+    .filter((c) => !c.is_archived && String(c.status ?? '') === 'active');
   const agreementsByClient = new Map<string, DashboardFeeAgreementInput[]>();
   for (const row of agreementRows) {
     const id = String(row.client_id);
@@ -937,7 +941,6 @@ export async function getOfficeFeeBreakdownAggregate(
     },
     columns: [
       { key: 'client', label_he: copy.col_client },
-      { key: 'agreement', label_he: copy.col_agreement },
       { key: 'frequency', label_he: copy.col_frequency },
       { key: 'before_discount', label_he: copy.col_before_discount },
       { key: 'discount', label_he: copy.col_discount },
@@ -946,14 +949,9 @@ export async function getOfficeFeeBreakdownAggregate(
     ],
     filters: [
       { key: 'all', label_he: copy.breakdown_filter_all },
-      { key: 'fee_attention', label_he: copy.breakdown_filter_attention },
-      { key: 'positive_recurring', label_he: copy.cat_positive_recurring },
-      { key: 'configured_zero', label_he: copy.cat_configured_zero },
-      { key: 'no_agreement', label_he: copy.cat_no_agreement },
-      { key: 'no_recurring_service', label_he: copy.cat_no_recurring_service },
-      { key: 'one_time_only', label_he: copy.cat_one_time_only },
-      { key: 'needs_attention', label_he: copy.cat_needs_attention },
-      { key: 'unsupported_vat_fx', label_he: copy.cat_unsupported_vat_fx },
+      { key: 'no_fee', label_he: copy.breakdown_filter_no_fee },
+      { key: 'configured_zero', label_he: copy.breakdown_filter_zero_fee },
+      { key: 'one_time_only', label_he: copy.breakdown_filter_one_time },
     ],
     search_placeholder_he: copy.breakdown_search,
     empty_he: copy.breakdown_empty,

@@ -35,8 +35,8 @@ test('Dashboard uses translucent glass cards and keeps the five metric slots', (
 
 test('Dashboard presentation drops the redundant name/language header only on /dashboard', () => {
   assert.match(layoutSrc, /const isDashboard = location\.pathname === '\/dashboard'/);
-  assert.match(layoutSrc, /isUsersRolesWorkspace \|\| isDashboard \? null/);
-  assert.match(layoutSrc, /isNavyNativeSurface = isClientOperationsModule \|\| isUsersRolesWorkspace \|\| isDashboard/);
+  assert.match(layoutSrc, /isUsersRolesWorkspace \|\| isDashboard \|\| isSettings \? null/);
+  assert.match(layoutSrc, /isNavyNativeSurface = isClientOperationsModule \|\| isUsersRolesWorkspace \|\| isDashboard \|\| isSettings/);
   assert.match(layoutSrc, /<AppHeader/);
   assert.match(layoutSrc, /onSetLanguage=\{onSetUiLanguage\}/);
 });

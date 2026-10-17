@@ -15,6 +15,9 @@
 .t1-appShell--client-operations {
   /* One typography system for the working shell (sidebar, header, Users & Roles, ToDo): Arial. */
   font-family: Arial, sans-serif;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
   --nx-nova: #123756;
   --nx-navy-950: #061a33;
   --nx-navy-900: #082447;
@@ -83,6 +86,21 @@
     inset 0 0 130px 44px rgba(38, 140, 255, 0.26);
   transform: rotate(-7deg);
   filter: blur(1.5px);
+}
+
+.t1-appShell--client-operations .t1-shellColumn {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+/*
+ * Registry fill-chain: the spreadsheet owns vertical overflow. Do not let the
+ * shared column scroller steal wheel/scroll from .nx-co-sheet.
+ */
+.t1-appShell--client-operations:has(.nx-co-sheet) .t1-shellColumn {
+  overflow: hidden;
+  height: 100%;
 }
 
 .t1-appShell--client-operations:not(.t1-appShell--general) .t1-pageMain {

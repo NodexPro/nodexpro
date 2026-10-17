@@ -1,30 +1,39 @@
 .t1-sidebar {
   display: flex;
   flex-direction: column;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  z-index: 6;
   min-height: 100vh;
   height: 100vh;
+  max-height: 100vh;
   background: #ffffff;
   border-right: 1px solid #e5e7eb;
   overflow: hidden;
   box-sizing: border-box;
   flex-shrink: 0;
+  overscroll-behavior: contain;
 }
 
 .t1-sidebar__nav {
   flex: 1 1 auto;
   min-height: 0;
   overflow-x: hidden;
-  /* Still scrollable on very short viewports, but never shows an internal scrollbar. */
   overflow-y: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(125, 236, 247, 0.45) transparent;
   padding-bottom: 8px;
 }
 
 .t1-sidebar__nav::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
+  width: 6px;
+}
+
+.t1-sidebar__nav::-webkit-scrollbar-thumb {
+  background: rgba(125, 236, 247, 0.35);
+  border-radius: 8px;
 }
 
 .t1-sidebar-account {

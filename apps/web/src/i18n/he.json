@@ -234,7 +234,13 @@
   "dashboard": {
     "unavailableTitle": "סקירת המשרד",
     "unavailableSubtitle": "אגרגט המשרד אינו זמין בשרת זה.",
-    "growthEmpty": "אין נתוני צמיחה להצגה."
+    "growthEmpty": "אין נתוני צמיחה להצגה.",
+    "breakdownLoadFailed": "לא ניתן לטעון את פירוט השכ״ט.",
+    "lang": {
+      "aria": "שפה",
+      "en": "English",
+      "he": "עברית"
+    }
   }
 }
 

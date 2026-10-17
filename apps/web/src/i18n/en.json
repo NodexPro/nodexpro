@@ -234,7 +234,13 @@
   "dashboard": {
     "unavailableTitle": "Office overview",
     "unavailableSubtitle": "The office aggregate is not available on this server.",
-    "growthEmpty": "No growth data to display."
+    "growthEmpty": "No growth data to display.",
+    "breakdownLoadFailed": "The fee breakdown could not be loaded.",
+    "lang": {
+      "aria": "Language",
+      "en": "English",
+      "he": "עברית"
+    }
   }
 }
 

@@ -47,11 +47,12 @@ export function TemplateLayout({
   // no generic top header (organization / user / language already live in the sidebar account block).
   const isUsersRolesWorkspace = location.pathname === '/users-roles';
   const isDashboard = location.pathname === '/dashboard';
+  const isSettings = location.pathname === '/settings';
   // Every destination opened from the canonical sidebar uses the same working shell (navy backdrop +
   // collapsible glass AppSidebar). CO / Users & Roles / Dashboard are navy-native surfaces; every other destination keeps
   // its own light content inside a light surface (`t1-appShell--general`) so internal content is unchanged.
   const usesCanonicalWorkingShell = true;
-  const isNavyNativeSurface = isClientOperationsModule || isUsersRolesWorkspace || isDashboard;
+  const isNavyNativeSurface = isClientOperationsModule || isUsersRolesWorkspace || isDashboard || isSettings;
   const pageMaxWidth =
     isClientOperationsModule || isIncomeModule || isWorkEngineSection || isUsersRolesWorkspace || isDashboard
       ? 1600
@@ -69,7 +70,7 @@ export function TemplateLayout({
   let header: React.ReactNode = null;
   if (!isWorkEngineQueuePage) {
     // Users & Roles and Dashboard render no header strip (account / org / language live in the sidebar).
-    header = isUsersRolesWorkspace || isDashboard ? null : isClientOperationsModule ? (
+    header = isUsersRolesWorkspace || isDashboard || isSettings ? null : isClientOperationsModule ? (
       <ClientOperationsAppHeader
         searchSlotRef={coHeaderSearchSlotRef}
         workspaceSlotRef={coHeaderWorkspaceSlotRef}

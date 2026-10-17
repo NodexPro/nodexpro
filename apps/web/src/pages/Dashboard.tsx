@@ -5,6 +5,7 @@ import { useI18n } from '../i18n/I18nProvider';
 import { apiJson } from '../api/client';
 import { dashboardOverview } from '../api/endpoints';
 import { DashboardFeeBreakdownModal } from '../components/dashboard/DashboardFeeBreakdownModal';
+import { UiLanguageSwitch } from '../components/glass/UiLanguageSwitch';
 import '../styles/nx-dashboard.css';
 
 type DashboardStatus = 'ready' | 'empty' | 'coming_soon' | 'unavailable';
@@ -397,17 +398,20 @@ export function Dashboard() {
             <h1 className="nx-dashboard__title">{office.title_he}</h1>
             <div className="nx-dashboard__subtitle">{office.subtitle_he}</div>
           </div>
-          <div className="nx-dashboard-period" role="group" aria-label={office.period.label_he}>
-            {office.period.options.map((opt) => (
-              <button
-                key={opt.key}
-                type="button"
-                className={`nx-dashboard-period__chip${opt.selected ? ' is-selected' : ''}`}
-                onClick={() => setPeriod(opt.key)}
-              >
-                {opt.label_he}
-              </button>
-            ))}
+          <div className="nx-dashboard__header-tools">
+            <UiLanguageSwitch />
+            <div className="nx-dashboard-period" role="group" aria-label={office.period.label_he}>
+              {office.period.options.map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  className={`nx-dashboard-period__chip${opt.selected ? ' is-selected' : ''}`}
+                  onClick={() => setPeriod(opt.key)}
+                >
+                  {opt.label_he}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -582,17 +586,19 @@ export function Dashboard() {
           </div>
         </div>
       </div>
-      <DashboardFeeBreakdownModal
-        open={breakdownOpen}
-        period={period}
-        locale={lang}
-        initialFilter={breakdownFilter}
-        onClose={() => setBreakdownOpen(false)}
-        onOpenClient={(href) => {
-          setBreakdownOpen(false);
-          navigate(href);
-        }}
-      />
+      {breakdownOpen ? (
+        <DashboardFeeBreakdownModal
+          open
+          period={period}
+          locale={lang}
+          initialFilter={breakdownFilter}
+          onClose={() => setBreakdownOpen(false)}
+          onOpenClient={(href) => {
+            setBreakdownOpen(false);
+            navigate(href);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { apiJson } from '../../api/client';
 import { dashboardOfficeFeeBreakdown } from '../../api/endpoints';
+import { useI18n } from '../../i18n/I18nProvider';
 
 export type OfficeFeeBreakdownAggregate = {
   title_he: string;
@@ -51,6 +53,39 @@ const SORT_BY_COLUMN: Record<string, string> = {
   status: 'category',
 };
 
+function cellFor(
+  columnKey: string,
+  row: OfficeFeeBreakdownAggregate['rows'][number],
+  expanded: string | null,
+  setExpanded: (id: string | null) => void,
+  onOpenClient: (href: string) => void,
+) {
+  if (columnKey === 'client') {
+    return (
+      <>
+        <button type="button" className="nx-dashboard-breakdown__link" onClick={() => onOpenClient(row.href)}>
+          {row.display_name}
+        </button>
+        {row.expandable ? (
+          <button
+            type="button"
+            className="nx-dashboard-breakdown__expand"
+            onClick={() => setExpanded(expanded === row.client_id ? null : row.client_id)}
+          >
+            +
+          </button>
+        ) : null}
+      </>
+    );
+  }
+  if (columnKey === 'frequency') return row.billing_frequency_he;
+  if (columnKey === 'before_discount') return row.recurring_before_discount_he;
+  if (columnKey === 'discount') return row.discount_he;
+  if (columnKey === 'monthly') return row.monthly_before_vat_he;
+  if (columnKey === 'status') return row.calculation_status_he;
+  return null;
+}
+
 export function DashboardFeeBreakdownModal(props: {
   open: boolean;
   period: string;
@@ -60,6 +95,8 @@ export function DashboardFeeBreakdownModal(props: {
   onOpenClient: (href: string) => void;
 }) {
   const { open, period, locale, initialFilter, onClose, onOpenClient } = props;
+  const { t } = useI18n();
+  const dir = locale === 'he' || locale.startsWith('he-') ? 'rtl' : 'ltr';
   const [data, setData] = useState<OfficeFeeBreakdownAggregate | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -72,20 +109,9 @@ export function DashboardFeeBreakdownModal(props: {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
-    const t = window.setTimeout(() => setQDebounced(q), 300);
-    return () => window.clearTimeout(t);
+    const timer = window.setTimeout(() => setQDebounced(q), 300);
+    return () => window.clearTimeout(timer);
   }, [q]);
-
-  useEffect(() => {
-    if (!open) return;
-    setFilter(initialFilter ?? 'all');
-    setPage(1);
-    setQ('');
-    setQDebounced('');
-    setSort('display_name');
-    setSortDir('asc');
-    setExpanded(null);
-  }, [open, initialFilter]);
 
   useEffect(() => {
     if (!open) return;
@@ -114,14 +140,15 @@ export function DashboardFeeBreakdownModal(props: {
     apiJson<OfficeFeeBreakdownAggregate>(`${dashboardOfficeFeeBreakdown()}?${params.toString()}`, { signal: ac.signal })
       .then((d) => setData(d))
       .catch((e) => {
-        if ((e as Error)?.name !== 'AbortError') setError(e instanceof Error ? e.message : 'Failed to load');
+        if ((e as Error)?.name !== 'AbortError') setError(e instanceof Error ? e.message : t('dashboard.breakdownLoadFailed'));
       })
       .finally(() => setLoading(false));
     return () => ac.abort();
-  }, [open, period, locale, page, filter, qDebounced, sort, sortDir]);
+  }, [open, period, locale, page, filter, qDebounced, sort, sortDir, t]);
 
   if (!open) return null;
   const pg = data?.pagination;
+  const columns = data?.columns ?? [];
 
   const toggleSort = (columnKey: string) => {
     const next = SORT_BY_COLUMN[columnKey];
@@ -134,8 +161,8 @@ export function DashboardFeeBreakdownModal(props: {
     setPage(1);
   };
 
-  return (
-    <div className="nx-dashboard-breakdown-overlay" role="presentation" onClick={onClose}>
+  return createPortal(
+    <div className="nx-dashboard-breakdown-overlay" role="presentation" dir={dir} lang={locale} onClick={onClose}>
       <div
         className="nx-dashboard-breakdown"
         role="dialog"
@@ -162,7 +189,7 @@ export function DashboardFeeBreakdownModal(props: {
               <div className="nx-dashboard-card__note">{data.office_total.note_he}</div>
             ) : null}
           </div>
-          <button type="button" className="nx-dashboard-btn nx-dashboard-btn--secondary" onClick={onClose}>
+          <button type="button" className="nx-dashboard-btn nx-dashboard-btn--purple" onClick={onClose}>
             ×
           </button>
         </div>
@@ -181,7 +208,7 @@ export function DashboardFeeBreakdownModal(props: {
               <button
                 key={f.key}
                 type="button"
-                className={`nx-dashboard-period__chip${filter === f.key ? ' is-selected' : ''}`}
+                className={`nx-dashboard-period__chip nx-dashboard-chip--purple${filter === f.key ? ' is-selected' : ''}`}
                 onClick={() => {
                   setPage(1);
                   setFilter(f.key);
@@ -193,63 +220,50 @@ export function DashboardFeeBreakdownModal(props: {
           </div>
         </div>
         <div className="nx-dashboard-breakdown__body">
-          {loading ? <div className="nx-dashboard-empty__subtitle">…</div> : null}
+          {loading ? <div className="nx-dashboard-empty__subtitle">{t('common.loading')}</div> : null}
           {error ? <div className="nx-dashboard__status--error">{error}</div> : null}
           {!loading && data && data.rows.length === 0 ? (
             <div className="nx-dashboard-empty__subtitle">{data.empty_he}</div>
           ) : null}
           {!loading && data && data.rows.length > 0 ? (
-            <table className="nx-dashboard-breakdown__table">
-              <thead>
-                <tr>
-                  {data.columns.map((c) => (
-                    <th
-                      key={c.key}
-                      className={SORT_BY_COLUMN[c.key] ? 'is-sortable' : undefined}
-                      onClick={() => toggleSort(c.key)}
-                    >
-                      {c.label_he}
-                    </th>
+            <div className="nx-dashboard-breakdown__table-wrap">
+              <table className="nx-dashboard-breakdown__table">
+                <thead>
+                  <tr>
+                    {columns.map((c) => (
+                      <th
+                        key={c.key}
+                        className={SORT_BY_COLUMN[c.key] ? 'is-sortable' : undefined}
+                        onClick={() => toggleSort(c.key)}
+                      >
+                        {c.label_he}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.rows.map((row) => (
+                    <Fragment key={row.client_id}>
+                      <tr>
+                        {columns.map((c) => (
+                          <td key={c.key}>
+                            {cellFor(c.key, row, expanded, setExpanded, onOpenClient)}
+                          </td>
+                        ))}
+                      </tr>
+                      {expanded === row.client_id
+                        ? row.lines.map((line, i) => (
+                            <tr key={`${row.client_id}-${i}`} className="nx-dashboard-breakdown__sub">
+                              <td colSpan={Math.max(1, columns.length - 1)}>{line.charging_type_he}</td>
+                              <td>{line.monthly_before_vat_he}</td>
+                            </tr>
+                          ))
+                        : null}
+                    </Fragment>
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {data.rows.map((row) => (
-                  <Fragment key={row.client_id}>
-                    <tr>
-                      <td>
-                        <button type="button" className="nx-dashboard-breakdown__link" onClick={() => onOpenClient(row.href)}>
-                          {row.display_name}
-                        </button>
-                        {row.expandable ? (
-                          <button
-                            type="button"
-                            className="nx-dashboard-breakdown__expand"
-                            onClick={() => setExpanded(expanded === row.client_id ? null : row.client_id)}
-                          >
-                            +
-                          </button>
-                        ) : null}
-                      </td>
-                      <td>{row.agreement_status_he}</td>
-                      <td>{row.billing_frequency_he}</td>
-                      <td>{row.recurring_before_discount_he}</td>
-                      <td>{row.discount_he}</td>
-                      <td>{row.monthly_before_vat_he}</td>
-                      <td>{row.calculation_status_he}</td>
-                    </tr>
-                    {expanded === row.client_id
-                      ? row.lines.map((line, i) => (
-                          <tr key={`${row.client_id}-${i}`} className="nx-dashboard-breakdown__sub">
-                            <td colSpan={3}>{line.charging_type_he}</td>
-                            <td colSpan={4}>{line.monthly_before_vat_he}</td>
-                          </tr>
-                        ))
-                      : null}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
           ) : null}
         </div>
         {pg ? (
@@ -258,7 +272,7 @@ export function DashboardFeeBreakdownModal(props: {
             <div className="nx-dashboard-actions">
               <button
                 type="button"
-                className="nx-dashboard-btn nx-dashboard-btn--secondary"
+                className="nx-dashboard-btn nx-dashboard-btn--purple"
                 disabled={pg.page <= 1}
                 onClick={() => setPage(pg.page - 1)}
               >
@@ -266,7 +280,7 @@ export function DashboardFeeBreakdownModal(props: {
               </button>
               <button
                 type="button"
-                className="nx-dashboard-btn nx-dashboard-btn--secondary"
+                className="nx-dashboard-btn nx-dashboard-btn--purple"
                 disabled={pg.page >= pg.total_pages}
                 onClick={() => setPage(pg.page + 1)}
               >
@@ -276,6 +290,7 @@ export function DashboardFeeBreakdownModal(props: {
           </div>
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

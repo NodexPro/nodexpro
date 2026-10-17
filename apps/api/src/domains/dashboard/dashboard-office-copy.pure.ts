@@ -72,6 +72,9 @@ type OfficeCopy = {
   breakdown_page: (page: number, pages: number, total: number) => string;
   breakdown_filter_all: string;
   breakdown_filter_attention: string;
+  breakdown_filter_no_fee: string;
+  breakdown_filter_zero_fee: string;
+  breakdown_filter_one_time: string;
   col_client: string;
   col_agreement: string;
   col_frequency: string;
@@ -169,6 +172,9 @@ const HE: OfficeCopy = {
   breakdown_page: (page, pages, total) => `עמוד ${page} מתוך ${pages} · ${total} לקוחות`,
   breakdown_filter_all: 'הכל',
   breakdown_filter_attention: 'לקוחות ללא שכ״ט מוגדר',
+  breakdown_filter_no_fee: 'ללא שכ״ט',
+  breakdown_filter_zero_fee: 'שכ״ט 0 ₪',
+  breakdown_filter_one_time: 'חד-פעמי',
   col_client: 'לקוח',
   col_agreement: 'סטטוס הסכם',
   col_frequency: 'תדירות',
@@ -270,6 +276,9 @@ const EN: OfficeCopy = {
   breakdown_page: (page, pages, total) => `Page ${page} of ${pages} · ${total} clients`,
   breakdown_filter_all: 'All',
   breakdown_filter_attention: 'Clients without configured fees',
+  breakdown_filter_no_fee: 'No fee',
+  breakdown_filter_zero_fee: 'Zero fee',
+  breakdown_filter_one_time: 'One time',
   col_client: 'Client',
   col_agreement: 'Agreement status',
   col_frequency: 'Frequency',

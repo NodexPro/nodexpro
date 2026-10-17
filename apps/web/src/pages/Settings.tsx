@@ -3,16 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../api/client';
 import { orgCountrySettings, orgSettings } from '../api/endpoints';
 import { useI18n } from '../i18n/I18nProvider';
-
-const sectionStyle: React.CSSProperties = {
-  marginBottom: 32,
-  padding: 24,
-  background: '#fff',
-  border: '1px solid #e5e7eb',
-  borderRadius: 12,
-};
-
-const sectionTitle: React.CSSProperties = { fontSize: '1rem', fontWeight: 600, marginBottom: 16 };
+import '../styles/nx-glass-surface.css';
 
 interface SettingsData {
   capabilities: {
@@ -255,43 +246,18 @@ export function Settings() {
     }
   };
 
-  const inputStyle: React.CSSProperties = {
-    display: 'block',
-    marginTop: 4,
-    padding: '8px 12px',
-    width: '100%',
-    maxWidth: 400,
-    borderRadius: 8,
-    border: '1px solid #d1d5db',
-  };
-
-  const profileInputStyle: React.CSSProperties = {
-    ...inputStyle,
-    marginTop: 0,
-    height: 32,
-    padding: '0 10px',
-    borderRadius: 6,
-    fontSize: 14,
-    lineHeight: 'normal',
-    maxWidth: '100%',
-    boxSizing: 'border-box',
-  };
-
   const profileLabelStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
     gap: 6,
-    fontSize: 14,
-    fontWeight: 500,
-    color: '#6b7280',
     margin: 0,
     lineHeight: 1.2,
   };
 
   if (auth.status !== 'authenticated') return null;
-  if (!orgId) return <p style={{ padding: 24 }}>{t('topBar.selectOrg')}</p>;
+  if (!orgId) return <p className="nx-glass-page">{t('topBar.selectOrg')}</p>;
 
-  if (loading) return <p style={{ padding: 24 }}>{t('common.loading')}</p>;
+  if (loading) return <p className="nx-glass-page">{t('common.loading')}</p>;
   if (!data) return null;
 
   const { capabilities } = data;
@@ -311,32 +277,32 @@ export function Settings() {
   const isCountryConfigured = countryConfig?.settings_status === 'configured';
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: 24 }}>
-      <h1 style={{ marginBottom: 8 }}>{t('settings.title')}</h1>
-      <p style={{ color: '#6b7280', marginBottom: 24 }}>{t('settings.subtitle')}</p>
+    <div className="nx-glass-page nx-settings">
+      <h1 className="nx-glass-title">{t('settings.title')}</h1>
+      <p className="nx-glass-subtitle">{t('settings.subtitle')}</p>
 
       {error && (
-        <div style={{ padding: 12, background: '#fef2f2', color: '#b91c1c', borderRadius: 8, marginBottom: 16 }}>
+        <div className="nx-glass-alert nx-glass-alert--error">
           {error}
         </div>
       )}
 
       {!capabilities.canEditSettings && (
-        <p style={{ padding: 12, background: '#fef3c7', color: '#92400e', borderRadius: 8, marginBottom: 24 }}>
+        <p className="nx-glass-alert nx-glass-alert--warn">
           {t('settings.readOnly')}
         </p>
       )}
 
       {capabilities.showOwnerIdentity && data.ownerIdentity && (
-        <section style={sectionStyle}>
-          <h2 style={sectionTitle}>{t('settings.ownerIdentity.section')}</h2>
+        <section className="nx-glass-card">
+          <h2>{t('settings.ownerIdentity.section')}</h2>
           <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: 16, rowGap: 12 }}>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <dt
                 style={{
                   display: 'block',
                   fontSize: 14,
-                  color: '#6b7280',
+                  color: 'rgba(238, 246, 255, 0.72)',
                   marginBottom: 4,
                   fontWeight: 500,
                   lineHeight: 1.2,
@@ -351,7 +317,7 @@ export function Settings() {
                   fontFamily: 'monospace',
                   fontWeight: 500,
                   fontSize: 14,
-                  color: '#111827',
+                  color: '#eef6ff',
                   lineHeight: 1.4,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
@@ -366,7 +332,7 @@ export function Settings() {
                 style={{
                   display: 'block',
                   fontSize: 14,
-                  color: '#6b7280',
+                  color: 'rgba(238, 246, 255, 0.72)',
                   marginBottom: 4,
                   fontWeight: 500,
                   lineHeight: 1.2,
@@ -380,7 +346,7 @@ export function Settings() {
                   margin: 0,
                   fontWeight: 500,
                   fontSize: 14,
-                  color: '#111827',
+                  color: '#eef6ff',
                   lineHeight: 1.4,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
@@ -395,7 +361,7 @@ export function Settings() {
                 style={{
                   display: 'block',
                   fontSize: 14,
-                  color: '#6b7280',
+                  color: 'rgba(238, 246, 255, 0.72)',
                   marginBottom: 4,
                   fontWeight: 500,
                   lineHeight: 1.2,
@@ -409,7 +375,7 @@ export function Settings() {
                   margin: 0,
                   fontWeight: 500,
                   fontSize: 14,
-                  color: '#111827',
+                  color: '#eef6ff',
                   lineHeight: 1.4,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
@@ -420,37 +386,37 @@ export function Settings() {
               </dd>
             </div>
           </dl>
-          <p style={{ marginTop: 16, marginBottom: 0, fontSize: 13, color: '#6b7280' }}>{t('settings.ownerIdentity.identityNote')}</p>
+          <p style={{ marginTop: 16, marginBottom: 0, fontSize: 13, color: 'rgba(238, 246, 255, 0.72)' }}>{t('settings.ownerIdentity.identityNote')}</p>
         </section>
       )}
 
       {!capabilities.showOwnerIdentity && (
-        <section style={sectionStyle}>
-          <p style={{ color: '#6b7280', margin: 0 }}>{t('settings.noOwnerIdentity')}</p>
+        <section className="nx-glass-card">
+          <p style={{ color: 'rgba(238, 246, 255, 0.72)', margin: 0 }}>{t('settings.noOwnerIdentity')}</p>
         </section>
       )}
 
       {capabilities.canEditSettings && (
         <form onSubmit={save}>
-          <section style={sectionStyle}>
-            <h2 style={sectionTitle}>{t('settings.profile.section')}</h2>
+          <section className="nx-glass-card">
+            <h2>{t('settings.profile.section')}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16, alignItems: 'start', fontSize: 14 }}>
-              <label style={profileLabelStyle}>
+              <label className="nx-glass-label" style={profileLabelStyle}>
                 {t('settings.profile.organizationName')}
                 <input
                   type="text"
                   value={(form.organizationName as string) ?? ''}
                   onChange={(e) => setForm((f) => ({ ...f, organizationName: e.target.value }))}
-                  style={profileInputStyle}
+                  className="nx-glass-input"
                   readOnly={!capabilities.canEditSettings}
                 />
               </label>
-              <label style={profileLabelStyle}>
+              <label className="nx-glass-label" style={profileLabelStyle}>
                 {t('settings.profile.legalEntityType')}
                 <select
                   value={(form.legalEntityType as string) ?? ''}
                   onChange={(e) => setForm((f) => ({ ...f, legalEntityType: e.target.value }))}
-                  style={profileInputStyle}
+                  className="nx-glass-input"
                   disabled={!capabilities.canEditSettings}
                 >
                   <option value="">—</option>
@@ -461,62 +427,62 @@ export function Settings() {
                   ))}
                 </select>
               </label>
-              <label style={profileLabelStyle}>
+              <label className="nx-glass-label" style={profileLabelStyle}>
                 {t(legalIdLabelKey)}
                 <input
                   type="text"
                   value={(form.legalIdNumber as string) ?? ''}
                   onChange={(e) => setForm((f) => ({ ...f, legalIdNumber: e.target.value }))}
-                  style={profileInputStyle}
+                  className="nx-glass-input"
                   readOnly={!capabilities.canEditSettings}
                 />
               </label>
-              <label style={profileLabelStyle}>
+              <label className="nx-glass-label" style={profileLabelStyle}>
                 {t('settings.profile.addressLine1')}
                 <input
                   type="text"
                   value={(form.addressLine1 as string) ?? ''}
                   onChange={(e) => setForm((f) => ({ ...f, addressLine1: e.target.value }))}
-                  style={profileInputStyle}
+                  className="nx-glass-input"
                   readOnly={!capabilities.canEditSettings}
                 />
               </label>
-              <label style={profileLabelStyle}>
+              <label className="nx-glass-label" style={profileLabelStyle}>
                 {t('settings.profile.addressLine2')}
                 <input
                   type="text"
                   value={(form.addressLine2 as string) ?? ''}
                   onChange={(e) => setForm((f) => ({ ...f, addressLine2: e.target.value }))}
-                  style={profileInputStyle}
+                  className="nx-glass-input"
                   readOnly={!capabilities.canEditSettings}
                 />
               </label>
-              <label style={profileLabelStyle}>
+              <label className="nx-glass-label" style={profileLabelStyle}>
                 {t('settings.profile.city')}
                 <input
                   type="text"
                   value={(form.city as string) ?? ''}
                   onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-                  style={profileInputStyle}
+                  className="nx-glass-input"
                   readOnly={!capabilities.canEditSettings}
                 />
               </label>
-              <label style={profileLabelStyle}>
+              <label className="nx-glass-label" style={profileLabelStyle}>
                 {t('settings.profile.postalCode')}
                 <input
                   type="text"
                   value={(form.postalCode as string) ?? ''}
                   onChange={(e) => setForm((f) => ({ ...f, postalCode: e.target.value }))}
-                  style={profileInputStyle}
+                  className="nx-glass-input"
                   readOnly={!capabilities.canEditSettings}
                 />
               </label>
-              <label style={profileLabelStyle}>
+              <label className="nx-glass-label" style={profileLabelStyle}>
                 {t('settings.profile.country')}
                 <select
                   value={(form.country as string) ?? ''}
                   onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))}
-                  style={profileInputStyle}
+                  className="nx-glass-input"
                   disabled={!capabilities.canEditSettings}
                 >
                   <option value="">Select country</option>
@@ -530,31 +496,31 @@ export function Settings() {
                   <span style={{ fontSize: 12, color: '#b45309', fontWeight: 400 }}>{data.profile.countryWarning}</span>
                 ) : null}
               </label>
-              <label style={profileLabelStyle}>
+              <label className="nx-glass-label" style={profileLabelStyle}>
                 {t('settings.profile.phone')}
                 <input
                   type="tel"
                   value={(form.phone as string) ?? ''}
                   onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-                  style={profileInputStyle}
+                  className="nx-glass-input"
                   readOnly={!capabilities.canEditSettings}
                 />
               </label>
-              <label style={profileLabelStyle}>
+              <label className="nx-glass-label" style={profileLabelStyle}>
                 {t('settings.profile.website')}
                 <input
                   type="url"
                   value={(form.website as string) ?? ''}
                   onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))}
-                  style={profileInputStyle}
+                  className="nx-glass-input"
                   placeholder="https://"
                   readOnly={!capabilities.canEditSettings}
                 />
               </label>
             </div>
-            <div style={{ marginTop: 16, border: '1px solid #d1d5db', borderRadius: 8, padding: 12, background: '#f9fafb' }}>
-              <h3 style={{ margin: '0 0 10px 0', fontSize: 15 }}>Country Configuration</h3>
-              <p style={{ margin: 0, color: isCountryConfigured ? '#065f46' : '#92400e', fontSize: 14, fontWeight: 500 }}>
+            <div className="nx-glass-card" style={{ marginTop: 16, marginBottom: 0, padding: 12 }}>
+              <h3 style={{ margin: '0 0 10px 0', fontSize: 15, color: '#eef6ff' }}>Country Configuration</h3>
+              <p style={{ margin: 0, color: isCountryConfigured ? '#7decf7' : '#fde68a', fontSize: 14, fontWeight: 500 }}>
                 {isCountryConfigured
                   ? '✔ Country is configured and ready'
                   : '⚠ Country configuration incomplete. Contact support.'}
@@ -562,20 +528,20 @@ export function Settings() {
             </div>
           </section>
 
-          <section style={sectionStyle}>
-            <h2 style={sectionTitle}>{t('settings.documentIdentity.section')}</h2>
+          <section className="nx-glass-card">
+            <h2>{t('settings.documentIdentity.section')}</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <label style={profileLabelStyle}>
+              <label className="nx-glass-label" style={profileLabelStyle}>
                 {t('settings.documentIdentity.displayNameOnDocuments')}
                 <input
                   type="text"
                   value={(form.displayNameOnDocuments as string) ?? ''}
                   onChange={(e) => setForm((f) => ({ ...f, displayNameOnDocuments: e.target.value }))}
-                  style={inputStyle}
+                  className="nx-glass-input"
                   readOnly={!capabilities.canEditSettings}
                 />
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 500, color: '#6b7280' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 500, color: 'rgba(238, 246, 255, 0.72)' }}>
                 <input
                   type="checkbox"
                   checked={!!form.displayPhoneOnDocuments}
@@ -584,7 +550,7 @@ export function Settings() {
                 />
                 {t('settings.documentIdentity.displayPhoneOnDocuments')}
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 500, color: '#6b7280' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 500, color: 'rgba(238, 246, 255, 0.72)' }}>
                 <input
                   type="checkbox"
                   checked={!!form.displayWebsiteOnDocuments}
@@ -593,7 +559,7 @@ export function Settings() {
                 />
                 {t('settings.documentIdentity.displayWebsiteOnDocuments')}
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 500, color: '#6b7280' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 500, color: 'rgba(238, 246, 255, 0.72)' }}>
                 <input
                   type="checkbox"
                   checked={!!form.displayAddressOnDocuments}
@@ -602,13 +568,13 @@ export function Settings() {
                 />
                 {t('settings.documentIdentity.displayAddressOnDocuments')}
               </label>
-              <label style={profileLabelStyle}>
+              <label className="nx-glass-label" style={profileLabelStyle}>
                 {t('settings.documentIdentity.documentFooterNote')}
                 <input
                   type="text"
                   value={(form.documentFooterNote as string) ?? ''}
                   onChange={(e) => setForm((f) => ({ ...f, documentFooterNote: e.target.value }))}
-                  style={inputStyle}
+                  className="nx-glass-input"
                   placeholder={t('settings.documentIdentity.footerNotePlaceholder')}
                   readOnly={!capabilities.canEditSettings}
                 />
@@ -616,15 +582,15 @@ export function Settings() {
             </div>
           </section>
 
-          <section style={sectionStyle}>
-            <h2 style={sectionTitle}>{t('settings.signature.section')}</h2>
-            <label style={profileLabelStyle}>
+          <section className="nx-glass-card">
+            <h2>{t('settings.signature.section')}</h2>
+            <label className="nx-glass-label" style={profileLabelStyle}>
               {t('settings.signature.signatureText')}
               <input
                 type="text"
                 value={(form.signatureText as string) ?? ''}
                 onChange={(e) => setForm((f) => ({ ...f, signatureText: e.target.value }))}
-                style={inputStyle}
+                className="nx-glass-input"
                 placeholder={t('settings.signature.signatureTextPlaceholder')}
                 readOnly={!capabilities.canEditSettings}
               />
@@ -632,70 +598,70 @@ export function Settings() {
           </section>
 
           {capabilities.showBankDetails && data.bankDetails !== undefined && (
-            <section style={sectionStyle}>
-              <h2 style={sectionTitle}>{t('settings.bankDetails.section')}</h2>
+            <section className="nx-glass-card">
+              <h2>{t('settings.bankDetails.section')}</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16, alignItems: 'start' }}>
-                <label style={profileLabelStyle}>
+                <label className="nx-glass-label" style={profileLabelStyle}>
                   {t('settings.bankDetails.bankAccountHolder')}
                   <input
                     type="text"
                     value={(form.bankAccountHolder as string) ?? ''}
                     onChange={(e) => setForm((f) => ({ ...f, bankAccountHolder: e.target.value }))}
-                    style={profileInputStyle}
+                    className="nx-glass-input"
                     readOnly={!capabilities.canEditSettings}
                   />
                 </label>
-                <label style={profileLabelStyle}>
+                <label className="nx-glass-label" style={profileLabelStyle}>
                   {t('settings.bankDetails.bankName')}
                   <input
                     type="text"
                     value={(form.bankName as string) ?? ''}
                     onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))}
-                    style={profileInputStyle}
+                    className="nx-glass-input"
                     readOnly={!capabilities.canEditSettings}
                   />
                 </label>
-                <label style={profileLabelStyle}>
+                <label className="nx-glass-label" style={profileLabelStyle}>
                   {t('settings.bankDetails.bankBranch')}
                   <input
                     type="text"
                     value={(form.bankBranch as string) ?? ''}
                     onChange={(e) => setForm((f) => ({ ...f, bankBranch: e.target.value }))}
-                    style={profileInputStyle}
+                    className="nx-glass-input"
                     readOnly={!capabilities.canEditSettings}
                   />
                 </label>
-                <label style={profileLabelStyle}>
+                <label className="nx-glass-label" style={profileLabelStyle}>
                   {t('settings.bankDetails.bankAccountNumber')}
                   <input
                     type="text"
                     value={(form.bankAccountNumber as string) ?? ''}
                     onChange={(e) => setForm((f) => ({ ...f, bankAccountNumber: e.target.value }))}
-                    style={profileInputStyle}
+                    className="nx-glass-input"
                     readOnly={!capabilities.canEditSettings}
                   />
                 </label>
-                <label style={profileLabelStyle}>
+                <label className="nx-glass-label" style={profileLabelStyle}>
                   {t('settings.bankDetails.iban')}
                   <input
                     type="text"
                     value={(form.iban as string) ?? ''}
                     onChange={(e) => setForm((f) => ({ ...f, iban: e.target.value }))}
-                    style={profileInputStyle}
+                    className="nx-glass-input"
                     readOnly={!capabilities.canEditSettings}
                   />
                 </label>
-                <label style={profileLabelStyle}>
+                <label className="nx-glass-label" style={profileLabelStyle}>
                   {t('settings.bankDetails.swift')}
                   <input
                     type="text"
                     value={(form.swift as string) ?? ''}
                     onChange={(e) => setForm((f) => ({ ...f, swift: e.target.value }))}
-                    style={profileInputStyle}
+                    className="nx-glass-input"
                     readOnly={!capabilities.canEditSettings}
                   />
                 </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 500, color: '#6b7280', gridColumn: '1 / -1' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 500, color: 'rgba(238, 246, 255, 0.72)', gridColumn: '1 / -1' }}>
                   <input
                     type="checkbox"
                     checked={!!form.displayBankDetailsOnDocuments}
@@ -709,13 +675,13 @@ export function Settings() {
           )}
 
           <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-            <button type="submit" disabled={saving} style={{ padding: '10px 20px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer', fontWeight: 500 }}>
+            <button type="submit" disabled={saving} className="nx-glass-btn nx-glass-btn--purple">
               {saving ? t('common.loading') : t('common.save')}
             </button>
             <button
               type="button"
               onClick={() => setReloadKey((k) => k + 1)}
-              style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}
+              className="nx-glass-btn nx-glass-btn--secondary"
             >
               {t('common.cancel')}
             </button>
@@ -725,27 +691,27 @@ export function Settings() {
 
       {!capabilities.canEditSettings && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <section style={sectionStyle}>
-            <h2 style={sectionTitle}>{t('settings.profile.section')}</h2>
+          <section className="nx-glass-card">
+            <h2>{t('settings.profile.section')}</h2>
             <dl style={{ margin: 0, display: 'grid', gap: '8px 24px', gridTemplateColumns: 'auto 1fr' }}>
-              <dt style={{ color: '#6b7280', fontSize: 14 }}>{t('settings.profile.organizationName')}</dt>
+              <dt style={{ color: 'rgba(238, 246, 255, 0.72)', fontSize: 14 }}>{t('settings.profile.organizationName')}</dt>
               <dd style={{ margin: 0 }}>{data.profile?.organizationName ?? '—'}</dd>
-              <dt style={{ color: '#6b7280', fontSize: 14 }}>{t('settings.profile.legalEntityType')}</dt>
+              <dt style={{ color: 'rgba(238, 246, 255, 0.72)', fontSize: 14 }}>{t('settings.profile.legalEntityType')}</dt>
               <dd style={{ margin: 0 }}>{data.profile?.legalEntityType ? t(`settings.legalEntityType.${data.profile.legalEntityType}`) : '—'}</dd>
-              <dt style={{ color: '#6b7280', fontSize: 14 }}>{t(data.profile?.legalIdLabelKey ?? 'settings.legalIdLabel.generic')}</dt>
+              <dt style={{ color: 'rgba(238, 246, 255, 0.72)', fontSize: 14 }}>{t(data.profile?.legalIdLabelKey ?? 'settings.legalIdLabel.generic')}</dt>
               <dd style={{ margin: 0 }}>{data.profile?.legalIdNumber ?? '—'}</dd>
-              <dt style={{ color: '#6b7280', fontSize: 14 }}>{t('settings.profile.addressLine1')}</dt>
+              <dt style={{ color: 'rgba(238, 246, 255, 0.72)', fontSize: 14 }}>{t('settings.profile.addressLine1')}</dt>
               <dd style={{ margin: 0 }}>{data.profile?.addressLine1 ?? '—'}</dd>
-              <dt style={{ color: '#6b7280', fontSize: 14 }}>{t('settings.profile.city')}</dt>
+              <dt style={{ color: 'rgba(238, 246, 255, 0.72)', fontSize: 14 }}>{t('settings.profile.city')}</dt>
               <dd style={{ margin: 0 }}>{data.profile?.city ?? '—'}</dd>
-              <dt style={{ color: '#6b7280', fontSize: 14 }}>{t('settings.profile.phone')}</dt>
+              <dt style={{ color: 'rgba(238, 246, 255, 0.72)', fontSize: 14 }}>{t('settings.profile.phone')}</dt>
               <dd style={{ margin: 0 }}>{data.profile?.phone ?? '—'}</dd>
-              <dt style={{ color: '#6b7280', fontSize: 14 }}>{t('settings.profile.website')}</dt>
+              <dt style={{ color: 'rgba(238, 246, 255, 0.72)', fontSize: 14 }}>{t('settings.profile.website')}</dt>
               <dd style={{ margin: 0 }}>{data.profile?.website ?? '—'}</dd>
             </dl>
-            <div style={{ marginTop: 16, border: '1px solid #d1d5db', borderRadius: 8, padding: 12, background: '#f9fafb' }}>
-              <h3 style={{ margin: '0 0 10px 0', fontSize: 15 }}>Country Configuration</h3>
-              <p style={{ margin: 0, color: isCountryConfigured ? '#065f46' : '#92400e', fontSize: 14, fontWeight: 500 }}>
+            <div className="nx-glass-card" style={{ marginTop: 16, marginBottom: 0, padding: 12 }}>
+              <h3 style={{ margin: '0 0 10px 0', fontSize: 15, color: '#eef6ff' }}>Country Configuration</h3>
+              <p style={{ margin: 0, color: isCountryConfigured ? '#7decf7' : '#fde68a', fontSize: 14, fontWeight: 500 }}>
                 {isCountryConfigured
                   ? '✔ Country is configured and ready'
                   : '⚠ Country configuration incomplete. Contact support.'}

@@ -36,7 +36,12 @@ export function parseFeeBreakdownSortDir(raw: unknown): 'asc' | 'desc' {
   return String(raw ?? '').toLowerCase() === 'desc' ? 'desc' : 'asc';
 }
 
-export type FeeBreakdownFilter = FeeBreakdownCategory | 'all' | 'needs_configuration' | 'fee_attention';
+export type FeeBreakdownFilter =
+  | FeeBreakdownCategory
+  | 'all'
+  | 'needs_configuration'
+  | 'fee_attention'
+  | 'no_fee';
 
 export const FEE_ATTENTION_CATEGORIES: readonly FeeBreakdownCategory[] = [
   'no_agreement',
@@ -47,10 +52,25 @@ export const FEE_ATTENTION_CATEGORIES: readonly FeeBreakdownCategory[] = [
   'unsupported_vat_fx',
 ];
 
+/** Visible "No fee" chip: attention other than explicit zero and one-time-only. */
+export const NO_FEE_CATEGORIES: readonly FeeBreakdownCategory[] = [
+  'no_agreement',
+  'no_recurring_service',
+  'needs_attention',
+  'unsupported_vat_fx',
+];
+
+/** Visible modal chips. Hidden classifications such as fee_attention remain parseable. */
+export const VISIBLE_FEE_BREAKDOWN_FILTERS = ['all', 'no_fee', 'configured_zero', 'one_time_only'] as const;
+
 export const FEE_ATTENTION_PREVIEW_CAP = 5;
 
 export function isFeeAttentionCategory(category: FeeBreakdownCategory): boolean {
   return (FEE_ATTENTION_CATEGORIES as readonly string[]).includes(category);
+}
+
+export function isNoFeeCategory(category: FeeBreakdownCategory): boolean {
+  return (NO_FEE_CATEGORIES as readonly string[]).includes(category);
 }
 
 export function selectFeeAttentionClients(rows: ClientExpectedFeeResult[]): ClientExpectedFeeResult[] {
@@ -69,6 +89,7 @@ export function parseFeeBreakdownFilter(raw: unknown): FeeBreakdownFilter {
   const s = String(raw ?? '').trim();
   if (s === 'all' || !s) return 'all';
   if (s === 'needs_configuration' || s === 'fee_attention') return 'fee_attention';
+  if (s === 'no_fee') return 'no_fee';
   return (FEE_BREAKDOWN_CATEGORIES as readonly string[]).includes(s) ? (s as FeeBreakdownCategory) : 'all';
 }
 
@@ -95,6 +116,8 @@ export function paginateFeeBreakdown(
   const filtered = inScope.filter((r) => {
     if (filter === 'fee_attention' || filter === 'needs_configuration') {
       if (!isFeeAttentionCategory(r.category)) return false;
+    } else if (filter === 'no_fee') {
+      if (!isNoFeeCategory(r.category)) return false;
     } else if (filter !== 'all' && r.category !== filter) return false;
     if (!q) return true;
     return r.display_name.toLowerCase().includes(q);

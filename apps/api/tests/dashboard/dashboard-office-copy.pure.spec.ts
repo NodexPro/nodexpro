@@ -35,4 +35,10 @@ test('Hebrew and English V2.1 labels cover churn, breakdown, and missing-agreeme
   assert.equal(he.cat_no_agreement, 'לא הוגדר הסכם שכ״ט');
   assert.equal(en.indicator_zero_fee, '₪0 fee');
   assert.equal(en.deadlines_title, 'Upcoming reports');
+  assert.equal(he.breakdown_filter_no_fee, 'ללא שכ״ט');
+  assert.equal(en.breakdown_filter_no_fee, 'No fee');
+  assert.equal(he.breakdown_filter_zero_fee, 'שכ״ט 0 ₪');
+  assert.equal(en.breakdown_filter_zero_fee, 'Zero fee');
+  assert.equal(he.breakdown_filter_one_time, 'חד-פעמי');
+  assert.equal(en.breakdown_filter_one_time, 'One time');
 });

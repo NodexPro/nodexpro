@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>V2.3 shell scroll harness</title>
+    <link rel="stylesheet" href="../src/templates/template-1/t1-sidebar-account.css" />
+    <link rel="stylesheet" href="../src/styles/nx-client-operations-shell.css" />
+    <style>
+      body { margin: 0; }
+      .t1-pageMain { flex: 1; padding: 24px 32px; min-width: 0; }
+      .nx-co-sheet { flex: 1; min-height: 0; overflow: auto; background: #0a2d55; color: #eef6ff; }
+      .nx-dashboard-breakdown-overlay {
+        position: fixed; inset: 0; z-index: 80; display: flex;
+        align-items: center; justify-content: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="t1-appShell t1-appShell--client-operations" id="shell" style="display:flex;min-height:100vh">
+      <aside class="t1-sidebar" id="sidebar" style="width:64px;flex:0 0 64px">
+        <div style="flex-shrink:0;height:56px">brand</div>
+        <nav class="t1-sidebar__nav" id="nav">
+          <div id="nav-inner"></div>
+        </nav>
+        <div class="t1-sidebar-account" style="height:72px">acct</div>
+      </aside>
+      <div class="t1-shellColumn" id="column" style="flex:1;display:flex;flex-direction:column;min-width:0">
+        <main class="t1-pageMain" id="main">
+          <div id="page"></div>
+        </main>
+      </div>
+    </div>
+    <script>
+      const navInner = document.getElementById('nav-inner');
+      for (let i = 0; i < 40; i++) {
+        const el = document.createElement('div');
+        el.textContent = 'nav ' + i;
+        el.style.height = '36px';
+        navInner.appendChild(el);
+      }
+      const page = document.getElementById('page');
+      const mode = new URLSearchParams(location.search).get('mode') || 'page';
+      if (mode === 'sheet') {
+        const sheet = document.createElement('div');
+        sheet.className = 'nx-co-sheet';
+        sheet.id = 'sheet';
+        for (let i = 0; i < 80; i++) {
+          const row = document.createElement('div');
+          row.textContent = 'row ' + i;
+          row.style.height = '28px';
+          sheet.appendChild(row);
+        }
+        page.appendChild(sheet);
+      } else {
+        for (let i = 0; i < 80; i++) {
+          const row = document.createElement('div');
+          row.textContent = 'content ' + i;
+          row.style.height = '36px';
+          page.appendChild(row);
+        }
+      }
+      const overlay = document.createElement('div');
+      overlay.className = 'nx-dashboard-breakdown-overlay';
+      overlay.id = 'overlay';
+      overlay.style.display = 'none';
+      overlay.innerHTML = '<div id="dialog" style="width:320px;height:160px;background:#082447;color:#eef6ff">dialog</div>';
+      document.body.appendChild(overlay);
+      window.__scrollProbe = function () {
+        const sidebar = document.getElementById('sidebar');
+        const nav = document.getElementById('nav');
+        const column = document.getElementById('column');
+        const sheet = document.getElementById('sheet');
+        const csNav = getComputedStyle(nav);
+        const csCol = getComputedStyle(column);
+        const csShell = getComputedStyle(document.getElementById('shell'));
+        overlay.style.display = 'flex';
+        const dialogBox = document.getElementById('dialog').getBoundingClientRect();
+        return {
+          shellOverflow: csShell.overflow,
+          navOverflowY: csNav.overflowY,
+          columnOverflow: csCol.overflow,
+          sidebarH: sidebar.getBoundingClientRect().height,
+          navScrollable: nav.scrollHeight > nav.clientHeight,
+          columnScrollable: column.scrollHeight > column.clientHeight + 1,
+          sheetScrollable: sheet ? sheet.scrollHeight > sheet.clientHeight + 1 : null,
+          dialogVisible: dialogBox.width > 0 && dialogBox.height > 0 && dialogBox.top >= 0,
+        };
+      };
+    </script>
+  </body>
+</html>

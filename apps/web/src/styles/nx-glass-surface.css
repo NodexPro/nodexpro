@@ -1,0 +1,190 @@
+/**
+ * Shared navy-glass surface tokens for Dashboard-adjacent screens (Settings).
+ * Values match the approved Dashboard glass recipe. Do not restyle the sidebar.
+ */
+
+.nx-glass-page {
+  font-family: Arial, sans-serif;
+  color: #eef6ff;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 8px 4px 24px;
+  box-sizing: border-box;
+}
+
+.nx-glass-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #eef6ff;
+  margin: 0 0 6px;
+}
+
+.nx-glass-subtitle {
+  font-size: 13px;
+  color: rgba(238, 246, 255, 0.72);
+  margin: 0 0 24px;
+}
+
+.nx-glass-card {
+  margin-bottom: 20px;
+  padding: 18px 20px;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.2), transparent 48%),
+    linear-gradient(180deg, rgba(248, 252, 255, 0.2) 0%, rgba(186, 216, 246, 0.14) 100%);
+  border: 1px solid rgba(210, 238, 255, 0.5);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.14),
+    0 8px 18px rgba(8, 38, 82, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.nx-glass-card h2 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #eef6ff;
+  margin: 0 0 16px;
+}
+
+.nx-glass-label {
+  color: rgba(238, 246, 255, 0.72);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.nx-glass-input {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(210, 238, 255, 0.45);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.16), transparent 48%),
+    linear-gradient(180deg, rgba(248, 252, 255, 0.14) 0%, rgba(186, 216, 246, 0.1) 100%);
+  color: #eef6ff;
+  font-size: 14px;
+  font-family: Arial, sans-serif;
+}
+
+.nx-glass-input:disabled,
+.nx-glass-input[readonly] {
+  opacity: 0.72;
+}
+
+textarea.nx-glass-input {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.nx-glass-input option {
+  background: #082447;
+  color: #eef6ff;
+}
+
+.nx-glass-btn {
+  height: auto;
+  min-height: 36px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  font-family: Arial, sans-serif;
+}
+
+.nx-glass-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.nx-glass-btn--purple {
+  border: 1px solid rgba(196, 184, 255, 0.55);
+  color: #f4f0ff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.2), transparent 48%),
+    linear-gradient(180deg, rgba(128, 116, 242, 0.42) 0%, rgba(102, 87, 232, 0.28) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.nx-glass-btn--purple:hover:not(:disabled) {
+  border-color: rgba(220, 210, 255, 0.72);
+  background: linear-gradient(115deg, rgba(128, 116, 242, 0.62) 0%, rgba(102, 87, 232, 0.48) 100%);
+}
+
+.nx-glass-btn--purple:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(128, 116, 242, 0.45);
+}
+
+.nx-glass-btn--secondary {
+  border: 1px solid rgba(210, 238, 255, 0.45);
+  color: #eef6ff;
+  background: rgba(8, 38, 82, 0.35);
+}
+
+.nx-glass-alert {
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.nx-glass-alert--error {
+  background: rgba(185, 28, 28, 0.28);
+  color: #fecaca;
+  border: 1px solid rgba(252, 165, 165, 0.35);
+}
+
+.nx-glass-alert--warn {
+  background: rgba(146, 64, 14, 0.28);
+  color: #fde68a;
+  border: 1px solid rgba(253, 230, 138, 0.35);
+}
+
+.nx-glass-lang {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.nx-glass-lang__btn {
+  height: auto;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  font-family: Arial, sans-serif;
+  color: #eef6ff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.18), transparent 48%),
+    linear-gradient(180deg, rgba(248, 252, 255, 0.16) 0%, rgba(186, 216, 246, 0.1) 100%);
+  border: 1px solid rgba(210, 238, 255, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.nx-glass-lang__btn.is-selected {
+  border-color: rgba(196, 184, 255, 0.7);
+  background: linear-gradient(115deg, rgba(128, 116, 242, 0.62) 0%, rgba(102, 87, 232, 0.48) 100%);
+}
+
+.nx-settings dt {
+  color: rgba(238, 246, 255, 0.72);
+  font-size: 14px;
+}
+
+.nx-settings dd {
+  color: #eef6ff;
+  margin: 0;
+}
