@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../i18n/I18nProvider';
 import { apiJson } from '../api/client';
 import { dashboardOverview } from '../api/endpoints';
+import { DashboardFeeBreakdownModal } from '../components/dashboard/DashboardFeeBreakdownModal';
 import '../styles/nx-dashboard.css';
 
 type DashboardStatus = 'ready' | 'empty' | 'coming_soon' | 'unavailable';
@@ -14,6 +15,7 @@ type OfficeKpi = {
   value_he: string;
   secondary_he: string;
   href: string | null;
+  action_key?: 'open_fee_breakdown' | 'navigate' | null;
   status: DashboardStatus;
   note_he: string | null;
 };
@@ -33,6 +35,7 @@ type OfficeSection = {
     expected_fees: OfficeKpi;
     office_debtors: OfficeKpi;
     new_clients: OfficeKpi;
+    clients_left: OfficeKpi;
   };
   missing_fees: {
     title_he: string;
@@ -42,6 +45,8 @@ type OfficeSection = {
     truncated?: boolean;
     truncated_he?: string | null;
     empty_he: string;
+    view_all_label_he?: string;
+    view_all_action?: 'open_fee_breakdown' | 'navigate' | null;
     clients: Array<{ client_id: string; display_name: string; indicator_he: string; href: string }>;
   };
   attention: {
@@ -73,6 +78,7 @@ type OfficeSection = {
       status: DashboardStatus;
       historical_basis_he: string;
       currency: string;
+      occupy_primary?: boolean;
       points: Array<{ month: string; label_he: string; value: number | null; established: boolean }>;
     };
     client_growth: {
@@ -80,6 +86,7 @@ type OfficeSection = {
       hint_he?: string;
       status: DashboardStatus;
       points: Array<{ month: string; label_he: string; value: number | null; established: boolean }>;
+      departed_points?: Array<{ month: string; label_he: string; value: number | null; established: boolean }>;
     };
   };
   client_status: {
@@ -106,7 +113,13 @@ type DashboardOverviewData = {
   office?: OfficeSection;
 };
 
-function LineChart({ points }: { points: Array<{ xLabel: string; count: number }> }) {
+function LineChart({
+  points,
+  secondary,
+}: {
+  points: Array<{ xLabel: string; count: number }>;
+  secondary?: Array<{ xLabel: string; count: number }>;
+}) {
   const w = 600;
   const h = 220;
   const paddingLeft = 44;
@@ -117,7 +130,7 @@ function LineChart({ points }: { points: Array<{ xLabel: string; count: number }
   const plotH = h - paddingTop - paddingBottom;
 
   const n = points.length;
-  const max = Math.max(1, ...points.map((p) => p.count));
+  const max = Math.max(1, ...points.map((p) => p.count), ...(secondary ?? []).map((p) => p.count));
   const min = 0;
   const range = Math.max(1, max - min);
 
@@ -151,6 +164,18 @@ function LineChart({ points }: { points: Array<{ xLabel: string; count: number }
       {coords.length > 0 && (
         <polyline points={polyline} fill="none" stroke="#39e6f4" strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" />
       )}
+      {secondary && secondary.length > 1 ? (
+        <polyline
+          points={secondary
+            .map((p, i) => `${n === 1 ? paddingLeft + plotW / 2 : paddingLeft + (i * plotW) / Math.max(1, n - 1)},${yAt(p.count)}`)
+            .join(' ')}
+          fill="none"
+          stroke="#268cff"
+          strokeWidth={2}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      ) : null}
       {coords.map((c, i) => (
         <circle key={`${c.xLabel}-${i}`} cx={c.x} cy={c.y} r={4} fill="#39e6f4" stroke="#04152f" strokeWidth={2} />
       ))}
@@ -172,7 +197,7 @@ function DonutChart({
   total: number;
   segments: Array<{ label: string; value: number; color: string }>;
 }) {
-  const size = 180;
+  const size = 132;
   const cx = size / 2;
   const cy = size / 2;
   const r = 66;
@@ -234,8 +259,14 @@ function EmptyState({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-function KpiCard({ kpi, onOpen }: { kpi: OfficeKpi; onOpen: (href: string) => void }) {
-  const clickable = Boolean(kpi.href) && kpi.status === 'ready';
+function KpiCard({
+  kpi,
+  onOpen,
+}: {
+  kpi: OfficeKpi;
+  onOpen: (kpi: OfficeKpi) => void;
+}) {
+  const clickable = kpi.action_key === 'open_fee_breakdown' || (Boolean(kpi.href) && kpi.status === 'ready');
   const inner = (
     <>
       <div className="nx-dashboard-card__label">{kpi.title_he}</div>
@@ -246,9 +277,9 @@ function KpiCard({ kpi, onOpen }: { kpi: OfficeKpi; onOpen: (href: string) => vo
       ) : null}
     </>
   );
-  if (clickable && kpi.href) {
+  if (clickable) {
     return (
-      <button type="button" className="nx-dashboard-card nx-dashboard-card--kpi" onClick={() => onOpen(kpi.href!)}>
+      <button type="button" className="nx-dashboard-card nx-dashboard-card--kpi" onClick={() => onOpen(kpi)}>
         {inner}
       </button>
     );
@@ -265,6 +296,8 @@ export function Dashboard() {
   const [period, setPeriod] = useState('current_month');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
+  const [breakdownFilter, setBreakdownFilter] = useState('all');
 
   const orgId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
 
@@ -314,6 +347,14 @@ export function Dashboard() {
     [office],
   );
 
+  const departedPoints = useMemo(
+    () =>
+      (office?.charts.client_growth.departed_points ?? [])
+        .filter((p) => p.value != null)
+        .map((p) => ({ xLabel: p.label_he, count: p.value as number })),
+    [office],
+  );
+
   if (auth.status !== 'authenticated') return null;
   if (loading) return <div className="nx-dashboard__status">{t('common.loading')}</div>;
   if (error) return <div className="nx-dashboard__status nx-dashboard__status--error">{error}</div>;
@@ -325,9 +366,25 @@ export function Dashboard() {
     );
   }
 
-  const kpis = [office.kpis.active_clients, office.kpis.expected_fees, office.kpis.office_debtors, office.kpis.new_clients];
+  const kpis = [
+    office.kpis.active_clients,
+    office.kpis.expected_fees,
+    office.kpis.office_debtors,
+    office.kpis.new_clients,
+    office.kpis.clients_left,
+  ].filter(Boolean);
   const statusTotal = office.client_status.segments.reduce((acc, s) => acc + s.count, 0);
   const collectedReady = overview?.summary.monthly_revenue_status === 'ready';
+  const occupyFeeChart = Boolean(office.charts.expected_fees_by_month.occupy_primary) && feePoints.length > 0;
+
+  const openKpi = (kpi: OfficeKpi) => {
+    if (kpi.action_key === 'open_fee_breakdown') {
+      setBreakdownFilter('all');
+      setBreakdownOpen(true);
+      return;
+    }
+    if (kpi.href) navigate(kpi.href);
+  };
 
   return (
     <div className="nx-dashboard" data-testid="nx-dashboard" dir={dir} lang={lang}>
@@ -353,7 +410,7 @@ export function Dashboard() {
 
         <div className="nx-dashboard__metrics">
           {kpis.map((kpi) => (
-            <KpiCard key={kpi.key} kpi={kpi} onOpen={(href) => navigate(href)} />
+            <KpiCard key={kpi.key} kpi={kpi} onOpen={openKpi} />
           ))}
         </div>
 
@@ -369,7 +426,7 @@ export function Dashboard() {
             ) : office.missing_fees.clients.length === 0 ? (
               <div className="nx-dashboard-empty__subtitle">{office.missing_fees.empty_he}</div>
             ) : (
-              <div className="nx-dashboard-list">
+              <div className="nx-dashboard-list nx-dashboard-list--compact">
                 {office.missing_fees.clients.map((c) => (
                   <button
                     key={c.client_id}
@@ -383,6 +440,18 @@ export function Dashboard() {
                 ))}
               </div>
             )}
+            {office.missing_fees.view_all_action === 'open_fee_breakdown' ? (
+              <button
+                type="button"
+                className="nx-dashboard-btn nx-dashboard-btn--secondary"
+                onClick={() => {
+                  setBreakdownFilter('needs_configuration');
+                  setBreakdownOpen(true);
+                }}
+              >
+                {office.missing_fees.view_all_label_he}
+              </button>
+            ) : null}
           </div>
 
           <div className="nx-dashboard-card">
@@ -416,6 +485,33 @@ export function Dashboard() {
 
         <div className="nx-dashboard__row nx-dashboard__row--split">
           <div className="nx-dashboard-card">
+            <div className="nx-dashboard-card__title">{office.charts.client_growth.title_he}</div>
+            <div className="nx-dashboard-card__hint">{office.charts.client_growth.hint_he ?? ''}</div>
+            {growthPoints.length === 0 ? (
+              <EmptyState title={office.charts.client_growth.title_he} subtitle={t('dashboard.growthEmpty')} />
+            ) : (
+              <LineChart points={growthPoints} secondary={departedPoints} />
+            )}
+          </div>
+          <div className="nx-dashboard-card nx-dashboard-card--compact">
+            <div className="nx-dashboard-card__title">{office.client_status.title_he}</div>
+            <DonutChart
+              total={statusTotal}
+              segments={office.client_status.segments.map((s) => ({ label: s.label_he, value: s.count, color: s.color }))}
+            />
+            <div className="nx-dashboard-legend">
+              {office.client_status.segments.map((s) => (
+                <div key={s.key} className="nx-dashboard-legend__item">
+                  <span className="nx-dashboard-legend__swatch" style={{ background: s.color }} />
+                  <span>{`${s.label_he} · ${s.count}`}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="nx-dashboard__row nx-dashboard__row--split nx-dashboard__row--compact">
+          <div className="nx-dashboard-card nx-dashboard-card--compact">
             <div className="nx-dashboard-card__title">{office.deadlines.title_he}</div>
             {office.deadlines.status === 'ready' && office.deadlines.rows.length > 0 ? (
               <div className="nx-dashboard-list">
@@ -436,51 +532,7 @@ export function Dashboard() {
               <EmptyState title={office.deadlines.title_he} subtitle={office.deadlines.unavailable_he} />
             )}
           </div>
-
-          <div className="nx-dashboard-card">
-            <div className="nx-dashboard-card__title">{office.client_status.title_he}</div>
-            <DonutChart
-              total={statusTotal}
-              segments={office.client_status.segments.map((s) => ({ label: s.label_he, value: s.count, color: s.color }))}
-            />
-            <div className="nx-dashboard-legend">
-              {office.client_status.segments.map((s) => (
-                <div key={s.key} className="nx-dashboard-legend__item">
-                  <span className="nx-dashboard-legend__swatch" style={{ background: s.color }} />
-                  <span>{`${s.label_he} · ${s.count}`}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="nx-dashboard__row nx-dashboard__row--chart">
-          <div className="nx-dashboard-card">
-            <div className="nx-dashboard-card__title">{office.charts.expected_fees_by_month.title_he}</div>
-            <div className="nx-dashboard-card__hint">{office.charts.expected_fees_by_month.historical_basis_he}</div>
-            {office.charts.expected_fees_by_month.status !== 'ready' || feePoints.length === 0 ? (
-              <EmptyState title={office.charts.expected_fees_by_month.title_he} subtitle={office.charts.expected_fees_by_month.historical_basis_he} />
-            ) : (
-              <LineChart points={feePoints} />
-            )}
-          </div>
-          <div className="nx-dashboard-card">
-            <div className="nx-dashboard-card__title">{office.charts.client_growth.title_he}</div>
-            <div className="nx-dashboard-card__hint">{office.charts.client_growth.hint_he ?? ''}</div>
-            {growthPoints.length === 0 ? (
-              <EmptyState title={office.charts.client_growth.title_he} subtitle={t('dashboard.growthEmpty')} />
-            ) : (
-              <LineChart points={growthPoints} />
-            )}
-          </div>
-        </div>
-
-        <div className="nx-dashboard__row nx-dashboard__row--split">
-          <div className="nx-dashboard-card">
-            <div className="nx-dashboard-card__title">{office.recent_activity.title_he}</div>
-            <EmptyState title={office.recent_activity.title_he} subtitle={office.recent_activity.unavailable_he} />
-          </div>
-          <div className="nx-dashboard-card">
+          <div className="nx-dashboard-card nx-dashboard-card--compact">
             <div className="nx-dashboard-card__title">{office.quick_actions.title_he}</div>
             <div className="nx-dashboard-actions">
               {office.quick_actions.actions.map((action) => (
@@ -506,7 +558,39 @@ export function Dashboard() {
             ) : null}
           </div>
         </div>
+
+        {occupyFeeChart ? (
+          <div className="nx-dashboard__row">
+            <div className="nx-dashboard-card">
+              <div className="nx-dashboard-card__title">{office.charts.expected_fees_by_month.title_he}</div>
+              <LineChart points={feePoints} />
+            </div>
+          </div>
+        ) : (
+          <div className="nx-dashboard-card nx-dashboard-card--compact nx-dashboard-card--muted">
+            <div className="nx-dashboard-card__title">{office.charts.expected_fees_by_month.title_he}</div>
+            <div className="nx-dashboard-empty__subtitle">{office.charts.expected_fees_by_month.historical_basis_he}</div>
+          </div>
+        )}
+
+        <div className="nx-dashboard__row nx-dashboard__row--split nx-dashboard__row--compact">
+          <div className="nx-dashboard-card">
+            <div className="nx-dashboard-card__title">{office.recent_activity.title_he}</div>
+            <EmptyState title={office.recent_activity.title_he} subtitle={office.recent_activity.unavailable_he} />
+          </div>
+        </div>
       </div>
+      <DashboardFeeBreakdownModal
+        open={breakdownOpen}
+        period={period}
+        locale={lang}
+        initialFilter={breakdownFilter}
+        onClose={() => setBreakdownOpen(false)}
+        onOpenClient={(href) => {
+          setBreakdownOpen(false);
+          navigate(href);
+        }}
+      />
     </div>
   );
 }

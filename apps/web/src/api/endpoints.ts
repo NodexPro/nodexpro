@@ -29,6 +29,9 @@ export const dashboardSummary = () => '/dashboard/summary';
 /** Rich aggregated payload for dashboard UI; requires X-Organization-Id. */
 export const dashboardOverview = () => '/dashboard/overview';
 
+/** Authorized office fee-breakdown aggregate for the Dashboard modal. */
+export const dashboardOfficeFeeBreakdown = () => '/dashboard/office-fee-breakdown';
+
 export const ORGS = '/organizations';
 export const org = (id: string) => `/organizations/${id}`;
 export const orgMembers = (id: string) => `/organizations/${id}/members`;

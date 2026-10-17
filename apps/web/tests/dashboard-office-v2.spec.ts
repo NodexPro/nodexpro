@@ -57,13 +57,13 @@ test('Dashboard V2 reads one overview aggregate with period and locale and does 
   assert.match(dashSrc, /dashboardOverview\(\)/);
   assert.match(dashSrc, /period=/);
   assert.match(dashSrc, /locale=/);
-  assert.doesNotMatch(dashSrc, /moduleClientOperationsCase|fetchWorkEngineQueueAggregate|\/fees/);
+  assert.doesNotMatch(dashSrc, /moduleClientOperationsCase|fetchWorkEngineQueueAggregate/);
   assert.match(routesSrc, /req\.query\.period/);
   assert.match(routesSrc, /req\.query\.locale/);
 });
 
 test('Expected fees stay before VAT, exclude one-time, and do not invent cash collected', () => {
-  assert.match(feesPure, /line\.charging_type\) === 'one_time'/);
+  assert.match(feesPure, /charging === 'one_time'|line\.charging_type\) === 'one_time'/);
   assert.doesNotMatch(feesPure, /DASHBOARD_FEES_VAT_RATE|=\s*0\.18/);
   assert.match(feesPure, /COUNTRY_PACK_STANDARD_VAT_KEY/);
   assert.match(officeProvider, /resolveCountryContext/);

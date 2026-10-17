@@ -337,3 +337,177 @@ test('projection only sees the authorized client set passed in (no cross-tenant 
   assert.equal(office.total_monthly_before_vat, 400);
   assert.equal(office.client_results.length, 1);
 });
+
+test('amount discount of 43 on 1503 monthly uses the fees-tab factor and yields 1460', () => {
+  const r = project({
+    client: client(),
+    agreement: agreement({ discount_has: true, discount_type: 'amount', discount_amount_ils: 43 }),
+    lines: [line({ price_ils: 1503 })],
+    periodStart: '2026-10-01',
+    periodEnd: '2026-10-31',
+    allowUndatedHistorical: true,
+  });
+  assert.equal(r.monthly_before_discount, 1503);
+  assert.equal(r.monthly_before_vat, 1460);
+  assert.equal(r.discount_applied_monthly, 43);
+  assert.equal(r.category, 'positive_recurring');
+});
+
+test('discount is applied to the VAT-split base, not the inclusive gross', () => {
+  const r = project({
+    client: client(),
+    agreement: agreement({ discount_has: true, discount_type: 'amount', discount_amount_ils: 43 }),
+    lines: [line({ vat_mode: 'incl_vat', price_ils: 1180 })],
+    periodStart: '2026-10-01',
+    periodEnd: '2026-10-31',
+    allowUndatedHistorical: true,
+    vatRate: 0.18,
+  });
+  assert.equal(r.monthly_before_discount, 1000);
+  assert.equal(r.monthly_before_vat, 957);
+});
+
+test('quantity multiplies the recurring unit price before monthly normalization', () => {
+  const r = project({
+    client: client(),
+    agreement: agreement(),
+    lines: [line({ price_ils: 400, quantity: 2 })],
+    periodStart: '2026-10-01',
+    periodEnd: '2026-10-31',
+    allowUndatedHistorical: true,
+  });
+  assert.equal(r.monthly_before_vat, 800);
+});
+
+test('missing agreement, one-time-only, and no recurring service stay distinct categories', () => {
+  const none = project({
+    client: client(),
+    agreement: null,
+    lines: [],
+    periodStart: '2026-10-01',
+    periodEnd: '2026-10-31',
+    allowUndatedHistorical: true,
+  });
+  assert.equal(none.category, 'no_agreement');
+  assert.equal(none.missing_recurring, true);
+
+  const once = project({
+    client: client(),
+    agreement: agreement(),
+    lines: [line({ charging_type: 'one_time', price_ils: 9000 })],
+    periodStart: '2026-10-01',
+    periodEnd: '2026-10-31',
+    allowUndatedHistorical: true,
+  });
+  assert.equal(once.category, 'one_time_only');
+
+  const idle = project({
+    client: client(),
+    agreement: agreement(),
+    lines: [line({ is_active: false })],
+    periodStart: '2026-10-01',
+    periodEnd: '2026-10-31',
+    allowUndatedHistorical: true,
+  });
+  assert.equal(idle.category, 'no_recurring_service');
+});
+
+test('explicit zero remains visible as configured_zero and is not missing', () => {
+  const office = projectOfficeExpectedFees({
+    clients: [client()],
+    agreementsByClient: new Map([['c1', agreement()]]),
+    linesByClient: new Map([['c1', [line({ price_ils: 0 })]]]),
+    periodStart: '2026-10-01',
+    periodEnd: '2026-10-31',
+    allowUndatedHistorical: true,
+    vatRate: 0.18,
+  });
+  assert.equal(office.missing.length, 0);
+  assert.equal(office.completeness, 'complete');
+  assert.equal(office.client_results[0]?.category, 'configured_zero');
+  assert.equal(office.zero_configured_count, 1);
+});
+
+test('unavailable FX blocks a complete office total instead of summing a partial amount', () => {
+  const office = projectOfficeExpectedFees({
+    clients: [client({ id: 'ok' }), client({ id: 'fx', display_name: 'מטבע' })],
+    agreementsByClient: new Map([
+      ['ok', agreement({ client_id: 'ok' })],
+      ['fx', agreement({ client_id: 'fx' })],
+    ]),
+    linesByClient: new Map([
+      ['ok', [line({ client_id: 'ok', price_ils: 1000 })]],
+      ['fx', [line({ client_id: 'fx', currency_code: 'USD', exchange_rate_to_ils: null, price_ils: 200 })]],
+    ]),
+    periodStart: '2026-10-01',
+    periodEnd: '2026-10-31',
+    allowUndatedHistorical: true,
+    vatRate: 0.18,
+  });
+  assert.equal(office.completeness, 'incomplete');
+  assert.equal(office.total_monthly_before_vat, 0);
+  assert.equal(office.skipped_fx_clients, 1);
+});
+
+test('duplicate in-force agreements block the complete office total', () => {
+  const office = projectOfficeExpectedFees({
+    clients: [client()],
+    agreementsByClient: new Map([
+      [
+        'c1',
+        [
+          agreement({ id: 'a1' }),
+          agreement({ id: 'a2', agreement_start_date: '2026-02-01' }),
+        ],
+      ],
+    ]),
+    linesByClient: new Map([['c1', [line({ agreement_id: 'a1', price_ils: 1000 })]]]),
+    periodStart: '2026-10-01',
+    periodEnd: '2026-10-31',
+    allowUndatedHistorical: true,
+    vatRate: 0.18,
+  });
+  assert.equal(office.completeness, 'incomplete');
+  assert.equal(office.total_monthly_before_vat, 0);
+  assert.equal(office.client_results[0]?.category, 'needs_attention');
+});
+
+test('complete office total equals the sum of included client monthly amounts', () => {
+  const office = projectOfficeExpectedFees({
+    clients: [client({ id: 'a' }), client({ id: 'b', display_name: 'ב' }), client({ id: 'z', display_name: 'אפס' })],
+    agreementsByClient: new Map([
+      ['a', agreement({ client_id: 'a' })],
+      ['b', agreement({ client_id: 'b' })],
+      ['z', agreement({ client_id: 'z' })],
+    ]),
+    linesByClient: new Map([
+      ['a', [line({ client_id: 'a', price_ils: 1000 })]],
+      ['b', [line({ client_id: 'b', charging_type: 'yearly', price_ils: 12000 })]],
+      ['z', [line({ client_id: 'z', price_ils: 0 })]],
+    ]),
+    periodStart: '2026-10-01',
+    periodEnd: '2026-10-31',
+    allowUndatedHistorical: true,
+    vatRate: 0.18,
+  });
+  const included = office.client_results.filter((r) => r.included_in_complete_total);
+  const sum = included.reduce((acc, r) => acc + r.monthly_before_vat, 0);
+  assert.equal(office.completeness, 'complete');
+  assert.equal(office.total_monthly_before_vat, sum);
+  assert.equal(office.total_monthly_before_vat, 2000);
+});
+
+test('missing Country Pack VAT rate makes the office total unavailable, not a silent zero of VAT-inclusive lines', () => {
+  const office = projectOfficeExpectedFees({
+    clients: [client()],
+    agreementsByClient: new Map([['c1', agreement()]]),
+    linesByClient: new Map([['c1', [line({ vat_mode: 'incl_vat', price_ils: 1180 })]]]),
+    periodStart: '2026-10-01',
+    periodEnd: '2026-10-31',
+    allowUndatedHistorical: true,
+    vatRate: null,
+  });
+  assert.equal(office.completeness, 'unavailable');
+  assert.equal(office.vat_rate_blocked, true);
+  assert.equal(office.total_monthly_before_vat, 0);
+});

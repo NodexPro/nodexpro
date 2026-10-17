@@ -67,6 +67,11 @@ createRoot(document.getElementById('root')!).render(
                 value="—"
                 secondary={dir === 'ltr' ? 'Added in current month' : 'נוספו בחודש נוכחי'}
               />
+              <Card
+                label={dir === 'ltr' ? 'Clients who left' : 'לקוחות שעזבו'}
+                value="—"
+                secondary={dir === 'ltr' ? 'Service ended in current month' : 'סיום טיפול בחודש נוכחי'}
+              />
             </div>
             <div className="nx-dashboard__row nx-dashboard__row--split">
               <div className="nx-dashboard-card">
@@ -87,6 +92,18 @@ createRoot(document.getElementById('root')!).render(
                     <div className="nx-dashboard-attention__value">—</div>
                   </div>
                 </div>
+              </div>
+            </div>
+            <div className="nx-dashboard__row nx-dashboard__row--split">
+              <div className="nx-dashboard-card">
+                <div className="nx-dashboard-card__title">{dir === 'ltr' ? 'Client growth' : 'צמיחת לקוחות'}</div>
+                <div className="nx-dashboard-empty__subtitle">
+                  {dir === 'ltr' ? 'Active at month end from open/end dates.' : 'פעילים בסוף החודש לפי תאריך פתיחה וסיום טיפול'}
+                </div>
+              </div>
+              <div className="nx-dashboard-card nx-dashboard-card--compact">
+                <div className="nx-dashboard-card__title">{dir === 'ltr' ? 'Client status' : 'סטטוס לקוחות'}</div>
+                <div className="nx-dashboard-empty__subtitle">{dir === 'ltr' ? 'Backend-owned status counts.' : 'סטטוסים מהאגרגט בלבד.'}</div>
               </div>
             </div>
           </div>

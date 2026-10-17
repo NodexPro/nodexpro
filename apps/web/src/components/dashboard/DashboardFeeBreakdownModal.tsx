@@ -1,0 +1,281 @@
+import { Fragment, useEffect, useState } from 'react';
+import { apiJson } from '../../api/client';
+import { dashboardOfficeFeeBreakdown } from '../../api/endpoints';
+
+export type OfficeFeeBreakdownAggregate = {
+  title_he: string;
+  period: { key: string; label_he: string };
+  office_total: {
+    status: string;
+    completeness: string;
+    completeness_he: string;
+    value_he: string;
+    before_discount_he: string | null;
+    discount_he: string | null;
+    note_he: string | null;
+  };
+  columns: Array<{ key: string; label_he: string }>;
+  filters: Array<{ key: string; label_he: string }>;
+  search_placeholder_he: string;
+  empty_he: string;
+  page_label_he: string;
+  rows: Array<{
+    client_id: string;
+    display_name: string;
+    href: string;
+    agreement_status_he: string;
+    billing_frequency_he: string;
+    recurring_before_discount_he: string;
+    discount_he: string;
+    monthly_before_vat_he: string;
+    calculation_status_he: string;
+    category: string;
+    expandable: boolean;
+    lines: Array<{ charging_type_he: string; monthly_before_vat_he: string }>;
+  }>;
+  pagination: {
+    page: number;
+    page_size: number;
+    total: number;
+    total_pages: number;
+    sort: string;
+    sort_dir: 'asc' | 'desc';
+    filter: string;
+    q: string;
+  };
+};
+
+const SORT_BY_COLUMN: Record<string, string> = {
+  client: 'display_name',
+  monthly: 'monthly_before_vat',
+  status: 'category',
+};
+
+export function DashboardFeeBreakdownModal(props: {
+  open: boolean;
+  period: string;
+  locale: string;
+  initialFilter?: string;
+  onClose: () => void;
+  onOpenClient: (href: string) => void;
+}) {
+  const { open, period, locale, initialFilter, onClose, onOpenClient } = props;
+  const [data, setData] = useState<OfficeFeeBreakdownAggregate | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [q, setQ] = useState('');
+  const [qDebounced, setQDebounced] = useState('');
+  const [page, setPage] = useState(1);
+  const [filter, setFilter] = useState(initialFilter ?? 'all');
+  const [sort, setSort] = useState('display_name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setQDebounced(q), 300);
+    return () => window.clearTimeout(t);
+  }, [q]);
+
+  useEffect(() => {
+    if (!open) return;
+    setFilter(initialFilter ?? 'all');
+    setPage(1);
+    setQ('');
+    setQDebounced('');
+    setSort('display_name');
+    setSortDir('asc');
+    setExpanded(null);
+  }, [open, initialFilter]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    const ac = new AbortController();
+    setLoading(true);
+    setError('');
+    const params = new URLSearchParams({
+      period,
+      locale,
+      page: String(page),
+      page_size: '25',
+      filter,
+      sort,
+      sort_dir: sortDir,
+    });
+    if (qDebounced.trim()) params.set('q', qDebounced.trim());
+    apiJson<OfficeFeeBreakdownAggregate>(`${dashboardOfficeFeeBreakdown()}?${params.toString()}`, { signal: ac.signal })
+      .then((d) => setData(d))
+      .catch((e) => {
+        if ((e as Error)?.name !== 'AbortError') setError(e instanceof Error ? e.message : 'Failed to load');
+      })
+      .finally(() => setLoading(false));
+    return () => ac.abort();
+  }, [open, period, locale, page, filter, qDebounced, sort, sortDir]);
+
+  if (!open) return null;
+  const pg = data?.pagination;
+
+  const toggleSort = (columnKey: string) => {
+    const next = SORT_BY_COLUMN[columnKey];
+    if (!next) return;
+    if (sort === next) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else {
+      setSort(next);
+      setSortDir('asc');
+    }
+    setPage(1);
+  };
+
+  return (
+    <div className="nx-dashboard-breakdown-overlay" role="presentation" onClick={onClose}>
+      <div
+        className="nx-dashboard-breakdown"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="nx-dashboard-breakdown-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="nx-dashboard-breakdown__header">
+          <div>
+            <h2 id="nx-dashboard-breakdown-title" className="nx-dashboard-card__title">
+              {data?.title_he ?? ''}
+            </h2>
+            <div className="nx-dashboard-card__hint">
+              {data?.office_total.value_he}
+              {data?.office_total.before_discount_he
+                ? ` · ${data.office_total.before_discount_he}`
+                : ''}
+              {data?.office_total.discount_he ? ` · ${data.office_total.discount_he}` : ''}
+            </div>
+            {data?.office_total.completeness_he ? (
+              <div className="nx-dashboard-card__note">{data.office_total.completeness_he}</div>
+            ) : null}
+            {data?.office_total.note_he ? (
+              <div className="nx-dashboard-card__note">{data.office_total.note_he}</div>
+            ) : null}
+          </div>
+          <button type="button" className="nx-dashboard-btn nx-dashboard-btn--secondary" onClick={onClose}>
+            ×
+          </button>
+        </div>
+        <div className="nx-dashboard-breakdown__toolbar">
+          <input
+            className="nx-dashboard-breakdown__search"
+            value={q}
+            onChange={(e) => {
+              setPage(1);
+              setQ(e.target.value);
+            }}
+            placeholder={data?.search_placeholder_he ?? ''}
+          />
+          <div className="nx-dashboard-period">
+            {(data?.filters ?? []).map((f) => (
+              <button
+                key={f.key}
+                type="button"
+                className={`nx-dashboard-period__chip${filter === f.key ? ' is-selected' : ''}`}
+                onClick={() => {
+                  setPage(1);
+                  setFilter(f.key);
+                }}
+              >
+                {f.label_he}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="nx-dashboard-breakdown__body">
+          {loading ? <div className="nx-dashboard-empty__subtitle">…</div> : null}
+          {error ? <div className="nx-dashboard__status--error">{error}</div> : null}
+          {!loading && data && data.rows.length === 0 ? (
+            <div className="nx-dashboard-empty__subtitle">{data.empty_he}</div>
+          ) : null}
+          {!loading && data && data.rows.length > 0 ? (
+            <table className="nx-dashboard-breakdown__table">
+              <thead>
+                <tr>
+                  {data.columns.map((c) => (
+                    <th
+                      key={c.key}
+                      className={SORT_BY_COLUMN[c.key] ? 'is-sortable' : undefined}
+                      onClick={() => toggleSort(c.key)}
+                    >
+                      {c.label_he}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.rows.map((row) => (
+                  <Fragment key={row.client_id}>
+                    <tr>
+                      <td>
+                        <button type="button" className="nx-dashboard-breakdown__link" onClick={() => onOpenClient(row.href)}>
+                          {row.display_name}
+                        </button>
+                        {row.expandable ? (
+                          <button
+                            type="button"
+                            className="nx-dashboard-breakdown__expand"
+                            onClick={() => setExpanded(expanded === row.client_id ? null : row.client_id)}
+                          >
+                            +
+                          </button>
+                        ) : null}
+                      </td>
+                      <td>{row.agreement_status_he}</td>
+                      <td>{row.billing_frequency_he}</td>
+                      <td>{row.recurring_before_discount_he}</td>
+                      <td>{row.discount_he}</td>
+                      <td>{row.monthly_before_vat_he}</td>
+                      <td>{row.calculation_status_he}</td>
+                    </tr>
+                    {expanded === row.client_id
+                      ? row.lines.map((line, i) => (
+                          <tr key={`${row.client_id}-${i}`} className="nx-dashboard-breakdown__sub">
+                            <td colSpan={3}>{line.charging_type_he}</td>
+                            <td colSpan={4}>{line.monthly_before_vat_he}</td>
+                          </tr>
+                        ))
+                      : null}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          ) : null}
+        </div>
+        {pg ? (
+          <div className="nx-dashboard-breakdown__footer">
+            <span className="nx-dashboard-card__note">{data?.page_label_he}</span>
+            <div className="nx-dashboard-actions">
+              <button
+                type="button"
+                className="nx-dashboard-btn nx-dashboard-btn--secondary"
+                disabled={pg.page <= 1}
+                onClick={() => setPage(pg.page - 1)}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="nx-dashboard-btn nx-dashboard-btn--secondary"
+                disabled={pg.page >= pg.total_pages}
+                onClick={() => setPage(pg.page + 1)}
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}

@@ -26,4 +26,30 @@ router.get('/overview', authMiddleware, requireOrg, requireOfficeAdministration,
   }
 });
 
+router.get('/office-fee-breakdown', authMiddleware, requireOrg, requireOfficeAdministration, async (req, res, next) => {
+  try {
+    const q = typeof req.query.q === 'string' ? req.query.q : undefined;
+    const period = typeof req.query.period === 'string' ? req.query.period : undefined;
+    const locale = typeof req.query.locale === 'string' ? req.query.locale : undefined;
+    const page = typeof req.query.page === 'string' ? req.query.page : undefined;
+    const page_size = typeof req.query.page_size === 'string' ? req.query.page_size : undefined;
+    const sort = typeof req.query.sort === 'string' ? req.query.sort : undefined;
+    const sort_dir = typeof req.query.sort_dir === 'string' ? req.query.sort_dir : undefined;
+    const filter = typeof req.query.filter === 'string' ? req.query.filter : undefined;
+    const breakdown = await dashboardService.getOfficeFeeBreakdown(req.context!, {
+      period,
+      locale,
+      q,
+      page,
+      page_size,
+      sort,
+      sort_dir,
+      filter,
+    });
+    return res.json(breakdown);
+  } catch (e) {
+    next(e);
+  }
+});
+
 export const dashboardRoutes = router;

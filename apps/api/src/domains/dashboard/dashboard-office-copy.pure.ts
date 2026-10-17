@@ -58,6 +58,45 @@ type OfficeCopy = {
   collected_cash_note: string;
   clients_count: (n: number) => string;
   historical_basis: (missing: string) => string;
+  kpi_left: string;
+  kpi_left_secondary: (periodLabel: string) => string;
+  kpi_left_churn: (pct: string) => string;
+  kpi_left_churn_unavailable: string;
+  kpi_expected_incomplete: string;
+  kpi_expected_year_unavailable: string;
+  breakdown_title: string;
+  breakdown_search: string;
+  breakdown_empty: string;
+  breakdown_load_failed: string;
+  breakdown_page: (page: number, pages: number, total: number) => string;
+  breakdown_filter_all: string;
+  col_client: string;
+  col_agreement: string;
+  col_frequency: string;
+  col_before_discount: string;
+  col_discount: string;
+  col_monthly: string;
+  col_status: string;
+  cat_positive_recurring: string;
+  cat_configured_zero: string;
+  cat_no_agreement: string;
+  cat_no_recurring_service: string;
+  cat_one_time_only: string;
+  cat_needs_attention: string;
+  cat_unsupported_vat_fx: string;
+  freq_monthly: string;
+  freq_bi_monthly: string;
+  freq_quarterly: string;
+  freq_yearly: string;
+  freq_one_time: string;
+  freq_mixed: string;
+  discount_none: string;
+  discount_percent: (n: string) => string;
+  discount_amount: (n: string) => string;
+  completeness_complete: string;
+  completeness_incomplete: string;
+  view_all: string;
+  chart_growth_departed_hint: string;
 };
 
 const HE: OfficeCopy = {
@@ -113,6 +152,46 @@ const HE: OfficeCopy = {
   clients_count: (n) => `${n} לקוחות`,
   historical_basis: (missing) =>
     `חודשים היסטוריים אינם מוצגים: היסטוריית השכ״ט אינה כוללת ${missing}. התעריף הנוכחי אינו מושלך אחורה.`,
+  kpi_left: 'לקוחות שעזבו',
+  kpi_left_secondary: (periodLabel) => `סיום טיפול ב${periodLabel}`,
+  kpi_left_churn: (pct) => `שיעור עזיבה ${pct}%`,
+  kpi_left_churn_unavailable: 'שיעור עזיבה אינו זמין — אין אוכלוסיית פתיחת תקופה מהימנה',
+  kpi_expected_incomplete: 'הסכום אינו מלא: יש לקוחות שלא ניתן לחשב עבורם שכ״ט באופן מהימן.',
+  kpi_expected_year_unavailable:
+    'אין סכום שנתי מהימן: היסטוריית השכ״ט אינה מאפשרת שחזור חודשים קודמים. לא הוכפל התעריף הנוכחי.',
+  breakdown_title: 'פירוט שכ״ט חודשי',
+  breakdown_search: 'חיפוש לקוח',
+  breakdown_empty: 'אין לקוחות להצגה במסנן זה.',
+  breakdown_load_failed: 'לא ניתן לטעון את פירוט השכ״ט.',
+  breakdown_page: (page, pages, total) => `עמוד ${page} מתוך ${pages} · ${total} לקוחות`,
+  breakdown_filter_all: 'הכל',
+  col_client: 'לקוח',
+  col_agreement: 'סטטוס הסכם',
+  col_frequency: 'תדירות',
+  col_before_discount: 'לפני הנחה',
+  col_discount: 'הנחה',
+  col_monthly: 'שווי חודשי לפני מע״מ',
+  col_status: 'סטטוס חישוב',
+  cat_positive_recurring: 'שכ״ט חוזר',
+  cat_configured_zero: 'שכ״ט אפס מפורש',
+  cat_no_agreement: 'לא הוגדר הסכם שכ״ט',
+  cat_no_recurring_service: 'הסכם ללא שירות חוזר',
+  cat_one_time_only: 'שירות חד-פעמי בלבד',
+  cat_needs_attention: 'דורש בדיקה',
+  cat_unsupported_vat_fx: 'מע״מ או מטבע לא זמינים',
+  freq_monthly: 'חודשי',
+  freq_bi_monthly: 'דו-חודשי',
+  freq_quarterly: 'רבעוני',
+  freq_yearly: 'שנתי',
+  freq_one_time: 'חד-פעמי',
+  freq_mixed: 'משולב',
+  discount_none: 'אין',
+  discount_percent: (n) => `${n}%`,
+  discount_amount: (n) => n,
+  completeness_complete: 'סה״כ מלא תואם לפירוט',
+  completeness_incomplete: 'סה״כ חלקי — לא מוצג כסכום סופי',
+  view_all: 'הצג הכל',
+  chart_growth_departed_hint: 'פעילים בסוף החודש לפי תאריך פתיחה וסיום טיפול; עזיבות בנפרד',
 };
 
 const EN: OfficeCopy = {
@@ -172,6 +251,46 @@ const EN: OfficeCopy = {
   clients_count: (n) => `${n} clients`,
   historical_basis: (missing) =>
     `Historical months are not shown: fee history does not include ${missing}. Current tariffs are not projected backward.`,
+  kpi_left: 'Clients who left',
+  kpi_left_secondary: (periodLabel) => `Service ended in ${periodLabel}`,
+  kpi_left_churn: (pct) => `Churn ${pct}%`,
+  kpi_left_churn_unavailable: 'Churn % unavailable — beginning-of-period population cannot be reconstructed',
+  kpi_expected_incomplete: 'The total is incomplete: some client fees cannot be established reliably.',
+  kpi_expected_year_unavailable:
+    'No trustworthy year-to-date amount: fee history cannot reconstruct prior months. Current tariff was not multiplied.',
+  breakdown_title: 'Monthly fee breakdown',
+  breakdown_search: 'Search clients',
+  breakdown_empty: 'No clients match this filter.',
+  breakdown_load_failed: 'The fee breakdown could not be loaded.',
+  breakdown_page: (page, pages, total) => `Page ${page} of ${pages} · ${total} clients`,
+  breakdown_filter_all: 'All',
+  col_client: 'Client',
+  col_agreement: 'Agreement status',
+  col_frequency: 'Frequency',
+  col_before_discount: 'Before discount',
+  col_discount: 'Discount',
+  col_monthly: 'Monthly equivalent before VAT',
+  col_status: 'Calculation status',
+  cat_positive_recurring: 'Recurring fees',
+  cat_configured_zero: 'Explicit zero fee',
+  cat_no_agreement: 'No fee agreement',
+  cat_no_recurring_service: 'Agreement without recurring service',
+  cat_one_time_only: 'One-time only',
+  cat_needs_attention: 'Needs attention',
+  cat_unsupported_vat_fx: 'VAT or FX unavailable',
+  freq_monthly: 'Monthly',
+  freq_bi_monthly: 'Bi-monthly',
+  freq_quarterly: 'Quarterly',
+  freq_yearly: 'Yearly',
+  freq_one_time: 'One-time',
+  freq_mixed: 'Mixed',
+  discount_none: 'None',
+  discount_percent: (n) => `${n}%`,
+  discount_amount: (n) => n,
+  completeness_complete: 'Complete total matches the breakdown',
+  completeness_incomplete: 'Partial total — not shown as a final figure',
+  view_all: 'View all',
+  chart_growth_departed_hint: 'Active at month end from open/end dates; departures as a separate series',
 };
 
 export function officeCopy(locale: DashboardLocale): OfficeCopy {

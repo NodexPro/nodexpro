@@ -16,13 +16,14 @@ const coProvider = readFileSync(
   'utf8',
 );
 
-test('Dashboard uses translucent glass cards and keeps the four metric slots', () => {
+test('Dashboard uses translucent glass cards and keeps the five metric slots', () => {
   assert.match(dashSrc, /nx-dashboard\.css/);
   assert.match(dashSrc, /data-testid="nx-dashboard"/);
   assert.match(dashSrc, /active_clients/);
   assert.match(dashSrc, /expected_fees/);
   assert.match(dashSrc, /office_debtors/);
   assert.match(dashSrc, /new_clients/);
+  assert.match(dashSrc, /clients_left/);
   assert.match(dashCss, /\.nx-dashboard-card/);
   assert.match(dashCss, /linear-gradient\(180deg, rgba\(248, 252, 255, 0\.2\)/);
   assert.match(dashCss, /backdrop-filter: blur\(12px\)/);

@@ -31,12 +31,24 @@ import {
   type DashboardFeeAgreementInput,
   type DashboardFeeClientInput,
   type DashboardFeeLineInput,
+  type FeeBreakdownCategory,
 } from '../dashboard-office-fees.pure.js';
-import type { DashboardOverviewQuery, OfficeDashboardSection } from '../dashboard-office.types.js';
+import {
+  monthActivePopulation,
+  monthDepartedCount,
+  projectOfficeChurn,
+} from '../dashboard-office-churn.pure.js';
+import { paginateFeeBreakdown } from '../dashboard-office-fee-breakdown.pure.js';
+import type {
+  DashboardFeeBreakdownQuery,
+  DashboardOverviewQuery,
+  OfficeDashboardSection,
+  OfficeFeeBreakdownAggregate,
+} from '../dashboard-office.types.js';
 import type { DashboardStatus } from '../dashboard-status.js';
 
 const PAGE = 500;
-const MISSING_FEES_LIST_CAP = 40;
+const MISSING_FEES_LIST_CAP = 8;
 
 function hasPermission(ctx: RequestContext, p: string): boolean {
   return (ctx.membership?.permissions ?? []).includes(p);
@@ -73,6 +85,7 @@ function unavailableKpi(key: string, title_he: string, secondary_he: string): Of
     value_he: '—',
     secondary_he,
     href: null,
+    action_key: null,
     status: 'unavailable',
     note_he: secondary_he,
   };
@@ -102,6 +115,14 @@ function emptyOfficeSection(
       expected_fees: kpi('expected_fees', copy.kpi_expected_fees),
       office_debtors: kpi('office_debtors', copy.kpi_debtors),
       new_clients: kpi('new_clients', copy.kpi_new_clients),
+      clients_left: kpi('clients_left', copy.kpi_left),
+    },
+    expected_fees_diagnostics: {
+      completeness: 'unavailable',
+      completeness_he: copy.completeness_incomplete,
+      total_before_discount_he: null,
+      discount_total_he: null,
+      opens_breakdown: false,
     },
     missing_fees: {
       title_he: copy.missing_title,
@@ -112,6 +133,8 @@ function emptyOfficeSection(
       truncated: false,
       truncated_he: null,
       empty_he: reason,
+      view_all_label_he: copy.view_all,
+      view_all_action: null,
       clients: [],
     },
     attention: {
@@ -163,13 +186,15 @@ function emptyOfficeSection(
         status: 'unavailable',
         historical_basis_he: reason,
         currency: 'ILS',
+        occupy_primary: false,
         points: [],
       },
       client_growth: {
         title_he: copy.chart_growth_title,
-        hint_he: copy.chart_growth_hint,
+        hint_he: copy.chart_growth_departed_hint,
         status: 'unavailable',
         points: [],
+        departed_points: [],
       },
     },
     client_status: { title_he: copy.status_title, segments: [] },
@@ -326,23 +351,28 @@ export const dashboardOfficeProvider: DashboardProvider = {
     };
 
     const months = lastNJerusalemMonths(now, 6);
-    const growthPoints = months.map((m) => {
-      const cumulative = visible.filter((c) => {
-        const created = isoToJerusalemDate(c.created_at);
-        return created != null && created <= m.end_date;
-      }).length;
-      return {
-        month: m.month_key,
-        label_he: monthLabel(m.month_key, locale),
-        value: cumulative,
-        established: true,
-      };
-    });
+    const growthUniverse = clients;
+    const growthPoints = months.map((m) => ({
+      month: m.month_key,
+      label_he: monthLabel(m.month_key, locale),
+      value: monthActivePopulation(growthUniverse, m.start_date, m.end_date),
+      established: true,
+    }));
+    const departedPoints = months.map((m) => ({
+      month: m.month_key,
+      label_he: monthLabel(m.month_key, locale),
+      value: monthDepartedCount(growthUniverse, m.start_date, m.end_date),
+      established: true,
+    }));
+    const churn = projectOfficeChurn(clients, window.start_date, window.end_date);
 
     let expectedStatus: DashboardStatus = 'ready';
     let expectedAmount = 0;
+    let expectedBeforeDiscount = 0;
+    let expectedDiscountTotal = 0;
+    let expectedCompleteness: 'complete' | 'incomplete' | 'unavailable' = 'unavailable';
     let skippedFx = 0;
-    let missingClients: Array<{ client_id: string; display_name: string }> = [];
+    let missingClients: Array<{ client_id: string; display_name: string; category: FeeBreakdownCategory }> = [];
     const feeChartPoints: OfficeDashboardSection['charts']['expected_fees_by_month']['points'] = [];
     let feeNote: string | null = null;
     const historyGap = canReconstructMonthlyExpectedFromFeeHistory([]);
@@ -355,7 +385,7 @@ export const dashboardOfficeProvider: DashboardProvider = {
       const [agreementRows, lineRows, vatRate] = await Promise.all([
         fetchAllOrgRows<Record<string, unknown>>(
           'client_fee_agreements',
-          'client_id, agreement_status, agreement_start_date, agreement_end_date, discount_has, discount_type, discount_percent, discount_amount_ils',
+          'id, client_id, agreement_status, agreement_start_date, agreement_end_date, discount_has, discount_type, discount_percent, discount_amount_ils',
           'organization_id',
           orgId,
         ),
@@ -367,11 +397,13 @@ export const dashboardOfficeProvider: DashboardProvider = {
         ),
         resolveOfficeCountryPackVatRate(orgId, today.date),
       ]);
-      const agreementsByClient = new Map<string, DashboardFeeAgreementInput>();
+      const agreementsByClient = new Map<string, DashboardFeeAgreementInput[]>();
       for (const row of agreementRows) {
         const id = String(row.client_id);
         if (authorizedSet && !authorizedSet.has(id)) continue;
-        agreementsByClient.set(id, {
+        const list = agreementsByClient.get(id) ?? [];
+        list.push({
+          id: row.id != null ? String(row.id) : null,
           client_id: id,
           agreement_status: row.agreement_status != null ? String(row.agreement_status) : null,
           agreement_start_date: row.agreement_start_date != null ? String(row.agreement_start_date).slice(0, 10) : null,
@@ -381,6 +413,7 @@ export const dashboardOfficeProvider: DashboardProvider = {
           discount_percent: row.discount_percent != null ? Number(row.discount_percent) : null,
           discount_amount_ils: row.discount_amount_ils != null ? Number(row.discount_amount_ils) : null,
         });
+        agreementsByClient.set(id, list);
       }
       const linesByClient = new Map<string, DashboardFeeLineInput[]>();
       for (const row of lineRows) {
@@ -404,7 +437,12 @@ export const dashboardOfficeProvider: DashboardProvider = {
 
       if (feeScheduleBasis === 'historical_unavailable') {
         expectedStatus = 'unavailable';
+        expectedCompleteness = 'unavailable';
         feeNote = copy.historical_unavailable;
+      } else if (periodKey === 'current_year') {
+        expectedStatus = 'unavailable';
+        expectedCompleteness = 'unavailable';
+        feeNote = copy.kpi_expected_year_unavailable;
       } else {
         const current = projectOfficeExpectedFees({
           clients: activeClients,
@@ -415,15 +453,20 @@ export const dashboardOfficeProvider: DashboardProvider = {
           allowUndatedHistorical: true,
           vatRate,
         });
-        if (current.vat_rate_blocked) {
+        expectedCompleteness = current.completeness;
+        expectedBeforeDiscount = current.total_before_discount;
+        expectedDiscountTotal = current.discount_total;
+        if (current.vat_rate_blocked || current.completeness === 'unavailable') {
           expectedStatus = 'unavailable';
           feeNote = copy.vat_rate_unavailable;
+        } else if (current.completeness === 'incomplete') {
+          expectedStatus = 'unavailable';
+          expectedAmount = 0;
+          skippedFx = current.skipped_fx_clients;
+          feeNote = skippedFx > 0 ? copy.fx_skipped(skippedFx) : copy.kpi_expected_incomplete;
         } else {
           expectedAmount = current.total_monthly_before_vat;
           skippedFx = current.skipped_fx_clients;
-          if (skippedFx > 0) {
-            feeNote = copy.fx_skipped(skippedFx);
-          }
         }
       }
 
@@ -459,7 +502,7 @@ export const dashboardOfficeProvider: DashboardProvider = {
     const missingHrefClients = missingClients.slice(0, MISSING_FEES_LIST_CAP).map((c) => ({
       client_id: c.client_id,
       display_name: c.display_name,
-      indicator_he: copy.missing_indicator,
+      indicator_he: categoryLabelHe(c.category, copy) || copy.missing_indicator,
       href: `/m/client-operations/clients/${c.client_id}?tab=fees`,
     }));
 
@@ -514,6 +557,7 @@ export const dashboardOfficeProvider: DashboardProvider = {
           value_he: String(activeClients.length),
           secondary_he: copy.kpi_active_secondary,
           href: '/m/client-operations',
+          action_key: 'navigate',
           status: 'ready',
           note_he: null,
         },
@@ -522,7 +566,8 @@ export const dashboardOfficeProvider: DashboardProvider = {
           title_he: copy.kpi_expected_fees,
           value_he: expectedStatus === 'ready' ? formatIls(expectedAmount, locale) : '—',
           secondary_he: expectedStatus === 'ready' ? expectedSecondary : feeNote ?? copy.unavailable,
-          href: '/m/client-operations',
+          href: null,
+          action_key: canViewFees(ctx) ? 'open_fee_breakdown' : null,
           status: expectedStatus,
           note_he: feeNote,
         },
@@ -532,6 +577,7 @@ export const dashboardOfficeProvider: DashboardProvider = {
           value_he: '—',
           secondary_he: copy.kpi_debtors_secondary,
           href: null,
+          action_key: null,
           status: 'coming_soon',
           note_he: copy.kpi_debtors_note,
         },
@@ -541,9 +587,31 @@ export const dashboardOfficeProvider: DashboardProvider = {
           value_he: String(newInPeriod.length),
           secondary_he: copy.kpi_new_clients_secondary(window.label_he),
           href: '/m/client-operations',
+          action_key: 'navigate',
           status: 'ready',
           note_he: null,
         },
+        clients_left: {
+          key: 'clients_left',
+          title_he: copy.kpi_left,
+          value_he: String(churn.departed_count),
+          secondary_he: churn.churn_percent != null
+            ? `${copy.kpi_left_secondary(window.label_he)} · ${copy.kpi_left_churn(String(churn.churn_percent))}`
+            : copy.kpi_left_secondary(window.label_he),
+          href: '/m/client-operations',
+          action_key: 'navigate',
+          status: 'ready',
+          note_he: churn.churn_percent == null ? copy.kpi_left_churn_unavailable : null,
+        },
+      },
+      expected_fees_diagnostics: {
+        completeness: expectedCompleteness,
+        completeness_he:
+          expectedCompleteness === 'complete' ? copy.completeness_complete : copy.completeness_incomplete,
+        total_before_discount_he:
+          expectedStatus === 'ready' ? formatIls(expectedBeforeDiscount, locale) : null,
+        discount_total_he: expectedStatus === 'ready' ? formatIls(expectedDiscountTotal, locale) : null,
+        opens_breakdown: canViewFees(ctx),
       },
       missing_fees: {
         title_he: copy.missing_title,
@@ -559,6 +627,8 @@ export const dashboardOfficeProvider: DashboardProvider = {
             : missingClients.length === 0
               ? copy.missing_empty
               : '',
+        view_all_label_he: copy.view_all,
+        view_all_action: missingFeesStatus === 'ready' ? 'open_fee_breakdown' : null,
         clients: missingHrefClients,
       },
       attention: {
@@ -610,13 +680,15 @@ export const dashboardOfficeProvider: DashboardProvider = {
           status: expectedStatus,
           historical_basis_he: historicalBasisHe,
           currency: 'ILS',
+          occupy_primary: feeChartPoints.some((p) => p.established && p.value != null),
           points: feeChartPoints,
         },
         client_growth: {
           title_he: copy.chart_growth_title,
-          hint_he: copy.chart_growth_hint,
+          hint_he: copy.chart_growth_departed_hint,
           status: 'ready',
           points: growthPoints,
+          departed_points: departedPoints,
         },
       },
       client_status: {
@@ -648,3 +720,252 @@ export const dashboardOfficeProvider: DashboardProvider = {
     return { office };
   },
 };
+
+function frequencyLabelHe(freqs: string[], copy: ReturnType<typeof officeCopy>): string {
+  const unique = [...new Set(freqs.filter(Boolean))];
+  if (unique.length === 0) return '—';
+  if (unique.length > 1) return copy.freq_mixed;
+  switch (unique[0]) {
+    case 'monthly':
+      return copy.freq_monthly;
+    case 'bi_monthly':
+      return copy.freq_bi_monthly;
+    case 'quarterly':
+      return copy.freq_quarterly;
+    case 'yearly':
+      return copy.freq_yearly;
+    case 'one_time':
+      return copy.freq_one_time;
+    default:
+      return unique[0] ?? '—';
+  }
+}
+
+function categoryLabelHe(category: FeeBreakdownCategory, copy: ReturnType<typeof officeCopy>): string {
+  switch (category) {
+    case 'positive_recurring':
+      return copy.cat_positive_recurring;
+    case 'configured_zero':
+      return copy.cat_configured_zero;
+    case 'no_agreement':
+      return copy.cat_no_agreement;
+    case 'no_recurring_service':
+      return copy.cat_no_recurring_service;
+    case 'one_time_only':
+      return copy.cat_one_time_only;
+    case 'needs_attention':
+      return copy.cat_needs_attention;
+    case 'unsupported_vat_fx':
+      return copy.cat_unsupported_vat_fx;
+    default:
+      return copy.unavailable;
+  }
+}
+
+export async function getOfficeFeeBreakdownAggregate(
+  ctx: RequestContext,
+  query?: DashboardFeeBreakdownQuery,
+): Promise<OfficeFeeBreakdownAggregate> {
+  const orgId = ctx.organizationId;
+  const membership = ctx.membership;
+  if (!orgId || !membership) throw forbidden('Active organization required');
+  const now = new Date();
+  const locale = parseDashboardLocale(query?.locale);
+  const copy = officeCopy(locale);
+  const periodKey = parseDashboardPeriodKey(query?.period);
+  const window = resolveDashboardPeriodWindow(now, periodKey, locale);
+  const today = jerusalemDayWindow(now);
+  const allowUndatedCurrent = window.start_date <= today.date && window.end_date >= today.date;
+  const period = {
+    key: window.key,
+    label_he: window.label_he,
+    start_date: window.start_date,
+    end_date: window.end_date,
+    options: dashboardPeriodOptions(window.key, locale),
+  };
+  const empty = (note: string, status: DashboardStatus = 'unavailable'): OfficeFeeBreakdownAggregate => ({
+    title_he: copy.breakdown_title,
+    period,
+    office_total: {
+      status,
+      completeness: 'unavailable',
+      completeness_he: copy.completeness_incomplete,
+      value_he: '—',
+      before_discount_he: null,
+      discount_he: null,
+      note_he: note,
+    },
+    columns: [],
+    filters: [{ key: 'all', label_he: copy.breakdown_filter_all }],
+    search_placeholder_he: copy.breakdown_search,
+    empty_he: note,
+    page_label_he: copy.breakdown_page(1, 1, 0),
+    rows: [],
+    pagination: {
+      page: 1,
+      page_size: 25,
+      total: 0,
+      total_pages: 1,
+      sort: 'display_name',
+      sort_dir: 'asc',
+      filter: 'all',
+      q: '',
+    },
+  });
+
+  if (!canViewFees(ctx)) return empty(copy.no_fees_permission);
+  if (feeScheduleBasisForPeriod(allowUndatedCurrent) === 'historical_unavailable') {
+    return empty(copy.historical_unavailable);
+  }
+  if (periodKey === 'current_year') {
+    return empty(copy.kpi_expected_year_unavailable);
+  }
+
+  const accessScope = await resolveOrganizationClientAccessScopeFromContext(ctx);
+  const authorizedSet = accessScope.authorized_client_ids ? new Set(accessScope.authorized_client_ids) : null;
+  const clientRows = await fetchAllOrgRows<Record<string, unknown>>(
+    'clients',
+    'id, display_name, status, is_archived, created_at, ended_at',
+    'organization_id',
+    orgId,
+  );
+  const clients: DashboardFeeClientInput[] = clientRows
+    .map((r) => ({
+      id: String(r.id),
+      display_name: r.display_name != null ? String(r.display_name) : null,
+      status: r.status != null ? String(r.status) : null,
+      is_archived: asBool(r.is_archived),
+      created_at: r.created_at != null ? String(r.created_at) : null,
+      ended_at: r.ended_at != null ? String(r.ended_at) : null,
+    }))
+    .filter((c) => (authorizedSet ? authorizedSet.has(c.id) : true))
+    .filter((c) => !c.is_archived && String(c.status ?? '') === 'active');
+
+  const [agreementRows, lineRows, vatRate] = await Promise.all([
+    fetchAllOrgRows<Record<string, unknown>>(
+      'client_fee_agreements',
+      'id, client_id, agreement_status, agreement_start_date, agreement_end_date, discount_has, discount_type, discount_percent, discount_amount_ils',
+      'organization_id',
+      orgId,
+    ),
+    fetchAllOrgRows<Record<string, unknown>>(
+      'client_fee_service_lines',
+      'client_id, agreement_id, is_active, charging_type, line_kind, catalog_code, price_ils, vat_mode, quantity, currency_code, exchange_rate_to_ils, payslip_count, unit_price_ils, line_total_ils',
+      'organization_id',
+      orgId,
+    ),
+    resolveOfficeCountryPackVatRate(orgId, today.date),
+  ]);
+  const agreementsByClient = new Map<string, DashboardFeeAgreementInput[]>();
+  for (const row of agreementRows) {
+    const id = String(row.client_id);
+    if (authorizedSet && !authorizedSet.has(id)) continue;
+    const list = agreementsByClient.get(id) ?? [];
+    list.push({
+      id: row.id != null ? String(row.id) : null,
+      client_id: id,
+      agreement_status: row.agreement_status != null ? String(row.agreement_status) : null,
+      agreement_start_date: row.agreement_start_date != null ? String(row.agreement_start_date).slice(0, 10) : null,
+      agreement_end_date: row.agreement_end_date != null ? String(row.agreement_end_date).slice(0, 10) : null,
+      discount_has: asBool(row.discount_has),
+      discount_type: row.discount_type != null ? String(row.discount_type) : null,
+      discount_percent: row.discount_percent != null ? Number(row.discount_percent) : null,
+      discount_amount_ils: row.discount_amount_ils != null ? Number(row.discount_amount_ils) : null,
+    });
+    agreementsByClient.set(id, list);
+  }
+  const linesByClient = new Map<string, DashboardFeeLineInput[]>();
+  for (const row of lineRows) {
+    const id = String(row.client_id);
+    if (authorizedSet && !authorizedSet.has(id)) continue;
+    const list = linesByClient.get(id) ?? [];
+    list.push(mapLine(row));
+    linesByClient.set(id, list);
+  }
+
+  const projected = projectOfficeExpectedFees({
+    clients,
+    agreementsByClient,
+    linesByClient,
+    periodStart: window.start_date,
+    periodEnd: window.end_date,
+    allowUndatedHistorical: true,
+    vatRate,
+  });
+  const paged = paginateFeeBreakdown(projected.client_results, query ?? {});
+  const complete = projected.completeness === 'complete';
+  const totalStatus: DashboardStatus = complete ? 'ready' : 'unavailable';
+
+  return {
+    title_he: copy.breakdown_title,
+    period,
+    office_total: {
+      status: totalStatus,
+      completeness: projected.completeness,
+      completeness_he: complete ? copy.completeness_complete : copy.completeness_incomplete,
+      value_he: complete ? formatIls(projected.total_monthly_before_vat, locale) : '—',
+      before_discount_he: complete ? formatIls(projected.total_before_discount, locale) : null,
+      discount_he: complete ? formatIls(projected.discount_total, locale) : null,
+      note_he: projected.vat_rate_blocked
+        ? copy.vat_rate_unavailable
+        : projected.skipped_fx_clients > 0
+          ? copy.fx_skipped(projected.skipped_fx_clients)
+          : complete
+            ? null
+            : copy.kpi_expected_incomplete,
+    },
+    columns: [
+      { key: 'client', label_he: copy.col_client },
+      { key: 'agreement', label_he: copy.col_agreement },
+      { key: 'frequency', label_he: copy.col_frequency },
+      { key: 'before_discount', label_he: copy.col_before_discount },
+      { key: 'discount', label_he: copy.col_discount },
+      { key: 'monthly', label_he: copy.col_monthly },
+      { key: 'status', label_he: copy.col_status },
+    ],
+    filters: [
+      { key: 'all', label_he: copy.breakdown_filter_all },
+      { key: 'positive_recurring', label_he: copy.cat_positive_recurring },
+      { key: 'configured_zero', label_he: copy.cat_configured_zero },
+      { key: 'no_agreement', label_he: copy.cat_no_agreement },
+      { key: 'no_recurring_service', label_he: copy.cat_no_recurring_service },
+      { key: 'one_time_only', label_he: copy.cat_one_time_only },
+      { key: 'needs_attention', label_he: copy.cat_needs_attention },
+      { key: 'unsupported_vat_fx', label_he: copy.cat_unsupported_vat_fx },
+    ],
+    search_placeholder_he: copy.breakdown_search,
+    empty_he: copy.breakdown_empty,
+    page_label_he: copy.breakdown_page(paged.page, paged.total_pages, paged.total),
+    rows: paged.rows.map((r) => ({
+      client_id: r.client_id,
+      display_name: r.display_name,
+      href: `/m/client-operations/clients/${r.client_id}?tab=fees`,
+      agreement_status_he: r.agreement_status || (r.category === 'no_agreement' ? copy.cat_no_agreement : '—'),
+      billing_frequency_he: frequencyLabelHe(r.billing_frequencies, copy),
+      recurring_before_discount_he: r.included_in_complete_total ? formatIls(r.monthly_before_discount, locale) : '—',
+      discount_he: !r.discount_has
+        ? copy.discount_none
+        : r.discount_type === 'percent'
+          ? copy.discount_percent(String(r.discount_percent ?? 0))
+          : copy.discount_amount(formatIls(Number(r.discount_amount_ils ?? 0), locale)),
+      monthly_before_vat_he: r.included_in_complete_total ? formatIls(r.monthly_before_vat, locale) : '—',
+      calculation_status_he: categoryLabelHe(r.category, copy),
+      category: r.category,
+      expandable: r.lines.length > 1,
+      lines: r.lines.map((line) => ({
+        charging_type_he: frequencyLabelHe([line.charging_type], copy),
+        monthly_before_vat_he: formatIls(line.monthly_before_vat, locale),
+      })),
+    })),
+    pagination: {
+      page: paged.page,
+      page_size: paged.page_size,
+      total: paged.total,
+      total_pages: paged.total_pages,
+      sort: paged.sort,
+      sort_dir: paged.sort_dir,
+      filter: paged.filter,
+      q: paged.q,
+    },
+  };
+}
