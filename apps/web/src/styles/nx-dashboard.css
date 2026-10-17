@@ -150,7 +150,7 @@
 }
 
 .nx-dashboard-list--compact {
-  max-height: 168px;
+  max-height: 220px;
 }
 
 .nx-dashboard__row--compact {
@@ -283,6 +283,29 @@ button.nx-dashboard-card--kpi:hover,
 
 .nx-dashboard__row--split {
   grid-template-columns: 1fr 1fr;
+}
+
+.nx-dashboard__row--triple {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.nx-dashboard__row--triple > .nx-dashboard-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.nx-dashboard-chart {
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+.nx-dashboard-chart svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
 }
 
 .nx-dashboard-card__title {
@@ -457,7 +480,8 @@ button.nx-dashboard-card--kpi:hover,
   }
 
   .nx-dashboard__row--chart,
-  .nx-dashboard__row--split {
+  .nx-dashboard__row--split,
+  .nx-dashboard__row--triple {
     grid-template-columns: 1fr;
   }
 }

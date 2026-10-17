@@ -101,7 +101,8 @@ test('search, category filter, needs-configuration filter, and sort are applied 
   assert.equal(zeros.rows[0]?.category, 'configured_zero');
 
   const needs = paginateFeeBreakdown(rows, { filter: 'needs_configuration' });
-  assert.deepEqual(needs.rows.map((r) => r.category).sort(), ['no_agreement', 'one_time_only']);
+  assert.deepEqual(needs.rows.map((r) => r.category).sort(), ['configured_zero', 'no_agreement', 'one_time_only']);
+  assert.equal(needs.filter, 'fee_attention');
 
   const sorted = paginateFeeBreakdown(rows, { sort: 'monthly_before_vat', sort_dir: 'desc' });
   assert.equal(sorted.rows[0]?.client_id, 'a');

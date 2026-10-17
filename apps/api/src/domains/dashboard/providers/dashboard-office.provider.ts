@@ -38,7 +38,12 @@ import {
   monthDepartedCount,
   projectOfficeChurn,
 } from '../dashboard-office-churn.pure.js';
-import { paginateFeeBreakdown } from '../dashboard-office-fee-breakdown.pure.js';
+import {
+  FEE_ATTENTION_PREVIEW_CAP,
+  capFeeAttentionPreview,
+  paginateFeeBreakdown,
+  selectFeeAttentionClients,
+} from '../dashboard-office-fee-breakdown.pure.js';
 import type {
   DashboardFeeBreakdownQuery,
   DashboardOverviewQuery,
@@ -48,7 +53,6 @@ import type {
 import type { DashboardStatus } from '../dashboard-status.js';
 
 const PAGE = 500;
-const MISSING_FEES_LIST_CAP = 8;
 
 function hasPermission(ctx: RequestContext, p: string): boolean {
   return (ctx.membership?.permissions ?? []).includes(p);
@@ -129,12 +133,13 @@ function emptyOfficeSection(
       status: 'unavailable',
       count: 0,
       count_label_he: copy.clients_count(0),
-      list_cap: MISSING_FEES_LIST_CAP,
+      list_cap: FEE_ATTENTION_PREVIEW_CAP,
       truncated: false,
       truncated_he: null,
       empty_he: reason,
       view_all_label_he: copy.view_all,
       view_all_action: null,
+      view_all_filter: null,
       clients: [],
     },
     attention: {
@@ -433,7 +438,11 @@ export const dashboardOfficeProvider: DashboardProvider = {
         allowUndatedHistorical: true,
         vatRate,
       });
-      missingClients = missingSnapshot.missing;
+      missingClients = selectFeeAttentionClients(missingSnapshot.client_results).map((r) => ({
+        client_id: r.client_id,
+        display_name: r.display_name,
+        category: r.category,
+      }));
 
       if (feeScheduleBasis === 'historical_unavailable') {
         expectedStatus = 'unavailable';
@@ -499,10 +508,11 @@ export const dashboardOfficeProvider: DashboardProvider = {
       }
     }
 
-    const missingHrefClients = missingClients.slice(0, MISSING_FEES_LIST_CAP).map((c) => ({
+    const attentionPreview = capFeeAttentionPreview(missingClients, FEE_ATTENTION_PREVIEW_CAP);
+    const missingHrefClients = attentionPreview.preview.map((c) => ({
       client_id: c.client_id,
       display_name: c.display_name,
-      indicator_he: categoryLabelHe(c.category, copy) || copy.missing_indicator,
+      indicator_he: attentionIndicatorHe(c.category, copy),
       href: `/m/client-operations/clients/${c.client_id}?tab=fees`,
     }));
 
@@ -535,7 +545,7 @@ export const dashboardOfficeProvider: DashboardProvider = {
     const canUploadDocument = membership.permissions.includes('documents:write');
 
     const missingFeesStatus: DashboardStatus = canViewFees(ctx) ? 'ready' : 'unavailable';
-    const missingTruncated = missingClients.length > MISSING_FEES_LIST_CAP;
+    const missingTruncated = attentionPreview.truncated;
     const expectedSecondary =
       periodKey === 'current_year' ? copy.kpi_expected_secondary_year : copy.kpi_expected_secondary;
     const historicalBasisHe = copy.historical_basis(historyGap.missing.join(', '));
@@ -618,9 +628,11 @@ export const dashboardOfficeProvider: DashboardProvider = {
         status: missingFeesStatus,
         count: missingClients.length,
         count_label_he: copy.clients_count(missingClients.length),
-        list_cap: MISSING_FEES_LIST_CAP,
+        list_cap: FEE_ATTENTION_PREVIEW_CAP,
         truncated: missingTruncated,
-        truncated_he: missingTruncated ? copy.missing_truncated(MISSING_FEES_LIST_CAP, missingClients.length) : null,
+        truncated_he: missingTruncated
+          ? copy.missing_truncated(FEE_ATTENTION_PREVIEW_CAP, attentionPreview.total)
+          : null,
         empty_he:
           missingFeesStatus === 'unavailable'
             ? feeNote ?? copy.unavailable
@@ -628,7 +640,10 @@ export const dashboardOfficeProvider: DashboardProvider = {
               ? copy.missing_empty
               : '',
         view_all_label_he: copy.view_all,
-        view_all_action: missingFeesStatus === 'ready' ? 'open_fee_breakdown' : null,
+        view_all_action:
+          missingFeesStatus === 'ready' && missingClients.length > 0 ? 'open_fee_breakdown' : null,
+        view_all_filter:
+          missingFeesStatus === 'ready' && missingClients.length > 0 ? 'fee_attention' : null,
         clients: missingHrefClients,
       },
       attention: {
@@ -739,6 +754,12 @@ function frequencyLabelHe(freqs: string[], copy: ReturnType<typeof officeCopy>):
     default:
       return unique[0] ?? '—';
   }
+}
+
+function attentionIndicatorHe(category: FeeBreakdownCategory, copy: ReturnType<typeof officeCopy>): string {
+  if (category === 'configured_zero') return copy.indicator_zero_fee;
+  if (category === 'no_agreement') return copy.cat_no_agreement;
+  return categoryLabelHe(category, copy) || copy.missing_indicator;
 }
 
 function categoryLabelHe(category: FeeBreakdownCategory, copy: ReturnType<typeof officeCopy>): string {
@@ -925,6 +946,7 @@ export async function getOfficeFeeBreakdownAggregate(
     ],
     filters: [
       { key: 'all', label_he: copy.breakdown_filter_all },
+      { key: 'fee_attention', label_he: copy.breakdown_filter_attention },
       { key: 'positive_recurring', label_he: copy.cat_positive_recurring },
       { key: 'configured_zero', label_he: copy.cat_configured_zero },
       { key: 'no_agreement', label_he: copy.cat_no_agreement },

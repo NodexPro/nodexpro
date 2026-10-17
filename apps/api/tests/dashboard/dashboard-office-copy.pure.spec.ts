@@ -30,4 +30,9 @@ test('Hebrew and English V2.1 labels cover churn, breakdown, and missing-agreeme
   assert.equal(he.kpi_active, 'לקוחות פעילים');
   assert.match(he.kpi_expected_year_unavailable, /אין סכום שנתי מהימן/);
   assert.match(en.historical_unavailable, /Historical fees cannot be reconstructed/);
+  assert.equal(he.missing_empty, 'לכל הלקוחות הוגדר שכ״ט');
+  assert.equal(he.indicator_zero_fee, 'שכ״ט 0 ₪');
+  assert.equal(he.cat_no_agreement, 'לא הוגדר הסכם שכ״ט');
+  assert.equal(en.indicator_zero_fee, '₪0 fee');
+  assert.equal(en.deadlines_title, 'Upcoming reports');
 });

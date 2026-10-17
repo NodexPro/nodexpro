@@ -73,12 +73,22 @@ createRoot(document.getElementById('root')!).render(
                 secondary={dir === 'ltr' ? 'Service ended in current month' : 'סיום טיפול בחודש נוכחי'}
               />
             </div>
-            <div className="nx-dashboard__row nx-dashboard__row--split">
+            <div className="nx-dashboard__row nx-dashboard__row--triple" data-testid="nx-dashboard-row-attention">
               <div className="nx-dashboard-card">
                 <div className="nx-dashboard-card__title">{dir === 'ltr' ? 'Clients without configured fees' : 'לקוחות ללא שכ״ט מוגדר'}</div>
-                <div className="nx-dashboard-empty__subtitle">
-                  {dir === 'ltr' ? 'This list comes from the office aggregate only.' : 'הרשימה מגיעה מאגרגט המשרד בלבד.'}
+                <div className="nx-dashboard-list nx-dashboard-list--compact">
+                  <button type="button" className="nx-dashboard-list__row">
+                    <span>Client A</span>
+                    <span className="nx-dashboard-list__tag">{dir === 'ltr' ? 'No fee agreement' : 'לא הוגדר הסכם שכ״ט'}</span>
+                  </button>
+                  <button type="button" className="nx-dashboard-list__row">
+                    <span>Client B</span>
+                    <span className="nx-dashboard-list__tag">{dir === 'ltr' ? '₪0 fee' : 'שכ״ט 0 ₪'}</span>
+                  </button>
                 </div>
+                <button type="button" className="nx-dashboard-btn nx-dashboard-btn--secondary">
+                  {dir === 'ltr' ? 'View all' : 'הצג הכל'}
+                </button>
               </div>
               <div className="nx-dashboard-card">
                 <div className="nx-dashboard-card__title">{dir === 'ltr' ? 'Tasks needing attention' : 'משימות דורשות תשומת לב'}</div>
@@ -93,8 +103,16 @@ createRoot(document.getElementById('root')!).render(
                   </div>
                 </div>
               </div>
+              <div className="nx-dashboard-card nx-dashboard-card--compact">
+                <div className="nx-dashboard-card__title">{dir === 'ltr' ? 'Upcoming reports' : 'הדיווחים הקרובים'}</div>
+                <div className="nx-dashboard-empty__subtitle">
+                  {dir === 'ltr'
+                    ? 'Statutory reporting deadlines are not yet available through an authorized aggregate. No dates were hardcoded.'
+                    : 'מועדי דיווח סטטוטוריים עדיין לא זמינים דרך aggregate מורשה. לא נקבעו מועדים בצד הלקוח.'}
+                </div>
+              </div>
             </div>
-            <div className="nx-dashboard__row nx-dashboard__row--split">
+            <div className="nx-dashboard__row nx-dashboard__row--triple" data-testid="nx-dashboard-row-charts">
               <div className="nx-dashboard-card">
                 <div className="nx-dashboard-card__title">{dir === 'ltr' ? 'Client growth' : 'צמיחת לקוחות'}</div>
                 <div className="nx-dashboard-empty__subtitle">
@@ -104,6 +122,30 @@ createRoot(document.getElementById('root')!).render(
               <div className="nx-dashboard-card nx-dashboard-card--compact">
                 <div className="nx-dashboard-card__title">{dir === 'ltr' ? 'Client status' : 'סטטוס לקוחות'}</div>
                 <div className="nx-dashboard-empty__subtitle">{dir === 'ltr' ? 'Backend-owned status counts.' : 'סטטוסים מהאגרגט בלבד.'}</div>
+              </div>
+              <div className="nx-dashboard-card nx-dashboard-card--compact">
+                <div className="nx-dashboard-card__title">{dir === 'ltr' ? 'Expected fees by month' : 'הכנסה צפויה משכ״ט לפי חודשים'}</div>
+                <div className="nx-dashboard-empty__subtitle">
+                  {dir === 'ltr'
+                    ? 'Historical months are not shown: fee history does not include frequency, VAT, discount, or monthly equivalent.'
+                    : 'חודשים היסטוריים אינם מוצגים: היסטוריית השכ״ט אינה כוללת תדירות, מע״מ, הנחה או שווי חודשי.'}
+                </div>
+              </div>
+            </div>
+            <div className="nx-dashboard__row nx-dashboard__row--compact">
+              <div className="nx-dashboard-card nx-dashboard-card--compact">
+                <div className="nx-dashboard-card__title">{dir === 'ltr' ? 'Quick actions' : 'פעולות מהירות'}</div>
+                <div className="nx-dashboard-actions">
+                  <button type="button" className="nx-dashboard-btn nx-dashboard-btn--primary">
+                    {dir === 'ltr' ? 'New client' : 'לקוח חדש'}
+                  </button>
+                  <button type="button" className="nx-dashboard-btn nx-dashboard-btn--secondary">
+                    {dir === 'ltr' ? 'Upload document' : 'העלאת מסמך'}
+                  </button>
+                  <button type="button" className="nx-dashboard-btn nx-dashboard-btn--secondary">
+                    {dir === 'ltr' ? 'Tasks' : 'משימות'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -119,6 +161,9 @@ requestAnimationFrame(() => {
   const nested = document.querySelector('.nx-dashboard-attention__item') as HTMLElement | null;
   const chip = document.querySelector('.nx-dashboard-period__chip') as HTMLElement | null;
   const title = document.querySelector('.nx-dashboard__title') as HTMLElement | null;
+  const metrics = document.querySelector('.nx-dashboard__metrics') as HTMLElement | null;
+  const attentionRow = document.querySelector('[data-testid="nx-dashboard-row-attention"]') as HTMLElement | null;
+  const chartRow = document.querySelector('[data-testid="nx-dashboard-row-charts"]') as HTMLElement | null;
   const header = document.querySelector('header');
   const pre = document.getElementById('nx-layout-dump');
   if (pre && dash) {
@@ -128,6 +173,10 @@ requestAnimationFrame(() => {
       dashFont: getComputedStyle(dash).fontFamily,
       dashBg: getComputedStyle(dash).backgroundColor,
       cardCount: cards.length,
+      kpiCount: metrics?.children.length ?? 0,
+      metricsCols: metrics ? getComputedStyle(metrics).gridTemplateColumns.split(' ').length : 0,
+      attentionCols: attentionRow ? getComputedStyle(attentionRow).gridTemplateColumns.split(' ').length : 0,
+      chartCols: chartRow ? getComputedStyle(chartRow).gridTemplateColumns.split(' ').length : 0,
       firstCardBg: cards[0] ? getComputedStyle(cards[0]).backgroundImage : '',
       firstCardBlur: cards[0] ? getComputedStyle(cards[0]).backdropFilter : '',
       nestedBg: nested ? getComputedStyle(nested).backgroundImage : '',
@@ -135,6 +184,7 @@ requestAnimationFrame(() => {
       titleText: title?.textContent ?? '',
       direction: getComputedStyle(dash).direction,
       overflowX: dash.scrollWidth > dash.clientWidth,
+      viewport: { w: window.innerWidth, h: window.innerHeight },
     });
   }
 });

@@ -31,6 +31,7 @@ type OfficeCopy = {
   missing_title: string;
   missing_indicator: string;
   missing_empty: string;
+  indicator_zero_fee: string;
   missing_truncated: (shown: number, total: number) => string;
   attention_title: string;
   attention_overdue: string;
@@ -70,6 +71,7 @@ type OfficeCopy = {
   breakdown_load_failed: string;
   breakdown_page: (page: number, pages: number, total: number) => string;
   breakdown_filter_all: string;
+  breakdown_filter_attention: string;
   col_client: string;
   col_agreement: string;
   col_frequency: string;
@@ -123,7 +125,8 @@ const HE: OfficeCopy = {
   kpi_new_clients_secondary: (periodLabel) => `נוספו ב${periodLabel}`,
   missing_title: 'לקוחות ללא שכ״ט מוגדר',
   missing_indicator: 'לא הוגדר שכ״ט',
-  missing_empty: 'לכל הלקוחות הפעילים מוגדר שכ״ט, כולל סכום אפס מפורש.',
+  missing_empty: 'לכל הלקוחות הוגדר שכ״ט',
+  indicator_zero_fee: 'שכ״ט 0 ₪',
   missing_truncated: (shown, total) => `מוצגים ${shown} מתוך ${total}`,
   attention_title: 'משימות דורשות תשומת לב',
   attention_overdue: 'משימות באיחור',
@@ -165,6 +168,7 @@ const HE: OfficeCopy = {
   breakdown_load_failed: 'לא ניתן לטעון את פירוט השכ״ט.',
   breakdown_page: (page, pages, total) => `עמוד ${page} מתוך ${pages} · ${total} לקוחות`,
   breakdown_filter_all: 'הכל',
+  breakdown_filter_attention: 'לקוחות ללא שכ״ט מוגדר',
   col_client: 'לקוח',
   col_agreement: 'סטטוס הסכם',
   col_frequency: 'תדירות',
@@ -221,7 +225,8 @@ const EN: OfficeCopy = {
   kpi_new_clients_secondary: (periodLabel) => `Added in ${periodLabel}`,
   missing_title: 'Clients without configured fees',
   missing_indicator: 'Fees not configured',
-  missing_empty: 'Every active client has a fee configuration, including an explicit zero amount.',
+  missing_empty: 'All clients have fees configured',
+  indicator_zero_fee: '₪0 fee',
   missing_truncated: (shown, total) => `Showing ${shown} of ${total}`,
   attention_title: 'Tasks needing attention',
   attention_overdue: 'Overdue tasks',
@@ -264,6 +269,7 @@ const EN: OfficeCopy = {
   breakdown_load_failed: 'The fee breakdown could not be loaded.',
   breakdown_page: (page, pages, total) => `Page ${page} of ${pages} · ${total} clients`,
   breakdown_filter_all: 'All',
+  breakdown_filter_attention: 'Clients without configured fees',
   col_client: 'Client',
   col_agreement: 'Agreement status',
   col_frequency: 'Frequency',

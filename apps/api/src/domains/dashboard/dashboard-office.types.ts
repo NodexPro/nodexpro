@@ -108,6 +108,7 @@ export type OfficeDashboardSection = {
     empty_he: string;
     view_all_label_he: string;
     view_all_action: OfficeDashboardKpiAction;
+    view_all_filter: 'fee_attention' | null;
     clients: OfficeDashboardMissingFeeClient[];
   };
   attention: {

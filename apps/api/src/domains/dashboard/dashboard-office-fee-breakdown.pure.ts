@@ -36,14 +36,39 @@ export function parseFeeBreakdownSortDir(raw: unknown): 'asc' | 'desc' {
   return String(raw ?? '').toLowerCase() === 'desc' ? 'desc' : 'asc';
 }
 
-export type FeeBreakdownFilter = FeeBreakdownCategory | 'all' | 'needs_configuration';
+export type FeeBreakdownFilter = FeeBreakdownCategory | 'all' | 'needs_configuration' | 'fee_attention';
 
-const NEEDS_CONFIGURATION: FeeBreakdownCategory[] = ['no_agreement', 'no_recurring_service', 'one_time_only'];
+export const FEE_ATTENTION_CATEGORIES: readonly FeeBreakdownCategory[] = [
+  'no_agreement',
+  'configured_zero',
+  'no_recurring_service',
+  'one_time_only',
+  'needs_attention',
+  'unsupported_vat_fx',
+];
+
+export const FEE_ATTENTION_PREVIEW_CAP = 5;
+
+export function isFeeAttentionCategory(category: FeeBreakdownCategory): boolean {
+  return (FEE_ATTENTION_CATEGORIES as readonly string[]).includes(category);
+}
+
+export function selectFeeAttentionClients(rows: ClientExpectedFeeResult[]): ClientExpectedFeeResult[] {
+  return rows.filter((r) => r.category !== 'not_in_scope' && isFeeAttentionCategory(r.category));
+}
+
+export function capFeeAttentionPreview<T>(rows: T[], cap = FEE_ATTENTION_PREVIEW_CAP): {
+  preview: T[];
+  total: number;
+  truncated: boolean;
+} {
+  return { preview: rows.slice(0, cap), total: rows.length, truncated: rows.length > cap };
+}
 
 export function parseFeeBreakdownFilter(raw: unknown): FeeBreakdownFilter {
   const s = String(raw ?? '').trim();
   if (s === 'all' || !s) return 'all';
-  if (s === 'needs_configuration') return 'needs_configuration';
+  if (s === 'needs_configuration' || s === 'fee_attention') return 'fee_attention';
   return (FEE_BREAKDOWN_CATEGORIES as readonly string[]).includes(s) ? (s as FeeBreakdownCategory) : 'all';
 }
 
@@ -68,8 +93,8 @@ export function paginateFeeBreakdown(
   const page_size = parseFeeBreakdownPageSize(query.page_size);
   const inScope = rows.filter((r) => r.category !== 'not_in_scope');
   const filtered = inScope.filter((r) => {
-    if (filter === 'needs_configuration') {
-      if (!NEEDS_CONFIGURATION.includes(r.category)) return false;
+    if (filter === 'fee_attention' || filter === 'needs_configuration') {
+      if (!isFeeAttentionCategory(r.category)) return false;
     } else if (filter !== 'all' && r.category !== filter) return false;
     if (!q) return true;
     return r.display_name.toLowerCase().includes(q);

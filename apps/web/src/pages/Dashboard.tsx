@@ -47,6 +47,7 @@ type OfficeSection = {
     empty_he: string;
     view_all_label_he?: string;
     view_all_action?: 'open_fee_breakdown' | 'navigate' | null;
+    view_all_filter?: 'fee_attention' | null;
     clients: Array<{ client_id: string; display_name: string; indicator_he: string; href: string }>;
   };
   attention: {
@@ -116,16 +117,18 @@ type DashboardOverviewData = {
 function LineChart({
   points,
   secondary,
+  compact,
 }: {
   points: Array<{ xLabel: string; count: number }>;
   secondary?: Array<{ xLabel: string; count: number }>;
+  compact?: boolean;
 }) {
   const w = 600;
-  const h = 220;
+  const h = compact ? 168 : 220;
   const paddingLeft = 44;
   const paddingRight = 16;
   const paddingTop = 10;
-  const paddingBottom = 40;
+  const paddingBottom = compact ? 32 : 40;
   const plotW = w - paddingLeft - paddingRight;
   const plotH = h - paddingTop - paddingBottom;
 
@@ -181,7 +184,7 @@ function LineChart({
       ))}
       {coords.map((c, i) =>
         i % labelEvery === 0 || i === coords.length - 1 ? (
-          <text key={c.xLabel + i} x={c.x} y={h - 18} textAnchor="middle" fontSize={12} fill="rgba(238, 246, 255, 0.72)" fontFamily="Arial, sans-serif">
+          <text key={c.xLabel + i} x={c.x} y={h - 16} textAnchor="middle" fontSize={compact ? 11 : 12} fill="rgba(238, 246, 255, 0.72)" fontFamily="Arial, sans-serif">
             {c.xLabel}
           </text>
         ) : null,
@@ -414,7 +417,7 @@ export function Dashboard() {
           ))}
         </div>
 
-        <div className="nx-dashboard__row nx-dashboard__row--split">
+        <div className="nx-dashboard__row nx-dashboard__row--triple" data-testid="nx-dashboard-row-attention">
           <div className="nx-dashboard-card">
             <div className="nx-dashboard-card__title">{office.missing_fees.title_he}</div>
             <div className="nx-dashboard-card__hint">
@@ -445,7 +448,7 @@ export function Dashboard() {
                 type="button"
                 className="nx-dashboard-btn nx-dashboard-btn--secondary"
                 onClick={() => {
-                  setBreakdownFilter('needs_configuration');
+                  setBreakdownFilter(office.missing_fees.view_all_filter ?? 'fee_attention');
                   setBreakdownOpen(true);
                 }}
               >
@@ -481,16 +484,40 @@ export function Dashboard() {
               })}
             </div>
           </div>
+
+          <div className="nx-dashboard-card nx-dashboard-card--compact">
+            <div className="nx-dashboard-card__title">{office.deadlines.title_he}</div>
+            {office.deadlines.status === 'ready' && office.deadlines.rows.length > 0 ? (
+              <div className="nx-dashboard-list nx-dashboard-list--compact">
+                {office.deadlines.rows.map((row, i) => (
+                  <div key={`${row.type_he}-${i}`} className="nx-dashboard-list__row nx-dashboard-list__row--static">
+                    <span>
+                      {row.type_he}
+                      {row.severity_he ? ` · ${row.severity_he}` : ''}
+                    </span>
+                    <span>
+                      {row.due_date_he}
+                      {row.clients_count != null ? ` · ${row.clients_count}` : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="nx-dashboard-empty__subtitle">{office.deadlines.unavailable_he}</div>
+            )}
+          </div>
         </div>
 
-        <div className="nx-dashboard__row nx-dashboard__row--split">
+        <div className="nx-dashboard__row nx-dashboard__row--triple" data-testid="nx-dashboard-row-charts">
           <div className="nx-dashboard-card">
             <div className="nx-dashboard-card__title">{office.charts.client_growth.title_he}</div>
             <div className="nx-dashboard-card__hint">{office.charts.client_growth.hint_he ?? ''}</div>
             {growthPoints.length === 0 ? (
               <EmptyState title={office.charts.client_growth.title_he} subtitle={t('dashboard.growthEmpty')} />
             ) : (
-              <LineChart points={growthPoints} secondary={departedPoints} />
+              <div className="nx-dashboard-chart">
+                <LineChart points={growthPoints} secondary={departedPoints} compact />
+              </div>
             )}
           </div>
           <div className="nx-dashboard-card nx-dashboard-card--compact">
@@ -508,30 +535,19 @@ export function Dashboard() {
               ))}
             </div>
           </div>
-        </div>
-
-        <div className="nx-dashboard__row nx-dashboard__row--split nx-dashboard__row--compact">
           <div className="nx-dashboard-card nx-dashboard-card--compact">
-            <div className="nx-dashboard-card__title">{office.deadlines.title_he}</div>
-            {office.deadlines.status === 'ready' && office.deadlines.rows.length > 0 ? (
-              <div className="nx-dashboard-list">
-                {office.deadlines.rows.map((row, i) => (
-                  <div key={`${row.type_he}-${i}`} className="nx-dashboard-list__row nx-dashboard-list__row--static">
-                    <span>
-                      {row.type_he}
-                      {row.severity_he ? ` · ${row.severity_he}` : ''}
-                    </span>
-                    <span>
-                      {row.due_date_he}
-                      {row.clients_count != null ? ` · ${row.clients_count}` : ''}
-                    </span>
-                  </div>
-                ))}
+            <div className="nx-dashboard-card__title">{office.charts.expected_fees_by_month.title_he}</div>
+            {occupyFeeChart ? (
+              <div className="nx-dashboard-chart">
+                <LineChart points={feePoints} compact />
               </div>
             ) : (
-              <EmptyState title={office.deadlines.title_he} subtitle={office.deadlines.unavailable_he} />
+              <div className="nx-dashboard-empty__subtitle">{office.charts.expected_fees_by_month.historical_basis_he}</div>
             )}
           </div>
+        </div>
+
+        <div className="nx-dashboard__row nx-dashboard__row--compact">
           <div className="nx-dashboard-card nx-dashboard-card--compact">
             <div className="nx-dashboard-card__title">{office.quick_actions.title_he}</div>
             <div className="nx-dashboard-actions">
@@ -559,24 +575,10 @@ export function Dashboard() {
           </div>
         </div>
 
-        {occupyFeeChart ? (
-          <div className="nx-dashboard__row">
-            <div className="nx-dashboard-card">
-              <div className="nx-dashboard-card__title">{office.charts.expected_fees_by_month.title_he}</div>
-              <LineChart points={feePoints} />
-            </div>
-          </div>
-        ) : (
+        <div className="nx-dashboard__row nx-dashboard__row--compact">
           <div className="nx-dashboard-card nx-dashboard-card--compact nx-dashboard-card--muted">
-            <div className="nx-dashboard-card__title">{office.charts.expected_fees_by_month.title_he}</div>
-            <div className="nx-dashboard-empty__subtitle">{office.charts.expected_fees_by_month.historical_basis_he}</div>
-          </div>
-        )}
-
-        <div className="nx-dashboard__row nx-dashboard__row--split nx-dashboard__row--compact">
-          <div className="nx-dashboard-card">
             <div className="nx-dashboard-card__title">{office.recent_activity.title_he}</div>
-            <EmptyState title={office.recent_activity.title_he} subtitle={office.recent_activity.unavailable_he} />
+            <div className="nx-dashboard-empty__subtitle">{office.recent_activity.unavailable_he}</div>
           </div>
         </div>
       </div>
