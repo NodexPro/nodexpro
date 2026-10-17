@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { apiJson } from '../api/client';
 import { moduleClientOperationsCase } from '../api/endpoints';
 import { ClientWorkspacePage } from '../components/ClientWorkspacePanel';
@@ -55,8 +55,27 @@ type ClientOperationsCaseResponse = {
   client_history_tab?: import('../components/client-history-tab-types').ClientHistoryTabModel | null;
 };
 
+const WORKSPACE_TABS = [
+  'client',
+  'taxes',
+  'accounting',
+  'obligations',
+  'docflow',
+  'documents',
+  'annual',
+  'equity',
+  'fees',
+  'salary',
+  'history',
+] as const;
+
 export function ClientOperationsClientCase() {
   const { clientId } = useParams();
+  const [searchParams] = useSearchParams();
+  const tabRaw = searchParams.get('tab');
+  const initialTab = WORKSPACE_TABS.includes(tabRaw as (typeof WORKSPACE_TABS)[number])
+    ? (tabRaw as (typeof WORKSPACE_TABS)[number])
+    : undefined;
   const [data, setData] = useState<ClientOperationsCaseResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -82,6 +101,6 @@ export function ClientOperationsClientCase() {
       cancelled = true;
     };
   }, [clientId]);
-  return <ClientWorkspacePage workspace={data} loading={loading} error={error} />;
+  return <ClientWorkspacePage workspace={data} loading={loading} error={error} initialTab={initialTab} />;
 }
 

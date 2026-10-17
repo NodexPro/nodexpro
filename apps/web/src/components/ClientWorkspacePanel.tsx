@@ -377,10 +377,12 @@ export function ClientWorkspacePanel({
   caseHydrating,
   hydrationError,
   profileFlushRef,
+  initialTab,
 }: {
   workspace: ClientOperationsCaseResponse;
   showClose?: boolean;
   onClose?: () => void;
+  initialTab?: string;
   /** After a confirmed update_profile command — refresh registry without closing the workspace. */
   onClientProfileSaved?: () => void;
   /** After מיסים save (tax command → full case) — e.g. refresh registry list. */
@@ -392,7 +394,9 @@ export function ClientWorkspacePanel({
   /** Lets the parent overlay flush pending edits before dismissing the workspace. */
   profileFlushRef?: MutableRefObject<(() => Promise<boolean>) | null>;
 }) {
-  const [activeTab, setActiveTab] = useState<WorkspaceTabKey>('client');
+  const [activeTab, setActiveTab] = useState<WorkspaceTabKey>(
+    TAB_ORDER.some((t) => t.key === initialTab) ? (initialTab as WorkspaceTabKey) : 'client',
+  );
   const [localWorkspace, setLocalWorkspace] = useState(workspace);
   const [docflowTabVisible, setDocflowTabVisible] = useState(false);
 
@@ -1300,10 +1304,12 @@ export function ClientWorkspacePage({
   workspace,
   loading,
   error,
+  initialTab,
 }: {
   workspace: ClientOperationsCaseResponse | null;
   loading: boolean;
   error: string;
+  initialTab?: string;
 }) {
   if (loading) return <p style={{ color: '#6b7280', padding: 24 }}>Loading…</p>;
   if (error) return <p style={{ color: '#b91c1c', padding: 24 }}>{error}</p>;
@@ -1311,7 +1317,7 @@ export function ClientWorkspacePage({
 
   return (
     <div style={{ direction: 'rtl' }}>
-      <ClientWorkspacePanel workspace={workspace} />
+      <ClientWorkspacePanel workspace={workspace} initialTab={initialTab} />
     </div>
   );
 }

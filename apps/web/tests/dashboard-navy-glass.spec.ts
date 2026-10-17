@@ -1,5 +1,5 @@
 /**
- * Dashboard navy-glass presentation + metric ownership (no invented revenue).
+ * Dashboard glass presentation + metric ownership (no invented revenue).
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -16,16 +16,18 @@ const coProvider = readFileSync(
   'utf8',
 );
 
-test('Dashboard uses navy glass cards and keeps the four metric slots', () => {
+test('Dashboard uses translucent glass cards and keeps the four metric slots', () => {
   assert.match(dashSrc, /nx-dashboard\.css/);
   assert.match(dashSrc, /data-testid="nx-dashboard"/);
-  assert.match(dashSrc, /label="New clients"/);
-  assert.match(dashSrc, /label="Active Total clients"/);
-  assert.match(dashSrc, /label="Debtors"/);
-  assert.match(dashSrc, /label="Total revenue"/);
+  assert.match(dashSrc, /active_clients/);
+  assert.match(dashSrc, /expected_fees/);
+  assert.match(dashSrc, /office_debtors/);
+  assert.match(dashSrc, /new_clients/);
   assert.match(dashCss, /\.nx-dashboard-card/);
   assert.match(dashCss, /linear-gradient\(180deg, rgba\(248, 252, 255, 0\.2\)/);
+  assert.match(dashCss, /backdrop-filter: blur\(12px\)/);
   assert.match(dashCss, /font-family: Arial, sans-serif/);
+  assert.doesNotMatch(dashCss, /background: rgba\(8, 38, 82, 0\.28\)/);
   assert.doesNotMatch(dashSrc, /background: '#FFFFFF'/);
   assert.doesNotMatch(dashSrc, /background: '#F8FAFC'/);
 });
@@ -38,10 +40,9 @@ test('Dashboard presentation drops the redundant name/language header only on /d
   assert.match(layoutSrc, /onSetLanguage=\{onSetUiLanguage\}/);
 });
 
-test('TOTAL REVENUE stays unavailable unless Accounting Base marks monthly_revenue ready', () => {
+test('Collected cash stays unavailable unless Accounting Base marks monthly_revenue ready', () => {
   assert.match(dashSrc, /summary\.monthly_revenue_status === 'ready'/);
-  assert.match(dashSrc, /Office-earned revenue is not available yet/);
-  assert.match(dashSrc, /Accounting Base does not expose this metric/);
+  assert.match(dashSrc, /collected_cash_note_he/);
   assert.doesNotMatch(dashSrc, /monthly_revenue\.amount\s*\+|sumInvoices|total_revenue\s*=/);
   assert.match(coProvider, /monthly_revenue_status: 'coming_soon'/);
   assert.match(coProvider, /monthly_revenue: null/);

@@ -1,4 +1,5 @@
 import type { DashboardStatus } from './dashboard-status.js';
+import type { OfficeDashboardSection } from './dashboard-office.types.js';
 
 export interface DashboardOverview {
   summary: {
@@ -48,6 +49,7 @@ export interface DashboardOverview {
     can_upload_document: boolean;
     can_invite_member: boolean;
   };
+  office?: OfficeDashboardSection;
 }
 
 export type DashboardOverviewPartial = {
@@ -56,5 +58,6 @@ export type DashboardOverviewPartial = {
   operations?: Partial<DashboardOverview['operations']>;
   organization?: Partial<DashboardOverview['organization']>;
   quick_actions?: Partial<DashboardOverview['quick_actions']>;
+  office?: OfficeDashboardSection;
 };
 

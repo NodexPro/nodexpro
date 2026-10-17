@@ -6,6 +6,8 @@ import { getDashboardProviders, registerDashboardProvider } from './dashboard-pr
 import { dashboardCoreProvider } from './providers/dashboard-core.provider.js';
 import { dashboardClientOperationsProvider } from './providers/dashboard-client-operations.provider.js';
 import { dashboardDebtProvider } from './providers/dashboard-debt.provider.js';
+import { dashboardOfficeProvider } from './providers/dashboard-office.provider.js';
+import type { DashboardOverviewQuery } from './dashboard-office.types.js';
 
 function assignIfDefined<T extends object>(target: T, patch: Partial<T>): void {
   for (const [k, v] of Object.entries(patch)) {
@@ -31,6 +33,9 @@ function mergeOverviewPartial(result: DashboardOverview, patch: DashboardOvervie
   }
   if (patch.quick_actions) {
     assignIfDefined(result.quick_actions, patch.quick_actions);
+  }
+  if (patch.office) {
+    result.office = patch.office;
   }
   return result;
 }
@@ -94,8 +99,12 @@ function makeBaseOverview(): DashboardOverview {
 registerDashboardProvider(dashboardCoreProvider);
 registerDashboardProvider(dashboardClientOperationsProvider);
 registerDashboardProvider(dashboardDebtProvider);
+registerDashboardProvider(dashboardOfficeProvider);
 
-export async function getDashboardOverviewAggregated(ctx: RequestContext): Promise<DashboardOverview> {
+export async function getDashboardOverviewAggregated(
+  ctx: RequestContext,
+  query?: DashboardOverviewQuery,
+): Promise<DashboardOverview> {
   const providers: DashboardProvider[] = getDashboardProviders();
   const result = makeBaseOverview();
 
@@ -104,7 +113,7 @@ export async function getDashboardOverviewAggregated(ctx: RequestContext): Promi
     if (!supported) continue;
 
     try {
-      const part = await provider.getOverviewPart(ctx);
+      const part = await provider.getOverviewPart(ctx, query);
       mergeOverviewPartial(result, part);
     } catch (e) {
       if (provider.required) {

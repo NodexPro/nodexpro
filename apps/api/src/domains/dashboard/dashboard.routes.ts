@@ -17,7 +17,9 @@ router.get('/summary', authMiddleware, requireOrg, requireOfficeAdministration, 
 
 router.get('/overview', authMiddleware, requireOrg, requireOfficeAdministration, async (req, res, next) => {
   try {
-    const overview = await dashboardService.getDashboardOverview(req.context!);
+    const period = typeof req.query.period === 'string' ? req.query.period : undefined;
+    const locale = typeof req.query.locale === 'string' ? req.query.locale : undefined;
+    const overview = await dashboardService.getDashboardOverview(req.context!, { period, locale });
     return res.json(overview);
   } catch (e) {
     next(e);

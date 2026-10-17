@@ -230,6 +230,11 @@
       "loadFailed": "טעינת ההגדרות נכשלה",
       "saveFailed": "שמירת ההגדרות נכשלה"
     }
+  },
+  "dashboard": {
+    "unavailableTitle": "סקירת המשרד",
+    "unavailableSubtitle": "אגרגט המשרד אינו זמין בשרת זה.",
+    "growthEmpty": "אין נתוני צמיחה להצגה."
   }
 }
 

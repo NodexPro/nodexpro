@@ -230,6 +230,11 @@
       "loadFailed": "Failed to load settings",
       "saveFailed": "Failed to save settings"
     }
+  },
+  "dashboard": {
+    "unavailableTitle": "Office overview",
+    "unavailableSubtitle": "The office aggregate is not available on this server.",
+    "growthEmpty": "No growth data to display."
   }
 }
 

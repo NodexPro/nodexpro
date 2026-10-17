@@ -22,7 +22,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   executeWorkEngineQueueCommand,
   fetchWorkEngineQueueAggregate,
@@ -123,7 +123,11 @@ export function WorkEngineQueueMain(props: {
 }) {
   const { onWorkspaceTabs } = props;
   const navigate = useNavigate();
-  const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
+  const [searchParams] = useSearchParams();
+  const [filters, setFilters] = useState<FilterState>(() => ({
+    ...INITIAL_FILTERS,
+    state: searchParams.get('state') ?? '',
+  }));
   const [aggregate, setAggregate] = useState<WorkEngineQueueAggregate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

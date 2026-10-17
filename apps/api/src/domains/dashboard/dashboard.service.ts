@@ -8,6 +8,7 @@ import { forbidden } from '../../shared/errors.js';
 import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import type { RequestContext } from '../../shared/context.js';
 import { getDashboardOverviewAggregated } from './dashboard-aggregator.service.js';
+import type { DashboardOverviewQuery } from './dashboard-office.types.js';
 export type { DashboardOverview } from './dashboard-overview.types.js';
 
 export interface DashboardSummary {
@@ -66,6 +67,6 @@ export async function getDashboardSummary(ctx: RequestContext): Promise<Dashboar
   };
 }
 
-export async function getDashboardOverview(ctx: RequestContext) {
-  return getDashboardOverviewAggregated(ctx);
+export async function getDashboardOverview(ctx: RequestContext, query?: DashboardOverviewQuery) {
+  return getDashboardOverviewAggregated(ctx, query);
 }
