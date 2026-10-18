@@ -25,20 +25,21 @@ import {
   ClientCardField,
   ClientCardFieldMono,
   ClientCardFormField,
-  clientCardInputStyle,
+  clientCardInputClass,
   ClientCardHint,
   ClientCardToolbarRow,
   ClientCardTableShell,
-  clientCardContactGridColumns,
+  clientCardContactGridClass,
   ClientCardContactColumnHeader,
   ClientCardContactValueCell,
   ClientCardContactFormColumn,
   ClientCardContactActionsCell,
-  clientCardContactInputStyle,
-  clientCardContactInputFocusProps,
-  clientCardFormStackStyle,
-  clientCardSubsectionTitleStyle,
+  clientCardContactInputClass,
+  clientCardFormStackClass,
+  clientCardSubsectionTitleClass,
 } from '../components/client-card/ClientCardSectionUi';
+import '../styles/nx-glass-surface.css';
+import '../styles/nx-clients.css';
 
 interface Client {
   id: string;
@@ -556,46 +557,46 @@ export function ClientCard() {
     : [...contacts];
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: 24 }}>
-      <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-        <button type="button" onClick={() => navigate('/clients')} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>
+    <div className="nx-glass-page nx-glass-page--wide nx-clients-card">
+      <div className="nx-clients-card__head">
+        <button type="button" onClick={() => navigate('/clients')} className="nx-glass-btn nx-glass-btn--secondary">
           ← {t('clients.title')}
         </button>
-        <h1 style={{ margin: 0, flex: 1 }}>{client.display_name}</h1>
-        {client.is_archived && <span style={{ padding: '4px 10px', background: '#f3f4f6', borderRadius: 6, fontSize: 12, color: '#6b7280' }}>{t('common.archived')}</span>}
+        <h1>{client.display_name}</h1>
+        {client.is_archived && <span className="nx-clients-table__muted">{t('common.archived')}</span>}
         {canArchive && !client.is_archived && (
-          <button type="button" onClick={archiveClient} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', color: '#b91c1c', cursor: 'pointer' }}>
+          <button type="button" onClick={archiveClient} className="nx-glass-btn nx-glass-btn--secondary">
             {t('clients.actions.archive')}
           </button>
         )}
         {canRestore && client.is_archived && (
-          <button type="button" onClick={restoreClient} disabled={restoring} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#15803d', cursor: 'pointer' }}>
+          <button type="button" onClick={restoreClient} disabled={restoring} className="nx-glass-btn nx-glass-btn--purple">
             {restoring ? t('common.loading') : t('clients.actions.restore')}
           </button>
         )}
       </div>
 
-      {error && <div style={{ padding: 12, background: '#fef2f2', color: '#b91c1c', borderRadius: 8, marginBottom: 16 }}>{error}</div>}
+      {error && <div className="nx-glass-alert nx-glass-alert--error">{error}</div>}
 
       <ClientCardSection>
         <ClientCardSectionTitle>{t('clients.details.section')}</ClientCardSectionTitle>
         {editing && canWrite ? (
-          <form onSubmit={saveClient} style={clientCardFormStackStyle}>
+          <form onSubmit={saveClient} className={clientCardFormStackClass}>
             <ClientCardFormField label={t('clients.create.displayName')}>
-              <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} required style={clientCardInputStyle} />
+              <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} required className={clientCardInputClass} />
             </ClientCardFormField>
             <ClientCardFormField label={t('clients.details.taxId')}>
-              <input type="text" value={editTaxId} onChange={(e) => setEditTaxId(e.target.value)} required style={{ ...clientCardInputStyle, fontFamily: 'monospace' }} />
+              <input type="text" value={editTaxId} onChange={(e) => setEditTaxId(e.target.value)} required className={`${clientCardInputClass} nx-clients-input--mono`} />
             </ClientCardFormField>
             <ClientCardFormField label={t('clients.details.status')}>
-              <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)} style={clientCardInputStyle}>
+              <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)} className={clientCardInputClass}>
                 <option value="active">active</option>
                 <option value="inactive">inactive</option>
                 <option value="pending">pending</option>
               </select>
             </ClientCardFormField>
             <ClientCardFormField label={t('clients.details.lifecycle')}>
-              <select value={editLifecycle} onChange={(e) => setEditLifecycle(e.target.value)} style={clientCardInputStyle}>
+              <select value={editLifecycle} onChange={(e) => setEditLifecycle(e.target.value)} className={clientCardInputClass}>
                 <option value="lead">lead</option>
                 <option value="prospect">prospect</option>
                 <option value="customer">customer</option>
@@ -604,7 +605,7 @@ export function ClientCard() {
               </select>
             </ClientCardFormField>
             <ClientCardFormField label={t('clients.details.type')}>
-              <select value={editType} onChange={(e) => setEditType(e.target.value)} style={clientCardInputStyle}>
+              <select value={editType} onChange={(e) => setEditType(e.target.value)} className={clientCardInputClass}>
                 <option value="business_customer">{t('clients.type.business_customer')}</option>
                 <option value="individual_customer">{t('clients.type.individual_customer')}</option>
                 <option value="supplier">{t('clients.type.supplier')}</option>
@@ -612,29 +613,29 @@ export function ClientCard() {
                 <option value="other">{t('clients.type.other')}</option>
               </select>
             </ClientCardFormField>
-            <h3 style={clientCardSubsectionTitleStyle}>{t('clients.contact.section')}</h3>
+            <h3 className={clientCardSubsectionTitleClass}>{t('clients.contact.section')}</h3>
             <ClientCardFormField label={t('clients.details.phone')}>
-              <input type="text" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder={t('clients.contact.phonePlaceholder')} style={clientCardInputStyle} />
+              <input type="text" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder={t('clients.contact.phonePlaceholder')} className={clientCardInputClass} />
             </ClientCardFormField>
             <ClientCardFormField label={t('clients.details.email')}>
-              <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder={t('clients.contact.emailPlaceholder')} style={clientCardInputStyle} />
+              <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder={t('clients.contact.emailPlaceholder')} className={clientCardInputClass} />
             </ClientCardFormField>
             <ClientCardHint>{t('clients.contact.requiredHint')}</ClientCardHint>
             <ClientCardFormField label={t('clients.contact.website')}>
-              <input type="url" value={editWebsite} onChange={(e) => setEditWebsite(e.target.value)} placeholder="https://" style={clientCardInputStyle} />
+              <input type="url" value={editWebsite} onChange={(e) => setEditWebsite(e.target.value)} placeholder="https://" className={clientCardInputClass} />
             </ClientCardFormField>
-            <h3 style={clientCardSubsectionTitleStyle}>{t('clients.address.section')}</h3>
+            <h3 className={clientCardSubsectionTitleClass}>{t('clients.address.section')}</h3>
             <ClientCardFormField label={t('clients.address.country')}>
-              <input type="text" value={editCountry} onChange={(e) => setEditCountry(e.target.value)} placeholder="IL" maxLength={2} style={clientCardInputStyle} />
+              <input type="text" value={editCountry} onChange={(e) => setEditCountry(e.target.value)} placeholder="IL" maxLength={2} className={clientCardInputClass} />
             </ClientCardFormField>
             <ClientCardFormField label={t('clients.address.city')}>
-              <input type="text" value={editCity} onChange={(e) => setEditCity(e.target.value)} style={clientCardInputStyle} />
+              <input type="text" value={editCity} onChange={(e) => setEditCity(e.target.value)} className={clientCardInputClass} />
             </ClientCardFormField>
             <ClientCardFormField label={t('clients.address.street')}>
-              <input type="text" value={editStreet} onChange={(e) => setEditStreet(e.target.value)} style={clientCardInputStyle} />
+              <input type="text" value={editStreet} onChange={(e) => setEditStreet(e.target.value)} className={clientCardInputClass} />
             </ClientCardFormField>
             <ClientCardFormField label={t('clients.address.postalCode')}>
-              <input type="text" value={editPostalCode} onChange={(e) => setEditPostalCode(e.target.value)} style={clientCardInputStyle} />
+              <input type="text" value={editPostalCode} onChange={(e) => setEditPostalCode(e.target.value)} className={clientCardInputClass} />
             </ClientCardFormField>
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="submit" disabled={saving} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer' }}>
@@ -696,7 +697,7 @@ export function ClientCard() {
         </ClientCardToolbarRow>
 
         <ClientCardTableShell>
-          <div style={{ ...clientCardContactGridColumns, borderBottom: '1px solid #f3f4f6' }}>
+          <div className="nx-clients-contact-grid nx-clients-contact-grid--row">
             <ClientCardContactColumnHeader>Name</ClientCardContactColumnHeader>
             <ClientCardContactColumnHeader>Phone</ClientCardContactColumnHeader>
             <ClientCardContactColumnHeader>Email</ClientCardContactColumnHeader>
@@ -724,7 +725,7 @@ export function ClientCard() {
               const isPrimary = rowIndex === 0;
               const showRowRule =
                 rowIndex < contactDisplayRows.length - 1 || (contactMode === 'add' && canWrite);
-              const rowBorder = showRowRule ? '1px solid #f3f4f6' : 'none';
+              const rowBorder = showRowRule ? '1px solid rgba(210, 238, 255, 0.16)' : 'none';
 
               if (isEditing) {
                 return (
@@ -737,8 +738,8 @@ export function ClientCard() {
                   >
                     <form
                       onSubmit={saveContact}
+                      className={clientCardContactGridClass}
                       style={{
-                        ...clientCardContactGridColumns,
                         columnGap: 20,
                         alignItems: 'start',
                         width: '100%',
@@ -750,8 +751,7 @@ export function ClientCard() {
                           value={contactFormName}
                           onChange={(e) => setContactFormName(e.target.value)}
                           placeholder={t('clients.contacts.fullNamePlaceholder')}
-                          style={clientCardContactInputStyle}
-                          {...clientCardContactInputFocusProps}
+                          className={clientCardContactInputClass}
                         />
                       </ClientCardContactFormColumn>
                       <ClientCardContactFormColumn label="Phone">
@@ -760,8 +760,7 @@ export function ClientCard() {
                           value={contactFormPhone}
                           onChange={(e) => setContactFormPhone(e.target.value)}
                           placeholder={t('clients.details.phone')}
-                          style={clientCardContactInputStyle}
-                          {...clientCardContactInputFocusProps}
+                          className={clientCardContactInputClass}
                         />
                       </ClientCardContactFormColumn>
                       <ClientCardContactFormColumn label="Email">
@@ -770,8 +769,7 @@ export function ClientCard() {
                           value={contactFormEmail}
                           onChange={(e) => setContactFormEmail(e.target.value)}
                           placeholder={t('clients.details.email')}
-                          style={clientCardContactInputStyle}
-                          {...clientCardContactInputFocusProps}
+                          className={clientCardContactInputClass}
                         />
                       </ClientCardContactFormColumn>
                       <ClientCardContactActionsCell>
@@ -827,9 +825,9 @@ export function ClientCard() {
               return (
                 <li
                   key={c.id}
+                  className={clientCardContactGridClass}
                   style={{
                     borderBottom: rowBorder,
-                    ...clientCardContactGridColumns,
                     columnGap: 20,
                     alignItems: 'start',
                   }}
@@ -906,8 +904,8 @@ export function ClientCard() {
             >
               <form
                 onSubmit={saveContact}
+                className={clientCardContactGridClass}
                 style={{
-                  ...clientCardContactGridColumns,
                   columnGap: 20,
                   alignItems: 'start',
                   width: '100%',
@@ -919,8 +917,7 @@ export function ClientCard() {
                     value={contactFormName}
                     onChange={(e) => setContactFormName(e.target.value)}
                     placeholder={t('clients.contacts.fullNamePlaceholder')}
-                    style={clientCardContactInputStyle}
-                    {...clientCardContactInputFocusProps}
+                    className={clientCardContactInputClass}
                   />
                 </ClientCardContactFormColumn>
                 <ClientCardContactFormColumn label="Phone">
@@ -929,8 +926,7 @@ export function ClientCard() {
                     value={contactFormPhone}
                     onChange={(e) => setContactFormPhone(e.target.value)}
                     placeholder={t('clients.details.phone')}
-                    style={clientCardContactInputStyle}
-                    {...clientCardContactInputFocusProps}
+                    className={clientCardContactInputClass}
                   />
                 </ClientCardContactFormColumn>
                 <ClientCardContactFormColumn label="Email">
@@ -939,8 +935,7 @@ export function ClientCard() {
                     value={contactFormEmail}
                     onChange={(e) => setContactFormEmail(e.target.value)}
                     placeholder={t('clients.details.email')}
-                    style={clientCardContactInputStyle}
-                    {...clientCardContactInputFocusProps}
+                    className={clientCardContactInputClass}
                   />
                 </ClientCardContactFormColumn>
                 <ClientCardContactActionsCell>

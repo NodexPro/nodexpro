@@ -239,7 +239,9 @@
     "lang": {
       "aria": "Language",
       "en": "English",
-      "he": "עברית"
+      "he": "עברית",
+      "enCompact": "EN",
+      "heCompact": "עב"
     }
   }
 }

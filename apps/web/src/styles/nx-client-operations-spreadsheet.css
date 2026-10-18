@@ -497,13 +497,13 @@
   min-height: 0;
   flex: 1 1 auto;
   scrollbar-width: thin;
-  scrollbar-color: #a8bdd4 transparent;
+  scrollbar-color: var(--nx-glass-scroll-thumb, rgba(125, 236, 247, 0.38)) transparent;
 }
 
 /* Windows/Chromium classic scrollbars expose ▲▼ buttons; hide those only. */
 .nx-co-sheet__canvas::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 
 .nx-co-sheet__canvas::-webkit-scrollbar-button {
@@ -513,8 +513,12 @@
 }
 
 .nx-co-sheet__canvas::-webkit-scrollbar-thumb {
-  background: #c5ced8;
-  border-radius: 6px;
+  background: var(--nx-glass-scroll-thumb, rgba(125, 236, 247, 0.38));
+  border-radius: 8px;
+}
+
+.nx-co-sheet__canvas::-webkit-scrollbar-thumb:hover {
+  background: var(--nx-glass-scroll-thumb-hover, rgba(125, 236, 247, 0.62));
 }
 
 .nx-co-sheet__canvas::-webkit-scrollbar-track {

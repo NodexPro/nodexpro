@@ -1,0 +1,304 @@
+/**
+ * Office Clients list + details — Dashboard glass presentation only.
+ * Does not change commands, RBAC, or owner/admin client screens.
+ */
+
+.nx-clients,
+.nx-clients-card {
+  font-family: Arial, sans-serif;
+  color: #eef6ff;
+}
+
+.nx-clients-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nx-clients-toolbar__row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.nx-clients-toolbar__row--split {
+  justify-content: space-between;
+}
+
+.nx-clients-toolbar__meta {
+  font-size: 13px;
+  color: rgba(238, 246, 255, 0.72);
+}
+
+.nx-clients-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(238, 246, 255, 0.82);
+}
+
+.nx-clients-bulk {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.nx-clients-import h3 {
+  margin-top: 0;
+  margin-bottom: 12px;
+  color: #eef6ff;
+}
+
+.nx-clients-import p,
+.nx-clients-hint {
+  font-size: 14px;
+  color: rgba(238, 246, 255, 0.72);
+}
+
+.nx-clients-table-wrap {
+  overflow-x: auto;
+}
+
+.nx-clients-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #eef6ff;
+}
+
+.nx-clients-table th,
+.nx-clients-table td {
+  text-align: start;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(210, 238, 255, 0.16);
+  vertical-align: middle;
+}
+
+.nx-clients-table th {
+  font-weight: 600;
+  color: rgba(238, 246, 255, 0.86);
+}
+
+.nx-clients-table__check {
+  width: 40px;
+  padding: 12px 8px;
+  text-align: center;
+}
+
+.nx-clients-table__name {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+  color: #d7f7ff;
+  text-decoration: underline;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+}
+
+.nx-clients-table__mono {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
+.nx-clients-table__muted {
+  font-size: 13px;
+  color: rgba(238, 246, 255, 0.62);
+}
+
+.nx-clients-empty {
+  padding: 24px;
+  color: rgba(238, 246, 255, 0.72);
+  text-align: center;
+}
+
+.nx-clients-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(4, 21, 47, 0.42);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.nx-clients-modal {
+  width: min(520px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 20px;
+  color: #eef6ff;
+}
+
+.nx-clients-modal__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.nx-clients-modal__head h3 {
+  margin: 0;
+  color: #eef6ff;
+}
+
+.nx-clients-modal__close {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: #eef6ff;
+}
+
+.nx-clients-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nx-clients-form label {
+  color: rgba(238, 246, 255, 0.82);
+  font-size: 14px;
+}
+
+.nx-clients-form h4 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 8px 0 0;
+  color: #eef6ff;
+}
+
+.nx-clients-required {
+  color: #fecaca;
+}
+
+.nx-clients-preview {
+  overflow-x: auto;
+  max-height: 200px;
+  border: 1px solid rgba(210, 238, 255, 0.28);
+  border-radius: 8px;
+  margin-top: 4px;
+}
+
+.nx-clients-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.nx-clients-preview th,
+.nx-clients-preview td {
+  padding: 6px;
+  text-align: start;
+}
+
+.nx-clients-section {
+  margin-bottom: 24px;
+}
+
+.nx-clients-section h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 16px;
+  color: #eef6ff;
+}
+
+.nx-clients-field-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(238, 246, 255, 0.62);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+  display: block;
+}
+
+.nx-clients-field-value {
+  font-size: 14px;
+  font-weight: 400;
+  color: #eef6ff;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.nx-clients-field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 20px 28px;
+}
+
+.nx-clients-form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 440px;
+}
+
+.nx-clients-subhead {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 16px 0 8px;
+  color: #eef6ff;
+}
+
+.nx-clients-card__head {
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.nx-clients-card__head h1 {
+  margin: 0;
+  flex: 1;
+  font-size: 22px;
+  font-weight: 700;
+  color: #eef6ff;
+}
+
+.nx-clients-contact-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1.4fr auto;
+  column-gap: 20px;
+  align-items: start;
+}
+
+.nx-clients-contact-grid--row {
+  border-bottom: 1px solid rgba(210, 238, 255, 0.16);
+}
+
+.nx-clients-table-shell {
+  border-top: 1px solid rgba(210, 238, 255, 0.16);
+  margin-top: 6px;
+}
+
+.nx-clients-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+  margin-bottom: 10px;
+  gap: 16px;
+}
+
+.nx-clients-hint {
+  font-size: 12px;
+  color: rgba(238, 246, 255, 0.62);
+  margin: 0 0 8px;
+}
+
+.nx-clients-input--mono {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
+
+.nx-glass-input:focus-visible {
+  outline: none;
+  border-color: rgba(70, 213, 255, 0.7);
+  box-shadow: 0 0 0 3px rgba(70, 213, 255, 0.18);
+}

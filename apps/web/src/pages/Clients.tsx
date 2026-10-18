@@ -14,9 +14,8 @@ import {
   orgClientsBulkExport,
 } from '../api/endpoints';
 import { useI18n } from '../i18n/I18nProvider';
-import { PageHeader } from '../templates/template-1/components/PageHeader';
-import { SectionCard } from '../templates/template-1/components/SectionCard';
-import { DataTable } from '../templates/template-1/components/DataTable';
+import '../styles/nx-glass-surface.css';
+import '../styles/nx-clients.css';
 
 const VIEW_OPTIONS: { value: string; labelKey: string }[] = [
   { value: 'all', labelKey: 'clients.views.all' },
@@ -335,22 +334,22 @@ export function Clients() {
   };
 
   if (auth.status !== 'authenticated') return null;
-  if (!orgId) return <p>Select an organization.</p>;
+  if (!orgId) return <p className="nx-clients-empty">Select an organization.</p>;
 
   return (
-    <div>
-      <PageHeader title={t('clients.title')} subtitle={t('clients.subtitle')} />
+    <div className="nx-glass-page nx-glass-page--wide nx-clients">
+      <h1 className="nx-glass-title">{t('clients.title')}</h1>
+      <p className="nx-glass-subtitle">{t('clients.subtitle')}</p>
 
-      <SectionCard style={{ marginBottom: 24, padding: 20 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {/* First row: View, Search, actions on right */}
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#374151' }}>{t('clients.views.label')}</span>
+      <section className="nx-glass-card">
+        <div className="nx-clients-toolbar">
+        <div className="nx-clients-toolbar__row nx-clients-toolbar__row--split">
+          <div className="nx-clients-toolbar__row">
+            <span className="nx-clients-label">{t('clients.views.label')}</span>
             <select
               value={view}
               onChange={(e) => { setView(e.target.value); setOffset(0); }}
-              style={{ padding: '8px 12px', minWidth: 180, borderRadius: 8, border: '1px solid #d1d5db', background: '#fff' }}
+              className="nx-glass-input nx-glass-input--inline"
             >
               {VIEW_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
@@ -362,51 +361,52 @@ export function Clients() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && applySearch()}
-              style={{ padding: '8px 12px', width: 220, borderRadius: 8, border: '1px solid #d1d5db' }}
+              className="nx-glass-input nx-glass-input--inline"
+              style={{ width: 220 }}
             />
-            <button type="button" onClick={applySearch} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#f9fafb', cursor: 'pointer' }}>
+            <button type="button" onClick={applySearch} className="nx-glass-btn nx-glass-btn--secondary">
               {t('clients.search')}
             </button>
             {(view !== 'all' && view !== 'archived') && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+              <label className="nx-clients-toolbar__row" style={{ fontSize: 14 }}>
                 <input type="checkbox" checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} />
                 {t('clients.includeArchived')}
               </label>
             )}
           </div>
           {canWrite && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <button type="button" onClick={() => setShowCreate(true)} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer' }}>
+            <div className="nx-clients-toolbar__row" style={{ gap: 8 }}>
+              <button type="button" onClick={() => setShowCreate(true)} className="nx-glass-btn nx-glass-btn--purple">
                 {t('clients.newClient')}
               </button>
               {canImport && (
-              <button type="button" onClick={() => setShowImport(true)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #059669', background: '#fff', color: '#059669', cursor: 'pointer' }}>
+              <button type="button" onClick={() => setShowImport(true)} className="nx-glass-btn nx-glass-btn--secondary">
                 Import CSV
               </button>
               )}
-              <button type="button" onClick={downloadExport} disabled={exportLoading} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#f9fafb', cursor: 'pointer' }}>
+              <button type="button" onClick={downloadExport} disabled={exportLoading} className="nx-glass-btn nx-glass-btn--secondary">
                 {exportLoading ? t('common.loading') : 'Export CSV'}
               </button>
             </div>
           )}
         </div>
-        {/* Second row: Sort by (single dropdown), Per page, results summary + pagination */}
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', fontSize: 13, color: '#6b7280' }}>
-          <span style={{ color: '#6b7280' }}>{t('clients.sort.label')}</span>
+        <div className="nx-clients-toolbar__row nx-clients-toolbar__meta">
+          <span>{t('clients.sort.label')}</span>
           <select
             value={sortOption}
             onChange={(e) => { setSortOption(e.target.value); setOffset(0); }}
-            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', color: '#374151', minWidth: 200 }}
+            className="nx-glass-input nx-glass-input--inline"
           >
             {SORT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
             ))}
           </select>
-          <span style={{ color: '#6b7280' }}>{t('clients.perPage')}</span>
+          <span>{t('clients.perPage')}</span>
           <select
             value={limit}
             onChange={(e) => { setLimit(Number(e.target.value)); setOffset(0); }}
-            style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #d1d5db' }}
+            className="nx-glass-input nx-glass-input--inline"
+            style={{ minWidth: 80 }}
           >
             <option value={10}>10</option>
             <option value={20}>20</option>
@@ -415,14 +415,14 @@ export function Clients() {
           </select>
           {total > 0 && (
             <>
-              <span style={{ marginLeft: 8 }}>
+              <span>
                 {t('clients.showing')} {offset + 1}–{Math.min(offset + limit, total)} {t('clients.of')} {total}
               </span>
               <button
                 type="button"
                 disabled={offset === 0 || loading}
                 onClick={() => setOffset((o) => Math.max(0, o - limit))}
-                style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: 13 }}
+                className="nx-glass-btn nx-glass-btn--secondary"
               >
                 {t('clients.previous')}
               </button>
@@ -430,7 +430,7 @@ export function Clients() {
                 type="button"
                 disabled={!hasMore || loading}
                 onClick={() => setOffset((o) => o + limit)}
-                style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: 13 }}
+                className="nx-glass-btn nx-glass-btn--secondary"
               >
                 {t('clients.next')}
               </button>
@@ -438,52 +438,52 @@ export function Clients() {
           )}
         </div>
       </div>
-      </SectionCard>
+      </section>
 
       {selectedIds.size > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', marginBottom: 16, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8 }}>
-          <strong style={{ color: '#1e40af' }}>{selectedIds.size} selected</strong>
+        <div className="nx-glass-card nx-clients-bulk">
+          <strong>{selectedIds.size} selected</strong>
           {canReactivate && (
-              <button type="button" onClick={() => runBulk('mark-active')} disabled={bulkLoading} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #2563eb', background: '#fff', color: '#2563eb', cursor: 'pointer', fontSize: 13 }}>
+              <button type="button" onClick={() => runBulk('mark-active')} disabled={bulkLoading} className="nx-glass-btn nx-glass-btn--secondary">
                 Mark active
               </button>
           )}
           {canInactive && (
-              <button type="button" onClick={() => runBulk('mark-inactive')} disabled={bulkLoading} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #2563eb', background: '#fff', color: '#2563eb', cursor: 'pointer', fontSize: 13 }}>
+              <button type="button" onClick={() => runBulk('mark-inactive')} disabled={bulkLoading} className="nx-glass-btn nx-glass-btn--secondary">
                 Mark inactive
               </button>
           )}
           {canArchive && (
-              <button type="button" onClick={() => runBulk('archive')} disabled={bulkLoading} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #2563eb', background: '#fff', color: '#2563eb', cursor: 'pointer', fontSize: 13 }}>
+              <button type="button" onClick={() => runBulk('archive')} disabled={bulkLoading} className="nx-glass-btn nx-glass-btn--secondary">
                 Archive
               </button>
           )}
           {canRestore && (
-              <button type="button" onClick={() => runBulk('restore')} disabled={bulkLoading} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #2563eb', background: '#fff', color: '#2563eb', cursor: 'pointer', fontSize: 13 }}>
+              <button type="button" onClick={() => runBulk('restore')} disabled={bulkLoading} className="nx-glass-btn nx-glass-btn--secondary">
                 Restore
               </button>
           )}
           {canWrite && (
-            <button type="button" onClick={exportSelected} disabled={bulkLoading} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #2563eb', background: '#fff', color: '#2563eb', cursor: 'pointer', fontSize: 13 }}>
+            <button type="button" onClick={exportSelected} disabled={bulkLoading} className="nx-glass-btn nx-glass-btn--secondary">
               Export selected
             </button>
           )}
-          <button type="button" onClick={clearSelection} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: 'transparent', color: '#1e40af', cursor: 'pointer', fontSize: 13 }}>
+          <button type="button" onClick={clearSelection} className="nx-glass-btn nx-glass-btn--secondary">
             Clear
           </button>
         </div>
       )}
 
       {showImport && canImport && (
-        <div style={{ marginBottom: 24, padding: 20, background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 12 }}>
-          <h3 style={{ marginTop: 0, marginBottom: 12 }}>Import clients (CSV)</h3>
-          <p style={{ fontSize: 14, color: '#6b7280', marginBottom: 12 }}>Columns: name (required), email, phone, company_name, tax_id, address, city, country, notes. Max 10,000 rows.</p>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+        <div className="nx-glass-card nx-clients-import">
+          <h3>Import clients (CSV)</h3>
+          <p>Columns: name (required), email, phone, company_name, tax_id, address, city, country, notes. Max 10,000 rows.</p>
+          <div className="nx-clients-toolbar__row" style={{ marginBottom: 16 }}>
             <input type="file" accept=".csv" onChange={handleImportFile} style={{ maxWidth: 280 }} />
-            <button type="button" onClick={loadImportPreview} disabled={!importCsv.trim() || importLoading} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>
+            <button type="button" onClick={loadImportPreview} disabled={!importCsv.trim() || importLoading} className="nx-glass-btn nx-glass-btn--secondary">
               {importLoading ? t('common.loading') : 'Preview'}
             </button>
-            <button type="button" onClick={() => { setShowImport(false); setImportCsv(''); setImportPreview(null); setImportResult(null); setError(''); }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>
+            <button type="button" onClick={() => { setShowImport(false); setImportCsv(''); setImportPreview(null); setImportResult(null); setError(''); }} className="nx-glass-btn nx-glass-btn--secondary">
               {t('common.cancel')}
             </button>
           </div>
@@ -497,58 +497,58 @@ export function Clients() {
               {importPreview.valid_rows.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <strong>Valid rows (to import)</strong>
-                  <div style={{ overflowX: 'auto', maxHeight: 200, border: '1px solid #e5e7eb', borderRadius: 8, marginTop: 4 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                      <thead><tr style={{ background: '#f3f4f6' }}><th style={{ padding: 6 }}>#</th><th style={{ padding: 6 }}>name</th><th style={{ padding: 6 }}>email</th><th style={{ padding: 6 }}>company_name</th></tr></thead>
+                  <div className="nx-clients-preview">
+                    <table>
+                      <thead><tr><th>#</th><th>name</th><th>email</th><th>company_name</th></tr></thead>
                       <tbody>
                         {importPreview.valid_rows.slice(0, 20).map((r) => (
-                          <tr key={r.row_index}><td style={{ padding: 6 }}>{r.row_index}</td><td style={{ padding: 6 }}>{r.name}</td><td style={{ padding: 6 }}>{r.email}</td><td style={{ padding: 6 }}>{r.company_name}</td></tr>
+                          <tr key={r.row_index}><td>{r.row_index}</td><td>{r.name}</td><td>{r.email}</td><td>{r.company_name}</td></tr>
                         ))}
                       </tbody>
                     </table>
-                    {importPreview.valid_rows.length > 20 && <p style={{ padding: 8, margin: 0, fontSize: 12, color: '#6b7280' }}>… and {importPreview.valid_rows.length - 20} more</p>}
+                    {importPreview.valid_rows.length > 20 && <p className="nx-clients-hint" style={{ padding: 8 }}>… and {importPreview.valid_rows.length - 20} more</p>}
                   </div>
                 </div>
               )}
               {importPreview.duplicates.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <strong>Duplicates (skipped)</strong>
-                  <div style={{ overflowX: 'auto', maxHeight: 120, border: '1px solid #e5e7eb', borderRadius: 8, marginTop: 4 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                      <thead><tr style={{ background: '#fef3c7' }}><th style={{ padding: 6 }}>#</th><th style={{ padding: 6 }}>name</th><th style={{ padding: 6 }}>reason</th></tr></thead>
+                  <div className="nx-clients-preview">
+                    <table>
+                      <thead><tr><th>#</th><th>name</th><th>reason</th></tr></thead>
                       <tbody>
                         {importPreview.duplicates.slice(0, 10).map((r) => (
-                          <tr key={r.row_index}><td style={{ padding: 6 }}>{r.row_index}</td><td style={{ padding: 6 }}>{r.name}</td><td style={{ padding: 6 }}>{r.reason ?? '—'}</td></tr>
+                          <tr key={r.row_index}><td>{r.row_index}</td><td>{r.name}</td><td>{r.reason ?? '—'}</td></tr>
                         ))}
                       </tbody>
                     </table>
-                    {importPreview.duplicates.length > 10 && <p style={{ padding: 8, margin: 0, fontSize: 12, color: '#6b7280' }}>… and {importPreview.duplicates.length - 10} more</p>}
+                    {importPreview.duplicates.length > 10 && <p className="nx-clients-hint" style={{ padding: 8 }}>… and {importPreview.duplicates.length - 10} more</p>}
                   </div>
                 </div>
               )}
               {importPreview.invalid_rows.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <strong>Invalid rows</strong>
-                  <div style={{ overflowX: 'auto', maxHeight: 120, border: '1px solid #fecaca', borderRadius: 8, marginTop: 4 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                      <thead><tr style={{ background: '#fee2e2' }}><th style={{ padding: 6 }}>#</th><th style={{ padding: 6 }}>errors</th></tr></thead>
+                  <div className="nx-clients-preview">
+                    <table>
+                      <thead><tr><th>#</th><th>errors</th></tr></thead>
                       <tbody>
                         {importPreview.invalid_rows.slice(0, 10).map((r) => (
-                          <tr key={r.row_index}><td style={{ padding: 6 }}>{r.row_index}</td><td style={{ padding: 6 }}>{r.errors.join('; ')}</td></tr>
+                          <tr key={r.row_index}><td>{r.row_index}</td><td>{r.errors.join('; ')}</td></tr>
                         ))}
                       </tbody>
                     </table>
-                    {importPreview.invalid_rows.length > 10 && <p style={{ padding: 8, margin: 0, fontSize: 12, color: '#6b7280' }}>… and {importPreview.invalid_rows.length - 10} more</p>}
+                    {importPreview.invalid_rows.length > 10 && <p className="nx-clients-hint" style={{ padding: 8 }}>… and {importPreview.invalid_rows.length - 10} more</p>}
                   </div>
                 </div>
               )}
-              <button type="button" onClick={confirmImport} disabled={importLoading || importPreview.valid_rows.length === 0} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer' }}>
+              <button type="button" onClick={confirmImport} disabled={importLoading || importPreview.valid_rows.length === 0} className="nx-glass-btn nx-glass-btn--purple">
                 {importLoading ? t('common.loading') : 'Confirm import'}
               </button>
             </>
           )}
           {importResult && (
-            <div style={{ padding: 12, background: '#f0fdf4', borderRadius: 8, marginTop: 12 }}>
+            <div className="nx-glass-alert" style={{ marginTop: 12 }}>
               <strong>Import complete:</strong> {importResult.imported} imported, {importResult.skipped} skipped, {importResult.errors.length} errors.
             </div>
           )}
@@ -556,56 +556,34 @@ export function Clients() {
       )}
 
       {showCreate && canWrite && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(15, 23, 42, 0.35)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 40,
-          }}
-        >
-          <div
-            style={{
-              width: '100%',
-              maxWidth: 520,
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              padding: 24,
-              background: '#ffffff',
-              borderRadius: 16,
-              boxShadow: '0 20px 40px rgba(15,23,42,0.25)',
-              border: '1px solid #e5e7eb',
-            }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h3 style={{ margin: 0 }}>{t('clients.create.title')}</h3>
+        <div className="nx-clients-overlay">
+          <div className="nx-glass-card nx-clients-modal">
+            <div className="nx-clients-modal__head">
+              <h3>{t('clients.create.title')}</h3>
               <button
                 type="button"
                 onClick={() => { setShowCreate(false); setError(''); }}
-                style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
+                className="nx-clients-modal__close"
                 aria-label={t('common.cancel')}
               >
                 ×
               </button>
             </div>
-            <form onSubmit={createClient} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <form onSubmit={createClient} className="nx-clients-form">
               <label>
-                {t('clients.create.taxId')} <span style={{ color: '#b91c1c' }}>*</span>
-                <input type="text" value={createTaxId} onChange={(e) => setCreateTaxId(e.target.value)} required style={{ display: 'block', marginTop: 4, padding: '8px 12px', width: '100%', borderRadius: 8, border: '1px solid #d1d5db' }} />
+                {t('clients.create.taxId')} <span className="nx-clients-required">*</span>
+                <input type="text" value={createTaxId} onChange={(e) => setCreateTaxId(e.target.value)} required className="nx-glass-input" />
               </label>
               <label>
-                {t('clients.create.displayName')} <span style={{ color: '#b91c1c' }}>*</span>
-                <input type="text" value={createName} onChange={(e) => setCreateName(e.target.value)} required style={{ display: 'block', marginTop: 4, padding: '8px 12px', width: '100%', borderRadius: 8, border: '1px solid #d1d5db' }} />
+                {t('clients.create.displayName')} <span className="nx-clients-required">*</span>
+                <input type="text" value={createName} onChange={(e) => setCreateName(e.target.value)} required className="nx-glass-input" />
               </label>
               <label>
                 {t('clients.create.type')}
                 <select
                   value={createType}
                   onChange={(e) => setCreateType(e.target.value)}
-                  style={{ display: 'block', marginTop: 4, padding: '8px 12px', width: '100%', borderRadius: 8, border: '1px solid #d1d5db' }}
+                  className="nx-glass-input"
                 >
                   <option value="business_customer">{t('clients.type.business_customer')}</option>
                   <option value="individual_customer">{t('clients.type.individual_customer')}</option>
@@ -614,10 +592,10 @@ export function Clients() {
                   <option value="other">{t('clients.type.other')}</option>
                 </select>
               </label>
-              <h4 style={{ fontSize: 13, fontWeight: 600, marginTop: 16, marginBottom: 8 }}>{t('clients.contact.section')}</h4>
+              <h4>{t('clients.contact.section')}</h4>
               <label>
                 {t('clients.details.phone')}
-                <input type="text" value={createPhone} onChange={(e) => setCreatePhone(e.target.value)} placeholder={t('clients.contact.phonePlaceholder')} style={{ display: 'block', marginTop: 4, padding: '8px 12px', width: '100%', borderRadius: 8, border: '1px solid #d1d5db' }} />
+                <input type="text" value={createPhone} onChange={(e) => setCreatePhone(e.target.value)} placeholder={t('clients.contact.phonePlaceholder')} className="nx-glass-input" />
               </label>
               <label>
                 {t('clients.details.email')}
@@ -626,43 +604,36 @@ export function Clients() {
                   value={createEmail}
                   onChange={(e) => setCreateEmail(e.target.value)}
                   placeholder={t('clients.contact.emailPlaceholder')}
-                  style={{
-                    display: 'block',
-                    marginTop: 4,
-                    padding: '8px 12px',
-                    width: '100%',
-                    borderRadius: 8,
-                    border: '1px solid #d1d5db',
-                  }}
+                  className="nx-glass-input"
                 />
               </label>
-              <p style={{ fontSize: 12, color: '#6b7280', margin: '0 0 8px 0' }}>{t('clients.contact.requiredHint')}</p>
+              <p className="nx-clients-hint">{t('clients.contact.requiredHint')}</p>
               <label>
                 {t('clients.contact.website')}
-                <input type="url" value={createWebsite} onChange={(e) => setCreateWebsite(e.target.value)} placeholder="https://" style={{ display: 'block', marginTop: 4, padding: '8px 12px', width: '100%', borderRadius: 8, border: '1px solid #d1d5db' }} />
+                <input type="url" value={createWebsite} onChange={(e) => setCreateWebsite(e.target.value)} placeholder="https://" className="nx-glass-input" />
               </label>
-              <h4 style={{ fontSize: 13, fontWeight: 600, marginTop: 16, marginBottom: 8 }}>{t('clients.address.section')}</h4>
+              <h4>{t('clients.address.section')}</h4>
               <label>
                 {t('clients.address.country')}
-                <input type="text" value={createCountry} onChange={(e) => setCreateCountry(e.target.value)} placeholder="IL" maxLength={2} style={{ display: 'block', marginTop: 4, padding: '8px 12px', width: '100%', borderRadius: 8, border: '1px solid #d1d5db' }} />
+                <input type="text" value={createCountry} onChange={(e) => setCreateCountry(e.target.value)} placeholder="IL" maxLength={2} className="nx-glass-input" />
               </label>
               <label>
                 {t('clients.address.city')}
-                <input type="text" value={createCity} onChange={(e) => setCreateCity(e.target.value)} style={{ display: 'block', marginTop: 4, padding: '8px 12px', width: '100%', borderRadius: 8, border: '1px solid #d1d5db' }} />
+                <input type="text" value={createCity} onChange={(e) => setCreateCity(e.target.value)} className="nx-glass-input" />
               </label>
               <label>
                 {t('clients.address.street')}
-                <input type="text" value={createStreet} onChange={(e) => setCreateStreet(e.target.value)} style={{ display: 'block', marginTop: 4, padding: '8px 12px', width: '100%', borderRadius: 8, border: '1px solid #d1d5db' }} />
+                <input type="text" value={createStreet} onChange={(e) => setCreateStreet(e.target.value)} className="nx-glass-input" />
               </label>
               <label>
                 {t('clients.address.postalCode')}
-                <input type="text" value={createPostalCode} onChange={(e) => setCreatePostalCode(e.target.value)} style={{ display: 'block', marginTop: 4, padding: '8px 12px', width: '100%', borderRadius: 8, border: '1px solid #d1d5db' }} />
+                <input type="text" value={createPostalCode} onChange={(e) => setCreatePostalCode(e.target.value)} className="nx-glass-input" />
               </label>
-              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                <button type="submit" disabled={createSubmitting} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer' }}>
+              <div className="nx-clients-toolbar__row" style={{ marginTop: 8 }}>
+                <button type="submit" disabled={createSubmitting} className="nx-glass-btn nx-glass-btn--purple">
                   {createSubmitting ? t('common.loading') : t('common.create')}
                 </button>
-                <button type="button" onClick={() => { setShowCreate(false); setError(''); }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>
+                <button type="button" onClick={() => { setShowCreate(false); setError(''); }} className="nx-glass-btn nx-glass-btn--secondary">
                   {t('common.cancel')}
                 </button>
               </div>
@@ -671,16 +642,16 @@ export function Clients() {
         </div>
       )}
 
-      {error && <div style={{ padding: 12, background: '#fef2f2', color: '#b91c1c', borderRadius: 8, marginBottom: 16 }}>{error}</div>}
+      {error && <div className="nx-glass-alert nx-glass-alert--error">{error}</div>}
 
       {loading ? (
-        <p style={{ color: '#666' }}>{t('common.loading')}</p>
+        <p className="nx-clients-empty">{t('common.loading')}</p>
       ) : (
-        <DataTable>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <section className="nx-glass-card nx-clients-table-wrap">
+          <table className="nx-clients-table">
             <thead>
               <tr>
-                <th style={{ width: 40, padding: '12px 8px', textAlign: 'center' }}>
+                <th className="nx-clients-table__check">
                   <input
                     type="checkbox"
                     checked={list.length > 0 && selectedIds.size === list.length}
@@ -688,19 +659,19 @@ export function Clients() {
                     aria-label="Select all"
                   />
                 </th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600 }}>{t('clients.table.name')}</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600 }}>{t('clients.table.taxId')}</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600 }}>{t('clients.table.type')}</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600 }}>{t('clients.table.status')}</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600 }}>{t('clients.table.lifecycle')}</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600 }}>Updated</th>
-                <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600 }}></th>
+                <th>{t('clients.table.name')}</th>
+                <th>{t('clients.table.taxId')}</th>
+                <th>{t('clients.table.type')}</th>
+                <th>{t('clients.table.status')}</th>
+                <th>{t('clients.table.lifecycle')}</th>
+                <th>Updated</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {list.map((c) => (
-                <tr key={c.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                  <td style={{ width: 40, padding: '12px 8px', textAlign: 'center' }}>
+                <tr key={c.id}>
+                  <td className="nx-clients-table__check">
                     <input
                       type="checkbox"
                       checked={selectedIds.has(c.id)}
@@ -708,33 +679,33 @@ export function Clients() {
                       aria-label={`Select ${c.display_name}`}
                     />
                   </td>
-                  <td style={{ padding: '12px 16px' }}>
+                  <td>
                     <button
                       type="button"
                       onClick={() => navigate(`/clients/${c.id}`)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500, color: '#111', textDecoration: 'underline' }}
+                      className="nx-clients-table__name"
                     >
                       {c.display_name}
                     </button>
                   </td>
-                  <td style={{ padding: '12px 16px', fontFamily: 'monospace' }}>{c.tax_id ?? '—'}</td>
-                  <td style={{ padding: '12px 16px' }}>{t(`clients.type.${c.client_type}`)}</td>
-                  <td style={{ padding: '12px 16px' }}>{c.status}</td>
-                  <td style={{ padding: '12px 16px' }}>{c.lifecycle_state}</td>
-                  <td style={{ padding: '12px 16px', fontSize: 13, color: '#6b7280' }}>
+                  <td className="nx-clients-table__mono">{c.tax_id ?? '—'}</td>
+                  <td>{t(`clients.type.${c.client_type}`)}</td>
+                  <td>{c.status}</td>
+                  <td>{c.lifecycle_state}</td>
+                  <td className="nx-clients-table__muted">
                     {c.updated_at ? new Date(c.updated_at).toLocaleDateString() : '—'}
                   </td>
-                  <td style={{ padding: '12px 16px' }}>{c.is_archived ? <span style={{ color: '#6b7280', fontSize: 12 }}>Archived</span> : null}</td>
+                  <td>{c.is_archived ? <span className="nx-clients-table__muted">Archived</span> : null}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {list.length === 0 && (
-            <p style={{ padding: 24, color: '#666', textAlign: 'center' }}>
+            <p className="nx-clients-empty">
               {searchApplied ? t('clients.noResultsSearch') : t('clients.empty')}
             </p>
           )}
-        </DataTable>
+        </section>
       )}
     </div>
   );

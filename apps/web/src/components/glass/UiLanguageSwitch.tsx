@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../i18n/I18nProvider';
 import '../../styles/nx-glass-surface.css';
 
-export function UiLanguageSwitch({ ariaLabel }: { ariaLabel?: string }) {
+export function UiLanguageSwitch({ ariaLabel, compact }: { ariaLabel?: string; compact?: boolean }) {
   const auth = useAuth();
   const { lang, setLang, t } = useI18n();
   const [busy, setBusy] = useState(false);
@@ -23,7 +23,11 @@ export function UiLanguageSwitch({ ariaLabel }: { ariaLabel?: string }) {
   };
 
   return (
-    <div className="nx-glass-lang" role="group" aria-label={ariaLabel ?? t('dashboard.lang.aria')}>
+    <div
+      className={`nx-glass-lang${compact ? ' nx-glass-lang--compact' : ''}`}
+      role="group"
+      aria-label={ariaLabel ?? t('dashboard.lang.aria')}
+    >
       <button
         type="button"
         className={`nx-glass-lang__btn${lang === 'en' ? ' is-selected' : ''}`}
@@ -31,7 +35,7 @@ export function UiLanguageSwitch({ ariaLabel }: { ariaLabel?: string }) {
         disabled={busy}
         onClick={() => void select('en')}
       >
-        {t('dashboard.lang.en')}
+        {compact ? t('dashboard.lang.enCompact') : t('dashboard.lang.en')}
       </button>
       <button
         type="button"
@@ -40,7 +44,7 @@ export function UiLanguageSwitch({ ariaLabel }: { ariaLabel?: string }) {
         disabled={busy}
         onClick={() => void select('he')}
       >
-        {t('dashboard.lang.he')}
+        {compact ? t('dashboard.lang.heCompact') : t('dashboard.lang.he')}
       </button>
     </div>
   );

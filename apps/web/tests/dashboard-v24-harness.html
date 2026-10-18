@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>V2.4 dashboard toolbar and glass scrollbar harness</title>
+    <link rel="stylesheet" href="../src/templates/template-1/t1-sidebar-account.css" />
+    <link rel="stylesheet" href="../src/styles/nx-client-operations-shell.css" />
+    <link rel="stylesheet" href="../src/styles/nx-glass-surface.css" />
+    <link rel="stylesheet" href="../src/styles/nx-dashboard.css" />
+    <link rel="stylesheet" href="../src/styles/nx-clients.css" />
+    <style>
+      body { margin: 0; }
+      .t1-pageMain { flex: 1; padding: 18px 26px; min-width: 0; }
+    </style>
+  </head>
+  <body>
+    <div class="t1-appShell t1-appShell--client-operations" id="shell" style="display:flex;min-height:100vh">
+      <aside class="t1-sidebar" style="width:64px;flex:0 0 64px">
+        <div style="flex-shrink:0;height:56px">brand</div>
+        <nav class="t1-sidebar__nav" id="nav">
+          <div id="nav-inner"></div>
+        </nav>
+        <div class="t1-sidebar-account" style="height:72px">acct</div>
+      </aside>
+      <div class="t1-shellColumn" id="column" style="flex:1;min-width:0">
+        <main class="t1-pageMain">
+          <div class="nx-dashboard" id="dash" dir="ltr">
+            <div class="nx-dashboard__inner">
+              <div class="nx-dashboard__header" data-testid="nx-dashboard-toolbar">
+                <div>
+                  <h1 class="nx-dashboard__title">Office overview</h1>
+                  <div class="nx-dashboard__subtitle">Current month</div>
+                </div>
+                <div class="nx-dashboard__header-tools">
+                  <div class="nx-dashboard-period" role="group" aria-label="Period">
+                    <button type="button" class="nx-dashboard-period__chip is-selected">Current month</button>
+                    <button type="button" class="nx-dashboard-period__chip">Previous month</button>
+                    <button type="button" class="nx-dashboard-period__chip">Current year</button>
+                  </div>
+                  <div class="nx-glass-lang nx-glass-lang--compact" role="group" aria-label="Language">
+                    <button type="button" class="nx-glass-lang__btn is-selected">EN</button>
+                    <button type="button" class="nx-glass-lang__btn">עב</button>
+                  </div>
+                </div>
+              </div>
+              <section class="nx-glass-card nx-clients">
+                <div class="nx-clients-label">Clients / Roles glass card</div>
+                <p>Scroll the navy column to inspect the transparent cyan thumb.</p>
+              </section>
+              <div id="rows"></div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+    <script>
+      const navInner = document.getElementById('nav-inner');
+      for (let i = 0; i < 40; i++) {
+        const el = document.createElement('div');
+        el.textContent = 'nav ' + i;
+        el.style.height = '36px';
+        navInner.appendChild(el);
+      }
+      const rows = document.getElementById('rows');
+      for (let i = 0; i < 40; i++) {
+        const row = document.createElement('div');
+        row.className = 'nx-dashboard-card';
+        row.style.marginBottom = '10px';
+        row.textContent = 'section ' + i;
+        rows.appendChild(row);
+      }
+      window.__v24Probe = function () {
+        const col = document.getElementById('column');
+        const nav = document.getElementById('nav');
+        const tools = document.querySelector('.nx-dashboard__header-tools');
+        const lang = document.querySelector('.nx-glass-lang__btn.is-selected');
+        return {
+          colOverflow: getComputedStyle(col).overflowY,
+          colScrollbarColor: getComputedStyle(col).scrollbarColor,
+          navScrollbarColor: getComputedStyle(nav).scrollbarColor,
+          toolsDirection: getComputedStyle(tools).flexDirection,
+          langBg: getComputedStyle(lang).backgroundImage,
+        };
+      };
+    </script>
+  </body>
+</html>

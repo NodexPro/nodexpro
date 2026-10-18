@@ -12,6 +12,7 @@ import type { UiLanguageCode } from '../../types/session';
 
 import './tokens.css';
 import '../../styles/nx-client-operations-shell.css';
+import '../../styles/nx-glass-surface.css';
 
 export type Template1SidebarItem = { to: string; label: string; children?: { to: string; label: string }[] };
 
@@ -48,13 +49,16 @@ export function TemplateLayout({
   const isUsersRolesWorkspace = location.pathname === '/users-roles';
   const isDashboard = location.pathname === '/dashboard';
   const isSettings = location.pathname === '/settings';
+  // Office Clients list + details only — not Client Operations and not platform-owner clients.
+  const isOfficeClients = location.pathname === '/clients' || /^\/clients\/[^/]+$/.test(location.pathname);
   // Every destination opened from the canonical sidebar uses the same working shell (navy backdrop +
-  // collapsible glass AppSidebar). CO / Users & Roles / Dashboard are navy-native surfaces; every other destination keeps
-  // its own light content inside a light surface (`t1-appShell--general`) so internal content is unchanged.
+  // collapsible glass AppSidebar). CO / Users & Roles / Dashboard / Settings / office Clients are navy-native
+  // surfaces; every other destination keeps its own light content inside a light surface (`t1-appShell--general`).
   const usesCanonicalWorkingShell = true;
-  const isNavyNativeSurface = isClientOperationsModule || isUsersRolesWorkspace || isDashboard || isSettings;
+  const isNavyNativeSurface =
+    isClientOperationsModule || isUsersRolesWorkspace || isDashboard || isSettings || isOfficeClients;
   const pageMaxWidth =
-    isClientOperationsModule || isIncomeModule || isWorkEngineSection || isUsersRolesWorkspace || isDashboard
+    isClientOperationsModule || isIncomeModule || isWorkEngineSection || isUsersRolesWorkspace || isDashboard || isOfficeClients
       ? 1600
       : 1100;
 
@@ -70,7 +74,7 @@ export function TemplateLayout({
   let header: React.ReactNode = null;
   if (!isWorkEngineQueuePage) {
     // Users & Roles and Dashboard render no header strip (account / org / language live in the sidebar).
-    header = isUsersRolesWorkspace || isDashboard || isSettings ? null : isClientOperationsModule ? (
+    header = isUsersRolesWorkspace || isDashboard || isSettings || isOfficeClients ? null : isClientOperationsModule ? (
       <ClientOperationsAppHeader
         searchSlotRef={coHeaderSearchSlotRef}
         workspaceSlotRef={coHeaderWorkspaceSlotRef}

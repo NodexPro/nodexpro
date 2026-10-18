@@ -49,7 +49,7 @@ test('Dashboard V2 renders aggregate labels and follows application language dir
 
 test('Dashboard V2 keeps global header/language off the dashboard surface only', () => {
   assert.match(layoutSrc, /const isDashboard = location\.pathname === '\/dashboard'/);
-  assert.match(layoutSrc, /isUsersRolesWorkspace \|\| isDashboard \|\| isSettings \? null/);
+  assert.match(layoutSrc, /isUsersRolesWorkspace \|\| isDashboard \|\| isSettings \|\| isOfficeClients \? null/);
   assert.match(layoutSrc, /<AppHeader/);
 });
 

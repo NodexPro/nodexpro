@@ -393,13 +393,12 @@ export function Dashboard() {
   return (
     <div className="nx-dashboard" data-testid="nx-dashboard" dir={dir} lang={lang}>
       <div className="nx-dashboard__inner">
-        <div className="nx-dashboard__header">
+        <div className="nx-dashboard__header" data-testid="nx-dashboard-toolbar">
           <div>
             <h1 className="nx-dashboard__title">{office.title_he}</h1>
             <div className="nx-dashboard__subtitle">{office.subtitle_he}</div>
           </div>
           <div className="nx-dashboard__header-tools">
-            <UiLanguageSwitch />
             <div className="nx-dashboard-period" role="group" aria-label={office.period.label_he}>
               {office.period.options.map((opt) => (
                 <button
@@ -412,6 +411,7 @@ export function Dashboard() {
                 </button>
               ))}
             </div>
+            <UiLanguageSwitch compact />
           </div>
         </div>
 

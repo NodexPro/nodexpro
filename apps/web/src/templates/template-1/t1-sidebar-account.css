@@ -32,8 +32,16 @@
 }
 
 .t1-sidebar__nav::-webkit-scrollbar-thumb {
-  background: rgba(125, 236, 247, 0.35);
+  background: var(--nx-glass-scroll-thumb, rgba(125, 236, 247, 0.38));
   border-radius: 8px;
+}
+
+.t1-sidebar__nav::-webkit-scrollbar-thumb:hover {
+  background: var(--nx-glass-scroll-thumb-hover, rgba(125, 236, 247, 0.62));
+}
+
+.t1-sidebar__nav::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .t1-sidebar-account {

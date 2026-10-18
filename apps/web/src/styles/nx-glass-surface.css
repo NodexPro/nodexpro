@@ -3,6 +3,13 @@
  * Values match the approved Dashboard glass recipe. Do not restyle the sidebar.
  */
 
+:root {
+  --nx-glass-scroll-thumb: rgba(125, 236, 247, 0.38);
+  --nx-glass-scroll-thumb-hover: rgba(125, 236, 247, 0.62);
+  --nx-glass-scroll-track: transparent;
+  --nx-glass-scroll-size: 8px;
+}
+
 .nx-glass-page {
   font-family: Arial, sans-serif;
   color: #eef6ff;
@@ -10,6 +17,10 @@
   margin: 0 auto;
   padding: 8px 4px 24px;
   box-sizing: border-box;
+}
+
+.nx-glass-page--wide {
+  max-width: 1440px;
 }
 
 .nx-glass-title {
@@ -86,6 +97,12 @@ textarea.nx-glass-input {
 .nx-glass-input option {
   background: #082447;
   color: #eef6ff;
+}
+
+.nx-glass-input--inline {
+  width: auto;
+  display: inline-block;
+  min-width: 160px;
 }
 
 .nx-glass-btn {
@@ -177,6 +194,96 @@ textarea.nx-glass-input {
 .nx-glass-lang__btn.is-selected {
   border-color: rgba(196, 184, 255, 0.7);
   background: linear-gradient(115deg, rgba(128, 116, 242, 0.62) 0%, rgba(102, 87, 232, 0.48) 100%);
+}
+
+.nx-glass-lang--compact {
+  flex-wrap: nowrap;
+}
+
+.nx-glass-lang--compact .nx-glass-lang__btn {
+  height: 36px;
+  min-height: 36px;
+  min-width: 44px;
+  padding: 8px 12px;
+}
+
+/*
+ * Transparent glass scrollbars — navy-native surfaces only.
+ * Do not change overflow. Do not restyle light general pages.
+ */
+.t1-appShell--client-operations:not(.t1-appShell--general) .t1-shellColumn,
+.t1-appShell--client-operations .t1-sidebar__nav,
+.nx-dashboard-breakdown__body,
+.nx-dashboard-breakdown__table-wrap,
+.nx-ur-modal__body,
+.nx-ur-table-scroll,
+.nx-ur-list,
+.nx-clients-modal,
+.nx-clients-preview {
+  scrollbar-width: thin;
+  scrollbar-color: var(--nx-glass-scroll-thumb) var(--nx-glass-scroll-track);
+}
+
+.t1-appShell--client-operations:not(.t1-appShell--general) .t1-shellColumn::-webkit-scrollbar,
+.t1-appShell--client-operations .t1-sidebar__nav::-webkit-scrollbar,
+.nx-dashboard-breakdown__body::-webkit-scrollbar,
+.nx-dashboard-breakdown__table-wrap::-webkit-scrollbar,
+.nx-ur-modal__body::-webkit-scrollbar,
+.nx-ur-table-scroll::-webkit-scrollbar,
+.nx-ur-list::-webkit-scrollbar,
+.nx-clients-modal::-webkit-scrollbar,
+.nx-clients-preview::-webkit-scrollbar {
+  width: var(--nx-glass-scroll-size);
+  height: var(--nx-glass-scroll-size);
+}
+
+.t1-appShell--client-operations:not(.t1-appShell--general) .t1-shellColumn::-webkit-scrollbar-track,
+.t1-appShell--client-operations .t1-sidebar__nav::-webkit-scrollbar-track,
+.nx-dashboard-breakdown__body::-webkit-scrollbar-track,
+.nx-dashboard-breakdown__table-wrap::-webkit-scrollbar-track,
+.nx-ur-modal__body::-webkit-scrollbar-track,
+.nx-ur-table-scroll::-webkit-scrollbar-track,
+.nx-ur-list::-webkit-scrollbar-track,
+.nx-clients-modal::-webkit-scrollbar-track,
+.nx-clients-preview::-webkit-scrollbar-track {
+  background: var(--nx-glass-scroll-track);
+}
+
+.t1-appShell--client-operations:not(.t1-appShell--general) .t1-shellColumn::-webkit-scrollbar-thumb,
+.t1-appShell--client-operations .t1-sidebar__nav::-webkit-scrollbar-thumb,
+.nx-dashboard-breakdown__body::-webkit-scrollbar-thumb,
+.nx-dashboard-breakdown__table-wrap::-webkit-scrollbar-thumb,
+.nx-ur-modal__body::-webkit-scrollbar-thumb,
+.nx-ur-table-scroll::-webkit-scrollbar-thumb,
+.nx-ur-list::-webkit-scrollbar-thumb,
+.nx-clients-modal::-webkit-scrollbar-thumb,
+.nx-clients-preview::-webkit-scrollbar-thumb {
+  background: var(--nx-glass-scroll-thumb);
+  border-radius: 8px;
+}
+
+.t1-appShell--client-operations:not(.t1-appShell--general) .t1-shellColumn::-webkit-scrollbar-thumb:hover,
+.t1-appShell--client-operations .t1-sidebar__nav::-webkit-scrollbar-thumb:hover,
+.nx-dashboard-breakdown__body::-webkit-scrollbar-thumb:hover,
+.nx-dashboard-breakdown__table-wrap::-webkit-scrollbar-thumb:hover,
+.nx-ur-modal__body::-webkit-scrollbar-thumb:hover,
+.nx-ur-table-scroll::-webkit-scrollbar-thumb:hover,
+.nx-ur-list::-webkit-scrollbar-thumb:hover,
+.nx-clients-modal::-webkit-scrollbar-thumb:hover,
+.nx-clients-preview::-webkit-scrollbar-thumb:hover {
+  background: var(--nx-glass-scroll-thumb-hover);
+}
+
+.t1-appShell--client-operations:not(.t1-appShell--general) .t1-shellColumn::-webkit-scrollbar-corner,
+.t1-appShell--client-operations .t1-sidebar__nav::-webkit-scrollbar-corner,
+.nx-dashboard-breakdown__body::-webkit-scrollbar-corner,
+.nx-dashboard-breakdown__table-wrap::-webkit-scrollbar-corner,
+.nx-ur-modal__body::-webkit-scrollbar-corner,
+.nx-ur-table-scroll::-webkit-scrollbar-corner,
+.nx-ur-list::-webkit-scrollbar-corner,
+.nx-clients-modal::-webkit-scrollbar-corner,
+.nx-clients-preview::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .nx-settings dt {
