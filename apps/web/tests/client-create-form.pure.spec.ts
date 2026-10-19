@@ -163,16 +163,23 @@ test('EN/HE contact and create-error copy exist; modal is RTL/LTR', () => {
   assert.match(clientsSrc, /nx-clients-field-error/);
 });
 
-test('royal-glass Create Client experiment is modal-scoped and one-step rollback', () => {
-  const css = readFileSync(join(dir, '../src/styles/nx-client-create-royal-glass.css'), 'utf8');
+test('Create Client visual variants are modal-scoped and selector-rollbackable', () => {
+  const royalCss = readFileSync(join(dir, '../src/styles/nx-client-create-royal-glass.css'), 'utf8');
+  const navyCss = readFileSync(join(dir, '../src/styles/nx-client-create-navy-royal-glass.css'), 'utf8');
   const productionCss = readFileSync(join(dir, '../src/styles/nx-clients.css'), 'utf8');
-  assert.match(clientsSrc, /CREATE_CLIENT_MODAL_APPEARANCE: 'current' \| 'royal-glass'/);
+  assert.match(clientsSrc, /CreateClientModalAppearance = 'current' \| 'royal-glass' \| 'navy-royal-glass'/);
+  assert.match(clientsSrc, /CREATE_CLIENT_MODAL_APPEARANCE: CreateClientModalAppearance = 'navy-royal-glass'/);
   assert.match(clientsSrc, /nx-client-create--royal-glass/);
-  assert.match(css, /\.nx-client-create--royal-glass/);
-  assert.match(css, /grid-template-columns: 1fr 1fr/);
-  assert.match(css, /@media \(max-width: 640px\)/);
-  assert.doesNotMatch(css, /(?:^|\n)\.nx-clients-overlay\s*\{/);
-  assert.doesNotMatch(clientsSrc.split('showImport')[1] ?? '', /nx-client-create--royal-glass/);
+  assert.match(clientsSrc, /nx-client-create--navy-royal-glass/);
+  assert.match(royalCss, /\.nx-client-create--royal-glass/);
+  assert.match(navyCss, /\.nx-client-create--navy-royal-glass/);
+  assert.match(navyCss, /grid-template-columns: 1fr 1fr/);
+  assert.match(navyCss, /justify-content: flex-end/);
+  assert.match(navyCss, /#14244[aA]|rgb\(20, 36, 74\)/);
+  assert.match(navyCss, /#13[Bb][Ff][Dd]0|rgb\(19, 191, 208\)/);
+  assert.match(navyCss, /@media \(max-width: 640px\)/);
+  assert.doesNotMatch(navyCss, /(?:^|\n)\.nx-clients-overlay\s*\{/);
+  assert.doesNotMatch(navyCss, /\.nx-client-create--royal-glass/);
   assert.match(productionCss, /\.nx-clients-modal \{/);
   assert.match(clientsSrc, /validateCreateClientDraft/);
   assert.match(clientsSrc, /buildCreateClientCommandPayload/);

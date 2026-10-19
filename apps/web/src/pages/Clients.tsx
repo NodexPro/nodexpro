@@ -27,14 +27,28 @@ import {
 import '../styles/nx-glass-surface.css';
 import '../styles/nx-clients.css';
 import '../styles/nx-client-create-royal-glass.css';
+import '../styles/nx-client-create-navy-royal-glass.css';
+
+type CreateClientModalAppearance = 'current' | 'royal-glass' | 'navy-royal-glass';
 
 /**
  * Create Client modal visual experiment switch (local, not a user setting).
- * CURRENT — production appearance in nx-clients.css
- * ROYAL   — royal-blue glass experiment (nx-client-create--royal-glass)
- * One-step rollback: set this to `'current'`. Do not delete production modal CSS.
+ * current           — original production appearance in nx-clients.css
+ * royal-glass       — bright royal-blue glass (nx-client-create--royal-glass)
+ * navy-royal-glass  — restrained navy glass (nx-client-create--navy-royal-glass)
+ * Rollback: change this assignment. Do not delete prior modal CSS.
  */
-const CREATE_CLIENT_MODAL_APPEARANCE: 'current' | 'royal-glass' = 'royal-glass';
+const CREATE_CLIENT_MODAL_APPEARANCE: CreateClientModalAppearance = 'navy-royal-glass';
+
+function createClientOverlayClass(appearance: CreateClientModalAppearance): string {
+  if (appearance === 'royal-glass') {
+    return 'nx-clients-overlay nx-client-create nx-client-create--royal-glass';
+  }
+  if (appearance === 'navy-royal-glass') {
+    return 'nx-clients-overlay nx-client-create nx-client-create--navy-royal-glass';
+  }
+  return 'nx-clients-overlay nx-client-create';
+}
 
 const VIEW_OPTIONS: { value: string; labelKey: string }[] = [
   { value: 'all', labelKey: 'clients.views.all' },
@@ -617,13 +631,7 @@ export function Clients() {
       )}
 
       {showCreate && canWrite && (
-        <div
-          className={
-            CREATE_CLIENT_MODAL_APPEARANCE === 'royal-glass'
-              ? 'nx-clients-overlay nx-client-create nx-client-create--royal-glass'
-              : 'nx-clients-overlay nx-client-create'
-          }
-        >
+        <div className={createClientOverlayClass(CREATE_CLIENT_MODAL_APPEARANCE)}>
           <div
             className="nx-glass-card nx-clients-modal"
             role="dialog"
