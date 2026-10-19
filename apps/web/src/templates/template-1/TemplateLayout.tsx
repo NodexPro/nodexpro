@@ -51,14 +51,24 @@ export function TemplateLayout({
   const isSettings = location.pathname === '/settings';
   // Office Clients list + details only — not Client Operations and not platform-owner clients.
   const isOfficeClients = location.pathname === '/clients' || /^\/clients\/[^/]+$/.test(location.pathname);
+  const isOfficeBilling = location.pathname === '/billing';
+  const isOfficeModules = location.pathname === '/modules';
+  const isOfficeDocuments = location.pathname === '/documents' || /^\/documents\/[^/]+$/.test(location.pathname);
+  const isOfficeGlassSurface = isOfficeClients || isOfficeBilling || isOfficeModules || isOfficeDocuments;
   // Every destination opened from the canonical sidebar uses the same working shell (navy backdrop +
-  // collapsible glass AppSidebar). CO / Users & Roles / Dashboard / Settings / office Clients are navy-native
+  // collapsible glass AppSidebar). CO / Users & Roles / Dashboard / Settings / office glass pages are navy-native
   // surfaces; every other destination keeps its own light content inside a light surface (`t1-appShell--general`).
   const usesCanonicalWorkingShell = true;
   const isNavyNativeSurface =
-    isClientOperationsModule || isUsersRolesWorkspace || isDashboard || isSettings || isOfficeClients;
+    isClientOperationsModule || isUsersRolesWorkspace || isDashboard || isSettings || isOfficeGlassSurface;
   const pageMaxWidth =
-    isClientOperationsModule || isIncomeModule || isWorkEngineSection || isUsersRolesWorkspace || isDashboard || isOfficeClients
+    isClientOperationsModule ||
+    isIncomeModule ||
+    isWorkEngineSection ||
+    isUsersRolesWorkspace ||
+    isDashboard ||
+    isSettings ||
+    isOfficeGlassSurface
       ? 1600
       : 1100;
 
@@ -74,7 +84,7 @@ export function TemplateLayout({
   let header: React.ReactNode = null;
   if (!isWorkEngineQueuePage) {
     // Users & Roles and Dashboard render no header strip (account / org / language live in the sidebar).
-    header = isUsersRolesWorkspace || isDashboard || isSettings || isOfficeClients ? null : isClientOperationsModule ? (
+    header = isUsersRolesWorkspace || isDashboard || isSettings || isOfficeGlassSurface ? null : isClientOperationsModule ? (
       <ClientOperationsAppHeader
         searchSlotRef={coHeaderSearchSlotRef}
         workspaceSlotRef={coHeaderWorkspaceSlotRef}

@@ -10,6 +10,9 @@ import {
   orgDocumentLinks,
   orgClients,
 } from '../api/endpoints';
+import { useI18n } from '../i18n/I18nProvider';
+import { GlassFilePicker } from '../components/glass/GlassFilePicker';
+import '../styles/nx-glass-surface.css';
 
 interface Document {
   id: string;
@@ -60,22 +63,21 @@ interface Client {
   display_name: string;
 }
 
-const DOC_TYPE_LABELS: Record<string, string> = {
-  invoice: 'Invoice',
-  receipt: 'Receipt',
-  contract: 'Contract',
-  statement: 'Statement',
-  payroll_document: 'Payroll',
-  tax_document: 'Tax',
-  other: 'Other',
-};
-
-const sectionStyle = { marginBottom: 32, padding: 20, background: '#f9fafb', borderRadius: 12, border: '1px solid #e5e7eb' };
+const DOC_TYPE_CODES = [
+  'invoice',
+  'receipt',
+  'contract',
+  'statement',
+  'payroll_document',
+  'tax_document',
+  'other',
+] as const;
 
 export function DocumentCard() {
   const { documentId } = useParams<{ documentId: string }>();
   const navigate = useNavigate();
   const auth = useAuth();
+  const { t } = useI18n();
   const [doc, setDoc] = useState<Document | null>(null);
   const [versions, setVersions] = useState<Version[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
@@ -98,6 +100,12 @@ export function DocumentCard() {
   const orgId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
   const canWrite = auth.status === 'authenticated' && auth.me?.permissions?.includes('documents:write');
   const canArchive = auth.status === 'authenticated' && auth.me?.permissions?.includes('documents:archive');
+
+  const typeLabel = (code: string) => {
+    const key = `documents.types.${code}`;
+    const label = t(key);
+    return label === key ? code : label;
+  };
 
   useEffect(() => {
     if (!orgId || !documentId) {
@@ -123,7 +131,7 @@ export function DocumentCard() {
         setEditDate(d.document_date ?? d.issue_date ?? '');
       })
       .catch((e) => {
-        if (!cancelled && (e as Error)?.name !== 'AbortError') setError(e instanceof Error ? e.message : 'Failed to load');
+        if (!cancelled && (e as Error)?.name !== 'AbortError') setError(e instanceof Error ? e.message : t('documents.errors.loadFailed'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -159,7 +167,7 @@ export function DocumentCard() {
       const { url: signedUrl } = await apiJson<{ url: string }>(url);
       window.open(signedUrl, '_blank', 'noopener,noreferrer');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to open');
+      setError(e instanceof Error ? e.message : t('documents.errors.openFailed'));
     }
   };
 
@@ -187,7 +195,7 @@ export function DocumentCard() {
       if (updated) setDoc(updated);
       else refetchDoc();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to update');
+      setError(e instanceof Error ? e.message : t('documents.errors.updateFailed'));
     } finally {
       setSaving(false);
     }
@@ -195,13 +203,13 @@ export function DocumentCard() {
 
   const archiveDocument = async () => {
     if (!orgId || !documentId || !canArchive) return;
-    if (!window.confirm('Archive this document? It will be excluded from active lists.')) return;
+    if (!window.confirm(t('documents.archiveConfirm'))) return;
     setError('');
     try {
       await apiJson(orgDocument(orgId, documentId) + '/archive', { method: 'POST', body: '{}' });
       navigate('/documents');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to archive');
+      setError(e instanceof Error ? e.message : t('documents.errors.archiveFailed'));
     }
   };
 
@@ -217,7 +225,7 @@ export function DocumentCard() {
       setLinkClientId('');
       refetchLinks();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add link');
+      setError(e instanceof Error ? e.message : t('documents.errors.addLinkFailed'));
     }
   };
 
@@ -228,7 +236,7 @@ export function DocumentCard() {
       await apiJson(`${orgDocumentLinks(orgId, documentId)}/${linkId}`, { method: 'DELETE' });
       refetchLinks();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to remove link');
+      setError(e instanceof Error ? e.message : t('documents.errors.removeLinkFailed'));
     }
   };
 
@@ -239,7 +247,7 @@ export function DocumentCard() {
         const dataUrl = reader.result as string;
         resolve(dataUrl.includes(',') ? dataUrl.split(',')[1] : '');
       };
-      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.onerror = () => reject(new Error(t('documents.errors.readFile')));
       reader.readAsDataURL(file);
     });
 
@@ -262,137 +270,184 @@ export function DocumentCard() {
       setNewVersionFile(null);
       refetchVersions();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to upload version');
+      setError(e instanceof Error ? e.message : t('documents.errors.uploadVersionFailed'));
     } finally {
       setUploadingVersion(false);
     }
   };
 
   if (auth.status !== 'authenticated') return null;
-  if (!orgId) return <p>Select an organization.</p>;
-  if (!documentId) return <p>No document selected.</p>;
-  if (loading) return <p style={{ padding: 24 }}>Loading…</p>;
-  if (!doc) return <p style={{ padding: 24 }}>Document not found.</p>;
+  if (!orgId) return <p className="nx-glass-page">{t('topBar.selectOrg')}</p>;
+  if (!documentId) return <p className="nx-glass-page">{t('documents.noDocument')}</p>;
+  if (loading) return <p className="nx-glass-page">{t('common.loading')}</p>;
+  if (!doc) return <p className="nx-glass-page">{t('documents.notFound')}</p>;
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: 24 }}>
-      <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-        <button type="button" onClick={() => navigate('/documents')} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>
-          ← Documents
+    <div className="nx-glass-page nx-glass-page--wide" data-testid="nx-document-card">
+      <div className="nx-glass-header-row">
+        <button type="button" className="nx-glass-btn nx-glass-btn--secondary" onClick={() => navigate('/documents')}>
+          {t('documents.back')}
         </button>
-        <h1 style={{ margin: 0, flex: 1 }}>{doc.title ?? 'Untitled document'}</h1>
-        {doc.is_archived && <span style={{ padding: '4px 10px', background: '#f3f4f6', borderRadius: 6, fontSize: 12, color: '#6b7280' }}>Archived</span>}
+        <h1 className="nx-glass-title">{doc.title ?? t('documents.untitled')}</h1>
+        {doc.is_archived && <span className="nx-glass-badge">{t('common.archived')}</span>}
         {canArchive && !doc.is_archived && (
-          <button type="button" onClick={archiveDocument} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', color: '#b91c1c', cursor: 'pointer' }}>
-            Archive
+          <button type="button" className="nx-glass-btn nx-glass-btn--danger" onClick={archiveDocument}>
+            {t('documents.archive')}
           </button>
         )}
       </div>
 
-      {error && <div style={{ padding: 12, background: '#fef2f2', color: '#b91c1c', borderRadius: 8, marginBottom: 16 }}>{error}</div>}
+      {error && (
+        <div className="nx-glass-alert nx-glass-alert--error" role="alert">
+          {error}
+        </div>
+      )}
 
-      <section style={sectionStyle}>
-        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 16 }}>Details</h2>
+      <section className="nx-glass-card">
+        <h2>{t('documents.details')}</h2>
         {editing && canWrite ? (
-          <form onSubmit={saveDocument} style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 400 }}>
-            <label>Title <input type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} style={{ display: 'block', marginTop: 4, padding: '8px 12px', width: '100%', borderRadius: 8, border: '1px solid #d1d5db' }} /></label>
-            <label>Type
-              <select value={editType} onChange={(e) => setEditType(e.target.value)} style={{ display: 'block', marginTop: 4, padding: '8px 12px', width: '100%', borderRadius: 8, border: '1px solid #d1d5db' }}>
-                {Object.entries(DOC_TYPE_LABELS).map(([code, label]) => <option key={code} value={code}>{label}</option>)}
+          <form onSubmit={saveDocument}>
+            <div className="nx-glass-field">
+              <label className="nx-glass-label" htmlFor="doc-title">{t('documents.fields.title')}</label>
+              <input id="doc-title" className="nx-glass-input" type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+            </div>
+            <div className="nx-glass-field">
+              <label className="nx-glass-label" htmlFor="doc-type">{t('documents.fields.type')}</label>
+              <select id="doc-type" className="nx-glass-input" value={editType} onChange={(e) => setEditType(e.target.value)}>
+                {DOC_TYPE_CODES.map((code) => <option key={code} value={code}>{typeLabel(code)}</option>)}
               </select>
-            </label>
-            <label>Amount <input type="number" step="0.01" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} style={{ display: 'block', marginTop: 4, padding: '8px 12px', width: '100%', borderRadius: 8, border: '1px solid #d1d5db' }} /></label>
-            <label>Currency <input type="text" value={editCurrency} onChange={(e) => setEditCurrency(e.target.value)} placeholder="ILS" style={{ display: 'block', marginTop: 4, padding: '8px 12px', width: '100%', borderRadius: 8, border: '1px solid #d1d5db' }} /></label>
-            <label>Date <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} style={{ display: 'block', marginTop: 4, padding: '8px 12px', width: '100%', borderRadius: 8, border: '1px solid #d1d5db' }} /></label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="submit" disabled={saving} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer' }}>{saving ? 'Saving…' : 'Save'}</button>
-              <button type="button" onClick={() => setEditing(false)} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>Cancel</button>
+            </div>
+            <div className="nx-glass-field">
+              <label className="nx-glass-label" htmlFor="doc-amount">{t('documents.fields.amount')}</label>
+              <input id="doc-amount" className="nx-glass-input" type="number" step="0.01" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
+            </div>
+            <div className="nx-glass-field">
+              <label className="nx-glass-label" htmlFor="doc-currency">{t('documents.fields.currency')}</label>
+              <input id="doc-currency" className="nx-glass-input" type="text" value={editCurrency} onChange={(e) => setEditCurrency(e.target.value)} placeholder="ILS" />
+            </div>
+            <div className="nx-glass-field">
+              <label className="nx-glass-label" htmlFor="doc-date">{t('documents.fields.date')}</label>
+              <input id="doc-date" className="nx-glass-input" type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+            </div>
+            <div className="nx-glass-toolbar">
+              <button type="submit" className="nx-glass-btn nx-glass-btn--purple" disabled={saving}>
+                {saving ? t('documents.saving') : t('common.save')}
+              </button>
+              <button type="button" className="nx-glass-btn nx-glass-btn--secondary" onClick={() => setEditing(false)}>
+                {t('common.cancel')}
+              </button>
             </div>
           </form>
         ) : (
           <>
-            {canWrite && !editing && <button type="button" onClick={() => setEditing(true)} style={{ marginBottom: 12, padding: '6px 12px', fontSize: 12, borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>Edit</button>}
-            <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '8px 24px' }}>
-              <dt style={{ color: '#6b7280' }}>Type</dt>
-              <dd style={{ margin: 0 }}>{DOC_TYPE_LABELS[doc.document_type_code] ?? doc.document_type_code}</dd>
-              <dt style={{ color: '#6b7280' }}>Status</dt>
-              <dd style={{ margin: 0 }}>{doc.lifecycle_state}</dd>
-              <dt style={{ color: '#6b7280' }}>Date</dt>
-              <dd style={{ margin: 0 }}>{doc.document_date ?? doc.issue_date ? new Date(doc.document_date ?? doc.issue_date!).toLocaleDateString() : '—'}</dd>
-              <dt style={{ color: '#6b7280' }}>Amount</dt>
-              <dd style={{ margin: 0 }}>{doc.amount_total != null ? `${doc.amount_total} ${doc.currency ?? ''}`.trim() : '—'}</dd>
+            {canWrite && !editing && (
+              <button type="button" className="nx-glass-btn nx-glass-btn--secondary" onClick={() => setEditing(true)}>
+                {t('documents.edit')}
+              </button>
+            )}
+            <dl className="nx-glass-dl" style={{ marginTop: 12 }}>
+              <dt>{t('documents.fields.type')}</dt>
+              <dd>{typeLabel(doc.document_type_code)}</dd>
+              <dt>{t('documents.fields.status')}</dt>
+              <dd>{doc.lifecycle_state}</dd>
+              <dt>{t('documents.fields.date')}</dt>
+              <dd>{doc.document_date ?? doc.issue_date ? new Date(doc.document_date ?? doc.issue_date!).toLocaleDateString() : '—'}</dd>
+              <dt>{t('documents.fields.amount')}</dt>
+              <dd>{doc.amount_total != null ? `${doc.amount_total} ${doc.currency ?? ''}`.trim() : '—'}</dd>
             </dl>
           </>
         )}
       </section>
 
-      <section style={sectionStyle}>
-        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 16 }}>Current version</h2>
+      <section className="nx-glass-card">
+        <h2>{t('documents.currentVersion')}</h2>
         {versions.find((v) => v.is_current) ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="nx-glass-toolbar" style={{ marginBottom: 0 }}>
             <span>{versions.find((v) => v.is_current)!.original_file_name}</span>
-            <button type="button" onClick={() => openFile()} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>Open</button>
+            <button type="button" className="nx-glass-btn nx-glass-btn--secondary" onClick={() => openFile()}>
+              {t('documents.open')}
+            </button>
           </div>
         ) : (
-          <p style={{ color: '#6b7280', margin: 0 }}>No current version</p>
+          <p className="nx-glass-muted">{t('documents.noCurrentVersion')}</p>
         )}
       </section>
 
-      <section style={sectionStyle}>
-        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 16 }}>Version history</h2>
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+      <section className="nx-glass-card">
+        <h2>{t('documents.versionHistory')}</h2>
+        <ul className="nx-glass-list">
           {versions.map((v) => (
-            <li key={v.id} style={{ padding: '8px 0', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <li key={v.id}>
               <span>v{v.version_number} — {v.original_file_name}</span>
-              {v.is_current && <span style={{ fontSize: 12, color: '#059669' }}>Current</span>}
-              <button type="button" onClick={() => openFile(v.id)} style={{ padding: '4px 8px', fontSize: 12, borderRadius: 4, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>Open</button>
+              {v.is_current && <span className="nx-glass-status--active">{t('documents.current')}</span>}
+              <button type="button" className="nx-glass-btn nx-glass-btn--secondary" onClick={() => openFile(v.id)}>
+                {t('documents.open')}
+              </button>
             </li>
           ))}
         </ul>
         {canWrite && (
-          <form onSubmit={uploadNewVersion} style={{ marginTop: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input type="file" onChange={(e) => setNewVersionFile(e.target.files?.[0] ?? null)} accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.txt,.csv" />
-            <button type="submit" disabled={!newVersionFile || uploadingVersion} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#f9fafb', cursor: 'pointer' }}>{uploadingVersion ? 'Uploading…' : 'Add version'}</button>
+          <form onSubmit={uploadNewVersion} className="nx-glass-toolbar" style={{ marginTop: 16, marginBottom: 0 }}>
+            <GlassFilePicker
+              accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.txt,.csv"
+              file={newVersionFile}
+              disabled={uploadingVersion}
+              onChange={setNewVersionFile}
+            />
+            <button type="submit" className="nx-glass-btn nx-glass-btn--purple" disabled={!newVersionFile || uploadingVersion}>
+              {uploadingVersion ? t('documents.uploading') : t('documents.addVersion')}
+            </button>
           </form>
         )}
       </section>
 
-      <section style={sectionStyle}>
-        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 16 }}>Linked to</h2>
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+      <section className="nx-glass-card">
+        <h2>{t('documents.linkedTo')}</h2>
+        <ul className="nx-glass-list">
           {links.map((l) => {
             const client = l.target_entity_type === 'client' ? clients.find((c) => c.id === l.target_entity_id) : null;
             return (
-              <li key={l.id} style={{ padding: '8px 0', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <li key={l.id}>
                 <span>{client?.display_name ?? l.target_entity_id}</span>
-                {l.is_primary && <span style={{ fontSize: 12, color: '#059669' }}>Primary</span>}
-                {canWrite && <button type="button" onClick={() => removeLink(l.id)} style={{ padding: '2px 8px', fontSize: 12, border: 'none', background: 'transparent', color: '#b91c1c', cursor: 'pointer' }}>Remove</button>}
+                {l.is_primary && <span className="nx-glass-status--active">{t('documents.primary')}</span>}
+                {canWrite && (
+                  <button type="button" className="nx-glass-btn nx-glass-btn--danger" onClick={() => removeLink(l.id)}>
+                    {t('documents.remove')}
+                  </button>
+                )}
               </li>
             );
           })}
         </ul>
         {canWrite && (
-          <form onSubmit={addLink} style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-            <select value={linkClientId} onChange={(e) => setLinkClientId(e.target.value)} style={{ padding: '8px 12px', minWidth: 200, borderRadius: 8, border: '1px solid #d1d5db' }}>
-              <option value="">Select client…</option>
+          <form onSubmit={addLink} className="nx-glass-toolbar" style={{ marginTop: 12, marginBottom: 0 }}>
+            <select
+              className="nx-glass-input nx-glass-input--inline"
+              value={linkClientId}
+              onChange={(e) => setLinkClientId(e.target.value)}
+              aria-label={t('documents.selectClient')}
+            >
+              <option value="">{t('documents.selectClient')}</option>
               {clients.map((c) => <option key={c.id} value={c.id}>{c.display_name}</option>)}
             </select>
-            <button type="submit" disabled={!linkClientId} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer' }}>Link</button>
+            <button type="submit" className="nx-glass-btn nx-glass-btn--purple" disabled={!linkClientId}>
+              {t('documents.link')}
+            </button>
           </form>
         )}
       </section>
 
-      <section style={sectionStyle}>
-        <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 16 }}>Activity</h2>
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+      <section className="nx-glass-card">
+        <h2>{t('documents.activity')}</h2>
+        <ul className="nx-glass-list">
           {activity.map((a) => (
-            <li key={a.id} style={{ padding: '8px 0', borderBottom: '1px solid #f3f4f6', fontSize: 14 }}>
+            <li key={a.id} style={{ display: 'block' }}>
               <strong>{a.event_type}</strong>
-              <div style={{ color: '#6b7280', fontSize: 12 }}>{new Date(a.created_at).toLocaleString()}</div>
+              <div className="nx-glass-muted">{new Date(a.created_at).toLocaleString()}</div>
             </li>
           ))}
         </ul>
-        {activity.length === 0 && <p style={{ color: '#6b7280', margin: 0 }}>No activity yet</p>}
+        {activity.length === 0 && <p className="nx-glass-muted">{t('documents.noActivity')}</p>}
       </section>
     </div>
   );

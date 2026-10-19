@@ -277,7 +277,7 @@ export function Settings() {
   const isCountryConfigured = countryConfig?.settings_status === 'configured';
 
   return (
-    <div className="nx-glass-page nx-settings">
+    <div className="nx-glass-page nx-glass-page--wide nx-settings" data-testid="nx-settings">
       <h1 className="nx-glass-title">{t('settings.title')}</h1>
       <p className="nx-glass-subtitle">{t('settings.subtitle')}</p>
 

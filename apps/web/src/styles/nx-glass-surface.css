@@ -19,8 +19,11 @@
   box-sizing: border-box;
 }
 
-.nx-glass-page--wide {
-  max-width: 1440px;
+.nx-glass-page--wide,
+.nx-glass-page.nx-settings {
+  max-width: none;
+  width: 100%;
+  margin: 0;
 }
 
 .nx-glass-title {
@@ -94,6 +97,12 @@ textarea.nx-glass-input {
   resize: vertical;
 }
 
+.nx-glass-input:focus-visible {
+  outline: none;
+  border-color: rgba(125, 236, 247, 0.7);
+  box-shadow: 0 0 0 2px rgba(57, 230, 244, 0.45);
+}
+
 .nx-glass-input option {
   background: #082447;
   color: #eef6ff;
@@ -147,6 +156,23 @@ textarea.nx-glass-input {
   background: rgba(8, 38, 82, 0.35);
 }
 
+.nx-glass-btn--secondary:focus-visible,
+.nx-glass-btn--danger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(125, 236, 247, 0.45);
+}
+
+.nx-glass-btn--danger {
+  border: 1px solid rgba(252, 165, 165, 0.4);
+  color: #fecaca;
+  background: rgba(185, 28, 28, 0.28);
+}
+
+.nx-glass-btn--danger:hover:not(:disabled) {
+  border-color: rgba(252, 165, 165, 0.62);
+  background: rgba(185, 28, 28, 0.42);
+}
+
 .nx-glass-alert {
   padding: 12px;
   border-radius: 8px;
@@ -164,6 +190,376 @@ textarea.nx-glass-input {
   background: rgba(146, 64, 14, 0.28);
   color: #fde68a;
   border: 1px solid rgba(253, 230, 138, 0.35);
+}
+
+.nx-glass-alert--ok {
+  background: rgba(6, 78, 59, 0.32);
+  color: #a7f3d0;
+  border: 1px solid rgba(167, 243, 208, 0.35);
+}
+
+.nx-glass-link {
+  color: #7decf7;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.nx-glass-link:hover {
+  color: #39e6f4;
+  text-decoration: underline;
+}
+
+.nx-glass-link:focus-visible {
+  outline: 2px solid rgba(125, 236, 247, 0.7);
+  outline-offset: 2px;
+}
+
+.nx-glass-muted {
+  color: rgba(238, 246, 255, 0.72);
+  font-size: 13px;
+}
+
+.nx-glass-toolbar {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.nx-glass-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(238, 246, 255, 0.82);
+  font-size: 14px;
+}
+
+.nx-glass-table-wrap {
+  overflow-x: auto;
+}
+
+.nx-glass-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: #eef6ff;
+}
+
+.nx-glass-table th,
+.nx-glass-table td {
+  text-align: start;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(210, 238, 255, 0.16);
+  vertical-align: middle;
+}
+
+.nx-glass-table th {
+  font-weight: 600;
+  font-size: 13px;
+  color: rgba(238, 246, 255, 0.78);
+}
+
+.nx-glass-table tbody tr.is-clickable {
+  cursor: pointer;
+}
+
+.nx-glass-table tbody tr.is-clickable:hover td {
+  background: rgba(38, 140, 255, 0.12);
+}
+
+.nx-glass-table td.is-num {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.nx-glass-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(238, 246, 255, 0.78);
+  background: rgba(8, 38, 82, 0.35);
+  border: 1px solid rgba(210, 238, 255, 0.28);
+}
+
+.nx-glass-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  margin-bottom: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(210, 238, 255, 0.16);
+}
+
+.nx-glass-status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nx-glass-status-item span:first-child {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: rgba(238, 246, 255, 0.55);
+}
+
+.nx-glass-status--active {
+  color: #7decf7;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.nx-glass-status--muted {
+  color: rgba(238, 246, 255, 0.72);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.nx-glass-plans {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.nx-glass-plan {
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(210, 238, 255, 0.35);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.12), transparent 48%),
+    linear-gradient(180deg, rgba(248, 252, 255, 0.12) 0%, rgba(186, 216, 246, 0.08) 100%);
+}
+
+.nx-glass-plan__name {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.nx-glass-plan__price {
+  font-size: 16px;
+  font-weight: 700;
+  color: #7decf7;
+  margin-bottom: 4px;
+}
+
+.nx-glass-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(210, 238, 255, 0.16);
+}
+
+.nx-glass-meta {
+  font-size: 13px;
+  color: rgba(238, 246, 255, 0.62);
+  margin-top: 6px;
+}
+
+.nx-glass-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  color: rgba(238, 246, 255, 0.62);
+}
+
+.nx-glass-dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 24px;
+}
+
+.nx-glass-dl dt {
+  color: rgba(238, 246, 255, 0.72);
+  font-size: 14px;
+}
+
+.nx-glass-dl dd {
+  margin: 0;
+  color: #eef6ff;
+}
+
+.nx-glass-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.nx-glass-list li {
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(210, 238, 255, 0.16);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.nx-glass-field {
+  margin-bottom: 16px;
+}
+
+.nx-glass-field .nx-glass-label {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.nx-glass-header-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.nx-glass-header-row .nx-glass-title {
+  flex: 1;
+  margin: 0;
+}
+
+.nx-modules-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nx-modules-current {
+  margin-bottom: 20px;
+  padding: 12px 16px;
+}
+
+html:has(.nx-glass-auth),
+body:has(.nx-glass-auth) {
+  margin: 0;
+  min-height: 100%;
+  background: #061a33;
+}
+
+.nx-glass-auth {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  box-sizing: border-box;
+  position: relative;
+  isolation: isolate;
+  font-family: Arial, sans-serif;
+  color: #eef6ff;
+  background-color: #061a33;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--nx-glass-scroll-thumb) var(--nx-glass-scroll-track);
+}
+
+.nx-glass-auth::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: #061a33;
+  background-image:
+    radial-gradient(ellipse 58% 42% at 4% 96%, rgba(57, 230, 244, 0.28), rgba(0, 207, 239, 0.4) 36%, transparent 72%),
+    radial-gradient(ellipse 88% 52% at 22% 108%, rgba(38, 140, 255, 0.55), rgba(38, 140, 255, 0.28) 48%, transparent 76%),
+    radial-gradient(ellipse 64% 36% at 92% 88%, rgba(38, 140, 255, 0.32), transparent 66%),
+    radial-gradient(ellipse 42% 40% at 100% 42%, rgba(0, 207, 239, 0.18), transparent 62%),
+    radial-gradient(ellipse 48% 38% at 78% 88%, rgba(102, 87, 232, 0.32), rgba(128, 116, 242, 0.2) 48%, transparent 68%),
+    radial-gradient(ellipse 40% 30% at 8% 8%, rgba(128, 116, 242, 0.18), transparent 60%),
+    linear-gradient(135deg, #061a33 0%, #082447 38%, #0a2d55 72%, #0d3764 100%);
+}
+
+.nx-glass-auth::after {
+  content: '';
+  position: fixed;
+  left: -34vw;
+  bottom: -66vh;
+  width: 164vw;
+  height: 100vh;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 50%;
+  border: 4px solid rgba(57, 230, 244, 0.78);
+  box-shadow:
+    0 0 26px 8px rgba(0, 207, 239, 0.55),
+    0 0 80px 30px rgba(38, 140, 255, 0.42),
+    0 0 160px 70px rgba(38, 140, 255, 0.22),
+    inset 0 0 46px 12px rgba(57, 230, 244, 0.28),
+    inset 0 0 130px 44px rgba(38, 140, 255, 0.26);
+  transform: rotate(-7deg);
+  filter: blur(1.5px);
+}
+
+.nx-glass-auth::-webkit-scrollbar {
+  width: var(--nx-glass-scroll-size);
+  height: var(--nx-glass-scroll-size);
+}
+
+.nx-glass-auth::-webkit-scrollbar-track {
+  background: var(--nx-glass-scroll-track);
+}
+
+.nx-glass-auth::-webkit-scrollbar-thumb {
+  background: var(--nx-glass-scroll-thumb);
+  border-radius: 8px;
+}
+
+.nx-glass-auth::-webkit-scrollbar-thumb:hover {
+  background: var(--nx-glass-scroll-thumb-hover);
+}
+
+.nx-glass-auth::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.nx-glass-auth__lang {
+  position: absolute;
+  top: 16px;
+  inset-inline-end: 16px;
+  z-index: 2;
+}
+
+.nx-glass-auth__card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 400px;
+  margin: 0;
+}
+
+.nx-glass-auth__card .nx-glass-btn {
+  width: 100%;
+}
+
+.nx-glass-auth__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.nx-glass-auth__logo {
+  height: 36px;
+  width: auto;
+  max-width: 180px;
+  object-fit: contain;
+}
+
+.nx-glass-auth__links {
+  margin-top: 16px;
+  font-size: 14px;
+}
+
+.nx-glass-auth__links p {
+  margin: 12px 0 0;
 }
 
 .nx-glass-lang {
@@ -294,4 +690,110 @@ textarea.nx-glass-input {
 .nx-settings dd {
   color: #eef6ff;
   margin: 0;
+}
+
+.nx-settings .nx-glass-card,
+.nx-settings form,
+.nx-settings table {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+.nx-glass-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(4, 21, 47, 0.42);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.nx-glass-modal {
+  width: min(720px, 100%);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-top: 8vh;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.2), transparent 48%),
+    linear-gradient(180deg, rgba(248, 252, 255, 0.2) 0%, rgba(186, 216, 246, 0.14) 100%);
+  border: 1px solid rgba(210, 238, 255, 0.5);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.14),
+    0 8px 18px rgba(8, 38, 82, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  padding: 16px 18px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #eef6ff;
+  font-family: Arial, sans-serif;
+}
+
+.nx-glass-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.nx-glass-modal__header .nx-glass-title {
+  font-size: 18px;
+  margin: 0;
+}
+
+.nx-glass-modal__body {
+  flex: 0 1 auto;
+  overflow: auto;
+  min-height: 0;
+}
+
+.nx-glass-modal__footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.nx-glass-modal__footer .nx-glass-btn {
+  min-width: 96px;
+}
+
+.nx-glass-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.nx-glass-file .nx-glass-btn {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.nx-glass-file input[type='file'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.nx-glass-file__name {
+  color: rgba(238, 246, 255, 0.72);
+  font-size: 13px;
+}
+
+.nx-glass-file .nx-glass-btn.is-disabled {
+  opacity: 0.55;
+  pointer-events: none;
 }

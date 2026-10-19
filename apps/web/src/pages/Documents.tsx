@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../api/client';
 import { orgDocuments, orgDocumentsUpload } from '../api/endpoints';
+import { useI18n } from '../i18n/I18nProvider';
+import { GlassFilePicker } from '../components/glass/GlassFilePicker';
+import '../styles/nx-glass-surface.css';
 
 interface DocumentRow {
   id: string;
@@ -19,19 +22,20 @@ interface DocumentRow {
   created_at: string;
 }
 
-const DOC_TYPE_LABELS: Record<string, string> = {
-  invoice: 'Invoice',
-  receipt: 'Receipt',
-  contract: 'Contract',
-  statement: 'Statement',
-  payroll_document: 'Payroll',
-  tax_document: 'Tax',
-  other: 'Other',
-};
+const DOC_TYPE_CODES = [
+  'invoice',
+  'receipt',
+  'contract',
+  'statement',
+  'payroll_document',
+  'tax_document',
+  'other',
+] as const;
 
 export function Documents() {
   const auth = useAuth();
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [list, setList] = useState<DocumentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -44,6 +48,12 @@ export function Documents() {
   const orgId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
   const canWrite = auth.status === 'authenticated' && auth.me?.permissions?.includes('documents:write');
 
+  const typeLabel = (code: string) => {
+    const key = `documents.types.${code}`;
+    const label = t(key);
+    return label === key ? code : label;
+  };
+
   const fileToBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -51,7 +61,7 @@ export function Documents() {
         const dataUrl = reader.result as string;
         resolve(dataUrl.includes(',') ? dataUrl.split(',')[1] : '');
       };
-      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.onerror = () => reject(new Error(t('documents.errors.readFile')));
       reader.readAsDataURL(file);
     });
 
@@ -74,7 +84,7 @@ export function Documents() {
         if (!cancelled) setList(Array.isArray(data) ? data : []);
       })
       .catch((e) => {
-        if (!cancelled && (e as Error)?.name !== 'AbortError') setError(e instanceof Error ? e.message : 'Failed to load');
+        if (!cancelled && (e as Error)?.name !== 'AbortError') setError(e instanceof Error ? e.message : t('documents.errors.loadFailed'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -105,90 +115,129 @@ export function Documents() {
       setSelectedFile(null);
       navigate(`/documents/${result.document.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to upload');
+      setError(err instanceof Error ? err.message : t('documents.errors.uploadFailed'));
     } finally {
       setUploading(false);
     }
   };
 
   if (auth.status !== 'authenticated') return null;
-  if (!orgId) return <p>Select an organization.</p>;
+  if (!orgId) return <p className="nx-glass-page">{t('topBar.selectOrg')}</p>;
 
   return (
-    <div style={{ maxWidth: 1000, margin: '0 auto', padding: 24 }}>
-      <h1 style={{ marginBottom: 8 }}>Documents</h1>
-      <p style={{ color: '#666', marginBottom: 24 }}>Document Hub. Upload, classify, and link documents to clients.</p>
+    <div className="nx-glass-page nx-glass-page--wide" data-testid="nx-documents">
+      <h1 className="nx-glass-title">{t('documents.title')}</h1>
+      <p className="nx-glass-subtitle">{t('documents.subtitle')}</p>
 
-      <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+      <div className="nx-glass-toolbar">
         {canWrite && (
-          <button type="button" onClick={() => setShowUpload(true)} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer' }}>
-            Upload document
+          <button
+            type="button"
+            className="nx-glass-btn nx-glass-btn--purple"
+            onClick={() => setShowUpload(true)}
+          >
+            {t('documents.upload')}
           </button>
         )}
         <select
+          className="nx-glass-input nx-glass-input--inline"
           value={documentType}
           onChange={(e) => setDocumentType(e.target.value)}
-          style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d1d5db' }}
+          aria-label={t('documents.typeFilter')}
         >
-          <option value="">All types</option>
-          {Object.entries(DOC_TYPE_LABELS).map(([code, label]) => (
+          <option value="">{t('documents.allTypes')}</option>
+          {DOC_TYPE_CODES.map((code) => (
             <option key={code} value={code}>
-              {label}
+              {typeLabel(code)}
             </option>
           ))}
         </select>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <label className="nx-glass-check">
           <input type="checkbox" checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} />
-          Include archived
+          {t('documents.includeArchived')}
         </label>
       </div>
 
       {showUpload && canWrite && (
-        <form onSubmit={uploadDocument} style={{ marginBottom: 24, padding: 20, background: '#f9fafb', borderRadius: 12, border: '1px solid #e5e7eb' }}>
-          <h3 style={{ marginTop: 0 }}>Upload document</h3>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input type="file" onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)} accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.txt,.csv" />
-            <button type="submit" disabled={!selectedFile || uploading} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: '#059669', color: '#fff', cursor: 'pointer' }}>
-              {uploading ? 'Uploading…' : 'Upload'}
+        <form className="nx-glass-card" onSubmit={uploadDocument}>
+          <h2>{t('documents.upload')}</h2>
+          <div className="nx-glass-toolbar" style={{ marginBottom: 0 }}>
+            <GlassFilePicker
+              accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.txt,.csv"
+              file={selectedFile}
+              disabled={uploading}
+              onChange={setSelectedFile}
+            />
+            <button
+              type="submit"
+              className="nx-glass-btn nx-glass-btn--purple"
+              disabled={!selectedFile || uploading}
+            >
+              {uploading ? t('documents.uploading') : t('documents.upload')}
             </button>
-            <button type="button" onClick={() => { setShowUpload(false); setSelectedFile(null); }} style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>
-              Cancel
+            <button
+              type="button"
+              className="nx-glass-btn nx-glass-btn--secondary"
+              onClick={() => {
+                setShowUpload(false);
+                setSelectedFile(null);
+              }}
+            >
+              {t('common.cancel')}
             </button>
           </div>
         </form>
       )}
 
-      {error && <div style={{ padding: 12, background: '#fef2f2', color: '#b91c1c', borderRadius: 8, marginBottom: 16 }}>{error}</div>}
+      {error && (
+        <div className="nx-glass-alert nx-glass-alert--error" role="alert">
+          {error}
+        </div>
+      )}
 
       {loading ? (
-        <p>Loading…</p>
+        <p className="nx-glass-muted">{t('common.loading')}</p>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ borderBottom: '2px solid #e5e7eb' }}>
-              <th style={{ textAlign: 'left', padding: 12 }}>Title</th>
-              <th style={{ textAlign: 'left', padding: 12 }}>Type</th>
-              <th style={{ textAlign: 'left', padding: 12 }}>Status</th>
-              <th style={{ textAlign: 'left', padding: 12 }}>Date</th>
-              <th style={{ textAlign: 'right', padding: 12 }}>Amount</th>
-              <th style={{ textAlign: 'left', padding: 12 }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((d) => (
-              <tr key={d.id} style={{ borderBottom: '1px solid #f3f4f6', cursor: 'pointer' }} onClick={() => navigate(`/documents/${d.id}`)}>
-                <td style={{ padding: 12 }}>{d.title ?? d.document_code ?? '—'}</td>
-                <td style={{ padding: 12 }}>{DOC_TYPE_LABELS[d.document_type_code] ?? d.document_type_code}</td>
-                <td style={{ padding: 12 }}>{d.lifecycle_state}</td>
-                <td style={{ padding: 12 }}>{(d.document_date ?? d.issue_date ?? d.created_at) ? new Date(d.document_date ?? d.issue_date ?? d.created_at!).toLocaleDateString() : '—'}</td>
-                <td style={{ padding: 12, textAlign: 'right' }}>{d.amount_total != null ? `${d.amount_total} ${d.currency ?? ''}`.trim() : '—'}</td>
-                <td style={{ padding: 12 }}>{d.is_archived && <span style={{ fontSize: 12, color: '#6b7280' }}>Archived</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="nx-glass-card">
+          <div className="nx-glass-table-wrap">
+            <table className="nx-glass-table">
+              <thead>
+                <tr>
+                  <th>{t('documents.columns.title')}</th>
+                  <th>{t('documents.columns.type')}</th>
+                  <th>{t('documents.columns.status')}</th>
+                  <th>{t('documents.columns.date')}</th>
+                  <th className="is-num">{t('documents.columns.amount')}</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((d) => (
+                  <tr
+                    key={d.id}
+                    className="is-clickable"
+                    onClick={() => navigate(`/documents/${d.id}`)}
+                  >
+                    <td>{d.title ?? d.document_code ?? '—'}</td>
+                    <td>{typeLabel(d.document_type_code)}</td>
+                    <td>{d.lifecycle_state}</td>
+                    <td>
+                      {(d.document_date ?? d.issue_date ?? d.created_at)
+                        ? new Date(d.document_date ?? d.issue_date ?? d.created_at!).toLocaleDateString()
+                        : '—'}
+                    </td>
+                    <td className="is-num">
+                      {d.amount_total != null ? `${d.amount_total} ${d.currency ?? ''}`.trim() : '—'}
+                    </td>
+                    <td>{d.is_archived && <span className="nx-glass-badge">{t('common.archived')}</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {list.length === 0 && <p className="nx-glass-muted">{t('documents.empty')}</p>}
+        </div>
       )}
-      {!loading && list.length === 0 && <p style={{ color: '#6b7280' }}>No documents yet. Upload one to get started.</p>}
     </div>
   );
 }
