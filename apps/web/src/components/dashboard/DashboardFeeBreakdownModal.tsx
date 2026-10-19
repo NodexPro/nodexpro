@@ -138,11 +138,17 @@ export function DashboardFeeBreakdownModal(props: {
     });
     if (qDebounced.trim()) params.set('q', qDebounced.trim());
     apiJson<OfficeFeeBreakdownAggregate>(`${dashboardOfficeFeeBreakdown()}?${params.toString()}`, { signal: ac.signal })
-      .then((d) => setData(d))
-      .catch((e) => {
-        if ((e as Error)?.name !== 'AbortError') setError(e instanceof Error ? e.message : t('dashboard.breakdownLoadFailed'));
+      .then((d) => {
+        if (!ac.signal.aborted) setData(d);
       })
-      .finally(() => setLoading(false));
+      .catch((e) => {
+        if (!ac.signal.aborted && (e as Error)?.name !== 'AbortError') {
+          setError(e instanceof Error ? e.message : t('dashboard.breakdownLoadFailed'));
+        }
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setLoading(false);
+      });
     return () => ac.abort();
   }, [open, period, locale, page, filter, qDebounced, sort, sortDir, t]);
 

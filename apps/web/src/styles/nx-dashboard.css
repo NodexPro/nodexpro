@@ -459,39 +459,125 @@ button.nx-dashboard-card--kpi:hover,
 }
 
 .nx-dashboard-legend {
-  margin-top: 10px;
-  display: flex;
-  gap: 18px;
-  flex-wrap: wrap;
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
 }
 
 .nx-dashboard-legend__item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: 6px;
+  font-size: 11px;
   color: #eef6ff;
   font-weight: 600;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.nx-dashboard-legend__item--btn {
+  margin: 0;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: Arial, sans-serif;
+  text-align: start;
+  border-radius: 6px;
+}
+
+.nx-dashboard-legend__item--btn:focus-visible {
+  outline: 2px solid rgba(128, 116, 242, 0.85);
+  outline-offset: 2px;
 }
 
 .nx-dashboard-legend__swatch {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
   display: inline-block;
+  flex: 0 0 auto;
 }
 
 .nx-dashboard-donut {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  position: relative;
+  width: 100px;
+  height: 100px;
+  margin: 4px auto 0;
+  overflow: visible;
+}
+
+.nx-dashboard-donut svg {
+  display: block;
+  overflow: visible;
 }
 
 .nx-dashboard-donut__total {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   font-size: 14px;
   color: #eef6ff;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.nx-dashboard-deadlines-table-wrap {
+  overflow: auto;
+  max-height: 220px;
+}
+
+.nx-dashboard-deadlines-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: Arial, sans-serif;
+}
+
+.nx-dashboard-deadlines-table th,
+.nx-dashboard-deadlines-table td {
+  text-align: start;
+  padding: 5px 6px;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.nx-dashboard-deadlines-table th {
+  color: rgba(238, 246, 255, 0.72);
   font-weight: 600;
+  font-size: 11px;
+}
+
+.nx-dashboard-deadlines-table td {
+  color: #eef6ff;
+  border-top: 1px solid rgba(210, 238, 255, 0.16);
+  vertical-align: middle;
+}
+
+.nx-dashboard-deadlines__hit {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.nx-dashboard-deadlines__hit:hover {
+  color: #7decf7;
+}
+
+.nx-dashboard-deadlines__hit:focus-visible {
+  outline: 2px solid rgba(128, 116, 242, 0.85);
+  outline-offset: 2px;
 }
 
 .t1-pageMain--dashboard {
@@ -519,6 +605,10 @@ button.nx-dashboard-card--kpi:hover,
 @media (max-width: 640px) {
   .nx-dashboard__metrics,
   .nx-dashboard-attention {
+    grid-template-columns: 1fr;
+  }
+
+  .nx-dashboard-legend {
     grid-template-columns: 1fr;
   }
 }

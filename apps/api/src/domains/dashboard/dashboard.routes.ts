@@ -52,4 +52,52 @@ router.get('/office-fee-breakdown', authMiddleware, requireOrg, requireOfficeAdm
   }
 });
 
+router.get('/office-clients', authMiddleware, requireOrg, requireOfficeAdministration, async (req, res, next) => {
+  try {
+    const list = await dashboardService.getOfficeClientList(req.context!, {
+      period: typeof req.query.period === 'string' ? req.query.period : undefined,
+      locale: typeof req.query.locale === 'string' ? req.query.locale : undefined,
+      q: typeof req.query.q === 'string' ? req.query.q : undefined,
+      page: typeof req.query.page === 'string' ? req.query.page : undefined,
+      page_size: typeof req.query.page_size === 'string' ? req.query.page_size : undefined,
+      list_key: typeof req.query.list_key === 'string' ? req.query.list_key : undefined,
+    });
+    return res.json(list);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/office-tasks', authMiddleware, requireOrg, requireOfficeAdministration, async (req, res, next) => {
+  try {
+    const list = await dashboardService.getOfficeTaskList(req.context!, {
+      locale: typeof req.query.locale === 'string' ? req.query.locale : undefined,
+      q: typeof req.query.q === 'string' ? req.query.q : undefined,
+      page: typeof req.query.page === 'string' ? req.query.page : undefined,
+      page_size: typeof req.query.page_size === 'string' ? req.query.page_size : undefined,
+      list_key: typeof req.query.list_key === 'string' ? req.query.list_key : undefined,
+    });
+    return res.json(list);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/office-reporting-clients', authMiddleware, requireOrg, requireOfficeAdministration, async (req, res, next) => {
+  try {
+    const list = await dashboardService.getOfficeReportingClients(req.context!, {
+      locale: typeof req.query.locale === 'string' ? req.query.locale : undefined,
+      q: typeof req.query.q === 'string' ? req.query.q : undefined,
+      page: typeof req.query.page === 'string' ? req.query.page : undefined,
+      page_size: typeof req.query.page_size === 'string' ? req.query.page_size : undefined,
+      obligation_key: typeof req.query.obligation_key === 'string' ? req.query.obligation_key : undefined,
+      filing_due_date: typeof req.query.filing_due_date === 'string' ? req.query.filing_due_date : undefined,
+      reporting_period_key: typeof req.query.reporting_period_key === 'string' ? req.query.reporting_period_key : undefined,
+    });
+    return res.json(list);
+  } catch (e) {
+    next(e);
+  }
+});
+
 export const dashboardRoutes = router;

@@ -1,14 +1,28 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../i18n/I18nProvider';
 import { apiJson } from '../api/client';
-import { dashboardOverview } from '../api/endpoints';
+import {
+  dashboardOfficeClients,
+  dashboardOfficeReportingClients,
+  dashboardOfficeTasks,
+  dashboardOverview,
+} from '../api/endpoints';
+import { DashboardDrilldownModal } from '../components/dashboard/DashboardDrilldownModal';
 import { DashboardFeeBreakdownModal } from '../components/dashboard/DashboardFeeBreakdownModal';
 import { UiLanguageSwitch } from '../components/glass/UiLanguageSwitch';
 import '../styles/nx-dashboard.css';
 
 type DashboardStatus = 'ready' | 'empty' | 'coming_soon' | 'unavailable';
+
+type OfficeKpiAction =
+  | 'open_fee_breakdown'
+  | 'open_client_list'
+  | 'open_task_list'
+  | 'open_reporting_clients'
+  | 'navigate'
+  | null;
 
 type OfficeKpi = {
   key: string;
@@ -16,7 +30,8 @@ type OfficeKpi = {
   value_he: string;
   secondary_he: string;
   href: string | null;
-  action_key?: 'open_fee_breakdown' | 'navigate' | null;
+  action_key?: OfficeKpiAction;
+  list_key?: string | null;
   status: DashboardStatus;
   note_he: string | null;
 };
@@ -47,7 +62,7 @@ type OfficeSection = {
     truncated_he?: string | null;
     empty_he: string;
     view_all_label_he?: string;
-    view_all_action?: 'open_fee_breakdown' | 'navigate' | null;
+    view_all_action?: OfficeKpiAction;
     view_all_filter?: 'fee_attention' | null;
     clients: Array<{ client_id: string; display_name: string; indicator_he: string; href: string }>;
   };
@@ -58,6 +73,8 @@ type OfficeSection = {
       title_he: string;
       count: number | null;
       href: string | null;
+      action_key?: OfficeKpiAction;
+      list_key?: string | null;
       status: DashboardStatus;
       unavailable_he: string | null;
     }>;
@@ -66,11 +83,17 @@ type OfficeSection = {
     title_he: string;
     status: DashboardStatus;
     unavailable_he: string;
+    columns?: Array<{ key: string; label_he: string }>;
     rows: Array<{
       type_he: string;
       due_date_he: string;
       clients_count: number | null;
       href: string | null;
+      obligation_key?: string | null;
+      filing_due_date?: string | null;
+      reporting_period_key?: string | null;
+      status_he?: string | null;
+      action_key?: OfficeKpiAction;
       severity_he: string | null;
     }>;
   };
@@ -93,7 +116,14 @@ type OfficeSection = {
   };
   client_status: {
     title_he: string;
-    segments: Array<{ key: string; label_he: string; count: number; color: string }>;
+    segments: Array<{
+      key: string;
+      label_he: string;
+      count: number;
+      color: string;
+      action_key?: OfficeKpiAction;
+      list_key?: string | null;
+    }>;
   };
   recent_activity: {
     title_he: string;
@@ -197,15 +227,17 @@ function LineChart({
 function DonutChart({
   total,
   segments,
+  onSelect,
 }: {
   total: number;
-  segments: Array<{ label: string; value: number; color: string }>;
+  segments: Array<{ key: string; label: string; value: number; color: string; clickable?: boolean }>;
+  onSelect?: (key: string) => void;
 }) {
-  const size = 132;
+  const size = 100;
   const cx = size / 2;
   const cy = size / 2;
-  const r = 66;
-  const strokeWidth = 14;
+  const r = 42;
+  const strokeWidth = 11;
   const sum = segments.reduce((acc, s) => acc + s.value, 0);
   const safeTotal = sum > 0 ? sum : total;
   let accAngle = -90;
@@ -224,23 +256,67 @@ function DonutChart({
     const endPt = polar(end);
     const largeArcFlag = end - start > 180 ? 1 : 0;
     return {
+      key: s.key,
       label: s.label,
       path: `M ${startPt.x} ${startPt.y} A ${r} ${r} 0 ${largeArcFlag} 1 ${endPt.x} ${endPt.y}`,
+      fullCircle: frac >= 1 || angle >= 359.9,
       color: s.color,
       value: s.value,
+      clickable: Boolean(s.clickable),
     };
   });
 
   return (
     <div className="nx-dashboard-donut">
-      <div className="nx-dashboard-donut__total">{`${total}`}</div>
-      <svg width="100%" height={size} viewBox={`0 0 ${size} ${size}`}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`${total}`}>
         <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(210, 238, 255, 0.18)" strokeWidth={strokeWidth} />
         {arcs
           .filter((a) => a.value > 0)
-          .map((a) => (
-            <path key={a.label} d={a.path} fill="none" stroke={a.color} strokeWidth={strokeWidth} strokeLinecap="round" />
-          ))}
+          .map((a) => {
+            const interactive = a.clickable
+              ? {
+                  role: 'button' as const,
+                  tabIndex: 0,
+                  'aria-label': a.label,
+                  style: { cursor: 'pointer' as const },
+                  onClick: onSelect ? () => onSelect(a.key) : undefined,
+                  onKeyDown: onSelect
+                    ? (e: KeyboardEvent) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onSelect(a.key);
+                        }
+                      }
+                    : undefined,
+                }
+              : {};
+            return a.fullCircle ? (
+              <circle
+                key={a.key}
+                cx={cx}
+                cy={cy}
+                r={r}
+                fill="none"
+                stroke={a.color}
+                strokeWidth={strokeWidth}
+                {...interactive}
+              >
+                <title>{`${a.label} · ${a.value}`}</title>
+              </circle>
+            ) : (
+              <path
+                key={a.key}
+                d={a.path}
+                fill="none"
+                stroke={a.color}
+                strokeWidth={strokeWidth}
+                strokeLinecap="round"
+                {...interactive}
+              >
+                <title>{`${a.label} · ${a.value}`}</title>
+              </path>
+            );
+          })}
         <circle
           cx={cx}
           cy={cy}
@@ -250,6 +326,7 @@ function DonutChart({
           strokeWidth={1}
         />
       </svg>
+      <div className="nx-dashboard-donut__total">{`${total}`}</div>
     </div>
   );
 }
@@ -270,7 +347,11 @@ function KpiCard({
   kpi: OfficeKpi;
   onOpen: (kpi: OfficeKpi) => void;
 }) {
-  const clickable = kpi.action_key === 'open_fee_breakdown' || (Boolean(kpi.href) && kpi.status === 'ready');
+  const clickable =
+    kpi.status === 'ready' &&
+    (kpi.action_key === 'open_fee_breakdown' ||
+      kpi.action_key === 'open_client_list' ||
+      (kpi.action_key === 'navigate' && Boolean(kpi.href)));
   const inner = (
     <>
       <div className="nx-dashboard-card__label">{kpi.title_he}</div>
@@ -302,6 +383,7 @@ export function Dashboard() {
   const [error, setError] = useState('');
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [breakdownFilter, setBreakdownFilter] = useState('all');
+  const [drilldownUrl, setDrilldownUrl] = useState<string | null>(null);
 
   const orgId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
 
@@ -378,8 +460,34 @@ export function Dashboard() {
     office.kpis.clients_left,
   ].filter(Boolean);
   const statusTotal = office.client_status.segments.reduce((acc, s) => acc + s.count, 0);
-  const collectedReady = overview?.summary.monthly_revenue_status === 'ready';
   const occupyFeeChart = Boolean(office.charts.expected_fees_by_month.occupy_primary) && feePoints.length > 0;
+
+  const openFeeAttention = () => {
+    setBreakdownFilter(office.missing_fees.view_all_filter ?? 'fee_attention');
+    setBreakdownOpen(true);
+  };
+
+  const openClientList = (listKey: string) => {
+    const next = new URL(dashboardOfficeClients(), window.location.origin);
+    next.searchParams.set('list_key', listKey);
+    next.searchParams.set('period', period);
+    setDrilldownUrl(`${next.pathname}${next.search}`);
+  };
+
+  const openTaskList = (listKey: string) => {
+    const next = new URL(dashboardOfficeTasks(), window.location.origin);
+    next.searchParams.set('list_key', listKey);
+    setDrilldownUrl(`${next.pathname}${next.search}`);
+  };
+
+  const openReportingClients = (row: OfficeSection['deadlines']['rows'][number]) => {
+    if (!row.obligation_key || !row.filing_due_date || !row.reporting_period_key) return;
+    const next = new URL(dashboardOfficeReportingClients(), window.location.origin);
+    next.searchParams.set('obligation_key', row.obligation_key);
+    next.searchParams.set('filing_due_date', row.filing_due_date);
+    next.searchParams.set('reporting_period_key', row.reporting_period_key);
+    setDrilldownUrl(`${next.pathname}${next.search}`);
+  };
 
   const openKpi = (kpi: OfficeKpi) => {
     if (kpi.action_key === 'open_fee_breakdown') {
@@ -387,7 +495,10 @@ export function Dashboard() {
       setBreakdownOpen(true);
       return;
     }
-    if (kpi.href) navigate(kpi.href);
+    if (kpi.action_key === 'open_client_list' && kpi.list_key) {
+      openClientList(kpi.list_key);
+      return;
+    }
   };
 
   return (
@@ -439,7 +550,7 @@ export function Dashboard() {
                     key={c.client_id}
                     type="button"
                     className="nx-dashboard-list__row"
-                    onClick={() => navigate(c.href)}
+                    onClick={openFeeAttention}
                   >
                     <span>{c.display_name}</span>
                     <span className="nx-dashboard-list__tag">{c.indicator_he}</span>
@@ -451,10 +562,7 @@ export function Dashboard() {
               <button
                 type="button"
                 className="nx-dashboard-btn nx-dashboard-btn--secondary"
-                onClick={() => {
-                  setBreakdownFilter(office.missing_fees.view_all_filter ?? 'fee_attention');
-                  setBreakdownOpen(true);
-                }}
+                onClick={openFeeAttention}
               >
                 {office.missing_fees.view_all_label_he}
               </button>
@@ -473,9 +581,14 @@ export function Dashboard() {
                     {!ready ? <div className="nx-dashboard-card__note">{item.unavailable_he}</div> : null}
                   </>
                 );
-                if (ready && item.href) {
+                if (ready && item.action_key === 'open_task_list' && item.list_key) {
                   return (
-                    <button key={item.key} type="button" className="nx-dashboard-attention__item" onClick={() => navigate(item.href!)}>
+                    <button
+                      key={item.key}
+                      type="button"
+                      className="nx-dashboard-attention__item"
+                      onClick={() => openTaskList(item.list_key!)}
+                    >
                       {body}
                     </button>
                   );
@@ -492,19 +605,46 @@ export function Dashboard() {
           <div className="nx-dashboard-card nx-dashboard-card--compact">
             <div className="nx-dashboard-card__title">{office.deadlines.title_he}</div>
             {office.deadlines.status === 'ready' && office.deadlines.rows.length > 0 ? (
-              <div className="nx-dashboard-list nx-dashboard-list--compact">
-                {office.deadlines.rows.map((row, i) => (
-                  <div key={`${row.type_he}-${i}`} className="nx-dashboard-list__row nx-dashboard-list__row--static">
-                    <span>
-                      {row.type_he}
-                      {row.severity_he ? ` · ${row.severity_he}` : ''}
-                    </span>
-                    <span>
-                      {row.due_date_he}
-                      {row.clients_count != null ? ` · ${row.clients_count}` : ''}
-                    </span>
-                  </div>
-                ))}
+              <div className="nx-dashboard-deadlines-table-wrap">
+                <table className="nx-dashboard-deadlines-table">
+                  <thead>
+                    <tr>
+                      {(office.deadlines.columns ?? []).map((col) => (
+                        <th key={col.key}>{col.label_he}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {office.deadlines.rows.map((row, i) => {
+                      const clickable = row.action_key === 'open_reporting_clients';
+                      const cells: Record<string, string> = {
+                        due: row.due_date_he,
+                        type: row.type_he,
+                        clients: row.clients_count != null ? String(row.clients_count) : '—',
+                        status: row.status_he ?? row.severity_he ?? '—',
+                      };
+                      return (
+                        <tr key={`${row.obligation_key ?? row.type_he}-${row.filing_due_date ?? i}`}>
+                          {(office.deadlines.columns ?? []).map((col) => (
+                            <td key={col.key}>
+                              {clickable ? (
+                                <button
+                                  type="button"
+                                  className="nx-dashboard-deadlines__hit"
+                                  onClick={() => openReportingClients(row)}
+                                >
+                                  {cells[col.key] ?? '—'}
+                                </button>
+                              ) : (
+                                cells[col.key] ?? '—'
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             ) : (
               <div className="nx-dashboard-empty__subtitle">{office.deadlines.unavailable_he}</div>
@@ -528,15 +668,45 @@ export function Dashboard() {
             <div className="nx-dashboard-card__title">{office.client_status.title_he}</div>
             <DonutChart
               total={statusTotal}
-              segments={office.client_status.segments.map((s) => ({ label: s.label_he, value: s.count, color: s.color }))}
+              segments={office.client_status.segments.map((s) => ({
+                key: s.key,
+                label: s.label_he,
+                value: s.count,
+                color: s.color,
+                clickable: s.action_key === 'open_client_list' && Boolean(s.list_key),
+              }))}
+              onSelect={(key) => {
+                const segment = office.client_status.segments.find((s) => s.key === key);
+                if (segment?.action_key === 'open_client_list' && segment.list_key) openClientList(segment.list_key);
+              }}
             />
             <div className="nx-dashboard-legend">
-              {office.client_status.segments.map((s) => (
-                <div key={s.key} className="nx-dashboard-legend__item">
-                  <span className="nx-dashboard-legend__swatch" style={{ background: s.color }} />
-                  <span>{`${s.label_he} · ${s.count}`}</span>
-                </div>
-              ))}
+              {office.client_status.segments.map((s) => {
+                const clickable = s.action_key === 'open_client_list' && Boolean(s.list_key);
+                const body = (
+                  <>
+                    <span className="nx-dashboard-legend__swatch" style={{ background: s.color }} />
+                    <span>{`${s.label_he} · ${s.count}`}</span>
+                  </>
+                );
+                if (clickable) {
+                  return (
+                    <button
+                      key={s.key}
+                      type="button"
+                      className="nx-dashboard-legend__item nx-dashboard-legend__item--btn"
+                      onClick={() => openClientList(s.list_key!)}
+                    >
+                      {body}
+                    </button>
+                  );
+                }
+                return (
+                  <div key={s.key} className="nx-dashboard-legend__item">
+                    {body}
+                  </div>
+                );
+              })}
             </div>
           </div>
           <div className="nx-dashboard-card nx-dashboard-card--compact">
@@ -548,34 +718,6 @@ export function Dashboard() {
             ) : (
               <div className="nx-dashboard-empty__subtitle">{office.charts.expected_fees_by_month.historical_basis_he}</div>
             )}
-          </div>
-        </div>
-
-        <div className="nx-dashboard__row nx-dashboard__row--compact">
-          <div className="nx-dashboard-card nx-dashboard-card--compact">
-            <div className="nx-dashboard-card__title">{office.quick_actions.title_he}</div>
-            <div className="nx-dashboard-actions">
-              {office.quick_actions.actions.map((action) => (
-                <button
-                  key={action.key}
-                  type="button"
-                  className={
-                    action.key === 'new_client'
-                      ? 'nx-dashboard-btn nx-dashboard-btn--primary'
-                      : 'nx-dashboard-btn nx-dashboard-btn--secondary'
-                  }
-                  onClick={() => navigate(action.href)}
-                  disabled={!action.enabled}
-                >
-                  {action.label_he}
-                </button>
-              ))}
-            </div>
-            {!collectedReady ? (
-              <div className="nx-dashboard-card__note nx-dashboard-card__note--spaced">
-                {office.quick_actions.collected_cash_note_he}
-              </div>
-            ) : null}
           </div>
         </div>
 
@@ -595,6 +737,19 @@ export function Dashboard() {
           onClose={() => setBreakdownOpen(false)}
           onOpenClient={(href) => {
             setBreakdownOpen(false);
+            navigate(href);
+          }}
+        />
+      ) : null}
+      {drilldownUrl ? (
+        <DashboardDrilldownModal
+          key={drilldownUrl}
+          open
+          url={drilldownUrl}
+          locale={lang}
+          onClose={() => setDrilldownUrl(null)}
+          onOpenHref={(href) => {
+            setDrilldownUrl(null);
             navigate(href);
           }}
         />

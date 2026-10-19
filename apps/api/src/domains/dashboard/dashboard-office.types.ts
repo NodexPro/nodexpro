@@ -15,7 +15,51 @@ export type DashboardFeeBreakdownQuery = DashboardOverviewQuery & {
   filter?: string | null;
 };
 
-export type OfficeDashboardKpiAction = 'open_fee_breakdown' | 'navigate' | null;
+export type DashboardOfficeListQuery = DashboardOverviewQuery & {
+  q?: string | null;
+  page?: string | number | null;
+  page_size?: string | number | null;
+  list_key?: string | null;
+  obligation_key?: string | null;
+  filing_due_date?: string | null;
+  reporting_period_key?: string | null;
+};
+
+export type OfficeDashboardListColumn = { key: string; label_he: string };
+
+export type OfficeDashboardListRow = {
+  id: string;
+  href: string | null;
+  open_label_he: string;
+  cells: Record<string, string>;
+};
+
+export type OfficeDashboardListAggregate = {
+  title_he: string;
+  total_he: string;
+  search_placeholder_he: string;
+  empty_he: string;
+  page_label_he: string;
+  open_label_he: string;
+  columns: OfficeDashboardListColumn[];
+  rows: OfficeDashboardListRow[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total: number;
+    total_pages: number;
+    q: string;
+    list_key: string;
+  };
+};
+
+export type OfficeDashboardKpiAction =
+  | 'open_fee_breakdown'
+  | 'open_client_list'
+  | 'open_task_list'
+  | 'open_reporting_clients'
+  | 'navigate'
+  | null;
 
 export type OfficeDashboardKpi = {
   key: string;
@@ -24,6 +68,7 @@ export type OfficeDashboardKpi = {
   secondary_he: string;
   href: string | null;
   action_key: OfficeDashboardKpiAction;
+  list_key: string | null;
   status: DashboardStatus;
   note_he: string | null;
 };
@@ -40,6 +85,8 @@ export type OfficeDashboardAttentionItem = {
   title_he: string;
   count: number | null;
   href: string | null;
+  action_key: OfficeDashboardKpiAction;
+  list_key: string | null;
   status: DashboardStatus;
   unavailable_he: string | null;
 };
@@ -49,6 +96,11 @@ export type OfficeDashboardDeadlineRow = {
   due_date_he: string;
   clients_count: number | null;
   href: string | null;
+  obligation_key: string | null;
+  filing_due_date: string | null;
+  reporting_period_key: string | null;
+  status_he: string | null;
+  action_key: OfficeDashboardKpiAction;
   severity_he: string | null;
 };
 
@@ -64,6 +116,8 @@ export type OfficeDashboardStatusSegment = {
   label_he: string;
   count: number;
   color: string;
+  action_key: OfficeDashboardKpiAction;
+  list_key: string | null;
 };
 
 export type OfficeDashboardQuickAction = {
@@ -119,6 +173,7 @@ export type OfficeDashboardSection = {
     title_he: string;
     status: DashboardStatus;
     unavailable_he: string;
+    columns: OfficeDashboardListColumn[];
     rows: OfficeDashboardDeadlineRow[];
   };
   charts: {

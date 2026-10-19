@@ -54,7 +54,7 @@ test('period selection and dashboard sections stay on the existing aggregate', (
   assert.match(dashSrc, /office\.charts\.client_growth/);
   assert.match(dashSrc, /office\.client_status/);
   assert.match(dashSrc, /office\.charts\.expected_fees_by_month/);
-  assert.match(dashSrc, /office\.quick_actions/);
+  assert.doesNotMatch(dashSrc, /office\.quick_actions\.actions/);
   assert.match(dashSrc, /office\.recent_activity/);
   assert.match(dashSrc, /nx-dashboard__row--triple/);
 });

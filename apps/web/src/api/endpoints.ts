@@ -31,6 +31,9 @@ export const dashboardOverview = () => '/dashboard/overview';
 
 /** Authorized office fee-breakdown aggregate for the Dashboard modal. */
 export const dashboardOfficeFeeBreakdown = () => '/dashboard/office-fee-breakdown';
+export const dashboardOfficeClients = () => '/dashboard/office-clients';
+export const dashboardOfficeTasks = () => '/dashboard/office-tasks';
+export const dashboardOfficeReportingClients = () => '/dashboard/office-reporting-clients';
 
 export const ORGS = '/organizations';
 export const org = (id: string) => `/organizations/${id}`;

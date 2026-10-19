@@ -9,7 +9,16 @@ import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import type { RequestContext } from '../../shared/context.js';
 import { getDashboardOverviewAggregated } from './dashboard-aggregator.service.js';
 import { getOfficeFeeBreakdownAggregate } from './providers/dashboard-office.provider.js';
-import type { DashboardFeeBreakdownQuery, DashboardOverviewQuery } from './dashboard-office.types.js';
+import {
+  getOfficeClientListAggregate,
+  getOfficeReportingClientsAggregate,
+  getOfficeTaskListAggregate,
+} from './dashboard-office-lists.service.js';
+import type {
+  DashboardFeeBreakdownQuery,
+  DashboardOfficeListQuery,
+  DashboardOverviewQuery,
+} from './dashboard-office.types.js';
 export type { DashboardOverview } from './dashboard-overview.types.js';
 
 export interface DashboardSummary {
@@ -74,4 +83,16 @@ export async function getDashboardOverview(ctx: RequestContext, query?: Dashboar
 
 export async function getOfficeFeeBreakdown(ctx: RequestContext, query?: DashboardFeeBreakdownQuery) {
   return getOfficeFeeBreakdownAggregate(ctx, query);
+}
+
+export async function getOfficeClientList(ctx: RequestContext, query?: DashboardOfficeListQuery) {
+  return getOfficeClientListAggregate(ctx, query);
+}
+
+export async function getOfficeTaskList(ctx: RequestContext, query?: DashboardOfficeListQuery) {
+  return getOfficeTaskListAggregate(ctx, query);
+}
+
+export async function getOfficeReportingClients(ctx: RequestContext, query?: DashboardOfficeListQuery) {
+  return getOfficeReportingClientsAggregate(ctx, query);
 }

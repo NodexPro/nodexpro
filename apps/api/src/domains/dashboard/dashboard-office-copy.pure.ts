@@ -102,6 +102,45 @@ type OfficeCopy = {
   completeness_incomplete: string;
   view_all: string;
   chart_growth_departed_hint: string;
+  list_search: string;
+  list_search_tasks: string;
+  list_empty: string;
+  list_open_client: string;
+  list_open_task: string;
+  list_page: (page: number, pages: number, total: number) => string;
+  list_total_clients: (n: number) => string;
+  list_total_tasks: (n: number) => string;
+  col_name: string;
+  col_date: string;
+  col_due: string;
+  col_title: string;
+  col_task_status: string;
+  list_active_title: string;
+  list_new_title: string;
+  list_departed_title: string;
+  list_status_title: (status: string) => string;
+  date_created: string;
+  date_ended: string;
+  reporting_col_due: string;
+  reporting_col_type: string;
+  reporting_col_clients: string;
+  reporting_col_status: string;
+  reporting_col_timing: string;
+  reporting_timing_upcoming: string;
+  reporting_timing_due_today: string;
+  reporting_timing_overdue: string;
+  reporting_type_vat_regular: string;
+  reporting_type_deductions: string;
+  reporting_type_vat_detailed: string;
+  reporting_clients_title: string;
+  reporting_clients_empty: string;
+  reporting_applicability: string;
+  task_state_overdue: string;
+  task_state_review_pending: string;
+  task_state_assigned: string;
+  task_state_waiting_client: string;
+  task_state_new: string;
+  task_state_done: string;
 };
 
 const HE: OfficeCopy = {
@@ -202,6 +241,45 @@ const HE: OfficeCopy = {
   completeness_incomplete: 'סה״כ חלקי — לא מוצג כסכום סופי',
   view_all: 'הצג הכל',
   chart_growth_departed_hint: 'פעילים בסוף החודש לפי תאריך פתיחה וסיום טיפול; עזיבות בנפרד',
+  list_search: 'חיפוש לקוחות',
+  list_search_tasks: 'חיפוש משימות',
+  list_empty: 'אין פריטים להצגה.',
+  list_open_client: 'פתיחת כרטיס לקוח',
+  list_open_task: 'פתיחת משימה',
+  list_page: (page, pages, total) => `עמוד ${page} מתוך ${pages} · ${total}`,
+  list_total_clients: (n) => `${n} לקוחות`,
+  list_total_tasks: (n) => `${n} משימות`,
+  col_name: 'לקוח',
+  col_date: 'תאריך',
+  col_due: 'מועד אחרון',
+  col_title: 'משימה',
+  col_task_status: 'סטטוס',
+  list_active_title: 'לקוחות פעילים',
+  list_new_title: 'לקוחות חדשים',
+  list_departed_title: 'לקוחות שעזבו',
+  list_status_title: (status) => `סטטוס לקוח · ${status}`,
+  date_created: 'נפתח',
+  date_ended: 'סיום טיפול',
+  reporting_col_due: 'מועד אחרון',
+  reporting_col_type: 'סוג דיווח',
+  reporting_col_clients: 'לקוחות',
+  reporting_col_status: 'סטטוס',
+  reporting_col_timing: 'תזמון מועד',
+  reporting_timing_upcoming: 'קרוב',
+  reporting_timing_due_today: 'היום',
+  reporting_timing_overdue: 'באיחור',
+  reporting_type_vat_regular: 'מע״מ + מקדמות מס הכנסה',
+  reporting_type_deductions: 'ניכויים',
+  reporting_type_vat_detailed: 'מע״מ מפורט',
+  reporting_clients_title: 'לקוחות לדיווח',
+  reporting_clients_empty: 'אין לקוחות ישימים לדיווח זה.',
+  reporting_applicability: 'ישים לפי הגדרות המס',
+  task_state_overdue: 'באיחור',
+  task_state_review_pending: 'ממתין לאישור',
+  task_state_assigned: 'משויך',
+  task_state_waiting_client: 'ממתין ללקוח',
+  task_state_new: 'חדש',
+  task_state_done: 'הושלם',
 };
 
 const EN: OfficeCopy = {
@@ -306,6 +384,45 @@ const EN: OfficeCopy = {
   completeness_incomplete: 'Partial total — not shown as a final figure',
   view_all: 'View all',
   chart_growth_departed_hint: 'Active at month end from open/end dates; departures as a separate series',
+  list_search: 'Search clients',
+  list_search_tasks: 'Search tasks',
+  list_empty: 'No items to display.',
+  list_open_client: 'Open client card',
+  list_open_task: 'Open task',
+  list_page: (page, pages, total) => `Page ${page} of ${pages} · ${total}`,
+  list_total_clients: (n) => `${n} clients`,
+  list_total_tasks: (n) => `${n} tasks`,
+  col_name: 'Client',
+  col_date: 'Date',
+  col_due: 'Due date',
+  col_title: 'Task',
+  col_task_status: 'Status',
+  list_active_title: 'Active clients',
+  list_new_title: 'New clients',
+  list_departed_title: 'Clients who left',
+  list_status_title: (status) => `Client status · ${status}`,
+  date_created: 'Opened',
+  date_ended: 'Service ended',
+  reporting_col_due: 'Due date',
+  reporting_col_type: 'Report type',
+  reporting_col_clients: 'Clients',
+  reporting_col_status: 'Status',
+  reporting_col_timing: 'Due-date timing',
+  reporting_timing_upcoming: 'Upcoming',
+  reporting_timing_due_today: 'Due today',
+  reporting_timing_overdue: 'Overdue',
+  reporting_type_vat_regular: 'VAT + income tax advances',
+  reporting_type_deductions: 'Income tax deductions',
+  reporting_type_vat_detailed: 'Detailed VAT',
+  reporting_clients_title: 'Clients for this report',
+  reporting_clients_empty: 'No applicable clients for this report.',
+  reporting_applicability: 'Applicable from tax settings',
+  task_state_overdue: 'Overdue',
+  task_state_review_pending: 'Awaiting approval',
+  task_state_assigned: 'Assigned',
+  task_state_waiting_client: 'Waiting on client',
+  task_state_new: 'New',
+  task_state_done: 'Done',
 };
 
 export function officeCopy(locale: DashboardLocale): OfficeCopy {

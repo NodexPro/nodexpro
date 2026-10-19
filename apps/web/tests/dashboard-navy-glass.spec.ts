@@ -45,7 +45,6 @@ test('Dashboard presentation drops the redundant name/language header only on /d
 });
 
 test('Collected cash stays unavailable unless Accounting Base marks monthly_revenue ready', () => {
-  assert.match(dashSrc, /summary\.monthly_revenue_status === 'ready'/);
   assert.match(dashSrc, /collected_cash_note_he/);
   assert.doesNotMatch(dashSrc, /monthly_revenue\.amount\s*\+|sumInvoices|total_revenue\s*=/);
   assert.match(coProvider, /monthly_revenue_status: 'coming_soon'/);

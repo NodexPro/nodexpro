@@ -43,7 +43,7 @@ test('second and third desktop rows are equal three-column grids that wrap on na
   assert.match(dashSrc, /office\.charts\.client_growth/);
   assert.match(dashSrc, /office\.client_status/);
   assert.match(dashSrc, /office\.charts\.expected_fees_by_month/);
-  assert.match(dashSrc, /office\.quick_actions/);
+  assert.doesNotMatch(dashSrc, /office\.quick_actions\.actions/);
   assert.match(dashCss, /\.nx-dashboard__row--triple \{[\s\S]*repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(
     dashCss,
