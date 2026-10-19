@@ -73,7 +73,8 @@
       "phonePlaceholder": "Phone number",
       "emailPlaceholder": "Email address",
       "requiredHint": "At least one of phone or email is required.",
-      "empty": "No contact information."
+      "empty": "No contact information.",
+      "orRequired": "Phone or email"
     },
     "address": {
       "section": "Address (optional)",
@@ -143,7 +144,14 @@
       "addNoteFailed": "Failed to add note",
       "addTagFailed": "Failed to add tag",
       "createTagFailed": "Failed to create tag",
-      "attachFileFailed": "Failed to attach file"
+      "attachFileFailed": "Failed to attach file",
+      "taxIdRequired": "Tax ID (HP) is required.",
+      "displayNameRequired": "Display name is required.",
+      "invalidType": "Client type is not valid.",
+      "duplicateTaxId": "A client with this tax ID already exists in this organization.",
+      "unauthorized": "You are not allowed to create a client. Sign in again if your session expired.",
+      "validation": "The client could not be created. Check the highlighted fields.",
+      "retryable": "The client could not be created. Check your connection and try again."
     }
   },
   "common": {

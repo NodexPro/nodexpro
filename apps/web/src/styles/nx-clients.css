@@ -128,10 +128,12 @@
 
 .nx-clients-modal {
   width: min(520px, 100%);
-  max-height: 90vh;
-  overflow-y: auto;
+  max-height: min(90vh, 720px);
+  overflow: hidden;
   padding: 20px;
   color: #eef6ff;
+  display: flex;
+  flex-direction: column;
 }
 
 .nx-clients-modal__head {
@@ -158,7 +160,65 @@
 .nx-clients-form {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 0;
+}
+
+.nx-clients-form__body {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-inline-end: 4px;
+}
+
+.nx-clients-form__footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding-top: 16px;
+}
+
+.nx-clients-form__footer .nx-glass-btn {
+  min-width: 96px;
+}
+
+.nx-clients-field-error {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fecaca;
+}
+
+.nx-clients-required-caption {
+  font-weight: 500;
+  color: rgba(238, 246, 255, 0.72);
+}
+
+.nx-clients-form .nx-glass-input.is-invalid {
+  border-color: rgba(252, 165, 165, 0.7);
+  box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.22);
+}
+
+@media (max-width: 640px) {
+  .nx-clients-overlay {
+    padding: 12px;
+    align-items: flex-end;
+  }
+
+  .nx-clients-modal {
+    width: 100%;
+    max-height: 92vh;
+  }
+
+  .nx-clients-form__footer {
+    flex-wrap: wrap;
+  }
 }
 
 .nx-clients-form label {

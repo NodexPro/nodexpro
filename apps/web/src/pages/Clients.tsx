@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson, apiFetch } from '../api/client';
@@ -15,6 +15,15 @@ import {
 } from '../api/endpoints';
 import { useI18n } from '../i18n/I18nProvider';
 import { canonicalCreatedClientId, clientCardPath } from './client-create-navigation.pure';
+import {
+  beginExclusiveSubmit,
+  buildCreateClientCommandPayload,
+  endExclusiveSubmit,
+  firstInvalidCreateClientFocusField,
+  mapCreateClientCommandError,
+  validateCreateClientDraft,
+  type CreateClientField,
+} from './client-create-form.pure';
 import '../styles/nx-glass-surface.css';
 import '../styles/nx-clients.css';
 
@@ -67,7 +76,7 @@ interface ClientRow {
 export function Clients() {
   const auth = useAuth();
   const navigate = useNavigate();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [list, setList] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -89,6 +98,14 @@ export function Clients() {
   const [createStreet, setCreateStreet] = useState('');
   const [createPostalCode, setCreatePostalCode] = useState('');
   const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [createInvalidField, setCreateInvalidField] = useState<CreateClientField | null>(null);
+  const createInFlightRef = useRef(false);
+  const createTaxIdRef = useRef<HTMLInputElement>(null);
+  const createNameRef = useRef<HTMLInputElement>(null);
+  const createPhoneRef = useRef<HTMLInputElement>(null);
+  const createEmailRef = useRef<HTMLInputElement>(null);
+  const createTypeRef = useRef<HTMLSelectElement>(null);
   const [showImport, setShowImport] = useState(false);
   const [importCsv, setImportCsv] = useState('');
   const [importPreview, setImportPreview] = useState<{
@@ -229,30 +246,58 @@ export function Clients() {
     }
   }, [orgId, selectedIds, canWrite, clearSelection]);
 
+  const focusCreateField = (field: CreateClientField | null) => {
+    const target = firstInvalidCreateClientFocusField(field);
+    const node =
+      target === 'tax_id' ? createTaxIdRef.current
+      : target === 'display_name' ? createNameRef.current
+      : target === 'client_type' ? createTypeRef.current
+      : target === 'phone' ? createPhoneRef.current
+      : null;
+    node?.focus();
+  };
+
   const createClient = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!orgId || !createTaxId.trim() || !createName.trim() || !canWrite) return;
+    if (!orgId || !canWrite) return;
+    if (!beginExclusiveSubmit(createInFlightRef)) return;
     setCreateSubmitting(true);
-    setError('');
+    setCreateError('');
+    setCreateInvalidField(null);
+    const draft = {
+      tax_id: createTaxId,
+      display_name: createName,
+      client_type: createType,
+      phone: createPhone,
+      email: createEmail,
+      website: createWebsite,
+      country_code: createCountry,
+      city: createCity,
+      street: createStreet,
+      postal_code: createPostalCode,
+    };
+    const validation = validateCreateClientDraft(draft);
+    if (!validation.ok) {
+      setCreateInvalidField(validation.field);
+      setCreateError(t(validation.messageKey));
+      focusCreateField(validation.field);
+      endExclusiveSubmit(createInFlightRef);
+      setCreateSubmitting(false);
+      return;
+    }
     try {
       const created = await apiJson<{ id: string }>(orgClients(orgId), {
         method: 'POST',
-        body: JSON.stringify({
-          tax_id: createTaxId.trim(),
-          display_name: createName.trim(),
-          client_type: createType,
-          phone: createPhone.trim() || null,
-          email: createEmail.trim() || null,
-          website: createWebsite.trim() || null,
-          country_code: createCountry.trim().slice(0, 2) || null,
-          city: createCity.trim() || null,
-          street: createStreet.trim() || null,
-          postal_code: createPostalCode.trim() || null,
-        }),
+        body: JSON.stringify(buildCreateClientCommandPayload(draft)),
       });
       const clientId = canonicalCreatedClientId(created);
-      if (!clientId) throw new Error('Failed to create client');
+      if (!clientId) {
+        setCreateError(t('clients.errors.retryable'));
+        return;
+      }
       setShowCreate(false);
+      setCreateError('');
+      setCreateInvalidField(null);
       setCreateTaxId('');
       setCreateName('');
       setCreateType('business_customer');
@@ -265,8 +310,12 @@ export function Clients() {
       setCreatePostalCode('');
       navigate(clientCardPath(clientId));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create client');
+      const mapped = mapCreateClientCommandError(err);
+      setCreateInvalidField(mapped.field);
+      setCreateError(t(mapped.messageKey));
+      focusCreateField(mapped.field);
     } finally {
+      endExclusiveSubmit(createInFlightRef);
       setCreateSubmitting(false);
     }
   };
@@ -379,7 +428,7 @@ export function Clients() {
           </div>
           {canWrite && (
             <div className="nx-clients-toolbar__row" style={{ gap: 8 }}>
-              <button type="button" onClick={() => setShowCreate(true)} className="nx-glass-btn nx-glass-btn--purple">
+              <button type="button" onClick={() => { setShowCreate(true); setCreateError(''); setCreateInvalidField(null); }} className="nx-glass-btn nx-glass-btn--purple">
                 {t('clients.newClient')}
               </button>
               {canImport && (
@@ -560,33 +609,63 @@ export function Clients() {
 
       {showCreate && canWrite && (
         <div className="nx-clients-overlay">
-          <div className="nx-glass-card nx-clients-modal">
+          <div
+            className="nx-glass-card nx-clients-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="nx-clients-create-title"
+            dir={lang === 'he' ? 'rtl' : 'ltr'}
+          >
             <div className="nx-clients-modal__head">
-              <h3>{t('clients.create.title')}</h3>
+              <h3 id="nx-clients-create-title">{t('clients.create.title')}</h3>
               <button
                 type="button"
-                onClick={() => { setShowCreate(false); setError(''); }}
+                onClick={() => { setShowCreate(false); setCreateError(''); setCreateInvalidField(null); }}
                 className="nx-clients-modal__close"
                 aria-label={t('common.cancel')}
               >
                 ×
               </button>
             </div>
-            <form onSubmit={createClient} className="nx-clients-form">
+            <form onSubmit={createClient} className="nx-clients-form" noValidate>
+              <div className="nx-clients-form__body">
+              {createError && (
+                <div className="nx-glass-alert nx-glass-alert--error" role="alert">
+                  {createError}
+                </div>
+              )}
               <label>
                 {t('clients.create.taxId')} <span className="nx-clients-required">*</span>
-                <input type="text" value={createTaxId} onChange={(e) => setCreateTaxId(e.target.value)} required className="nx-glass-input" />
+                <input
+                  ref={createTaxIdRef}
+                  type="text"
+                  value={createTaxId}
+                  onChange={(e) => { setCreateTaxId(e.target.value); if (createInvalidField === 'tax_id') setCreateInvalidField(null); }}
+                  required
+                  aria-invalid={createInvalidField === 'tax_id'}
+                  className={`nx-glass-input${createInvalidField === 'tax_id' ? ' is-invalid' : ''}`}
+                />
               </label>
               <label>
                 {t('clients.create.displayName')} <span className="nx-clients-required">*</span>
-                <input type="text" value={createName} onChange={(e) => setCreateName(e.target.value)} required className="nx-glass-input" />
+                <input
+                  ref={createNameRef}
+                  type="text"
+                  value={createName}
+                  onChange={(e) => { setCreateName(e.target.value); if (createInvalidField === 'display_name') setCreateInvalidField(null); }}
+                  required
+                  aria-invalid={createInvalidField === 'display_name'}
+                  className={`nx-glass-input${createInvalidField === 'display_name' ? ' is-invalid' : ''}`}
+                />
               </label>
               <label>
                 {t('clients.create.type')}
                 <select
+                  ref={createTypeRef}
                   value={createType}
                   onChange={(e) => setCreateType(e.target.value)}
-                  className="nx-glass-input"
+                  aria-invalid={createInvalidField === 'client_type'}
+                  className={`nx-glass-input${createInvalidField === 'client_type' ? ' is-invalid' : ''}`}
                 >
                   <option value="business_customer">{t('clients.type.business_customer')}</option>
                   <option value="individual_customer">{t('clients.type.individual_customer')}</option>
@@ -595,22 +674,44 @@ export function Clients() {
                   <option value="other">{t('clients.type.other')}</option>
                 </select>
               </label>
-              <h4>{t('clients.contact.section')}</h4>
+              <h4>
+                {t('clients.contact.section')}{' '}
+                <span className="nx-clients-required">*</span>
+                <span className="nx-clients-required-caption"> {t('clients.contact.orRequired')}</span>
+              </h4>
               <label>
                 {t('clients.details.phone')}
-                <input type="text" value={createPhone} onChange={(e) => setCreatePhone(e.target.value)} placeholder={t('clients.contact.phonePlaceholder')} className="nx-glass-input" />
+                <input
+                  ref={createPhoneRef}
+                  type="text"
+                  value={createPhone}
+                  onChange={(e) => { setCreatePhone(e.target.value); if (createInvalidField === 'contact') setCreateInvalidField(null); }}
+                  placeholder={t('clients.contact.phonePlaceholder')}
+                  aria-invalid={createInvalidField === 'contact'}
+                  aria-describedby="nx-clients-create-contact-error"
+                  className={`nx-glass-input${createInvalidField === 'contact' ? ' is-invalid' : ''}`}
+                />
               </label>
               <label>
                 {t('clients.details.email')}
                 <input
+                  ref={createEmailRef}
                   type="email"
                   value={createEmail}
-                  onChange={(e) => setCreateEmail(e.target.value)}
+                  onChange={(e) => { setCreateEmail(e.target.value); if (createInvalidField === 'contact') setCreateInvalidField(null); }}
                   placeholder={t('clients.contact.emailPlaceholder')}
-                  className="nx-glass-input"
+                  aria-invalid={createInvalidField === 'contact'}
+                  aria-describedby="nx-clients-create-contact-error"
+                  className={`nx-glass-input${createInvalidField === 'contact' ? ' is-invalid' : ''}`}
                 />
               </label>
-              <p className="nx-clients-hint">{t('clients.contact.requiredHint')}</p>
+              <p
+                id="nx-clients-create-contact-error"
+                className={createInvalidField === 'contact' ? 'nx-clients-field-error' : 'nx-clients-hint'}
+                role={createInvalidField === 'contact' ? 'alert' : undefined}
+              >
+                {t('clients.contact.requiredHint')}
+              </p>
               <label>
                 {t('clients.contact.website')}
                 <input type="url" value={createWebsite} onChange={(e) => setCreateWebsite(e.target.value)} placeholder="https://" className="nx-glass-input" />
@@ -632,11 +733,16 @@ export function Clients() {
                 {t('clients.address.postalCode')}
                 <input type="text" value={createPostalCode} onChange={(e) => setCreatePostalCode(e.target.value)} className="nx-glass-input" />
               </label>
-              <div className="nx-clients-toolbar__row" style={{ marginTop: 8 }}>
+              </div>
+              <div className="nx-clients-form__footer">
                 <button type="submit" disabled={createSubmitting} className="nx-glass-btn nx-glass-btn--purple">
                   {createSubmitting ? t('common.loading') : t('common.create')}
                 </button>
-                <button type="button" onClick={() => { setShowCreate(false); setError(''); }} className="nx-glass-btn nx-glass-btn--secondary">
+                <button
+                  type="button"
+                  onClick={() => { setShowCreate(false); setCreateError(''); setCreateInvalidField(null); }}
+                  className="nx-glass-btn nx-glass-btn--secondary"
+                >
                   {t('common.cancel')}
                 </button>
               </div>

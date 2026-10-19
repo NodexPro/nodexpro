@@ -73,7 +73,8 @@
       "phonePlaceholder": "מספר טלפון",
       "emailPlaceholder": "כתובת אימייל",
       "requiredHint": "נדרש טלפון או אימייל לפחות.",
-      "empty": "אין פרטי התקשרות."
+      "empty": "אין פרטי התקשרות.",
+      "orRequired": "טלפון או אימייל"
     },
     "address": {
       "section": "כתובת (אופציונלי)",
@@ -143,7 +144,14 @@
       "addNoteFailed": "הוספת הערה נכשלה",
       "addTagFailed": "הוספת תגית נכשלה",
       "createTagFailed": "יצירת תגית נכשלה",
-      "attachFileFailed": "צירוף הקובץ נכשל"
+      "attachFileFailed": "צירוף הקובץ נכשל",
+      "taxIdRequired": "יש למלא ח.פ / מספר עוסק.",
+      "displayNameRequired": "יש למלא שם תצוגה.",
+      "invalidType": "סוג הלקוח אינו תקין.",
+      "duplicateTaxId": "לקוח עם מספר עוסק זה כבר קיים בארגון.",
+      "unauthorized": "אין הרשאה ליצור לקוח. אם פג תוקף ההתחברות, יש להיכנס מחדש.",
+      "validation": "לא ניתן ליצור את הלקוח. בדקו את השדות המסומנים.",
+      "retryable": "לא ניתן ליצור את הלקוח כרגע. בדקו את החיבור ונסו שוב."
     }
   },
   "common": {
