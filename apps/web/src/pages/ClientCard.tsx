@@ -525,7 +525,8 @@ export function ClientCard() {
   if (!clientId) return <p>No client selected.</p>;
 
   if (loading) return <p style={{ padding: 24 }}>{t('common.loading')}</p>;
-  if (!client) return <p style={{ padding: 24 }}>Client not found.</p>;
+  if (error && !client) return <p style={{ padding: 24 }}>{error}</p>;
+  if (!client) return <p style={{ padding: 24 }}>{t('clients.errors.notFound')}</p>;
 
   const clientPhoneTrim = (client.phone ?? '').trim();
   const clientEmailNorm = (client.email ?? '').trim().toLowerCase();

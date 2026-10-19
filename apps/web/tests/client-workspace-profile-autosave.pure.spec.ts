@@ -2,12 +2,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   CLIENT_PROFILE_AUTOSAVE_DEBOUNCE_MS,
+  CLIENT_PROFILE_BUSINESS_TYPE_VALUES,
   buildClientProfileUpdatePayload,
+  clientProfileBusinessTypeSelectOptions,
   clientProfileDraftsEqual,
   clientProfileNeedsLeaveGuard,
   createClientProfileAutosaver,
   decideAfterProfileSave,
   draftFromClientOperationsCase,
+  hydrateClientProfileBusinessType,
   shouldIgnoreStaleProfileResponse,
   shouldSkipClientProfileSave,
   validateClientProfileDraft,
@@ -63,6 +66,67 @@ test('validation preserves the same required contact/business rules', () => {
   const missing = validateClientProfileDraft(sample({ business_type: '', phone: '', email: '' }));
   assert.equal(missing.ok, false);
   if (!missing.ok) assert.match(missing.messageHe, /סוג עסק/);
+});
+
+test('empty business type stays empty; עוסק פטור and other allowed types hydrate and validate', () => {
+  assert.equal(hydrateClientProfileBusinessType(null), '');
+  assert.equal(hydrateClientProfileBusinessType(''), '');
+  assert.equal(hydrateClientProfileBusinessType('—'), '');
+  assert.equal(hydrateClientProfileBusinessType('עוסק פטור'), 'עוסק פטור');
+  assert.equal(hydrateClientProfileBusinessType('\u00a0עוסק פטור\u00a0'), 'עוסק פטור');
+  for (const value of CLIENT_PROFILE_BUSINESS_TYPE_VALUES) {
+    assert.equal(hydrateClientProfileBusinessType(value), value);
+    assert.equal(validateClientProfileDraft(sample({ business_type: value })).ok, true);
+    assert.ok(clientProfileBusinessTypeSelectOptions(value).includes(value));
+  }
+  const emptyDraft = draftFromClientOperationsCase({
+    client: { client_name: 'חדש', tax_id: '1', status: 'active', phone: '0500000000' },
+    profile: { business_type: null, assigned_handler_user_id: null },
+    primary_contact: null,
+  });
+  assert.equal(emptyDraft.business_type, '');
+  const emptyCheck = validateClientProfileDraft(emptyDraft);
+  assert.equal(emptyCheck.ok, false);
+  if (!emptyCheck.ok) assert.match(emptyCheck.messageHe, /סוג עסק/);
+  const patur = draftFromClientOperationsCase({
+    client: { client_name: 'פטור', tax_id: '1', status: 'active', phone: '0500000000' },
+    profile: { business_type: 'עוסק פטור', assigned_handler_user_id: null },
+    primary_contact: null,
+  });
+  assert.equal(patur.business_type, 'עוסק פטור');
+  assert.equal(validateClientProfileDraft(patur).ok, true);
+  assert.equal(buildClientProfileUpdatePayload(patur).business_type, 'עוסק פטור');
+  const dashPlaceholder = draftFromClientOperationsCase({
+    client: { client_name: 'רשימה', tax_id: '1', status: 'active', phone: '0500000000' },
+    profile: { business_type: '—', assigned_handler_user_id: null },
+    primary_contact: null,
+  });
+  assert.equal(dashPlaceholder.business_type, '');
+});
+
+test('business-type control does not use a disabled empty option that browsers display as עוסק פטור', () => {
+  assert.match(panelSrc, /clientProfileBusinessTypeSelectOptions/);
+  assert.match(panelSrc, /hydrateClientProfileBusinessType/);
+  assert.match(panelSrc, /נא לבחור/);
+  assert.doesNotMatch(
+    panelSrc.slice(panelSrc.indexOf('aria-label="סוג עסק"')),
+    /<option value="" disabled>/,
+  );
+  const allowed = readFileSync(
+    join(dir, '../../api/src/domains/client-operations/client-operations.service.ts'),
+    'utf8',
+  );
+  assert.match(
+    allowed,
+    /const ALLOWED_BUSINESS_TYPES = new Set\(\['עוסק פטור', 'עוסק מורשה', 'חברה', 'תאגיד', 'אחר'\]\)/,
+  );
+  assert.deepEqual([...CLIENT_PROFILE_BUSINESS_TYPE_VALUES], [
+    'עוסק פטור',
+    'עוסק מורשה',
+    'חברה',
+    'תאגיד',
+    'אחר',
+  ]);
 });
 
 test('unchanged draft is not saved; newer local edits are not replaced by a stale response', () => {

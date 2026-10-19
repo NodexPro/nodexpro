@@ -17,6 +17,17 @@ import * as clientImportExport from './client-import-export.service.js';
 const router = Router();
 const ENTITY_TYPE_CLIENT = 'client';
 
+/**
+ * Auth/org context MUST be attached on a parent router before `router.param('clientId')`.
+ * Express runs param callbacks before route-level middleware, so putting
+ * `requireAuthorizedClientParam` on the same router as `authMiddleware` would
+ * deny every `/clients/:clientId` read (including right after create) with
+ * "Organization context required" — which the card UI showed as "Client not found."
+ * Same pattern as client-operations: parent `use(auth, requireOrg, inner)`.
+ */
+export const clientsRoutes = Router();
+clientsRoutes.use(authMiddleware, requireOrg, router);
+
 // Canonical client ACL for every nested :clientId route (contacts/notes/tags/files/…).
 router.param('clientId', (req, res, next) => {
   void requireAuthorizedClientParam('clientId')(req, res, next);
@@ -433,5 +444,3 @@ router.delete('/:id/clients/:clientId/files/:fileAssetId', authMiddleware, requi
     next(e);
   }
 });
-
-export const clientsRoutes = router;

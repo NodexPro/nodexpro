@@ -43,7 +43,10 @@ test('remaining top tabs stay in TAB_ORDER for rendering content', () => {
 test('hidden obligations tab falls back to a visible default tab', () => {
   assert.match(panelSrc, /!isWorkspaceNavTabVisible\(activeTab/);
   assert.match(panelSrc, /setActiveTab\('client'\)/);
-  assert.match(panelSrc, /useState<WorkspaceTabKey>\('client'\)/);
+  assert.match(
+    panelSrc,
+    /useState<WorkspaceTabKey>\(\s*TAB_ORDER\.some\(\(t\) => t\.key === initialTab\) \? \(initialTab as WorkspaceTabKey\) : 'client',?\s*\)/,
+  );
 });
 
 test('obligations domain content is retained (not deleted)', () => {

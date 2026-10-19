@@ -134,6 +134,7 @@
       "other": "אחר"
     },
     "errors": {
+      "notFound": "הלקוח לא נמצא.",
       "loadFailed": "טעינת הנתונים נכשלה",
       "createFailed": "יצירת הלקוח נכשלה",
       "updateFailed": "עדכון הלקוח נכשל",

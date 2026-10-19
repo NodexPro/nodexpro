@@ -134,6 +134,7 @@
       "other": "Other"
     },
     "errors": {
+      "notFound": "Client not found.",
       "loadFailed": "Failed to load",
       "createFailed": "Failed to create client",
       "updateFailed": "Failed to update",

@@ -47,12 +47,45 @@ export function isoToDateInputValue(iso: string | null | undefined): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+/** Backend ALLOWED_BUSINESS_TYPES — Hebrew codes stored on client_operational_profiles. */
+export const CLIENT_PROFILE_BUSINESS_TYPE_VALUES = [
+  'עוסק פטור',
+  'עוסק מורשה',
+  'חברה',
+  'תאגיד',
+  'אחר',
+] as const;
+
+export type ClientProfileBusinessTypeValue = (typeof CLIENT_PROFILE_BUSINESS_TYPE_VALUES)[number];
+
+/**
+ * Controlled <select> value. Empty stays empty — never coerce to the first option
+ * (עוסק פטור). Registry em-dash placeholders are not a business type.
+ */
+export function hydrateClientProfileBusinessType(raw: string | null | undefined): string {
+  const s = String(raw ?? '')
+    .replace(/\u00a0/g, ' ')
+    .trim();
+  if (!s || s === '—' || s === '-') return '';
+  return s;
+}
+
+/** Keep an unmatched persisted value visible instead of letting the browser show עוסק פטור. */
+export function clientProfileBusinessTypeSelectOptions(current: string): string[] {
+  const allowed = [...CLIENT_PROFILE_BUSINESS_TYPE_VALUES];
+  const hydrated = hydrateClientProfileBusinessType(current);
+  if (hydrated && !allowed.includes(hydrated as ClientProfileBusinessTypeValue)) {
+    return [hydrated, ...allowed];
+  }
+  return allowed;
+}
+
 export function draftFromClientOperationsCase(workspace: ClientProfileCaseSlice): ClientProfileDraft {
   const displayAddress = [workspace.client.address, workspace.client.city].filter(Boolean).join(' · ');
   return {
     client_name: workspace.client.client_name ?? '',
     government_id: workspace.client.tax_id ?? '',
-    business_type: workspace.profile.business_type ?? '',
+    business_type: hydrateClientProfileBusinessType(workspace.profile.business_type),
     status: workspace.client.status ?? 'active',
     contact_person: workspace.primary_contact?.full_name ?? '',
     phone: workspace.primary_contact?.phone ?? workspace.client.phone ?? '',

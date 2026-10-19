@@ -14,6 +14,7 @@ import {
   orgClientsBulkExport,
 } from '../api/endpoints';
 import { useI18n } from '../i18n/I18nProvider';
+import { canonicalCreatedClientId, clientCardPath } from './client-create-navigation.pure';
 import '../styles/nx-glass-surface.css';
 import '../styles/nx-clients.css';
 
@@ -249,6 +250,8 @@ export function Clients() {
           postal_code: createPostalCode.trim() || null,
         }),
       });
+      const clientId = canonicalCreatedClientId(created);
+      if (!clientId) throw new Error('Failed to create client');
       setShowCreate(false);
       setCreateTaxId('');
       setCreateName('');
@@ -260,7 +263,7 @@ export function Clients() {
       setCreateCity('');
       setCreateStreet('');
       setCreatePostalCode('');
-      navigate(`/clients/${created.id}`);
+      navigate(clientCardPath(clientId));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create client');
     } finally {
@@ -682,7 +685,7 @@ export function Clients() {
                   <td>
                     <button
                       type="button"
-                      onClick={() => navigate(`/clients/${c.id}`)}
+                      onClick={() => navigate(clientCardPath(c.id))}
                       className="nx-clients-table__name"
                     >
                       {c.display_name}

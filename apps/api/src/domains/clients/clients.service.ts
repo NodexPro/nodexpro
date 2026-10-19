@@ -380,28 +380,31 @@ export async function createClient(
     .single();
 
   if (error || !client) throw new Error('Failed to create client');
+  const canonicalId = String((client as { id?: unknown }).id ?? '').trim();
+  if (!canonicalId) throw new Error('Failed to create client');
+  const created = { ...client, id: canonicalId };
 
-  await upsertClientSearchIndex(orgId, client.id, buildClientSearchText(client));
+  await upsertClientSearchIndex(orgId, canonicalId, buildClientSearchText(created));
   await addTimelineEvent({
     organizationId: orgId,
     entityType: ENTITY_TYPE_CLIENT,
-    entityId: client.id,
+    entityId: canonicalId,
     eventType: TIMELINE_EVENTS.CLIENT_CREATED,
     sourceType: TIMELINE_SOURCE.SYSTEM,
     sourceModule: 'shared',
     actorUserId: ctx.user.id,
-    payload: { display_name: client.display_name },
+    payload: { display_name: created.display_name },
   });
   await writeAudit({
     organizationId: orgId,
     actorUserId: ctx.user.id,
     entityType: 'client',
-    entityId: client.id,
+    entityId: canonicalId,
     action: AUDIT_ACTIONS.CLIENT_CREATED,
-    payload: { display_name: client.display_name, tax_id_masked: '***' },
+    payload: { display_name: created.display_name, tax_id_masked: '***' },
   });
 
-  return client;
+  return created;
 }
 
 export async function updateClient(

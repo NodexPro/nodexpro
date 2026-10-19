@@ -22,10 +22,12 @@ import { ClientDocflowTab } from './ClientDocflowTab';
 import {
   CLIENT_PROFILE_AUTOSAVE_DEBOUNCE_MS,
   buildClientProfileUpdatePayload,
+  clientProfileBusinessTypeSelectOptions,
   clientProfileNeedsLeaveGuard,
   clientProfileSaveStateLabelHe,
   createClientProfileAutosaver,
   draftFromClientOperationsCase,
+  hydrateClientProfileBusinessType,
   shouldIgnoreStaleProfileResponse,
   type ClientProfileDraft,
   type ClientProfileSaveState,
@@ -328,7 +330,7 @@ export function buildPlaceholderClientCaseFromRegistryRow(row: RegistryRowForPla
     primary_contact: null,
     handler_user_options: [],
     profile: {
-      business_type: row.business_type,
+      business_type: hydrateClientProfileBusinessType(row.business_type) || null,
       payroll_flag: row.payroll_flag,
       material_brought_flag: row.material_brought_flag,
       vat_status: row.vat_status,
@@ -352,8 +354,6 @@ export function buildPlaceholderClientCaseFromRegistryRow(row: RegistryRowForPla
     client_obligations_tab: undefined,
   };
 }
-
-const BUSINESS_TYPE_OPTIONS = ['עוסק פטור', 'עוסק מורשה', 'חברה', 'תאגיד', 'אחר'] as const;
 
 const CLIENT_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'active', label: 'פעיל' },
@@ -697,10 +697,10 @@ export function ClientWorkspacePanel({
                   appearance: 'none',
                 }}
               >
-                <option value="" disabled>
-                  —
+                <option value="">
+                  נא לבחור
                 </option>
-                {BUSINESS_TYPE_OPTIONS.map((opt) => (
+                {clientProfileBusinessTypeSelectOptions(draft.business_type).map((opt) => (
                   <option key={opt} value={opt}>
                     {opt}
                   </option>
