@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { apiJson } from '../../api/client';
 import { dashboardOfficeFeeBreakdown } from '../../api/endpoints';
+import { withAccountDeepOceanClass } from '../glass/account-deep-ocean';
 import { useI18n } from '../../i18n/I18nProvider';
 
 export type OfficeFeeBreakdownAggregate = {
@@ -168,7 +169,13 @@ export function DashboardFeeBreakdownModal(props: {
   };
 
   return createPortal(
-    <div className="nx-dashboard-breakdown-overlay" role="presentation" dir={dir} lang={locale} onClick={onClose}>
+    <div
+      className={withAccountDeepOceanClass('nx-dashboard-breakdown-overlay')}
+      role="presentation"
+      dir={dir}
+      lang={locale}
+      onClick={onClose}
+    >
       <div
         className="nx-dashboard-breakdown"
         role="dialog"

@@ -349,6 +349,7 @@ export function Modules() {
         title={selected?.name ?? t('modules.select')}
         onClose={() => setSelectedModuleId(null)}
         testId="nx-modules-select-modal"
+        appearance="account-deep-ocean"
         footer={
           selected ? (
             <>

@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useI18n } from '../../i18n/I18nProvider';
+import { withAccountDeepOceanClass } from './account-deep-ocean';
 
 export function GlassModal(props: {
   open: boolean;
@@ -9,8 +10,9 @@ export function GlassModal(props: {
   children: ReactNode;
   footer?: ReactNode;
   testId?: string;
+  appearance?: 'default' | 'account-deep-ocean';
 }) {
-  const { open, title, onClose, children, footer, testId } = props;
+  const { open, title, onClose, children, footer, testId, appearance = 'default' } = props;
   const { lang, t } = useI18n();
   const dir = lang === 'he' ? 'rtl' : 'ltr';
 
@@ -27,7 +29,11 @@ export function GlassModal(props: {
 
   return createPortal(
     <div
-      className="nx-glass-modal-overlay"
+      className={
+        appearance === 'account-deep-ocean'
+          ? withAccountDeepOceanClass('nx-glass-modal-overlay')
+          : 'nx-glass-modal-overlay'
+      }
       role="presentation"
       dir={dir}
       lang={lang}

@@ -24,6 +24,7 @@ import {
   validateCreateClientDraft,
   type CreateClientField,
 } from './client-create-form.pure';
+import { AccountRequiredMark } from '../components/glass/AccountRequiredMark';
 import '../styles/nx-glass-surface.css';
 import '../styles/nx-clients.css';
 import '../styles/nx-client-create-royal-glass.css';
@@ -667,7 +668,7 @@ export function Clients() {
                 </div>
               )}
               <label>
-                {t('clients.create.taxId')} <span className="nx-clients-required">*</span>
+                {t('clients.create.taxId')} <AccountRequiredMark />
                 <input
                   ref={createTaxIdRef}
                   type="text"
@@ -679,7 +680,7 @@ export function Clients() {
                 />
               </label>
               <label>
-                {t('clients.create.displayName')} <span className="nx-clients-required">*</span>
+                {t('clients.create.displayName')} <AccountRequiredMark />
                 <input
                   ref={createNameRef}
                   type="text"
@@ -712,7 +713,7 @@ export function Clients() {
               </label>
               <h4 className="nx-client-create__span">
                 {t('clients.contact.section')}{' '}
-                <span className="nx-clients-required">*</span>
+                <AccountRequiredMark />
                 <span className="nx-clients-required-caption"> {t('clients.contact.orRequired')}</span>
               </h4>
               <label>

@@ -1,0 +1,227 @@
+/**
+ * Account-level Deep Ocean Glass V3 — shared overlay appearance.
+ *
+ * Scope: `.nx-account-deep-ocean` only (opt-in on account overlays).
+ * Does not restyle business-module modals, Create Client variant CSS,
+ * Dashboard page chrome, sidebar, login, or owner admin.
+ *
+ * Create Client keeps `nx-client-create--deep-ocean-glass` as its own
+ * reversible appearance. Do not wrap that overlay in this class.
+ *
+ * Palette: #102D49 #17547A #337493 #36A9C6 #13BFD0 #FFFFFF
+ * Required marker: #00D9FF
+ */
+
+.nx-account-required-mark {
+  color: #00d9ff;
+  font-weight: 700;
+}
+
+.nx-account-deep-ocean.nx-glass-modal-overlay,
+.nx-account-deep-ocean.nx-ur-overlay,
+.nx-account-deep-ocean.nx-dashboard-breakdown-overlay {
+  background: rgba(16, 45, 73, 0.28);
+}
+
+.nx-account-deep-ocean .nx-glass-modal,
+.nx-account-deep-ocean .nx-ur-modal,
+.nx-account-deep-ocean .nx-dashboard-breakdown {
+  color: #ffffff;
+  border: 1px solid rgba(54, 169, 198, 0.62);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%);
+  box-shadow:
+    0 0 0 1px rgba(54, 169, 198, 0.28),
+    0 0 28px rgba(19, 191, 208, 0.18),
+    0 16px 36px rgba(16, 45, 73, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(19, 191, 208, 0.12);
+  backdrop-filter: blur(22px) saturate(1.25);
+  -webkit-backdrop-filter: blur(22px) saturate(1.25);
+}
+
+.nx-account-deep-ocean,
+.nx-account-deep-ocean h2,
+.nx-account-deep-ocean h3,
+.nx-account-deep-ocean h4,
+.nx-account-deep-ocean p,
+.nx-account-deep-ocean label,
+.nx-account-deep-ocean dt,
+.nx-account-deep-ocean dd,
+.nx-account-deep-ocean th,
+.nx-account-deep-ocean td,
+.nx-account-deep-ocean strong,
+.nx-account-deep-ocean small,
+.nx-account-deep-ocean .nx-glass-title,
+.nx-account-deep-ocean .nx-glass-muted,
+.nx-account-deep-ocean .nx-glass-dl dt,
+.nx-account-deep-ocean .nx-glass-dl dd,
+.nx-account-deep-ocean .nx-ur-modal__title,
+.nx-account-deep-ocean .nx-ur-modal__subtitle,
+.nx-account-deep-ocean .nx-ur-field,
+.nx-account-deep-ocean .nx-ur-muted,
+.nx-account-deep-ocean .nx-ur-intro,
+.nx-account-deep-ocean .nx-ur-confirm-name,
+.nx-account-deep-ocean .nx-ur-choice__item,
+.nx-account-deep-ocean .nx-ur-choice__item small,
+.nx-account-deep-ocean .nx-ur-list__name,
+.nx-account-deep-ocean .nx-ur-list__meta,
+.nx-account-deep-ocean .nx-dashboard-card__title,
+.nx-account-deep-ocean .nx-dashboard-card__hint,
+.nx-account-deep-ocean .nx-dashboard-breakdown__table th,
+.nx-account-deep-ocean .nx-dashboard-breakdown__table td,
+.nx-account-deep-ocean .nx-dashboard-breakdown__sub td {
+  color: #ffffff;
+}
+
+.nx-account-deep-ocean a,
+.nx-account-deep-ocean .nx-dashboard-breakdown__link,
+.nx-account-deep-ocean .nx-dashboard-breakdown__expand {
+  color: #13bfd0;
+}
+
+.nx-account-deep-ocean .nx-account-required-mark {
+  color: #00d9ff;
+}
+
+.nx-account-deep-ocean .nx-ur-error,
+.nx-account-deep-ocean .nx-glass-alert--error {
+  color: #ffd6de;
+}
+
+.nx-account-deep-ocean .nx-glass-alert--warn,
+.nx-account-deep-ocean .nx-ur-warning {
+  color: #ffffff;
+  border-color: rgba(54, 169, 198, 0.5);
+  background: rgba(23, 84, 122, 0.28);
+}
+
+.nx-account-deep-ocean .nx-ur-modal__header,
+.nx-account-deep-ocean .nx-ur-modal__footer {
+  background: transparent;
+  border-color: rgba(54, 169, 198, 0.28);
+}
+
+.nx-account-deep-ocean .nx-ur-choice__item,
+.nx-account-deep-ocean .nx-ur-list {
+  border-color: rgba(54, 169, 198, 0.42);
+  background: rgba(23, 84, 122, 0.18);
+}
+
+.nx-account-deep-ocean .nx-glass-input,
+.nx-account-deep-ocean .nx-ur-field input,
+.nx-account-deep-ocean .nx-ur-field select,
+.nx-account-deep-ocean .nx-ur-search,
+.nx-account-deep-ocean .nx-dashboard-breakdown__search {
+  color: #ffffff;
+  color-scheme: dark;
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.nx-account-deep-ocean .nx-glass-input::placeholder,
+.nx-account-deep-ocean .nx-ur-search::placeholder,
+.nx-account-deep-ocean .nx-dashboard-breakdown__search::placeholder {
+  color: rgba(255, 255, 255, 0.86);
+  opacity: 1;
+}
+
+.nx-account-deep-ocean .nx-glass-input:focus-visible,
+.nx-account-deep-ocean .nx-ur-field input:focus-visible,
+.nx-account-deep-ocean .nx-ur-field select:focus-visible,
+.nx-account-deep-ocean .nx-ur-search:focus-visible,
+.nx-account-deep-ocean .nx-dashboard-breakdown__search:focus-visible {
+  outline: none;
+  border-color: rgba(19, 191, 208, 0.92);
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.3),
+    0 0 12px rgba(54, 169, 198, 0.28);
+}
+
+.nx-account-deep-ocean .nx-glass-input option,
+.nx-account-deep-ocean .nx-ur-field option,
+.nx-account-deep-ocean .nx-ur-search option {
+  background: #102d49;
+  color: #ffffff;
+}
+
+.nx-account-deep-ocean .nx-glass-btn,
+.nx-account-deep-ocean .nx-ur-btn,
+.nx-account-deep-ocean .nx-dashboard-btn,
+.nx-account-deep-ocean .nx-ur-modal__close {
+  color: #ffffff;
+  border-radius: 6px;
+}
+
+.nx-account-deep-ocean .nx-glass-modal__footer .nx-glass-btn--purple,
+.nx-account-deep-ocean .nx-ur-modal .nx-btn.nx-btn-primary,
+.nx-account-deep-ocean .nx-ur-btn--primary {
+  border: 1px solid rgba(19, 191, 208, 0.78);
+  color: #ffffff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.34), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.62) 0%, rgba(19, 191, 208, 0.48) 100%);
+  box-shadow:
+    0 0 16px rgba(19, 191, 208, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+.nx-account-deep-ocean .nx-glass-modal__footer .nx-glass-btn--purple:hover:not(:disabled),
+.nx-account-deep-ocean .nx-ur-modal .nx-btn.nx-btn-primary:hover:not(:disabled),
+.nx-account-deep-ocean .nx-ur-btn--primary:hover:not(:disabled) {
+  border-color: rgba(120, 232, 240, 0.92);
+  background: linear-gradient(180deg, rgba(54, 169, 198, 0.74) 0%, rgba(19, 191, 208, 0.58) 100%);
+}
+
+.nx-account-deep-ocean .nx-glass-btn--secondary,
+.nx-account-deep-ocean .nx-ur-modal .nx-btn-secondary,
+.nx-account-deep-ocean .nx-ur-modal__close,
+.nx-account-deep-ocean .nx-glass-modal__header .nx-glass-btn--purple,
+.nx-account-deep-ocean .nx-dashboard-breakdown__header .nx-dashboard-btn--purple {
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  color: #ffffff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.nx-account-deep-ocean .nx-glass-btn--secondary:hover:not(:disabled),
+.nx-account-deep-ocean .nx-ur-modal .nx-btn-secondary:hover:not(:disabled),
+.nx-account-deep-ocean .nx-ur-modal__close:hover:not(:disabled),
+.nx-account-deep-ocean .nx-glass-modal__header .nx-glass-btn--purple:hover:not(:disabled),
+.nx-account-deep-ocean .nx-dashboard-breakdown__header .nx-dashboard-btn--purple:hover:not(:disabled) {
+  border-color: rgba(19, 191, 208, 0.7);
+  background: rgba(23, 84, 122, 0.38);
+}
+
+.nx-account-deep-ocean .nx-glass-btn--danger,
+.nx-account-deep-ocean .nx-ur-btn--danger {
+  border: 1px solid rgba(255, 138, 165, 0.72);
+  color: #ffffff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(160, 48, 72, 0.48) 0%, rgba(96, 24, 48, 0.38) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.nx-account-deep-ocean .nx-glass-btn--danger:hover:not(:disabled),
+.nx-account-deep-ocean .nx-ur-btn--danger:hover:not(:disabled) {
+  border-color: rgba(255, 180, 196, 0.9);
+  background: rgba(160, 48, 72, 0.58);
+}
+
+.nx-account-deep-ocean .nx-glass-btn:focus-visible,
+.nx-account-deep-ocean .nx-ur-btn:focus-visible,
+.nx-account-deep-ocean .nx-dashboard-btn:focus-visible,
+.nx-account-deep-ocean .nx-ur-modal__close:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.42),
+    0 0 14px rgba(19, 191, 208, 0.32);
+}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { apiJson } from '../../api/client';
+import { withAccountDeepOceanClass } from '../glass/account-deep-ocean';
 import { useI18n } from '../../i18n/I18nProvider';
 
 export type OfficeDashboardListAggregate = {
@@ -96,7 +97,13 @@ export function DashboardDrilldownModal(props: {
   const columns = data?.columns ?? [];
 
   return createPortal(
-    <div className="nx-dashboard-breakdown-overlay" role="presentation" dir={dir} lang={locale} onClick={onClose}>
+    <div
+      className={withAccountDeepOceanClass('nx-dashboard-breakdown-overlay')}
+      role="presentation"
+      dir={dir}
+      lang={locale}
+      onClick={onClose}
+    >
       <div
         className="nx-dashboard-breakdown"
         role="dialog"

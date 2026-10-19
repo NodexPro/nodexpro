@@ -21,6 +21,7 @@ import {
   uiText,
   type UsersRolesUi,
 } from './users-roles-selection.pure';
+import { withAccountDeepOceanClass } from '../glass/account-deep-ocean';
 import './UsersRoles.css';
 
 /**
@@ -43,7 +44,7 @@ function ModalShell(props: {
 }) {
   return (
     <div
-      className="nx-ur-overlay"
+      className={withAccountDeepOceanClass('nx-ur-overlay')}
       role="presentation"
       dir={props.ui.direction}
       lang={props.ui.locale}

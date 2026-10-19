@@ -200,4 +200,6 @@ test('Create Client visual variants are modal-scoped and selector-rollbackable',
   assert.match(productionCss, /\.nx-clients-modal \{/);
   assert.match(clientsSrc, /validateCreateClientDraft/);
   assert.match(clientsSrc, /buildCreateClientCommandPayload/);
+  assert.match(clientsSrc, /AccountRequiredMark/);
+  assert.match(oceanCss, /#00[Dd]9[Ff][Ff]/);
 });
