@@ -26,6 +26,15 @@ import {
 } from './client-create-form.pure';
 import '../styles/nx-glass-surface.css';
 import '../styles/nx-clients.css';
+import '../styles/nx-client-create-royal-glass.css';
+
+/**
+ * Create Client modal visual experiment switch (local, not a user setting).
+ * CURRENT — production appearance in nx-clients.css
+ * ROYAL   — royal-blue glass experiment (nx-client-create--royal-glass)
+ * One-step rollback: set this to `'current'`. Do not delete production modal CSS.
+ */
+const CREATE_CLIENT_MODAL_APPEARANCE: 'current' | 'royal-glass' = 'royal-glass';
 
 const VIEW_OPTIONS: { value: string; labelKey: string }[] = [
   { value: 'all', labelKey: 'clients.views.all' },
@@ -608,7 +617,13 @@ export function Clients() {
       )}
 
       {showCreate && canWrite && (
-        <div className="nx-clients-overlay">
+        <div
+          className={
+            CREATE_CLIENT_MODAL_APPEARANCE === 'royal-glass'
+              ? 'nx-clients-overlay nx-client-create nx-client-create--royal-glass'
+              : 'nx-clients-overlay nx-client-create'
+          }
+        >
           <div
             className="nx-glass-card nx-clients-modal"
             role="dialog"
@@ -630,7 +645,7 @@ export function Clients() {
             <form onSubmit={createClient} className="nx-clients-form" noValidate>
               <div className="nx-clients-form__body">
               {createError && (
-                <div className="nx-glass-alert nx-glass-alert--error" role="alert">
+                <div className="nx-client-create__span nx-glass-alert nx-glass-alert--error" role="alert">
                   {createError}
                 </div>
               )}
@@ -674,7 +689,11 @@ export function Clients() {
                   <option value="other">{t('clients.type.other')}</option>
                 </select>
               </label>
-              <h4>
+              <label>
+                {t('clients.contact.website')}
+                <input type="url" value={createWebsite} onChange={(e) => setCreateWebsite(e.target.value)} placeholder="https://" className="nx-glass-input" />
+              </label>
+              <h4 className="nx-client-create__span">
                 {t('clients.contact.section')}{' '}
                 <span className="nx-clients-required">*</span>
                 <span className="nx-clients-required-caption"> {t('clients.contact.orRequired')}</span>
@@ -707,16 +726,12 @@ export function Clients() {
               </label>
               <p
                 id="nx-clients-create-contact-error"
-                className={createInvalidField === 'contact' ? 'nx-clients-field-error' : 'nx-clients-hint'}
+                className={`nx-client-create__span ${createInvalidField === 'contact' ? 'nx-clients-field-error' : 'nx-clients-hint'}`}
                 role={createInvalidField === 'contact' ? 'alert' : undefined}
               >
                 {t('clients.contact.requiredHint')}
               </p>
-              <label>
-                {t('clients.contact.website')}
-                <input type="url" value={createWebsite} onChange={(e) => setCreateWebsite(e.target.value)} placeholder="https://" className="nx-glass-input" />
-              </label>
-              <h4>{t('clients.address.section')}</h4>
+              <h4 className="nx-client-create__span">{t('clients.address.section')}</h4>
               <label>
                 {t('clients.address.country')}
                 <input type="text" value={createCountry} onChange={(e) => setCreateCountry(e.target.value)} placeholder="IL" maxLength={2} className="nx-glass-input" />

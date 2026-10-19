@@ -205,6 +205,11 @@
   box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.22);
 }
 
+/* Wrappers are transparent in the production Create Client layout. */
+.nx-client-create__span {
+  display: contents;
+}
+
 @media (max-width: 640px) {
   .nx-clients-overlay {
     padding: 12px;
