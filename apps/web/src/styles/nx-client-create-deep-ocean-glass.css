@@ -1,0 +1,204 @@
+/**
+ * Create Client modal — deep ocean glass visual experiment (V3).
+ *
+ * Scope: `.nx-client-create--deep-ocean-glass` only.
+ * Does not restyle import overlay, client card, dashboard, or shared `.nx-glass-*`.
+ *
+ * Variants (CREATE_CLIENT_MODAL_APPEARANCE in Clients.tsx):
+ * - current            → production CSS in nx-clients.css
+ * - royal-glass        → nx-client-create-royal-glass.css (unchanged)
+ * - navy-royal-glass   → nx-client-create-navy-royal-glass.css (unchanged)
+ * - deep-ocean-glass   → this file
+ *
+ * Palette (translucent glass, not opaque fills):
+ * #102D49 base, #17547A ocean, #337493 highlight, #36A9C6 border, #13BFD0 accent, #FFFFFF text.
+ */
+
+.nx-client-create--deep-ocean-glass.nx-clients-overlay {
+  background: rgba(16, 45, 73, 0.28);
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-modal.nx-glass-card {
+  width: min(760px, 100%);
+  max-height: min(88vh, 640px);
+  padding: 16px 18px 14px;
+  color: #ffffff;
+  border-radius: 14px;
+  border: 1px solid rgba(54, 169, 198, 0.62);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%);
+  box-shadow:
+    0 0 0 1px rgba(54, 169, 198, 0.28),
+    0 0 28px rgba(19, 191, 208, 0.18),
+    0 16px 36px rgba(16, 45, 73, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(19, 191, 208, 0.12);
+  backdrop-filter: blur(22px) saturate(1.25);
+  -webkit-backdrop-filter: blur(22px) saturate(1.25);
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-modal__head {
+  margin-bottom: 8px;
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-modal__head h3,
+.nx-client-create--deep-ocean-glass .nx-clients-form h4,
+.nx-client-create--deep-ocean-glass .nx-clients-form label,
+.nx-client-create--deep-ocean-glass .nx-clients-modal__close {
+  color: #ffffff;
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-form h4 {
+  margin: 2px 0 0;
+  font-size: 13px;
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-required-caption,
+.nx-client-create--deep-ocean-glass .nx-clients-hint {
+  color: #ffffff;
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-field-error {
+  color: #ff8aa5;
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-form__body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+  align-items: start;
+}
+
+.nx-client-create--deep-ocean-glass .nx-client-create__span {
+  display: block;
+  grid-column: 1 / -1;
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 0;
+}
+
+.nx-client-create--deep-ocean-glass .nx-glass-input {
+  height: 34px;
+  color: #ffffff;
+  color-scheme: dark;
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 0 1px rgba(19, 191, 208, 0.04);
+}
+
+.nx-client-create--deep-ocean-glass .nx-glass-input::placeholder {
+  color: rgba(255, 255, 255, 0.86);
+  opacity: 1;
+}
+
+.nx-client-create--deep-ocean-glass .nx-glass-input:focus-visible {
+  outline: none;
+  border-color: rgba(19, 191, 208, 0.92);
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.3),
+    0 0 12px rgba(54, 169, 198, 0.28);
+}
+
+.nx-client-create--deep-ocean-glass .nx-glass-input option {
+  background: #102d49;
+  color: #ffffff;
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-form .nx-glass-input.is-invalid {
+  border-color: rgba(255, 138, 165, 0.9);
+  box-shadow: 0 0 0 2px rgba(255, 110, 150, 0.24);
+}
+
+.nx-client-create--deep-ocean-glass .nx-glass-alert {
+  color: #ffffff;
+}
+
+.nx-client-create--deep-ocean-glass .nx-glass-alert--error {
+  color: #ffd6de;
+  border-color: rgba(255, 138, 165, 0.5);
+  background: rgba(96, 24, 48, 0.28);
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-form__footer {
+  padding-top: 12px;
+  justify-content: flex-end;
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-form__footer .nx-glass-btn {
+  min-width: 96px;
+  border-radius: 8px;
+  color: #ffffff;
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-form__footer .nx-glass-btn--purple {
+  border: 1px solid rgba(19, 191, 208, 0.78);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.34), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.62) 0%, rgba(19, 191, 208, 0.48) 100%);
+  box-shadow:
+    0 0 16px rgba(19, 191, 208, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-form__footer .nx-glass-btn--purple:hover:not(:disabled) {
+  border-color: rgba(120, 232, 240, 0.92);
+  background: linear-gradient(180deg, rgba(54, 169, 198, 0.74) 0%, rgba(19, 191, 208, 0.58) 100%);
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-form__footer .nx-glass-btn--purple:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.42),
+    0 0 14px rgba(19, 191, 208, 0.32);
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-form__footer .nx-glass-btn--secondary {
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-form__footer .nx-glass-btn--secondary:hover:not(:disabled) {
+  border-color: rgba(19, 191, 208, 0.7);
+  background: rgba(23, 84, 122, 0.38);
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-form__footer .nx-glass-btn--secondary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(19, 191, 208, 0.36);
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-modal__close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(19, 191, 208, 0.4);
+  border-radius: 6px;
+}
+
+@media (max-width: 640px) {
+  .nx-client-create--deep-ocean-glass .nx-clients-modal.nx-glass-card {
+    width: 100%;
+    max-height: 92vh;
+  }
+
+  .nx-client-create--deep-ocean-glass .nx-clients-form__body {
+    grid-template-columns: 1fr;
+  }
+
+  .nx-client-create--deep-ocean-glass .nx-clients-form__footer {
+    flex-wrap: wrap;
+  }
+}

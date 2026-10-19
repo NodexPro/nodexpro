@@ -28,17 +28,23 @@ import '../styles/nx-glass-surface.css';
 import '../styles/nx-clients.css';
 import '../styles/nx-client-create-royal-glass.css';
 import '../styles/nx-client-create-navy-royal-glass.css';
+import '../styles/nx-client-create-deep-ocean-glass.css';
 
-type CreateClientModalAppearance = 'current' | 'royal-glass' | 'navy-royal-glass';
+type CreateClientModalAppearance =
+  | 'current'
+  | 'royal-glass'
+  | 'navy-royal-glass'
+  | 'deep-ocean-glass';
 
 /**
  * Create Client modal visual experiment switch (local, not a user setting).
- * current           — original production appearance in nx-clients.css
- * royal-glass       — bright royal-blue glass (nx-client-create--royal-glass)
- * navy-royal-glass  — restrained navy glass (nx-client-create--navy-royal-glass)
+ * current            — original production appearance in nx-clients.css
+ * royal-glass        — bright royal-blue glass (nx-client-create--royal-glass)
+ * navy-royal-glass   — restrained navy glass (nx-client-create--navy-royal-glass)
+ * deep-ocean-glass   — brighter translucent ocean glass (nx-client-create--deep-ocean-glass)
  * Rollback: change this assignment. Do not delete prior modal CSS.
  */
-const CREATE_CLIENT_MODAL_APPEARANCE: CreateClientModalAppearance = 'navy-royal-glass';
+const CREATE_CLIENT_MODAL_APPEARANCE: CreateClientModalAppearance = 'deep-ocean-glass';
 
 function createClientOverlayClass(appearance: CreateClientModalAppearance): string {
   if (appearance === 'royal-glass') {
@@ -46,6 +52,9 @@ function createClientOverlayClass(appearance: CreateClientModalAppearance): stri
   }
   if (appearance === 'navy-royal-glass') {
     return 'nx-clients-overlay nx-client-create nx-client-create--navy-royal-glass';
+  }
+  if (appearance === 'deep-ocean-glass') {
+    return 'nx-clients-overlay nx-client-create nx-client-create--deep-ocean-glass';
   }
   return 'nx-clients-overlay nx-client-create';
 }
