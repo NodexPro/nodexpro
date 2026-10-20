@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { signInWithIdentifier } from '../lib/sign-in-with-identifier';
 import { useAuth } from '../contexts/AuthContext';
 import {
   captureInviteReturnPath,
@@ -33,12 +34,7 @@ export function Login() {
     setLoading(true);
     try {
       const emailNorm = email.trim().toLowerCase();
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email: emailNorm,
-        password,
-      });
-      if (signInError) throw new Error(signInError.message);
-      if (!data.session) throw new Error('No session after sign in');
+      await signInWithIdentifier(supabase, emailNorm, password);
 
       const me = await refetchMe();
       if (!me) {

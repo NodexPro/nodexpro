@@ -1,4 +1,4 @@
-export type UiLanguageCode = 'en' | 'he';
+export type UiLanguageCode = string;
 
 export type ShellProfile = 'income_only' | 'full_platform' | 'worker' | 'closed';
 

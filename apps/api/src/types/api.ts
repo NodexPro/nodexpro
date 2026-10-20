@@ -1,6 +1,6 @@
 // DTOs and API types. Frontend consumes these; no business logic here.
 
-export type UiLanguageCode = 'en' | 'he';
+export type UiLanguageCode = string;
 
 export interface SidebarAccountBlockModel {
   organization_name: string | null;
@@ -42,13 +42,54 @@ export interface SessionNavItemDto {
   order: number;
 }
 
+export interface AccountSecurityAggregate {
+  primary_login_email: string;
+  primary_email_verified: boolean;
+  additional_login_email: string | null;
+  additional_status: string | null;
+  additional_pending_email: string | null;
+  allowed_actions: string[];
+  password_indicator: string;
+  password_reveal_forbidden: boolean;
+}
+
+export interface LocalizationAggregate {
+  country: {
+    code: string | null;
+    options: Array<{ code: string; label: string }>;
+    pack_status: string | null;
+    legal_jurisdiction_note: string;
+  };
+  language: {
+    current: string;
+    options: Array<{ locale: string; name: string; direction: 'ltr' | 'rtl' }>;
+  };
+  timezone: {
+    current: string;
+    options: Array<{ value: string; label: string }>;
+    historical_note: string;
+  };
+  date_format: {
+    current: string;
+    options: Array<{ value: string; label: string }>;
+  };
+  display_currency: {
+    current: string;
+    options: Array<{ code: string; label: string; symbol: string }>;
+    accounting_base_note: string;
+  };
+}
+
 export interface MeResponse {
   user: {
     id: string;
     email: string;
     fullName: string | null;
     status: string;
+    email_verified?: boolean;
   };
+  account_security?: AccountSecurityAggregate;
+  localization?: LocalizationAggregate;
   organizations: { id: string; name: string }[];
   activeOrganizationId: string | null;
   permissions: string[];

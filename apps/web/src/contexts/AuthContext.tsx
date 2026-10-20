@@ -6,7 +6,33 @@ import { setBackendActiveOrganizationId } from '../api/org-context';
 import type { SessionNavItemDto, ShellProfile, SidebarAccountBlockModel, UiLanguageCode } from '../types/session';
 
 export interface MeData {
-  user: { id: string; email: string; fullName: string | null; status: string };
+  user: { id: string; email: string; fullName: string | null; status: string; email_verified?: boolean };
+  account_security?: {
+    primary_login_email: string;
+    primary_email_verified: boolean;
+    additional_login_email: string | null;
+    additional_status: string | null;
+    additional_pending_email: string | null;
+    allowed_actions: string[];
+    password_indicator: string;
+    password_reveal_forbidden: boolean;
+  };
+  localization?: {
+    country: {
+      code: string | null;
+      options: Array<{ code: string; label: string }>;
+      pack_status: string | null;
+      legal_jurisdiction_note: string;
+    };
+    language: { current: string; options: Array<{ locale: string; name: string; direction?: 'ltr' | 'rtl' }> };
+    timezone: { current: string; options: Array<{ value: string; label: string }>; historical_note: string };
+    date_format: { current: string; options: Array<{ value: string; label: string }> };
+    display_currency: {
+      current: string;
+      options: Array<{ code: string; label: string; symbol: string }>;
+      accounting_base_note: string;
+    };
+  };
   organizations: { id: string; name: string }[];
   activeOrganizationId: string | null;
   permissions: string[];

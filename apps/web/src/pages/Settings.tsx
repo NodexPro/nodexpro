@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../api/client';
-import { orgCountrySettings, orgSettings } from '../api/endpoints';
+import { AUTH, orgCountrySettings, orgSettings } from '../api/endpoints';
+import { AccountRequiredMark } from '../components/glass/AccountRequiredMark';
 import { useI18n } from '../i18n/I18nProvider';
 import '../styles/nx-glass-surface.css';
+import '../styles/nx-settings-deep-ocean.css';
 
 interface SettingsData {
   capabilities: {
@@ -97,7 +100,7 @@ interface CountrySettingsData {
   note: string;
 }
 
-const COUNTRY_OPTIONS: Array<{ code: string; label: string }> = [
+const FALLBACK_COUNTRY_OPTIONS: Array<{ code: string; label: string }> = [
   { code: 'IL', label: 'Israel' },
   { code: 'US', label: 'United States' },
   { code: 'CA', label: 'Canada' },
@@ -105,7 +108,7 @@ const COUNTRY_OPTIONS: Array<{ code: string; label: string }> = [
 
 export function Settings() {
   const auth = useAuth();
-  const { t } = useI18n();
+  const { t, setLang } = useI18n();
   const [data, setData] = useState<SettingsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -113,6 +116,21 @@ export function Settings() {
   const [form, setForm] = useState<Record<string, unknown>>({});
   const [countryConfig, setCountryConfig] = useState<CountrySettingsData | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [additionalEmail, setAdditionalEmail] = useState('');
+  const [passwordForm, setPasswordForm] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_password: '',
+  });
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [securityBusy, setSecurityBusy] = useState(false);
+  const [localizationBusy, setLocalizationBusy] = useState(false);
+  const [locForm, setLocForm] = useState({
+    language_code: 'en',
+    timezone: 'Asia/Jerusalem',
+    date_format: 'DD/MM/YYYY',
+    display_currency_code: 'ILS',
+  });
 
   const orgId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
 
@@ -169,6 +187,16 @@ export function Settings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- t only used in error handler, no need to re-fetch when lang changes
   }, [orgId, reloadKey]);
 
+  useEffect(() => {
+    if (auth.status !== 'authenticated' || !auth.me.localization) return;
+    setLocForm({
+      language_code: auth.me.localization.language.current,
+      timezone: auth.me.localization.timezone.current,
+      date_format: auth.me.localization.date_format.current,
+      display_currency_code: auth.me.localization.display_currency.current,
+    });
+  }, [auth]);
+
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!orgId || !data?.capabilities.canEditSettings) return;
@@ -176,7 +204,11 @@ export function Settings() {
     setError('');
     try {
       const selectedCountryCode = String(form.country ?? '').trim().toUpperCase();
-      const isKnownCountry = COUNTRY_OPTIONS.some((opt) => opt.code === selectedCountryCode);
+      const countryOptions =
+        auth.status === 'authenticated' && Array.isArray(auth.me.localization?.country.options) && auth.me.localization.country.options.length
+          ? auth.me.localization.country.options
+          : FALLBACK_COUNTRY_OPTIONS;
+      const isKnownCountry = countryOptions.some((opt) => opt.code === selectedCountryCode);
       if (!isKnownCountry) {
         setError('Please select a valid country.');
         setSaving(false);
@@ -275,9 +307,47 @@ export function Settings() {
     : '';
 
   const isCountryConfigured = countryConfig?.settings_status === 'configured';
+  const security = auth.status === 'authenticated' ? auth.me.account_security : undefined;
+  const localization = auth.status === 'authenticated' ? auth.me.localization : undefined;
+  const countryOptions =
+    localization?.country.options?.length ? localization.country.options : FALLBACK_COUNTRY_OPTIONS;
+  const securityActions = new Set(security?.allowed_actions ?? []);
+
+  const runSecurityCommand = async (path: string, body: Record<string, unknown>) => {
+    setSecurityBusy(true);
+    setError('');
+    try {
+      const me = await apiJson(path, { method: 'POST', body: JSON.stringify(body) });
+      await auth.refetchMe();
+      return me;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('settings.errors.saveFailed'));
+    } finally {
+      setSecurityBusy(false);
+    }
+  };
+
+  const saveLocalization = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLocalizationBusy(true);
+    setError('');
+    try {
+      await apiJson(AUTH.setLocalizationPreferences, {
+        method: 'POST',
+        body: JSON.stringify(locForm),
+      });
+      const refreshed = await auth.refetchMe();
+      const nextLang = refreshed?.localization?.language.current;
+      if (nextLang === 'en' || nextLang === 'he') setLang(nextLang);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('settings.errors.saveFailed'));
+    } finally {
+      setLocalizationBusy(false);
+    }
+  };
 
   return (
-    <div className="nx-glass-page nx-glass-page--wide nx-settings" data-testid="nx-settings">
+    <div className="nx-glass-page nx-glass-page--wide nx-settings nx-settings-deep-ocean" data-testid="nx-settings">
       <h1 className="nx-glass-title">{t('settings.title')}</h1>
       <p className="nx-glass-subtitle">{t('settings.subtitle')}</p>
 
@@ -386,15 +456,279 @@ export function Settings() {
               </dd>
             </div>
           </dl>
-          <p style={{ marginTop: 16, marginBottom: 0, fontSize: 13, color: 'rgba(238, 246, 255, 0.72)' }}>{t('settings.ownerIdentity.identityNote')}</p>
+          <div className="nx-settings-grid" style={{ marginTop: 16 }}>
+            <div>
+              <dt>{t('settings.loginEmail')}</dt>
+              <dd className="nx-settings-readonly">{security?.primary_login_email ?? auth.me.user.email}</dd>
+              <small className="nx-settings-muted">
+                {security?.primary_email_verified || auth.me.user.email_verified
+                  ? t('settings.loginEmailVerified')
+                  : t('settings.loginEmailUnverified')}
+              </small>
+            </div>
+            <div>
+              <dt>{t('settings.passwordMasked')}</dt>
+              <dd className="nx-settings-readonly" aria-label={t('settings.passwordMasked')}>
+                {security?.password_indicator ?? '••••••••••••'}
+              </dd>
+              <a className="nx-glass-link" href="#nx-account-security">
+                {t('settings.changePasswordAction')}
+              </a>
+            </div>
+          </div>
+          <p style={{ marginTop: 16, marginBottom: 0, fontSize: 13 }} className="nx-settings-muted">{t('settings.ownerIdentity.identityNote')}</p>
         </section>
       )}
 
       {!capabilities.showOwnerIdentity && (
         <section className="nx-glass-card">
-          <p style={{ color: 'rgba(238, 246, 255, 0.72)', margin: 0 }}>{t('settings.noOwnerIdentity')}</p>
+          <h2>{t('settings.ownerIdentity.section')}</h2>
+          <div className="nx-settings-grid">
+            <div>
+              <dt>{t('settings.loginEmail')}</dt>
+              <dd className="nx-settings-readonly">{security?.primary_login_email ?? auth.me.user.email}</dd>
+              <small className="nx-settings-muted">
+                {security?.primary_email_verified || auth.me.user.email_verified
+                  ? t('settings.loginEmailVerified')
+                  : t('settings.loginEmailUnverified')}
+              </small>
+            </div>
+            <div>
+              <dt>{t('settings.passwordMasked')}</dt>
+              <dd className="nx-settings-readonly">{security?.password_indicator ?? '••••••••••••'}</dd>
+              <a className="nx-glass-link" href="#nx-account-security">
+                {t('settings.changePasswordAction')}
+              </a>
+            </div>
+          </div>
+          <p className="nx-settings-muted" style={{ marginTop: 16, marginBottom: 0 }}>{t('settings.noOwnerIdentity')}</p>
         </section>
       )}
+
+      <section className="nx-glass-card" id="nx-account-security">
+        <h2>{t('settings.accountSecurity.section')}</h2>
+        <p className="nx-settings-muted">{t('settings.accountSecurity.additionalEmailHint')}</p>
+        {security?.additional_login_email ? (
+          <p>
+            {t('settings.accountSecurity.additionalEmail')}: <strong>{security.additional_login_email}</strong>{' '}
+            ({t('settings.accountSecurity.verified')})
+          </p>
+        ) : null}
+        {security?.additional_pending_email ? (
+          <p>
+            {t('settings.accountSecurity.pending')}: <strong>{security.additional_pending_email}</strong>
+          </p>
+        ) : null}
+        {(securityActions.has('request_additional_login_email') ||
+          securityActions.has('replace_additional_login_email')) && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void runSecurityCommand(
+                securityActions.has('replace_additional_login_email')
+                  ? AUTH.replaceAdditionalLoginEmail
+                  : AUTH.requestAdditionalLoginEmail,
+                { email: additionalEmail },
+              );
+            }}
+            className="nx-settings-grid"
+          >
+            <label className="nx-glass-label">
+              {t('settings.accountSecurity.additionalEmail')}
+              <AccountRequiredMark />
+              <input
+                className="nx-glass-input"
+                type="email"
+                value={additionalEmail}
+                placeholder="name@example.com"
+                onChange={(e) => setAdditionalEmail(e.target.value)}
+                required
+              />
+            </label>
+            <div style={{ display: 'flex', alignItems: 'end', gap: 8 }}>
+              <button type="submit" className="nx-glass-btn nx-glass-btn--purple" disabled={securityBusy}>
+                {securityActions.has('replace_additional_login_email')
+                  ? t('settings.accountSecurity.replaceEmail')
+                  : t('settings.accountSecurity.addEmail')}
+              </button>
+            </div>
+          </form>
+        )}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+          {securityActions.has('resend_additional_login_email') ? (
+            <button
+              type="button"
+              className="nx-glass-btn nx-glass-btn--secondary"
+              disabled={securityBusy}
+              onClick={() => void runSecurityCommand(AUTH.resendAdditionalLoginEmail, {})}
+            >
+              {t('settings.accountSecurity.resend')}
+            </button>
+          ) : null}
+          {securityActions.has('remove_additional_login_email') ? (
+            <button
+              type="button"
+              className="nx-glass-btn nx-glass-btn--secondary"
+              disabled={securityBusy}
+              onClick={() => void runSecurityCommand(AUTH.removeAdditionalLoginEmail, {})}
+            >
+              {t('settings.accountSecurity.removeEmail')}
+            </button>
+          ) : null}
+        </div>
+        <form
+          style={{ marginTop: 24 }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            void runSecurityCommand(AUTH.changePassword, passwordForm).then((result) => {
+              if (result) setPasswordForm({ current_password: '', new_password: '', confirm_password: '' });
+            });
+          }}
+        >
+          <h3>{t('settings.changePasswordAction')}</h3>
+          <div className="nx-settings-grid">
+            <label className="nx-glass-label">
+              {t('settings.accountSecurity.currentPassword')}
+              <AccountRequiredMark />
+              <input
+                className="nx-glass-input"
+                type="password"
+                autoComplete="current-password"
+                value={passwordForm.current_password}
+                onChange={(e) => setPasswordForm((f) => ({ ...f, current_password: e.target.value }))}
+                required
+              />
+            </label>
+            <label className="nx-glass-label">
+              {t('settings.accountSecurity.newPassword')}
+              <AccountRequiredMark />
+              <input
+                className="nx-glass-input"
+                type={showNewPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={passwordForm.new_password}
+                onChange={(e) => setPasswordForm((f) => ({ ...f, new_password: e.target.value }))}
+                required
+              />
+            </label>
+            <label className="nx-glass-label">
+              {t('settings.accountSecurity.confirmPassword')}
+              <AccountRequiredMark />
+              <input
+                className="nx-glass-input"
+                type={showNewPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={passwordForm.confirm_password}
+                onChange={(e) => setPasswordForm((f) => ({ ...f, confirm_password: e.target.value }))}
+                required
+              />
+            </label>
+            <label className="nx-glass-label" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" checked={showNewPassword} onChange={(e) => setShowNewPassword(e.target.checked)} />
+              {t('settings.accountSecurity.showPassword')}
+            </label>
+          </div>
+          <p className="nx-settings-muted">
+            <Link className="nx-glass-link" to="/forgot-password">
+              {t('settings.accountSecurity.recovery')}
+            </Link>
+          </p>
+          <button type="submit" className="nx-glass-btn nx-glass-btn--purple" disabled={securityBusy}>
+            {t('settings.accountSecurity.savePassword')}
+          </button>
+        </form>
+      </section>
+
+      <section className="nx-glass-card">
+        <h2>{t('settings.localization.section')}</h2>
+        <form onSubmit={saveLocalization}>
+          <div className="nx-settings-grid">
+            <label className="nx-glass-label">
+              {t('settings.localization.country')}
+              <select className="nx-glass-input" value={(form.country as string) ?? ''} disabled>
+                {(countryOptions as Array<{ code: string; label: string }>).map((opt) => (
+                  <option key={opt.code} value={opt.code}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <small className="nx-settings-muted">{t('settings.localization.countryNote')}</small>
+            </label>
+            <label className="nx-glass-label">
+              {t('settings.localization.language')}
+              <select
+                className="nx-glass-input"
+                value={locForm.language_code}
+                onChange={(e) => setLocForm((f) => ({ ...f, language_code: e.target.value }))}
+              >
+                {(localization?.language.options ?? [{ locale: 'en', name: 'English' }, { locale: 'he', name: 'עברית' }]).map(
+                  (opt) => (
+                    <option key={opt.locale} value={opt.locale}>
+                      {opt.name}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+            <label className="nx-glass-label">
+              {t('settings.localization.timezone')}
+              <select
+                className="nx-glass-input"
+                value={locForm.timezone}
+                onChange={(e) => setLocForm((f) => ({ ...f, timezone: e.target.value }))}
+              >
+                {(localization?.timezone.options ?? [{ value: 'Asia/Jerusalem', label: 'Asia/Jerusalem' }]).map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <small className="nx-settings-muted">{t('settings.localization.timezoneNote')}</small>
+            </label>
+            <label className="nx-glass-label">
+              {t('settings.localization.dateFormat')}
+              <select
+                className="nx-glass-input"
+                value={locForm.date_format}
+                onChange={(e) => setLocForm((f) => ({ ...f, date_format: e.target.value }))}
+              >
+                {(localization?.date_format.options ?? [
+                  { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY' },
+                  { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY' },
+                  { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD' },
+                ]).map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <small className="nx-settings-muted">{t('settings.localization.dateFormatNote')}</small>
+            </label>
+            <label className="nx-glass-label">
+              {t('settings.localization.currency')}
+              <select
+                className="nx-glass-input"
+                value={locForm.display_currency_code}
+                onChange={(e) => setLocForm((f) => ({ ...f, display_currency_code: e.target.value }))}
+              >
+                {(localization?.display_currency.options ?? [
+                  { code: 'ILS', label: 'ILS — ₪', symbol: '₪' },
+                  { code: 'USD', label: 'USD — $', symbol: '$' },
+                  { code: 'EUR', label: 'EUR — €', symbol: '€' },
+                ]).map((opt) => (
+                  <option key={opt.code} value={opt.code}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <small className="nx-settings-muted">{t('settings.localization.currencyNote')}</small>
+            </label>
+          </div>
+          <button type="submit" className="nx-glass-btn nx-glass-btn--purple" disabled={localizationBusy} style={{ marginTop: 16 }}>
+            {t('settings.save')}
+          </button>
+        </form>
+      </section>
 
       {capabilities.canEditSettings && (
         <form onSubmit={save}>
@@ -486,7 +820,7 @@ export function Settings() {
                   disabled={!capabilities.canEditSettings}
                 >
                   <option value="">Select country</option>
-                  {COUNTRY_OPTIONS.map((opt) => (
+                  {countryOptions.map((opt) => (
                     <option key={opt.code} value={opt.code}>
                       {opt.label}
                     </option>

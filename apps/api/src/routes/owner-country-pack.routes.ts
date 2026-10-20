@@ -30,6 +30,12 @@ import {
   executeOwnerInvoiceLayoutCommand,
   isOwnerInvoiceLayoutCommand,
 } from '../domains/owner-invoice-document-layout/owner-invoice-document-layout.service.js';
+import {
+  buildOwnerCurrenciesAggregate,
+  buildOwnerLanguagesAggregate,
+  executePlatformLocalizationCommand,
+  isPlatformLocalizationCommand,
+} from '../domains/platform-localization/platform-localization.service.js';
 
 const router = Router();
 
@@ -264,6 +270,27 @@ router.get('/active-ruleset-context/:organizationId', async (req: Request, res: 
   }
 });
 
+router.get('/currencies', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    await assertOwnerOrAuditFailure(ctx, req);
+    return res.json(await buildOwnerCurrenciesAggregate(ctx));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/languages', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    await assertOwnerOrAuditFailure(ctx, req);
+    const locale = typeof req.query.locale === 'string' ? req.query.locale : undefined;
+    return res.json(await buildOwnerLanguagesAggregate(ctx, locale));
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get('/invoice-document-builder', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctx = req.context as RequestContext;
@@ -302,6 +329,11 @@ router.post('/command', async (req: Request, res: Response, next: NextFunction) 
         commandName,
         payload as Record<string, unknown>,
       );
+      return res.json(out);
+    }
+
+    if (isPlatformLocalizationCommand(commandName)) {
+      const out = await executePlatformLocalizationCommand(ctx, commandName, payload as Record<string, unknown>);
       return res.json(out);
     }
 

@@ -138,20 +138,20 @@
       "notFound": "Client not found.",
       "loadFailed": "Failed to load",
       "createFailed": "Failed to create client",
-      "updateFailed": "Failed to update",
-      "archiveFailed": "Failed to archive",
-      "addContactFailed": "Failed to add contact",
-      "addNoteFailed": "Failed to add note",
-      "addTagFailed": "Failed to add tag",
-      "createTagFailed": "Failed to create tag",
-      "attachFileFailed": "Failed to attach file",
       "taxIdRequired": "Tax ID (HP) is required.",
       "displayNameRequired": "Display name is required.",
       "invalidType": "Client type is not valid.",
       "duplicateTaxId": "A client with this tax ID already exists in this organization.",
       "unauthorized": "You are not allowed to create a client. Sign in again if your session expired.",
       "validation": "The client could not be created. Check the highlighted fields.",
-      "retryable": "The client could not be created. Check your connection and try again."
+      "retryable": "The client could not be created. Check your connection and try again.",
+      "updateFailed": "Failed to update",
+      "archiveFailed": "Failed to archive",
+      "addContactFailed": "Failed to add contact",
+      "addNoteFailed": "Failed to add note",
+      "addTagFailed": "Failed to add tag",
+      "createTagFailed": "Failed to create tag",
+      "attachFileFailed": "Failed to attach file"
     }
   },
   "common": {
@@ -236,6 +236,41 @@
       "iban": "IBAN (optional)",
       "swift": "SWIFT (optional)",
       "displayBankDetailsOnDocuments": "Show bank details on documents"
+    },
+    "loginEmail": "Primary login email",
+    "loginEmailVerified": "Verified",
+    "loginEmailUnverified": "Not verified",
+    "passwordMasked": "Password",
+    "changePasswordAction": "Change password",
+    "save": "Save",
+    "accountSecurity": {
+      "section": "Account & Security",
+      "additionalEmail": "Additional login email",
+      "additionalEmailHint": "Maximum one additional address. It signs into this same account after you verify it.",
+      "addEmail": "Add additional email",
+      "replaceEmail": "Replace additional email",
+      "removeEmail": "Remove additional email",
+      "resend": "Resend verification",
+      "pending": "Pending verification",
+      "verified": "Verified",
+      "currentPassword": "Current password",
+      "newPassword": "New password",
+      "confirmPassword": "Confirm new password",
+      "showPassword": "Show new password",
+      "savePassword": "Update password",
+      "recovery": "Forgot current password? Use password recovery."
+    },
+    "localization": {
+      "section": "Country & Localization",
+      "country": "Country",
+      "countryNote": "Country follows Country Pack authorization. This is not a display-only preference and does not silently change tax jurisdiction.",
+      "language": "Interface language",
+      "timezone": "Time zone",
+      "timezoneNote": "Display time zone only. Stored timestamps are not rewritten.",
+      "dateFormat": "Date format",
+      "dateFormatNote": "Display format only. Legal and accounting source dates are unchanged.",
+      "currency": "Display currency",
+      "currencyNote": "Display default only. This does not change Accounting Base currency, invoices, tax, or historical entries."
     },
     "errors": {
       "loadFailed": "Failed to load settings",
@@ -441,5 +476,21 @@
       "removeLinkFailed": "Failed to remove link",
       "uploadVersionFailed": "Failed to upload version"
     }
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "createAccount": "Create account",
+    "email": "Email",
+    "password": "Password",
+    "fullName": "Full name",
+    "forgotPassword": "Forgot password?",
+    "signingIn": "Signing in…",
+    "creatingAccount": "Creating account…",
+    "passwordResetOk": "Password updated. Sign in with your new password.",
+    "noSession": "No session after sign in",
+    "loadAccountFailed": "Could not load your account. Please try again.",
+    "loginFailed": "Login failed",
+    "registerFailed": "Registration failed"
   }
 }
+

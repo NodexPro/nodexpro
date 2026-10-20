@@ -11,11 +11,19 @@ const NAV = [
     label: 'Invoice Document Builder',
     end: true,
   },
+  { to: '/platform-owner/currencies', label: 'Currencies', end: false },
+  { to: '/platform-owner/languages', label: 'Languages & Translations', end: false },
 ] as const;
 
 function navActive(pathname: string, search: string, item: (typeof NAV)[number]): boolean {
   if (item.to.startsWith('/platform-owner/modules')) {
     return pathname.startsWith('/platform-owner/modules');
+  }
+  if (item.to.startsWith('/platform-owner/currencies')) {
+    return pathname.startsWith('/platform-owner/currencies');
+  }
+  if (item.to.startsWith('/platform-owner/languages')) {
+    return pathname.startsWith('/platform-owner/languages');
   }
   if (!pathname.startsWith('/platform-owner/legal-control')) return false;
   const section = new URLSearchParams(search).get('section');

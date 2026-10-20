@@ -22,6 +22,7 @@ import { config } from '../../config.js';
 import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import type { RequestContext } from '../../shared/context.js';
 import { resolveSessionShell } from './session-shell.service.js';
+import { loadSessionPreferenceSlices } from './session-preferences.service.js';
 import { filterSessionEnabledModuleCodes } from '../modules/entitlement.service.js';
 import { loadEnabledMemberModuleIdSet } from '../modules/member-module-access.service.js';
 import { roleHasOfficeClientAccess } from '../client-operations/organization-client-access.pure.js';
@@ -32,7 +33,7 @@ const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey);
 
 function resolveUiLanguage(ctx: RequestContext): UiLanguageCode {
   const stored = ctx.user.uiLanguage;
-  if (stored === 'he' || stored === 'en') return stored;
+  if (stored && /^[a-z]{2}(-[A-Z]{2})?$/.test(stored)) return stored;
   return 'en';
 }
 
@@ -149,8 +150,17 @@ async function buildMeResponse(
     moduleAppNavItems,
   });
   const exposedCoreNav = shell.available_navigation.filter((item) => !item.path.startsWith('/m/'));
+  const preferenceSlices = await loadSessionPreferenceSlices(ctx);
   const meCore: MeCoreForSidebar = {
-    user: { id: ctx.user.id, email: ctx.user.email, fullName: ctx.user.fullName, status: ctx.user.status },
+    user: {
+      id: ctx.user.id,
+      email: ctx.user.email,
+      fullName: ctx.user.fullName,
+      status: ctx.user.status,
+      email_verified: Boolean(ctx.user.emailVerified),
+    },
+    account_security: preferenceSlices.account_security,
+    localization: preferenceSlices.localization,
     organizations: orgList,
     activeOrganizationId: activeOrgId,
     permissions,
@@ -339,8 +349,17 @@ router.post('/commands/select_active_organization', authMiddleware, async (req, 
 router.post('/commands/set_ui_language', authMiddleware, async (req, res, next) => {
   try {
     const languageCode = String(req.body?.language_code ?? '').trim();
-    if (languageCode !== 'en' && languageCode !== 'he') {
-      return res.status(400).json({ code: 'BAD_REQUEST', message: 'language_code must be en or he' });
+    const { buildPublishedLocalizationOptions } = await import('../platform-localization/platform-localization.service.js');
+    let allowedLocales = ['en', 'he'];
+    try {
+      const published = await buildPublishedLocalizationOptions();
+      const publishedLocales = published.languages.map((row) => row.locale);
+      if (publishedLocales.length) allowedLocales = publishedLocales;
+    } catch {
+      allowedLocales = ['en', 'he'];
+    }
+    if (!allowedLocales.includes(languageCode)) {
+      return res.status(400).json({ code: 'BAD_REQUEST', message: 'language_code must be a published language' });
     }
     const ctx = req.context!;
     const previous = ctx.user.uiLanguage;
@@ -363,6 +382,119 @@ router.post('/commands/set_ui_language', authMiddleware, async (req, res, next) 
       user: { ...ctx.user, uiLanguage: languageCode },
     };
     const me = await buildMeResponse(freshCtx);
+    return res.json(toAuthSessionAggregate(me));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/commands/set_localization_preferences', authMiddleware, async (req, res, next) => {
+  try {
+    const { setUserLocalizationPreferences } = await import('../platform-localization/platform-localization.service.js');
+    const ctx = req.context!;
+    const updated = await setUserLocalizationPreferences(ctx, {
+      language_code: req.body?.language_code,
+      timezone: req.body?.timezone,
+      date_format: req.body?.date_format,
+      display_currency_code: req.body?.display_currency_code,
+    });
+    const freshCtx: RequestContext = {
+      ...ctx,
+      user: { ...ctx.user, uiLanguage: updated.languageCode },
+    };
+    const me = await buildMeResponse(freshCtx);
+    return res.json(toAuthSessionAggregate(me));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post(
+  '/commands/request_additional_login_email',
+  authMiddleware,
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyGenerator: (req) => req.context?.user.id ?? req.ip ?? 'unknown' }),
+  async (req, res, next) => {
+    try {
+      const { requestAdditionalLoginEmail } = await import('../account-security/account-security.service.js');
+      await requestAdditionalLoginEmail(req.context!, String(req.body?.email ?? ''), req);
+      const me = await buildMeResponse(req.context!);
+      return res.json(toAuthSessionAggregate(me));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/commands/replace_additional_login_email',
+  authMiddleware,
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyGenerator: (req) => req.context?.user.id ?? req.ip ?? 'unknown' }),
+  async (req, res, next) => {
+    try {
+      const { replaceAdditionalLoginEmail } = await import('../account-security/account-security.service.js');
+      await replaceAdditionalLoginEmail(req.context!, String(req.body?.email ?? ''), req);
+      const me = await buildMeResponse(req.context!);
+      return res.json(toAuthSessionAggregate(me));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/commands/resend_additional_login_email',
+  authMiddleware,
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyGenerator: (req) => req.context?.user.id ?? req.ip ?? 'unknown' }),
+  async (req, res, next) => {
+    try {
+      const { resendAdditionalLoginEmail } = await import('../account-security/account-security.service.js');
+      await resendAdditionalLoginEmail(req.context!, req);
+      const me = await buildMeResponse(req.context!);
+      return res.json(toAuthSessionAggregate(me));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post('/commands/remove_additional_login_email', authMiddleware, async (req, res, next) => {
+  try {
+    const { removeAdditionalLoginEmail } = await import('../account-security/account-security.service.js');
+    await removeAdditionalLoginEmail(req.context!, req);
+    const me = await buildMeResponse(req.context!);
+    return res.json(toAuthSessionAggregate(me));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post(
+  '/commands/verify_additional_login_email',
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 20, keyGenerator: (req) => req.ip ?? 'unknown' }),
+  async (req, res, next) => {
+    try {
+      const { verifyAdditionalLoginEmail } = await import('../account-security/account-security.service.js');
+      const result = await verifyAdditionalLoginEmail(String(req.body?.token ?? ''), req);
+      return res.json({ ok: true, verified: true, user_id: result.user_id });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post('/commands/change_password', authMiddleware, async (req, res, next) => {
+  try {
+    const { changePasswordThroughSupabase } = await import('../account-security/account-security.service.js');
+    await changePasswordThroughSupabase(
+      req.context!,
+      {
+        currentPassword: String(req.body?.current_password ?? ''),
+        newPassword: String(req.body?.new_password ?? ''),
+        confirmPassword: String(req.body?.confirm_password ?? ''),
+      },
+      req,
+    );
+    const me = await buildMeResponse(req.context!);
     return res.json(toAuthSessionAggregate(me));
   } catch (e) {
     next(e);

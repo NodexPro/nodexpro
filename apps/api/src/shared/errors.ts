@@ -30,3 +30,7 @@ export function notFound(message = 'Not found', code = 'NOT_FOUND') {
 export function conflict(message: string, code = 'CONFLICT', details?: Record<string, unknown>) {
   return new AppError(409, message, code, details);
 }
+
+export function tooManyRequests(message = 'Too many requests. Please try again later.', code = 'TOO_MANY_REQUESTS') {
+  return new AppError(429, message, code);
+}

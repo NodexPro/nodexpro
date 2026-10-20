@@ -26,12 +26,23 @@ export async function register(params: { email: string; password: string; fullNa
 }
 
 export async function login(params: { email: string; password: string }) {
-  const { data, error } = await supabaseAuth.auth.signInWithPassword({ email: params.email, password: params.password });
+  const { resolveLoginIdentifier } = await import('../account-security/account-security.service.js');
+  const canonicalEmail = await resolveLoginIdentifier(params.email);
+  const { data, error } = await supabaseAuth.auth.signInWithPassword({
+    email: canonicalEmail,
+    password: params.password,
+  });
   if (error) throw badRequest('Invalid email or password');
   const appUser = await supabaseAdmin.from('users').select('id').eq('auth_user_id', data.user.id).single();
   if (appUser.data) {
     await supabaseAdmin.from('users').update({ last_login_at: new Date().toISOString() }).eq('id', appUser.data.id);
-    await writeAudit({ organizationId: null, actorUserId: appUser.data.id, entityType: 'user', action: AUDIT_ACTIONS.USER_LOGGED_IN, payload: { email: params.email } });
+    await writeAudit({
+      organizationId: null,
+      actorUserId: appUser.data.id,
+      entityType: 'user',
+      action: AUDIT_ACTIONS.USER_LOGGED_IN,
+      payload: { identifier_kind: canonicalEmail === params.email.trim().toLowerCase() ? 'primary' : 'additional' },
+    });
   }
   return { session: data.session, user: data.user };
 }

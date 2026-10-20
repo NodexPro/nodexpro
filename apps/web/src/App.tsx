@@ -28,6 +28,9 @@ import { ClientPortalDocflow } from './pages/ClientPortalDocflow';
 import { PlatformOwnerLogin } from './pages/PlatformOwnerLogin';
 import { PlatformOwnerLegalControl } from './pages/PlatformOwnerLegalControl';
 import { PlatformOwnerShell } from './pages/PlatformOwnerShell';
+import { PlatformOwnerCurrenciesPage } from './pages/PlatformOwnerCurrenciesPage';
+import { PlatformOwnerLanguagesPage } from './pages/PlatformOwnerLanguagesPage';
+import { VerifyAdditionalEmail } from './pages/VerifyAdditionalEmail';
 import { PlatformOwnerModulesPage } from './pages/owner-modules/PlatformOwnerModulesPage';
 import { PlatformOwnerModuleDetailPage } from './pages/owner-modules/PlatformOwnerModuleDetailPage';
 import { DocflowCommunicationReviewPage } from './pages/DocflowCommunicationReviewPage';
@@ -122,6 +125,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/verify-additional-email" element={<VerifyAdditionalEmail />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/platform-owner/login" element={<PlatformOwnerLogin />} />
@@ -130,6 +134,8 @@ function AppRoutes() {
         <Route path="legal-control" element={<PlatformOwnerLegalControl />} />
         <Route path="modules" element={<PlatformOwnerModulesPage />} />
         <Route path="modules/:moduleCode" element={<PlatformOwnerModuleDetailPage />} />
+        <Route path="currencies" element={<PlatformOwnerCurrenciesPage />} />
+        <Route path="languages" element={<PlatformOwnerLanguagesPage />} />
       </Route>
       <Route path="/register" element={<Register />} />
       <Route path="/invite/accept" element={<InviteAccept />} />

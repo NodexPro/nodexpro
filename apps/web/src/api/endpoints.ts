@@ -21,6 +21,13 @@ export const AUTH = {
   setActiveOrg: '/auth/me/active-organization',
   selectActiveOrgCommand: '/auth/commands/select_active_organization',
   setUiLanguageCommand: '/auth/commands/set_ui_language',
+  setLocalizationPreferences: '/auth/commands/set_localization_preferences',
+  requestAdditionalLoginEmail: '/auth/commands/request_additional_login_email',
+  replaceAdditionalLoginEmail: '/auth/commands/replace_additional_login_email',
+  resendAdditionalLoginEmail: '/auth/commands/resend_additional_login_email',
+  removeAdditionalLoginEmail: '/auth/commands/remove_additional_login_email',
+  verifyAdditionalLoginEmail: '/auth/commands/verify_additional_login_email',
+  changePassword: '/auth/commands/change_password',
 } as const;
 
 /** Single aggregated payload for dashboard; requires X-Organization-Id. */
@@ -408,6 +415,8 @@ export const OWNER = {
   modules: '/owner/modules',
   moduleDetail: (moduleCode: string) => `/owner/modules/${encodeURIComponent(moduleCode)}`,
   emailProviderConfig: () => '/owner/email-provider-config',
+  currencies: '/owner/currencies',
+  languages: '/owner/languages',
   command: '/owner/command',
   countrySettings: (organizationId: string) => `/owner/country-settings/${organizationId}`,
   countryDiagnostics: (organizationId: string) => `/owner/country-diagnostics/${organizationId}`,

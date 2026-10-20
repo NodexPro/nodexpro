@@ -54,7 +54,7 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
   const dbEmail = typeof appUserRow.email === 'string' ? appUserRow.email.trim() : '';
   const jwtEmail = typeof authUser.email === 'string' ? authUser.email.trim() : '';
   const rawUiLang = typeof appUserRow.ui_language === 'string' ? appUserRow.ui_language.trim() : '';
-  const uiLanguage = rawUiLang === 'he' ? 'he' : rawUiLang === 'en' ? 'en' : null;
+  const uiLanguage = /^[a-z]{2}(-[A-Z]{2})?$/.test(rawUiLang) ? rawUiLang : null;
 
   const user: AppUser = {
     id: appUserRow.id,
@@ -64,6 +64,7 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
     fullName: appUserRow.full_name,
     status: appUserRow.status,
     uiLanguage,
+    emailVerified: Boolean(authUser.email_confirmed_at),
   };
 
   const rawOrgHeader = req.headers['x-organization-id'];

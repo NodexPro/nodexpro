@@ -138,20 +138,20 @@
       "notFound": "הלקוח לא נמצא.",
       "loadFailed": "טעינת הנתונים נכשלה",
       "createFailed": "יצירת הלקוח נכשלה",
-      "updateFailed": "עדכון הלקוח נכשל",
-      "archiveFailed": "העברת הלקוח לארכיון נכשלה",
-      "addContactFailed": "הוספת איש קשר נכשלה",
-      "addNoteFailed": "הוספת הערה נכשלה",
-      "addTagFailed": "הוספת תגית נכשלה",
-      "createTagFailed": "יצירת תגית נכשלה",
-      "attachFileFailed": "צירוף הקובץ נכשל",
       "taxIdRequired": "יש למלא ח.פ / מספר עוסק.",
       "displayNameRequired": "יש למלא שם תצוגה.",
       "invalidType": "סוג הלקוח אינו תקין.",
       "duplicateTaxId": "לקוח עם מספר עוסק זה כבר קיים בארגון.",
       "unauthorized": "אין הרשאה ליצור לקוח. אם פג תוקף ההתחברות, יש להיכנס מחדש.",
       "validation": "לא ניתן ליצור את הלקוח. בדקו את השדות המסומנים.",
-      "retryable": "לא ניתן ליצור את הלקוח כרגע. בדקו את החיבור ונסו שוב."
+      "retryable": "לא ניתן ליצור את הלקוח כרגע. בדקו את החיבור ונסו שוב.",
+      "updateFailed": "עדכון הלקוח נכשל",
+      "archiveFailed": "העברת הלקוח לארכיון נכשלה",
+      "addContactFailed": "הוספת איש קשר נכשלה",
+      "addNoteFailed": "הוספת הערה נכשלה",
+      "addTagFailed": "הוספת תגית נכשלה",
+      "createTagFailed": "יצירת תגית נכשלה",
+      "attachFileFailed": "צירוף הקובץ נכשל"
     }
   },
   "common": {
@@ -236,6 +236,41 @@
       "iban": "IBAN (אופציונלי)",
       "swift": "SWIFT (אופציונלי)",
       "displayBankDetailsOnDocuments": "הצג פרטי בנק במסמכים"
+    },
+    "loginEmail": "אימייל כניסה ראשי",
+    "loginEmailVerified": "מאומת",
+    "loginEmailUnverified": "לא מאומת",
+    "passwordMasked": "סיסמה",
+    "changePasswordAction": "שינוי סיסמה",
+    "save": "שמירה",
+    "accountSecurity": {
+      "section": "חשבון ואבטחה",
+      "additionalEmail": "אימייל כניסה נוסף",
+      "additionalEmailHint": "כתובת נוספת אחת לכל היותר. לאחר אימות היא נכנסת לאותו חשבון.",
+      "addEmail": "הוספת אימייל נוסף",
+      "replaceEmail": "החלפת אימייל נוסף",
+      "removeEmail": "הסרת אימייל נוסף",
+      "resend": "שליחת אימות מחדש",
+      "pending": "ממתין לאימות",
+      "verified": "מאומת",
+      "currentPassword": "סיסמה נוכחית",
+      "newPassword": "סיסמה חדשה",
+      "confirmPassword": "אימות סיסמה חדשה",
+      "showPassword": "הצג סיסמה חדשה",
+      "savePassword": "עדכון סיסמה",
+      "recovery": "שכחת את הסיסמה הנוכחית? השתמש בשחזור סיסמה."
+    },
+    "localization": {
+      "section": "מדינה ולוקליזציה",
+      "country": "מדינה",
+      "countryNote": "המדינה כפופה ל-Country Pack. זו אינה העדפת תצוגה בלבד ואינה משנה סמכות מס בשקט.",
+      "language": "שפת ממשק",
+      "timezone": "אזור זמן",
+      "timezoneNote": "אזור זמן לתצוגה בלבד. חותמות זמן שמורות אינן משתנות.",
+      "dateFormat": "פורמט תאריך",
+      "dateFormatNote": "פורמט תצוגה בלבד. תאריכי מקור משפטיים וחשבונאיים אינם משתנים.",
+      "currency": "מטבע תצוגה",
+      "currencyNote": "ברירת מחדל לתצוגה בלבד. אין שינוי במטבע Accounting Base, חשבוניות, מס או רשומות היסטוריות."
     },
     "errors": {
       "loadFailed": "טעינת ההגדרות נכשלה",
@@ -441,5 +476,21 @@
       "removeLinkFailed": "הסרת הקישור נכשלה",
       "uploadVersionFailed": "העלאת הגרסה נכשלה"
     }
+  },
+  "auth": {
+    "signIn": "התחברות",
+    "createAccount": "יצירת חשבון",
+    "email": "אימייל",
+    "password": "סיסמה",
+    "fullName": "שם מלא",
+    "forgotPassword": "שכחתם סיסמה?",
+    "signingIn": "מתחברים…",
+    "creatingAccount": "יוצרים חשבון…",
+    "passwordResetOk": "הסיסמה עודכנה. התחברו עם הסיסמה החדשה.",
+    "noSession": "אין סשן לאחר ההתחברות",
+    "loadAccountFailed": "לא ניתן לטעון את החשבון. נסו שוב.",
+    "loginFailed": "ההתחברות נכשלה",
+    "registerFailed": "ההרשמה נכשלה"
   }
 }
+
