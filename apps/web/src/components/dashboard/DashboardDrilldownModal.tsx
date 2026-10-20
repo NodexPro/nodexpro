@@ -138,7 +138,7 @@ export function DashboardDrilldownModal(props: {
           {loading ? <div className="nx-dashboard-empty__subtitle">{t('common.loading')}</div> : null}
           {error ? <div className="nx-dashboard__status--error" role="alert">{error}</div> : null}
           {!loading && data && data.rows.length === 0 ? (
-            <div className="nx-dashboard-empty__subtitle">{data.empty_he}</div>
+            <div className="nx-dashboard-breakdown__empty">{data.empty_he}</div>
           ) : null}
           {!loading && data && data.rows.length > 0 ? (
             <div className="nx-dashboard-breakdown__table-wrap">

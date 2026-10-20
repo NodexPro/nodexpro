@@ -60,11 +60,6 @@
   color: #ffffff;
 }
 
-.nx-client-create--deep-ocean-glass .nx-account-required-mark,
-.nx-client-create--deep-ocean-glass .nx-clients-required {
-  color: #00d9ff;
-}
-
 .nx-client-create--deep-ocean-glass .nx-clients-field-error {
   color: #ff8aa5;
 }
@@ -88,6 +83,17 @@
   font-size: 13px;
   font-weight: 600;
   min-width: 0;
+}
+
+.nx-client-create--deep-ocean-glass .nx-clients-form__label-line {
+  display: block;
+  color: #ffffff;
+}
+
+.nx-client-create--deep-ocean-glass .nx-account-required-mark,
+.nx-client-create--deep-ocean-glass .nx-clients-required {
+  display: inline;
+  color: #00d9ff;
 }
 
 .nx-client-create--deep-ocean-glass .nx-glass-input {

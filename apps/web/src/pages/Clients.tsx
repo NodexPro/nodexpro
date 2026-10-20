@@ -668,7 +668,9 @@ export function Clients() {
                 </div>
               )}
               <label>
-                {t('clients.create.taxId')} <AccountRequiredMark />
+                <span className="nx-clients-form__label-line">
+                  {t('clients.create.taxId')} <AccountRequiredMark />
+                </span>
                 <input
                   ref={createTaxIdRef}
                   type="text"
@@ -680,7 +682,9 @@ export function Clients() {
                 />
               </label>
               <label>
-                {t('clients.create.displayName')} <AccountRequiredMark />
+                <span className="nx-clients-form__label-line">
+                  {t('clients.create.displayName')} <AccountRequiredMark />
+                </span>
                 <input
                   ref={createNameRef}
                   type="text"

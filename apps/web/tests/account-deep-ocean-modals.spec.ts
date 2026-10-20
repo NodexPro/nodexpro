@@ -45,6 +45,7 @@ test('Create Client V3 selector, two-column layout, and validation stay unchange
 test('Create form required markers are semantic cyan asterisks, not gray label text', () => {
   assert.match(requiredMarkSrc, /nx-account-required-mark/);
   assert.match(requiredMarkSrc, /aria-hidden="true"/);
+  assert.match(oceanCss, /\.nx-account-required-mark\s*\{[^}]*display:\s*inline/);
   assert.match(oceanCss, /\.nx-account-required-mark\s*\{[^}]*color:\s*#00d9ff/i);
   assert.match(createOceanCss, /\.nx-account-required-mark/);
   assert.match(clientsSrc, /<AccountRequiredMark \/>/);
@@ -55,6 +56,67 @@ test('Create form required markers are semantic cyan asterisks, not gray label t
     clientsSrc.slice(clientsSrc.indexOf("t('clients.create.type')"), clientsSrc.indexOf("t('clients.contact.website')")),
     /AccountRequiredMark/,
   );
+});
+
+test('Create Client required asterisk stays inline with its label text', () => {
+  assert.match(clientsSrc, /nx-clients-form__label-line/);
+  assert.match(createOceanCss, /\.nx-clients-form__label-line\s*\{[^}]*display:\s*block/);
+  assert.match(createOceanCss, /\.nx-account-required-mark[\s\S]*display:\s*inline/);
+  const taxBlock = clientsSrc.slice(
+    clientsSrc.indexOf("t('clients.create.taxId')"),
+    clientsSrc.indexOf("t('clients.create.displayName')"),
+  );
+  assert.match(taxBlock, /nx-clients-form__label-line/);
+  assert.match(taxBlock, /AccountRequiredMark/);
+  assert.doesNotMatch(requiredMarkSrc, /display:\s*block/);
+});
+
+test('Dashboard modal search is a complete glass field on one desktop toolbar', () => {
+  assert.match(oceanCss, /\.nx-account-deep-ocean \.nx-dashboard-breakdown__toolbar\s*\{[^}]*flex-direction:\s*row/);
+  assert.match(oceanCss, /\.nx-account-deep-ocean \.nx-dashboard-breakdown__search\s*\{[^}]*height:\s*36px/);
+  assert.match(oceanCss, /\.nx-account-deep-ocean \.nx-dashboard-breakdown__search\s*\{[^}]*overflow:\s*visible/);
+  assert.match(oceanCss, /\.nx-account-deep-ocean \.nx-dashboard-breakdown__search\s*\{[^}]*flex:\s*1 1 12rem/);
+  assert.match(oceanCss, /@media \(max-width: 640px\)[\s\S]*flex-direction:\s*column/);
+  assert.match(drilldownSrc, /nx-dashboard-breakdown__search/);
+  assert.match(feeModalSrc, /nx-dashboard-breakdown__search/);
+  assert.match(feeModalSrc, /nx-dashboard-period__chip/);
+  assert.match(feeModalSrc, /setFilter\(f\.key\)/);
+  assert.match(drilldownSrc, /dir=\{dir\}/);
+  assert.match(feeModalSrc, /dir=\{dir\}/);
+});
+
+test('Dashboard fee filters use turquoise glass and selected state stays distinct', () => {
+  assert.match(feeModalSrc, /nx-dashboard-chip--purple/);
+  assert.match(oceanCss, /\.nx-account-deep-ocean \.nx-dashboard-chip--purple\s*\{[^}]*#ffffff/);
+  assert.match(oceanCss, /rgba\(19, 191, 208/);
+  assert.match(oceanCss, /\.nx-account-deep-ocean \.nx-dashboard-chip--purple\.is-selected/);
+  assert.doesNotMatch(oceanCss, /(?:^|\n)\.nx-dashboard-chip--purple\s*\{/);
+});
+
+test('Dashboard modal client names are white; action links keep the accent', () => {
+  assert.match(feeModalSrc, /nx-dashboard-breakdown__name/);
+  assert.match(oceanCss, /\.nx-account-deep-ocean \.nx-dashboard-breakdown__name\s*\{[^}]*color:\s*#ffffff/);
+  const clientCell = feeModalSrc.slice(
+    feeModalSrc.indexOf("columnKey === 'client'"),
+    feeModalSrc.indexOf("columnKey === 'frequency'"),
+  );
+  assert.match(clientCell, /nx-dashboard-breakdown__name/);
+  assert.doesNotMatch(clientCell, /nx-dashboard-breakdown__link/);
+  assert.match(drilldownSrc, /nx-dashboard-breakdown__link/);
+  assert.match(oceanCss, /\.nx-account-deep-ocean \.nx-dashboard-breakdown__link[\s\S]*#13bfd0/);
+});
+
+test('Dashboard empty states keep search, message, and pagination footer', () => {
+  assert.match(drilldownSrc, /nx-dashboard-breakdown__empty/);
+  assert.match(feeModalSrc, /nx-dashboard-breakdown__empty/);
+  assert.match(drilldownSrc, /data\.empty_he/);
+  assert.match(feeModalSrc, /data\.empty_he/);
+  assert.match(drilldownSrc, /nx-dashboard-breakdown__footer/);
+  assert.match(feeModalSrc, /nx-dashboard-breakdown__footer/);
+  assert.match(oceanCss, /\.nx-account-deep-ocean \.nx-dashboard-breakdown__empty/);
+  assert.doesNotMatch(drilldownSrc, /fabricat|dummyRows|placeholderRows/i);
+  assert.match(feeModalSrc, /dashboardOfficeFeeBreakdown\(\)/);
+  assert.match(feeModalSrc, /page_label_he/);
 });
 
 test('Modules select modal opts into account Deep Ocean and keeps checkout disabled', () => {

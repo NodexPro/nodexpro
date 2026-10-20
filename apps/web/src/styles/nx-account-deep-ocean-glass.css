@@ -13,8 +13,10 @@
  */
 
 .nx-account-required-mark {
+  display: inline;
   color: #00d9ff;
   font-weight: 700;
+  margin-inline-start: 0.2em;
 }
 
 .nx-account-deep-ocean.nx-glass-modal-overlay,
@@ -82,6 +84,29 @@
   color: #13bfd0;
 }
 
+.nx-account-deep-ocean .nx-dashboard-breakdown__name {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #ffffff;
+  font-family: Arial, sans-serif;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nx-account-deep-ocean .nx-dashboard-breakdown__name:hover,
+.nx-account-deep-ocean .nx-dashboard-breakdown__name:focus-visible {
+  color: #ffffff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.nx-account-deep-ocean .nx-dashboard-breakdown__name:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(19, 191, 208, 0.42);
+  border-radius: 4px;
+}
+
 .nx-account-deep-ocean .nx-account-required-mark {
   color: #00d9ff;
 }
@@ -113,8 +138,7 @@
 .nx-account-deep-ocean .nx-glass-input,
 .nx-account-deep-ocean .nx-ur-field input,
 .nx-account-deep-ocean .nx-ur-field select,
-.nx-account-deep-ocean .nx-ur-search,
-.nx-account-deep-ocean .nx-dashboard-breakdown__search {
+.nx-account-deep-ocean .nx-ur-search {
   color: #ffffff;
   color-scheme: dark;
   border: 1px solid rgba(54, 169, 198, 0.58);
@@ -125,8 +149,7 @@
 }
 
 .nx-account-deep-ocean .nx-glass-input::placeholder,
-.nx-account-deep-ocean .nx-ur-search::placeholder,
-.nx-account-deep-ocean .nx-dashboard-breakdown__search::placeholder {
+.nx-account-deep-ocean .nx-ur-search::placeholder {
   color: rgba(255, 255, 255, 0.86);
   opacity: 1;
 }
@@ -134,8 +157,7 @@
 .nx-account-deep-ocean .nx-glass-input:focus-visible,
 .nx-account-deep-ocean .nx-ur-field input:focus-visible,
 .nx-account-deep-ocean .nx-ur-field select:focus-visible,
-.nx-account-deep-ocean .nx-ur-search:focus-visible,
-.nx-account-deep-ocean .nx-dashboard-breakdown__search:focus-visible {
+.nx-account-deep-ocean .nx-ur-search:focus-visible {
   outline: none;
   border-color: rgba(19, 191, 208, 0.92);
   box-shadow:
@@ -224,4 +246,135 @@
   box-shadow:
     0 0 0 2px rgba(19, 191, 208, 0.42),
     0 0 14px rgba(19, 191, 208, 0.32);
+}
+
+.nx-account-deep-ocean .nx-dashboard-breakdown,
+.nx-account-deep-ocean .nx-dashboard-breakdown * {
+  box-sizing: border-box;
+}
+
+.nx-account-deep-ocean .nx-dashboard-breakdown__toolbar {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  overflow: visible;
+  padding: 2px;
+}
+
+.nx-account-deep-ocean .nx-dashboard-breakdown__search {
+  flex: 1 1 12rem;
+  width: auto;
+  min-width: 12rem;
+  max-width: 100%;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+  line-height: 1.2;
+  overflow: visible;
+  border-radius: 6px;
+  appearance: none;
+  -webkit-appearance: none;
+  color: #ffffff;
+  color-scheme: dark;
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+.nx-account-deep-ocean .nx-dashboard-breakdown__search::placeholder {
+  color: rgba(255, 255, 255, 0.86);
+  opacity: 1;
+}
+
+.nx-account-deep-ocean .nx-dashboard-breakdown__search:focus-visible {
+  outline: none;
+  border-color: rgba(19, 191, 208, 0.92);
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.3),
+    0 0 12px rgba(54, 169, 198, 0.28);
+}
+
+.nx-account-deep-ocean .nx-dashboard-period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 auto;
+}
+
+.nx-account-deep-ocean .nx-dashboard-period__chip,
+.nx-account-deep-ocean .nx-dashboard-chip--purple {
+  height: 36px;
+  min-height: 36px;
+  padding: 0 14px;
+  line-height: 1.2;
+  border-radius: 6px;
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  color: #ffffff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.nx-account-deep-ocean .nx-dashboard-period__chip:hover:not(:disabled),
+.nx-account-deep-ocean .nx-dashboard-chip--purple:hover:not(:disabled) {
+  border-color: rgba(19, 191, 208, 0.7);
+  background: rgba(23, 84, 122, 0.38);
+}
+
+.nx-account-deep-ocean .nx-dashboard-period__chip.is-selected,
+.nx-account-deep-ocean .nx-dashboard-chip--purple.is-selected {
+  border: 1px solid rgba(19, 191, 208, 0.78);
+  color: #ffffff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.34), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.62) 0%, rgba(19, 191, 208, 0.48) 100%);
+  box-shadow:
+    0 0 16px rgba(19, 191, 208, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+.nx-account-deep-ocean .nx-dashboard-period__chip:focus-visible,
+.nx-account-deep-ocean .nx-dashboard-chip--purple:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.42),
+    0 0 14px rgba(19, 191, 208, 0.32);
+}
+
+.nx-account-deep-ocean .nx-dashboard-period__chip:disabled,
+.nx-account-deep-ocean .nx-dashboard-chip--purple:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.nx-account-deep-ocean .nx-dashboard-breakdown__empty {
+  color: #ffffff;
+  padding: 20px 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.nx-account-deep-ocean .nx-dashboard-breakdown__footer {
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .nx-account-deep-ocean .nx-dashboard-breakdown__toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nx-account-deep-ocean .nx-dashboard-breakdown__search {
+    width: 100%;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
 }
