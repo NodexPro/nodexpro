@@ -163,9 +163,8 @@ test('8 filters + search remain combinable (search carries active filters; filte
   assert.match(pageSource, /\.\.\.query,\s*\.\.\.next,\s*operational_period_key: query\.operational_period_key,/);
 });
 
-test('9 unrelated routes retain account header chrome; language lives in the shared sidebar', () => {
-  // AppHeader kept org + user chrome. The independent header language select was a second
-  // localization source and is gone — office language is the sidebar UiLanguageSwitch.
+test('9 unrelated routes retain account header chrome; office language lives on Dashboard', () => {
+  // AppHeader kept org + user chrome. Language is the Dashboard UiLanguageSwitch only.
   assert.doesNotMatch(appHeaderSource, /t\('topBar\.language'\)/);
   assert.doesNotMatch(appHeaderSource, /<option value="en">EN<\/option>/);
   assert.match(appHeaderSource, /\{user\.fullName \|\| user\.email\}/);
@@ -175,7 +174,7 @@ test('9 unrelated routes retain account header chrome; language lives in the sha
   assert.match(layoutSource, /if \(!isWorkEngineQueuePage\) \{/);
   assert.match(layoutSource, /isClientOperationsModule \? coHeaderSearchSlot : null/);
   const sidebar = read('../src/templates/template-1/components/SidebarAccountBlock.tsx');
-  assert.match(sidebar, /<UiLanguageSwitch compact/);
+  assert.doesNotMatch(sidebar, /UiLanguageSwitch/);
 });
 
 test('10 header styles: dark blue glass search, approved palette — scoped to CO only', () => {

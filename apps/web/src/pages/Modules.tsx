@@ -13,7 +13,36 @@ import {
   type OfficeModulesState,
   type OfficeTrialState,
 } from '../modules/office-modules-state';
+import {
+  moduleShowcaseBenefitKeys,
+  moduleShowcaseClosingKey,
+  moduleShowcaseHeadlineKey,
+  moduleShowcaseLeadKey,
+} from '../modules/module-showcase-copy.pure';
 import '../styles/nx-glass-surface.css';
+import '../styles/nx-modules-showcase.css';
+
+function WarningGlyph() {
+  return (
+    <svg className="nx-modules-banner__icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M8 1.4 14.8 13.6H1.2L8 1.4Zm0 3.3-.2 5h.4l-.2-5Zm0 6.3c.4 0 .7.3.7.7s-.3.7-.7.7-.7-.3-.7-.7.3-.7.7-.7Z"
+      />
+    </svg>
+  );
+}
+
+function BenefitGlyph() {
+  return (
+    <svg className="nx-modules-benefits__icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        fill="currentColor"
+        d="M6.4 11.3 3.2 8.1l1.1-1.1 2.1 2.1 5.3-5.3 1.1 1.1-6.4 6.4Z"
+      />
+    </svg>
+  );
+}
 
 function formatLimit(
   limit: OfficeModulePlan['limits'][number],
@@ -45,7 +74,8 @@ function statusLabel(prefix: string, value: string, t: (key: string) => string):
 export function Modules() {
   const auth = useAuth();
   const navigate = useNavigate();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const dir = lang === 'he' ? 'rtl' : 'ltr';
   const [state, setState] = useState<OfficeModuleStateItem[]>([]);
   const [trialState, setTrialState] = useState<OfficeTrialState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -153,27 +183,33 @@ export function Modules() {
   const trialBlocked = trialState?.blocked === true;
 
   return (
-    <div className="nx-glass-page nx-glass-page--wide" data-testid="nx-modules">
+    <div className="nx-glass-page nx-glass-page--wide nx-modules nx-modules--deep-ocean" data-testid="nx-modules" dir={dir} lang={lang}>
       <h1 className="nx-glass-title">{t('modules.title')}</h1>
       {canAdministerModules && <p className="nx-glass-subtitle">{t('modules.subtitle')}</p>}
       {canAdministerModules && trialActive && (
-        <div className="nx-glass-alert nx-glass-alert--ok">
-          <strong>{t('modules.trialActive')}</strong>
-          {trialState.endsAt && (
-            <span>
-              {' '}
-              — {t('modules.trialEnds')} {new Date(trialState.endsAt).toLocaleDateString()}. {t('modules.trialAllModules')}
-            </span>
-          )}
+        <div className="nx-modules-banner nx-modules-banner--ok">
+          <WarningGlyph />
+          <div>
+            <strong>{t('modules.trialActive')}</strong>
+            {trialState.endsAt && (
+              <span>
+                {' '}
+                — {t('modules.trialEnds')} {new Date(trialState.endsAt).toLocaleDateString()}. {t('modules.trialAllModules')}
+              </span>
+            )}
+          </div>
         </div>
       )}
       {canAdministerModules && trialEnded && !trialActive && (
-        <div className="nx-glass-alert nx-glass-alert--warn">
-          <strong>{t('modules.trialEnded')}</strong> {t('modules.trialEndedHint')}
+        <div className="nx-modules-banner">
+          <WarningGlyph />
+          <div>
+            <strong>{t('modules.trialEnded')}</strong> {t('modules.trialEndedHint')}
+          </div>
         </div>
       )}
       {canAdministerModules && trialBlocked && (
-        <div className="nx-glass-alert nx-glass-alert--error">{t('modules.trialBlocked')}</div>
+        <div className="nx-modules-banner nx-modules-banner--critical">{t('modules.trialBlocked')}</div>
       )}
       {canAdministerModules && !trialState?.hasLegalIdentity && !trialBlocked && trialState !== null && (
         <form className="nx-glass-card" onSubmit={handleSetLegalIdentity}>
@@ -213,132 +249,143 @@ export function Modules() {
           </h2>
           <div className="nx-modules-stack">
             {catalog.map((m) => (
-              <div key={m.moduleId} className="nx-glass-card">
-                <div>
-                  <div className="nx-glass-title" style={{ fontSize: 18, marginBottom: 4 }}>
-                    {m.name}
-                  </div>
-                  <div className="nx-glass-code">{m.code}</div>
-                  <p className="nx-glass-muted">{t('modules.descriptionUnavailable')}</p>
-                  <div className="nx-glass-meta">
-                    {t('modules.version')} {m.version} · {t('modules.scope')}: {m.scopeType}
-                    {m.dependencies.length > 0 && ` · ${t('modules.dependencies')}: ${m.dependencies.join(', ')}`}
-                  </div>
-                </div>
+              <article
+                key={m.moduleId}
+                className="nx-glass-card nx-modules-card"
+                data-testid="nx-modules-card"
+                data-module-code={m.code}
+              >
+                <div className="nx-modules-card__commerce">
+                  <h3 className="nx-modules-card__name">{m.name}</h3>
+                  <p className="nx-modules-card__lead">{t(moduleShowcaseLeadKey(m.code))}</p>
 
-                <div className="nx-glass-status-row">
-                  <div className="nx-glass-status-item">
-                    <span>{t('modules.entitlement')}</span>
-                    <span
-                      className={
-                        m.entitlementStatus === 'entitled' || m.entitlementStatus === 'trial'
-                          ? 'nx-glass-status--active'
-                          : 'nx-glass-status--muted'
-                      }
-                    >
-                      {statusLabel('modules.entitlementStatus', m.entitlementStatus, t)}
-                    </span>
-                  </div>
-                  <div className="nx-glass-status-item">
-                    <span>{t('modules.activation')}</span>
-                    <span className={m.activationStatus === 'active' ? 'nx-glass-status--active' : 'nx-glass-status--muted'}>
-                      {statusLabel('modules.activationStatus', m.activationStatus, t)}
-                    </span>
-                  </div>
-                  {m.currentSubscription && (
+                  <div className="nx-glass-status-row">
                     <div className="nx-glass-status-item">
-                      <span>{t('modules.subscription')}</span>
-                      <span className="nx-glass-status--muted">
-                        {m.currentSubscription.planName} · {m.currentSubscription.status}
+                      <span>{t('modules.entitlement')}</span>
+                      <span
+                        className={
+                          m.entitlementStatus === 'entitled' || m.entitlementStatus === 'trial'
+                            ? 'nx-glass-status--active'
+                            : 'nx-glass-status--muted'
+                        }
+                      >
+                        {statusLabel('modules.entitlementStatus', m.entitlementStatus, t)}
                       </span>
                     </div>
-                  )}
-                </div>
-
-                {m.currentSubscription && (
-                  <div className="nx-modules-current">
-                    <div className="nx-glass-muted">{t('modules.currentPlan')}</div>
-                    <div className="nx-glass-plan__price">
-                      {m.currentSubscription.planName} — {m.currentSubscription.currency} {m.currentSubscription.priceAmount}
-                      {matchingPlan(m)?.billingPeriod
-                        ? ` ${formatBillingPeriod(matchingPlan(m)!.billingPeriod, t)}`
-                        : ''}
+                    <div className="nx-glass-status-item">
+                      <span>{t('modules.activation')}</span>
+                      <span className={m.activationStatus === 'active' ? 'nx-glass-status--active' : 'nx-glass-status--muted'}>
+                        {statusLabel('modules.activationStatus', m.activationStatus, t)}
+                      </span>
                     </div>
+                    {m.currentSubscription && (
+                      <div className="nx-glass-status-item">
+                        <span>{t('modules.subscription')}</span>
+                        <span className="nx-glass-status--muted">
+                          {m.currentSubscription.planName} · {m.currentSubscription.status}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                )}
 
-                {m.blockReason && <div className="nx-glass-alert nx-glass-alert--warn">{m.blockReason}</div>}
-
-                {m.availablePlans.length > 0 && (
-                  <>
-                    <div className="nx-glass-muted" style={{ marginBottom: 12, fontWeight: 600 }}>
-                      {t('modules.availablePlans')}
+                  {m.currentSubscription && (
+                    <div className="nx-modules-current">
+                      <div className="nx-glass-muted">{t('modules.currentPlan')}</div>
+                      <div className="nx-glass-plan__price">
+                        {m.currentSubscription.planName} — {m.currentSubscription.currency} {m.currentSubscription.priceAmount}
+                        {matchingPlan(m)?.billingPeriod
+                          ? ` ${formatBillingPeriod(matchingPlan(m)!.billingPeriod, t)}`
+                          : ''}
+                      </div>
                     </div>
-                    <div className="nx-glass-plans">
-                      {m.availablePlans.map((p) => (
-                        <div key={p.id} className="nx-glass-plan">
-                          <div className="nx-glass-plan__name">{p.name}</div>
-                          <div className="nx-glass-plan__price">
-                            {p.currency} {p.priceAmount}
-                          </div>
-                          <div className="nx-glass-muted">{formatBillingPeriod(p.billingPeriod, t)}</div>
-                          {p.limits.length > 0 && (
-                            <div className="nx-glass-meta">
-                              {p.limits.map((l, i) => (
-                                <div key={i}>{formatLimit(l, t)}</div>
-                              ))}
+                  )}
+
+                  {m.blockReason && <div className="nx-modules-banner">{m.blockReason}</div>}
+
+                  {m.availablePlans.length > 0 && (
+                    <>
+                      <div className="nx-glass-muted" style={{ marginBottom: 12, fontWeight: 600 }}>
+                        {t('modules.availablePlans')}
+                      </div>
+                      <div className="nx-glass-plans">
+                        {m.availablePlans.map((p) => (
+                          <div key={p.id} className="nx-glass-plan">
+                            <div className="nx-glass-plan__name">{p.name}</div>
+                            <div className="nx-glass-plan__price">
+                              {p.currency} {p.priceAmount}
                             </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
+                            <div className="nx-glass-muted">{formatBillingPeriod(p.billingPeriod, t)}</div>
+                            {p.limits.length > 0 && (
+                              <div className="nx-glass-meta">
+                                {p.limits.map((l, i) => (
+                                  <div key={i}>{formatLimit(l, t)}</div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
 
-                <div className="nx-glass-actions">
-                  <button
-                    type="button"
-                    className="nx-glass-btn nx-glass-btn--purple"
-                    onClick={() => setSelectedModuleId(m.moduleId)}
-                  >
-                    {t('modules.select')}
-                  </button>
-                  {m.canActivate && (
+                  <div className="nx-glass-actions">
                     <button
                       type="button"
                       className="nx-glass-btn nx-glass-btn--purple"
-                      disabled={!!actionLoading}
-                      onClick={() => handleActivate(m.moduleId)}
+                      onClick={() => setSelectedModuleId(m.moduleId)}
                     >
-                      {actionLoading === m.moduleId ? t('common.loading') : t('modules.activate')}
+                      {t('modules.select')}
                     </button>
-                  )}
-                  {m.canDeactivate && (
-                    <button
-                      type="button"
-                      className="nx-glass-btn nx-glass-btn--danger"
-                      disabled={!!actionLoading}
-                      onClick={() => handleDeactivate(m.moduleId)}
-                    >
-                      {actionLoading === m.moduleId ? t('common.loading') : t('modules.deactivate')}
-                    </button>
-                  )}
-                  {m.activationStatus === 'active' &&
-                    (m.navPath || m.code === 'client-operations' || m.code === 'docflow') && (
+                    {m.canActivate && (
                       <button
                         type="button"
-                        className="nx-glass-btn nx-glass-btn--secondary"
-                        onClick={() => {
-                          if (m.code === 'docflow') navigate('/m/docflow/invites');
-                          else if (m.navPath) navigate(m.navPath);
-                          else navigate('/m/client-operations');
-                        }}
+                        className="nx-glass-btn nx-glass-btn--purple"
+                        disabled={!!actionLoading}
+                        onClick={() => handleActivate(m.moduleId)}
                       >
-                        {t('modules.open')}
+                        {actionLoading === m.moduleId ? t('common.loading') : t('modules.activate')}
                       </button>
                     )}
+                    {m.canDeactivate && (
+                      <button
+                        type="button"
+                        className="nx-glass-btn nx-glass-btn--danger"
+                        disabled={!!actionLoading}
+                        onClick={() => handleDeactivate(m.moduleId)}
+                      >
+                        {actionLoading === m.moduleId ? t('common.loading') : t('modules.deactivate')}
+                      </button>
+                    )}
+                    {m.activationStatus === 'active' &&
+                      (m.navPath || m.code === 'client-operations' || m.code === 'docflow') && (
+                        <button
+                          type="button"
+                          className="nx-glass-btn nx-glass-btn--secondary"
+                          onClick={() => {
+                            if (m.code === 'docflow') navigate('/m/docflow/invites');
+                            else if (m.navPath) navigate(m.navPath);
+                            else navigate('/m/client-operations');
+                          }}
+                        >
+                          {t('modules.open')}
+                        </button>
+                      )}
+                  </div>
                 </div>
-              </div>
+
+                <div className="nx-modules-card__why">
+                  <h4 className="nx-modules-card__why-title">{t(moduleShowcaseHeadlineKey(m.code))}</h4>
+                  <ul className="nx-modules-benefits">
+                    {moduleShowcaseBenefitKeys(m.code).map((key) => (
+                      <li key={key}>
+                        <BenefitGlyph />
+                        <span>{t(key)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="nx-modules-card__closing">{t(moduleShowcaseClosingKey(m.code))}</p>
+                </div>
+              </article>
             ))}
           </div>
         </section>
@@ -385,7 +432,7 @@ export function Modules() {
       >
         {selected ? (
           <>
-            <p className="nx-glass-muted">{t('modules.descriptionUnavailable')}</p>
+            <p className="nx-glass-muted">{t(moduleShowcaseLeadKey(selected.code))}</p>
             <dl className="nx-glass-dl">
               <dt>{t('modules.price')}</dt>
               <dd>

@@ -411,7 +411,7 @@
     "trialEnds": "Ends",
     "trialAllModules": "All commercial modules available during trial.",
     "trialEnded": "Trial ended.",
-    "trialEndedHint": "Choose and pay for modules to continue using them.",
+    "trialEndedHint": "Paid checkout is not connected yet. Continue only with modules your office is already entitled to use.",
     "trialBlocked": "Trial is not available for this organization.",
     "startTrial": "Start free trial",
     "startTrialHint": "Set legal identity (Israel teudat zehut, 9 digits) to start a 2‑month free trial for all commercial modules.",
@@ -459,6 +459,53 @@
       "max_employees_per_company": "employees per company",
       "unlimitedPrefix": "Unlimited",
       "upToPrefix": "Up to"
+    },
+    "showcase": {
+      "clientOperations": {
+        "lead": "Your entire client workflow. One organized workspace.",
+        "headline": "Why choose Client Operations",
+        "closing": "Less administration. More control over your office.",
+        "benefits": {
+          "1": "Client information and important records in one place.",
+          "2": "Keep upcoming reporting obligations and office tasks visible.",
+          "3": "Spend less time switching between spreadsheets and systems.",
+          "4": "Identify clients and tasks that need attention.",
+          "5": "Organize client-related work across your team.",
+          "6": "Reduce repetitive administrative work."
+        }
+      },
+      "docflow": {
+        "lead": "Send office documents and keep delivery conversations in one place.",
+        "headline": "Why choose DocFlow",
+        "closing": "Clearer document delivery. Fewer lost conversations.",
+        "benefits": {
+          "1": "Invite clients to receive documents securely.",
+          "2": "Keep delivery attempts and message history together.",
+          "3": "Open the client conversation from the office workspace.",
+          "4": "Separate document delivery from accounting and workflow truth."
+        }
+      },
+      "invoice": {
+        "lead": "Prepare and issue income documents from an authorized office workspace.",
+        "headline": "Why choose Income documents",
+        "closing": "Issue documents in the office. Accounting remains the financial source of truth.",
+        "benefits": {
+          "1": "Create and review income documents for your clients.",
+          "2": "Keep client document work in one authorized workspace.",
+          "3": "Use the existing office document types your organization already has.",
+          "4": "Leave balances and tax totals to Accounting Base."
+        }
+      },
+      "fallback": {
+        "lead": "Use this authorized module in its own office workspace.",
+        "headline": "What this module offers",
+        "closing": "Open it when your office is entitled and the module is active.",
+        "benefits": {
+          "1": "Its name, plans, and status come from your office catalog.",
+          "2": "Available actions stay limited to what your entitlement allows.",
+          "3": "Paid checkout stays unavailable until a payment provider is connected."
+        }
+      }
     },
     "errors": {
       "activateFailed": "Activate failed",

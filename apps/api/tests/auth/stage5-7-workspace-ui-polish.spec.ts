@@ -95,7 +95,7 @@ test('8. sidebar: no internal scrollbar, language visibility follows the backend
   assert.match(css, /\.t1-sidebar__nav\s*\{[^}]*scrollbar-width: none;/);
   assert.match(css, /\.t1-sidebar__nav::-webkit-scrollbar\s*\{\s*display: none;/);
   const block = web('templates/template-1/components/SidebarAccountBlock.tsx');
-  assert.match(block, /block\.language_selector\?\.visible === true/);
+  assert.doesNotMatch(block, /UiLanguageSwitch/);
   assert.match(block, /block\.logout_action\?\.visible !== false/);
   assert.match(block, /block\.office_context\?\.visible/);
 });

@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import type { SidebarAccountBlockModel } from '../../../types/session';
-import { UiLanguageSwitch } from '../../../components/glass/UiLanguageSwitch';
 
 function initialsFromDisplayName(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -18,7 +17,6 @@ export function SidebarAccountBlock(props: {
   busy?: boolean;
 }) {
   const { block, expanded, onSelectOrganization, onLogout, busy = false } = props;
-  const showLanguage = block.language_selector?.visible === true;
   const showLogout = block.logout_action?.visible !== false;
   const showOfficeContext = Boolean(block.office_context?.visible && block.office_context.name);
   const initials = useMemo(() => initialsFromDisplayName(block.user_display_name), [block.user_display_name]);
@@ -76,15 +74,6 @@ export function SidebarAccountBlock(props: {
       <div className="t1-sidebar-account__user" title={block.user_email}>
         {block.user_display_name}
       </div>
-
-      {showLanguage ? (
-      <div className="t1-sidebar-account__field">
-        <span className="t1-sidebar-account__label" id="t1-sidebar-lang-label">
-          {block.language_selector.label}
-        </span>
-        <UiLanguageSwitch compact ariaLabel={block.language_selector.label} />
-      </div>
-      ) : null}
 
       {showLogout ? (
         <button

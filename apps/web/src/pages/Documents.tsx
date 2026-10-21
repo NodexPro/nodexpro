@@ -6,6 +6,7 @@ import { orgDocuments, orgDocumentsUpload } from '../api/endpoints';
 import { useI18n } from '../i18n/I18nProvider';
 import { GlassFilePicker } from '../components/glass/GlassFilePicker';
 import '../styles/nx-glass-surface.css';
+import '../styles/nx-documents.css';
 
 interface DocumentRow {
   id: string;
@@ -35,7 +36,8 @@ const DOC_TYPE_CODES = [
 export function Documents() {
   const auth = useAuth();
   const navigate = useNavigate();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const dir = lang === 'he' ? 'rtl' : 'ltr';
   const [list, setList] = useState<DocumentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -125,7 +127,7 @@ export function Documents() {
   if (!orgId) return <p className="nx-glass-page">{t('topBar.selectOrg')}</p>;
 
   return (
-    <div className="nx-glass-page nx-glass-page--wide" data-testid="nx-documents">
+    <div className="nx-glass-page nx-glass-page--wide nx-documents nx-documents--deep-ocean" data-testid="nx-documents" dir={dir} lang={lang}>
       <h1 className="nx-glass-title">{t('documents.title')}</h1>
       <p className="nx-glass-subtitle">{t('documents.subtitle')}</p>
 

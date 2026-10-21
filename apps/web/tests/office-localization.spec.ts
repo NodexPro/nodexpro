@@ -35,7 +35,7 @@ test('5-6. one shared switcher writes the language command and applies the retur
   assert.match(i18n, /document\.documentElement\.lang = lang/);
   assert.match(i18n, /document\.documentElement\.dir = lang === 'he' \? 'rtl' : 'ltr'/);
   assert.match(shell, /SessionLanguageSync/);
-  assert.match(sidebar, /<UiLanguageSwitch compact/);
+  assert.doesNotMatch(sidebar, /UiLanguageSwitch/);
   assert.match(read('../src/pages/Dashboard.tsx'), /<UiLanguageSwitch compact \/>/);
   assert.doesNotMatch(header, /t\('topBar\.language'\)/);
 });
