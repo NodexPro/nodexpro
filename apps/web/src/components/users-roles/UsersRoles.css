@@ -85,9 +85,44 @@
   font-size: 13px;
 }
 
-/* Primary action: Dashboard purple glass. */
+/* Page primary (Invite user / Send invitation): Create Client Deep Ocean V3 turquoise. */
 .nx-ur-btn--primary.nx-btn,
-.nx-ur-btn--primary,
+.nx-ur-btn--primary {
+  min-width: 96px;
+  border-radius: 8px;
+  border: 1px solid rgba(19, 191, 208, 0.78);
+  color: #ffffff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.34), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.62) 0%, rgba(19, 191, 208, 0.48) 100%);
+  box-shadow:
+    0 0 16px rgba(19, 191, 208, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+.nx-ur-btn--primary:hover:not(:disabled) {
+  border-color: rgba(120, 232, 240, 0.92);
+  background: linear-gradient(180deg, rgba(54, 169, 198, 0.74) 0%, rgba(19, 191, 208, 0.58) 100%);
+}
+
+.nx-ur-btn--secondary.nx-btn,
+.nx-ur-btn--secondary {
+  min-width: 96px;
+  border-radius: 8px;
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  color: #ffffff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.nx-ur-btn--secondary:hover:not(:disabled) {
+  border-color: rgba(19, 191, 208, 0.7);
+  background: rgba(23, 84, 122, 0.38);
+}
+
+/* Modal primary stays Dashboard purple glass. */
 .nx-ur-modal .nx-btn.nx-btn-primary {
   border: 1px solid rgba(196, 184, 255, 0.55);
   color: #f4f0ff;
@@ -97,17 +132,19 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
-.nx-ur-btn--primary:hover:not(:disabled),
 .nx-ur-modal .nx-btn.nx-btn-primary:hover:not(:disabled) {
   border-color: rgba(220, 210, 255, 0.72);
   background: linear-gradient(115deg, rgba(128, 116, 242, 0.62) 0%, rgba(102, 87, 232, 0.48) 100%);
 }
 
 .nx-ur-btn--primary:focus-visible,
+.nx-ur-btn--secondary:focus-visible,
 .nx-ur-modal .nx-btn:focus-visible,
 .nx-ur-btn--action:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(0, 207, 239, 0.25);
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.42),
+    0 0 14px rgba(19, 191, 208, 0.32);
 }
 
 /* Destructive confirmation (modal only): clearly destructive, still within the NodexPro palette. */
@@ -364,15 +401,18 @@
 }
 
 .nx-ur-btn--action.nx-btn-secondary {
-  border: 1px solid rgba(210, 238, 255, 0.45);
-  background: rgba(8, 38, 82, 0.35);
-  color: #eef6ff;
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  color: #ffffff;
 }
 
 .nx-ur-btn--action.nx-btn-secondary:hover:not(:disabled) {
-  border-color: rgba(70, 213, 255, 0.55);
-  background: rgba(39, 124, 255, 0.22);
-  color: #eef6ff;
+  border-color: rgba(19, 191, 208, 0.7);
+  background: rgba(23, 84, 122, 0.38);
+  color: #ffffff;
 }
 
 /* Invitation cancel: soft, not a bright red button. */
@@ -469,25 +509,107 @@
   margin-inline-start: auto;
 }
 
-/* ───────────── Invite form ───────────── */
+/* ───────────── Invite form — Create Client Deep Ocean V3 ───────────── */
 .nx-ur-invite-form {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  flex-wrap: nowrap;
+  gap: 10px;
   align-items: flex-end;
   padding: 12px 14px;
   margin-bottom: 14px;
-  border: 1px solid rgba(210, 238, 255, 0.5);
+  min-width: 0;
+  border: 1px solid rgba(54, 169, 198, 0.62);
   border-radius: 12px;
   background:
-    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.2), transparent 48%),
-    linear-gradient(180deg, rgba(248, 252, 255, 0.2) 0%, rgba(186, 216, 246, 0.14) 100%);
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%);
   box-shadow:
-    0 0 0 1px rgba(70, 213, 255, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+    0 0 0 1px rgba(54, 169, 198, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  color: var(--nx-ur-navy-text);
+  color: #ffffff;
+}
+
+.nx-ur-invite-form__email {
+  flex: 0 1 200px;
+  width: 200px;
+  max-width: 220px;
+  min-width: 0;
+}
+
+.nx-ur-invite-form__role {
+  flex: 1 1 280px;
+  min-width: 240px;
+  max-width: 380px;
+}
+
+.nx-ur-invite-form__actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.nx-ur-invite-form .nx-ur-field {
+  color: #ffffff;
+}
+
+.nx-ur-invite-form .nx-ur-field input,
+.nx-ur-invite-form .nx-ur-field select {
+  height: 34px;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  color: #ffffff;
+  color-scheme: dark;
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  border-radius: 6px;
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 0 1px rgba(19, 191, 208, 0.04);
+}
+
+.nx-ur-invite-form .nx-ur-field input::placeholder {
+  color: rgba(255, 255, 255, 0.86);
+  opacity: 1;
+}
+
+.nx-ur-invite-form .nx-ur-field input:focus-visible,
+.nx-ur-invite-form .nx-ur-field select:focus-visible {
+  outline: none;
+  border-color: rgba(19, 191, 208, 0.92);
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.3),
+    0 0 12px rgba(54, 169, 198, 0.28);
+}
+
+.nx-ur-invite-form .nx-ur-field option {
+  background: #102d49;
+  color: #ffffff;
+}
+
+@media (max-width: 860px) {
+  .nx-ur-invite-form {
+    flex-wrap: wrap;
+  }
+
+  .nx-ur-invite-form__email,
+  .nx-ur-invite-form__role {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .nx-ur-invite-form__actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
 }
 
 /* ───────────── Alerts ───────────── */

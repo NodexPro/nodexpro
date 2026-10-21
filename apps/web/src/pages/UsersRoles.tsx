@@ -171,7 +171,7 @@ export function UsersRoles() {
 
       {showInvite && data ? (
         <form className="nx-ur-invite-form" onSubmit={sendInvite}>
-          <label className="nx-ur-field" style={{ flex: '1 1 240px' }}>
+          <label className="nx-ur-field nx-ur-invite-form__email">
             <span>{T('email')}</span>
             <input
               type="email"
@@ -182,7 +182,7 @@ export function UsersRoles() {
               onChange={(e) => setInviteEmail(e.target.value)}
             />
           </label>
-          <label className="nx-ur-field">
+          <label className="nx-ur-field nx-ur-invite-form__role">
             <span>{T('role')}</span>
             <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value)}>
               {data.invite_roles.map((r) => (
@@ -192,12 +192,14 @@ export function UsersRoles() {
               ))}
             </select>
           </label>
-          <button type="submit" className="nx-btn nx-ur-btn nx-ur-btn--primary" disabled={inviteBusy}>
-            {inviteBusy ? T('sending') : T('send_invitation')}
-          </button>
-          <button type="button" className="nx-btn nx-btn-secondary nx-ur-btn" onClick={() => setShowInvite(false)}>
-            {T('cancel')}
-          </button>
+          <div className="nx-ur-invite-form__actions">
+            <button type="submit" className="nx-btn nx-ur-btn nx-ur-btn--primary" disabled={inviteBusy}>
+              {inviteBusy ? T('sending') : T('send_invitation')}
+            </button>
+            <button type="button" className="nx-btn nx-ur-btn nx-ur-btn--secondary" onClick={() => setShowInvite(false)}>
+              {T('cancel')}
+            </button>
+          </div>
         </form>
       ) : null}
 

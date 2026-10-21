@@ -422,7 +422,7 @@ export function Clients() {
   if (!orgId) return <p className="nx-clients-empty">Select an organization.</p>;
 
   return (
-    <div className="nx-glass-page nx-glass-page--wide nx-clients">
+    <div className="nx-glass-page nx-glass-page--wide nx-clients nx-clients--deep-ocean">
       <h1 className="nx-glass-title">{t('clients.title')}</h1>
       <p className="nx-glass-subtitle">{t('clients.subtitle')}</p>
 
@@ -564,7 +564,7 @@ export function Clients() {
           <h3>Import clients (CSV)</h3>
           <p>Columns: name (required), email, phone, company_name, tax_id, address, city, country, notes. Max 10,000 rows.</p>
           <div className="nx-clients-toolbar__row" style={{ marginBottom: 16 }}>
-            <input type="file" accept=".csv" onChange={handleImportFile} style={{ maxWidth: 280 }} />
+            <input type="file" accept=".csv" onChange={handleImportFile} className="nx-glass-input nx-glass-input--inline nx-clients-import__file" />
             <button type="button" onClick={loadImportPreview} disabled={!importCsv.trim() || importLoading} className="nx-glass-btn nx-glass-btn--secondary">
               {importLoading ? t('common.loading') : 'Preview'}
             </button>

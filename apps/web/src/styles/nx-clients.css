@@ -367,3 +367,114 @@
   border-color: rgba(70, 213, 255, 0.7);
   box-shadow: 0 0 0 3px rgba(70, 213, 255, 0.18);
 }
+
+/*
+ * Clients toolbar / import / bulk — Create Client Deep Ocean V3 buttons + fields.
+ * Does not restyle the client table, cards, or business statuses.
+ */
+.nx-clients--deep-ocean .nx-clients-toolbar .nx-glass-btn,
+.nx-clients--deep-ocean .nx-clients-bulk .nx-glass-btn,
+.nx-clients--deep-ocean .nx-clients-import .nx-glass-btn {
+  min-width: 96px;
+  height: auto;
+  min-height: 34px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #ffffff;
+}
+
+.nx-clients--deep-ocean .nx-clients-toolbar .nx-glass-btn--purple,
+.nx-clients--deep-ocean .nx-clients-import .nx-glass-btn--purple {
+  border: 1px solid rgba(19, 191, 208, 0.78);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.34), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.62) 0%, rgba(19, 191, 208, 0.48) 100%);
+  box-shadow:
+    0 0 16px rgba(19, 191, 208, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+.nx-clients--deep-ocean .nx-clients-toolbar .nx-glass-btn--purple:hover:not(:disabled),
+.nx-clients--deep-ocean .nx-clients-import .nx-glass-btn--purple:hover:not(:disabled) {
+  border-color: rgba(120, 232, 240, 0.92);
+  background: linear-gradient(180deg, rgba(54, 169, 198, 0.74) 0%, rgba(19, 191, 208, 0.58) 100%);
+}
+
+.nx-clients--deep-ocean .nx-clients-toolbar .nx-glass-btn--purple:focus-visible,
+.nx-clients--deep-ocean .nx-clients-import .nx-glass-btn--purple:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.42),
+    0 0 14px rgba(19, 191, 208, 0.32);
+}
+
+.nx-clients--deep-ocean .nx-clients-toolbar .nx-glass-btn--secondary,
+.nx-clients--deep-ocean .nx-clients-bulk .nx-glass-btn--secondary,
+.nx-clients--deep-ocean .nx-clients-import .nx-glass-btn--secondary {
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.nx-clients--deep-ocean .nx-clients-toolbar .nx-glass-btn--secondary:hover:not(:disabled),
+.nx-clients--deep-ocean .nx-clients-bulk .nx-glass-btn--secondary:hover:not(:disabled),
+.nx-clients--deep-ocean .nx-clients-import .nx-glass-btn--secondary:hover:not(:disabled) {
+  border-color: rgba(19, 191, 208, 0.7);
+  background: rgba(23, 84, 122, 0.38);
+}
+
+.nx-clients--deep-ocean .nx-clients-toolbar .nx-glass-btn--secondary:focus-visible,
+.nx-clients--deep-ocean .nx-clients-bulk .nx-glass-btn--secondary:focus-visible,
+.nx-clients--deep-ocean .nx-clients-import .nx-glass-btn--secondary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(19, 191, 208, 0.36);
+}
+
+.nx-clients--deep-ocean .nx-clients-toolbar .nx-glass-btn:disabled,
+.nx-clients--deep-ocean .nx-clients-bulk .nx-glass-btn:disabled,
+.nx-clients--deep-ocean .nx-clients-import .nx-glass-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.nx-clients--deep-ocean .nx-clients-toolbar .nx-glass-input,
+.nx-clients--deep-ocean .nx-clients-import .nx-glass-input {
+  height: 34px;
+  color: #ffffff;
+  color-scheme: dark;
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 0 1px rgba(19, 191, 208, 0.04);
+}
+
+.nx-clients--deep-ocean .nx-clients-toolbar .nx-glass-input::placeholder {
+  color: rgba(255, 255, 255, 0.86);
+  opacity: 1;
+}
+
+.nx-clients--deep-ocean .nx-clients-toolbar .nx-glass-input:focus-visible,
+.nx-clients--deep-ocean .nx-clients-import .nx-glass-input:focus-visible {
+  outline: none;
+  border-color: rgba(19, 191, 208, 0.92);
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.3),
+    0 0 12px rgba(54, 169, 198, 0.28);
+}
+
+.nx-clients--deep-ocean .nx-clients-toolbar .nx-glass-input option {
+  background: #102d49;
+  color: #ffffff;
+}
+
+.nx-clients--deep-ocean .nx-clients-import__file {
+  max-width: 280px;
+}
