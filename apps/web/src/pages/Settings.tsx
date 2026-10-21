@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../api/client';
 import { AUTH, orgSettings } from '../api/endpoints';
@@ -7,6 +7,8 @@ import { useI18n } from '../i18n/I18nProvider';
 import { supabase } from '../lib/supabase';
 import '../styles/nx-glass-surface.css';
 import '../styles/nx-settings-deep-ocean.css';
+import type { SettingsAutosaveDomain, SettingsAutosaveStatus } from './settings-autosave.pure';
+import { useSettingsAutosave } from './useSettingsAutosave';
 
 interface SettingsData {
   capabilities: {
@@ -102,19 +104,46 @@ const FALLBACK_COUNTRY_OPTIONS: Array<{ code: string; label: string }> = [
   { code: 'CA', label: 'Canada' },
 ];
 
+function SettingsAutosaveStatus(props: {
+  domain: SettingsAutosaveDomain;
+  status: SettingsAutosaveStatus;
+  onRetry: (domain: SettingsAutosaveDomain) => void;
+  label: string;
+}) {
+  const { t } = useI18n();
+  if (props.status === 'idle') return null;
+  return (
+    <span
+      className="nx-settings-autosave"
+      role="status"
+      aria-live="polite"
+      data-testid={`nx-settings-autosave-${props.domain}`}
+    >
+      {props.status === 'saving' ? props.label || t('settings.autosave.saving') : null}
+      {props.status === 'saved' ? t('settings.autosave.saved') : null}
+      {props.status === 'error' ? (
+        <>
+          {t('settings.autosave.failed')}
+          <button type="button" className="nx-glass-link" onClick={() => props.onRetry(props.domain)}>
+            {t('settings.autosave.retry')}
+          </button>
+        </>
+      ) : null}
+    </span>
+  );
+}
+
 export function Settings() {
   const auth = useAuth();
   const { t, setLang } = useI18n();
   const [data, setData] = useState<SettingsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<Record<string, unknown>>({});
   const [reloadKey, setReloadKey] = useState(0);
   const [additionalEmail, setAdditionalEmail] = useState('');
   const [securityBusy, setSecurityBusy] = useState(false);
   const [passwordResetSent, setPasswordResetSent] = useState(false);
-  const [localizationBusy, setLocalizationBusy] = useState(false);
   const [locForm, setLocForm] = useState({
     language_code: 'en',
     timezone: 'Asia/Jerusalem',
@@ -123,6 +152,23 @@ export function Settings() {
   });
 
   const orgId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
+  const canEdit = !!data?.capabilities.canEditSettings;
+  const localization = auth.status === 'authenticated' ? auth.me.localization : undefined;
+  const countryOptions =
+    localization?.country.options?.length ? localization.country.options : FALLBACK_COUNTRY_OPTIONS;
+
+  const autosave = useSettingsAutosave<SettingsData>({
+    orgId,
+    canEdit,
+    countryOptions,
+    form,
+    locForm,
+    setForm,
+    setLocForm,
+    setData,
+    formFromSettings,
+    setLang,
+  });
 
   useEffect(() => {
     if (!orgId) {
@@ -136,7 +182,7 @@ export function Settings() {
       .then((d) => {
         if (ac.signal.aborted) return;
         setData(d);
-        setForm(formFromSettings(d));
+        autosave.applyLoadedForm(formFromSettings(d));
       })
       .catch((e) => {
         if (e instanceof Error && e.name === 'AbortError') return;
@@ -151,68 +197,22 @@ export function Settings() {
 
   useEffect(() => {
     if (auth.status !== 'authenticated' || !auth.me.localization) return;
+    if (autosave.isLocDirty()) return;
     setLocForm({
       language_code: auth.me.localization.language.current,
       timezone: auth.me.localization.timezone.current,
       date_format: auth.me.localization.date_format.current,
       display_currency_code: auth.me.localization.display_currency.current,
     });
-  }, [auth]);
-
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!orgId || !data?.capabilities.canEditSettings) return;
-    setSaving(true);
-    setError('');
-    try {
-      const selectedCountryCode = String(form.country ?? '').trim().toUpperCase();
-      const countryOptions =
-        auth.status === 'authenticated' && Array.isArray(auth.me.localization?.country.options) && auth.me.localization.country.options.length
-          ? auth.me.localization.country.options
-          : FALLBACK_COUNTRY_OPTIONS;
-      const isKnownCountry = countryOptions.some((opt) => opt.code === selectedCountryCode);
-      if (!isKnownCountry) {
-        setError('Please select a valid country.');
-        setSaving(false);
-        return;
-      }
-      const payload = {
-        organizationName: (form.organizationName as string) || null,
-        legalEntityType: (form.legalEntityType as string) || null,
-        legalIdNumber: (form.legalIdNumber as string) || null,
-        addressLine1: (form.addressLine1 as string) || null,
-        addressLine2: (form.addressLine2 as string) || null,
-        city: (form.city as string) || null,
-        postalCode: (form.postalCode as string) || null,
-        country: selectedCountryCode,
-        phone: (form.phone as string) || null,
-        website: (form.website as string) || null,
-        displayNameOnDocuments: (form.displayNameOnDocuments as string) || null,
-        displayPhoneOnDocuments: !!form.displayPhoneOnDocuments,
-        displayWebsiteOnDocuments: !!form.displayWebsiteOnDocuments,
-        displayAddressOnDocuments: !!form.displayAddressOnDocuments,
-        documentFooterNote: (form.documentFooterNote as string) || null,
-        signatureText: (form.signatureText as string) || null,
-        bankAccountHolder: (form.bankAccountHolder as string) || null,
-        bankName: (form.bankName as string) || null,
-        bankBranch: (form.bankBranch as string) || null,
-        bankAccountNumber: (form.bankAccountNumber as string) || null,
-        iban: (form.iban as string) || null,
-        swift: (form.swift as string) || null,
-        displayBankDetailsOnDocuments: !!form.displayBankDetailsOnDocuments,
-      };
-      const updated = await apiJson<SettingsData>(orgSettings(orgId), {
-        method: 'PATCH',
-        body: JSON.stringify(payload),
-      });
-      setData(updated);
-      setForm(formFromSettings(updated));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t('settings.errors.saveFailed'));
-    } finally {
-      setSaving(false);
-    }
-  };
+    // Session localization only — do not reset from a stale auth snapshot after autosave.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    auth.status,
+    auth.status === 'authenticated' ? auth.me.localization?.language.current : null,
+    auth.status === 'authenticated' ? auth.me.localization?.timezone.current : null,
+    auth.status === 'authenticated' ? auth.me.localization?.date_format.current : null,
+    auth.status === 'authenticated' ? auth.me.localization?.display_currency.current : null,
+  ]);
 
   if (auth.status !== 'authenticated') return null;
   if (!orgId) return <p className="nx-glass-page">{t('topBar.selectOrg')}</p>;
@@ -235,12 +235,11 @@ export function Settings() {
       : t(data.ownerIdentity.trialStatusLabelKey)
     : '';
 
-  const isCountryConfigured = data?.country_configuration?.status === 'configured';
   const security = auth.status === 'authenticated' ? auth.me.account_security : undefined;
-  const localization = auth.status === 'authenticated' ? auth.me.localization : undefined;
-  const countryOptions =
-    localization?.country.options?.length ? localization.country.options : FALLBACK_COUNTRY_OPTIONS;
   const securityActions = new Set(security?.allowed_actions ?? []);
+  const countryFieldWarning =
+    data?.profile?.countryWarning ||
+    (data?.country_configuration?.status === 'not_configured' ? t('settings.profile.countryIncomplete') : null);
 
   const runSecurityCommand = async (path: string, body: Record<string, unknown>) => {
     setSecurityBusy(true);
@@ -277,24 +276,6 @@ export function Settings() {
     }
   };
 
-  const saveLocalization = async () => {
-    setLocalizationBusy(true);
-    setError('');
-    try {
-      await apiJson(AUTH.setLocalizationPreferences, {
-        method: 'POST',
-        body: JSON.stringify(locForm),
-      });
-      const refreshed = await auth.refetchMe();
-      const nextLang = refreshed?.localization?.language.current;
-      if (nextLang === 'en' || nextLang === 'he') setLang(nextLang);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t('settings.errors.saveFailed'));
-    } finally {
-      setLocalizationBusy(false);
-    }
-  };
-
   const localizationFields = (
     <div className="nx-settings-grid nx-settings-localization-fields">
       <label className="nx-glass-label">
@@ -302,7 +283,7 @@ export function Settings() {
         <select
           className="nx-glass-input"
           value={locForm.language_code}
-          onChange={(e) => setLocForm((f) => ({ ...f, language_code: e.target.value }))}
+          onChange={(e) => autosave.changeLoc('language_code', e.target.value)}
         >
           {(localization?.language.options ?? [
             { locale: 'en', name: 'English' },
@@ -319,7 +300,8 @@ export function Settings() {
         <select
           className="nx-glass-input"
           value={locForm.timezone}
-          onChange={(e) => setLocForm((f) => ({ ...f, timezone: e.target.value }))}
+          title={t('settings.localization.timezoneNote')}
+          onChange={(e) => autosave.changeLoc('timezone', e.target.value)}
         >
           {(localization?.timezone.options ?? [{ value: 'Asia/Jerusalem', label: 'Asia/Jerusalem' }]).map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -327,14 +309,14 @@ export function Settings() {
             </option>
           ))}
         </select>
-        <small className="nx-settings-muted">{t('settings.localization.timezoneNote')}</small>
       </label>
       <label className="nx-glass-label">
         {t('settings.localization.dateFormat')}
         <select
           className="nx-glass-input"
           value={locForm.date_format}
-          onChange={(e) => setLocForm((f) => ({ ...f, date_format: e.target.value }))}
+          title={t('settings.localization.dateFormatNote')}
+          onChange={(e) => autosave.changeLoc('date_format', e.target.value)}
         >
           {(localization?.date_format.options ?? [
             { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY' },
@@ -346,14 +328,14 @@ export function Settings() {
             </option>
           ))}
         </select>
-        <small className="nx-settings-muted">{t('settings.localization.dateFormatNote')}</small>
       </label>
       <label className="nx-glass-label">
         {t('settings.localization.currency')}
         <select
           className="nx-glass-input"
           value={locForm.display_currency_code}
-          onChange={(e) => setLocForm((f) => ({ ...f, display_currency_code: e.target.value }))}
+          title={t('settings.localization.currencyNote')}
+          onChange={(e) => autosave.changeLoc('display_currency_code', e.target.value)}
         >
           {(localization?.display_currency.options ?? [
             { code: 'ILS', label: 'ILS — ₪', symbol: '₪' },
@@ -365,47 +347,7 @@ export function Settings() {
             </option>
           ))}
         </select>
-        <small className="nx-settings-muted">{t('settings.localization.currencyNote')}</small>
       </label>
-      <div className="nx-settings-localization-save">
-        <button
-          type="button"
-          className="nx-glass-btn nx-glass-btn--purple"
-          disabled={localizationBusy}
-          onClick={() => void saveLocalization()}
-        >
-          {t('settings.localization.save')}
-        </button>
-      </div>
-    </div>
-  );
-
-  const localizationSave = (
-    <div className="nx-settings-localization-save">
-      <button
-        type="button"
-        className="nx-glass-btn nx-glass-btn--purple"
-        disabled={localizationBusy}
-        title={t('settings.localization.currencyNote')}
-        onClick={() => void saveLocalization()}
-      >
-        {t('settings.localization.save')}
-      </button>
-    </div>
-  );
-
-  const countryConfigBlock = (
-    <div className="nx-settings-country-status">
-      <h3>{t('settings.profile.countryStatus')}</h3>
-      {loading && !data ? (
-        <p className="nx-settings-placeholder" aria-busy="true">{t('common.loading')}</p>
-      ) : (
-        <p className={isCountryConfigured ? 'nx-settings-status-ok' : 'nx-settings-warning'}>
-          {isCountryConfigured
-            ? t('settings.profile.countryConfigured')
-            : t('settings.profile.countryIncomplete')}
-        </p>
-      )}
     </div>
   );
 
@@ -436,7 +378,9 @@ export function Settings() {
       <section className="nx-glass-card nx-settings-pair-card">
         <div className="nx-settings-pair">
           <div className="nx-settings-pair__col">
-            <h2>{t('settings.ownerIdentity.section')}</h2>
+            <h2 title={data?.ownerIdentity ? t('settings.ownerIdentity.identityNote') : undefined}>
+              {t('settings.ownerIdentity.section')}
+            </h2>
             <dl className="nx-settings-identity-table" data-testid="nx-settings-identity-table">
               <div className="nx-settings-identity-table__row">
                 <dt>{t(data?.ownerIdentity?.legalIdLabelKey ?? 'settings.legalIdLabel.teudatZehut')}</dt>
@@ -504,11 +448,6 @@ export function Settings() {
                 </dd>
               </div>
             </dl>
-            {data?.ownerIdentity ? (
-              <p className="nx-settings-muted nx-settings-identity-note">{t('settings.ownerIdentity.identityNote')}</p>
-            ) : !loading ? (
-              <p className="nx-settings-muted nx-settings-identity-note">{t('settings.noOwnerIdentity')}</p>
-            ) : null}
           </div>
 
           <div className="nx-settings-pair__col" id="nx-account-security">
@@ -610,16 +549,31 @@ export function Settings() {
       </section>
 
       {data && capabilities.canEditSettings && (
-        <form onSubmit={save}>
+        <div>
           <section className="nx-glass-card">
-            <h2>{t('settings.profile.section')}</h2>
+            <div className="nx-settings-section-head">
+              <h2>{t('settings.profile.section')}</h2>
+              <SettingsAutosaveStatus
+                domain="profile"
+                status={autosave.statuses.profile}
+                onRetry={autosave.retry}
+                label={t('settings.autosave.saving')}
+              />
+              <SettingsAutosaveStatus
+                domain="localization"
+                status={autosave.statuses.localization}
+                onRetry={autosave.retry}
+                label={t('settings.autosave.saving')}
+              />
+            </div>
             <div className="nx-settings-grid nx-settings-profile-grid">
               <label className="nx-glass-label">
                 {t('settings.profile.organizationName')}
                 <input
                   type="text"
                   value={(form.organizationName as string) ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, organizationName: e.target.value }))}
+                  onChange={(e) => autosave.changeField('organizationName', e.target.value, 'text')}
+                  onBlur={() => autosave.blurField('organizationName')}
                   className="nx-glass-input"
                   readOnly={!capabilities.canEditSettings}
                 />
@@ -628,7 +582,7 @@ export function Settings() {
                 {t('settings.profile.legalEntityType')}
                 <select
                   value={(form.legalEntityType as string) ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, legalEntityType: e.target.value }))}
+                  onChange={(e) => autosave.changeField('legalEntityType', e.target.value, 'select')}
                   className="nx-glass-input"
                   disabled={!capabilities.canEditSettings}
                 >
@@ -645,7 +599,8 @@ export function Settings() {
                 <input
                   type="text"
                   value={(form.legalIdNumber as string) ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, legalIdNumber: e.target.value }))}
+                  onChange={(e) => autosave.changeField('legalIdNumber', e.target.value, 'text')}
+                  onBlur={() => autosave.blurField('legalIdNumber')}
                   className="nx-glass-input"
                   readOnly={!capabilities.canEditSettings}
                 />
@@ -654,7 +609,7 @@ export function Settings() {
                 {t('settings.profile.country')}
                 <select
                   value={(form.country as string) ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, country: e.target.value }))}
+                  onChange={(e) => autosave.changeField('country', e.target.value, 'select')}
                   className="nx-glass-input"
                   disabled={!capabilities.canEditSettings}
                 >
@@ -665,16 +620,15 @@ export function Settings() {
                     </option>
                   ))}
                 </select>
-                {data?.profile?.countryWarning ? (
-                  <span className="nx-settings-warning">{data.profile.countryWarning}</span>
-                ) : null}
+                {countryFieldWarning ? <span className="nx-settings-warning">{countryFieldWarning}</span> : null}
               </label>
               <label className="nx-glass-label">
                 {t('settings.profile.addressLine1')}
                 <input
                   type="text"
                   value={(form.addressLine1 as string) ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, addressLine1: e.target.value }))}
+                  onChange={(e) => autosave.changeField('addressLine1', e.target.value, 'text')}
+                  onBlur={() => autosave.blurField('addressLine1')}
                   className="nx-glass-input"
                   readOnly={!capabilities.canEditSettings}
                 />
@@ -684,7 +638,8 @@ export function Settings() {
                 <input
                   type="text"
                   value={(form.city as string) ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+                  onChange={(e) => autosave.changeField('city', e.target.value, 'text')}
+                  onBlur={() => autosave.blurField('city')}
                   className="nx-glass-input"
                   readOnly={!capabilities.canEditSettings}
                 />
@@ -694,7 +649,8 @@ export function Settings() {
                 <input
                   type="text"
                   value={(form.addressLine2 as string) ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, addressLine2: e.target.value }))}
+                  onChange={(e) => autosave.changeField('addressLine2', e.target.value, 'text')}
+                  onBlur={() => autosave.blurField('addressLine2')}
                   className="nx-glass-input"
                   readOnly={!capabilities.canEditSettings}
                 />
@@ -704,7 +660,8 @@ export function Settings() {
                 <input
                   type="text"
                   value={(form.postalCode as string) ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, postalCode: e.target.value }))}
+                  onChange={(e) => autosave.changeField('postalCode', e.target.value, 'text')}
+                  onBlur={() => autosave.blurField('postalCode')}
                   className="nx-glass-input"
                   readOnly={!capabilities.canEditSettings}
                 />
@@ -714,7 +671,8 @@ export function Settings() {
                 <input
                   type="tel"
                   value={(form.phone as string) ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                  onChange={(e) => autosave.changeField('phone', e.target.value, 'text')}
+                  onBlur={() => autosave.blurField('phone')}
                   className="nx-glass-input"
                   readOnly={!capabilities.canEditSettings}
                 />
@@ -724,7 +682,8 @@ export function Settings() {
                 <input
                   type="url"
                   value={(form.website as string) ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))}
+                  onChange={(e) => autosave.changeField('website', e.target.value, 'text')}
+                  onBlur={() => autosave.blurField('website')}
                   className="nx-glass-input"
                   placeholder="https://"
                   readOnly={!capabilities.canEditSettings}
@@ -735,7 +694,7 @@ export function Settings() {
                 <select
                   className="nx-glass-input"
                   value={locForm.language_code}
-                  onChange={(e) => setLocForm((f) => ({ ...f, language_code: e.target.value }))}
+                  onChange={(e) => autosave.changeLoc('language_code', e.target.value)}
                 >
                   {(localization?.language.options ?? [
                     { locale: 'en', name: 'English' },
@@ -753,7 +712,7 @@ export function Settings() {
                   className="nx-glass-input"
                   value={locForm.timezone}
                   title={t('settings.localization.timezoneNote')}
-                  onChange={(e) => setLocForm((f) => ({ ...f, timezone: e.target.value }))}
+                  onChange={(e) => autosave.changeLoc('timezone', e.target.value)}
                 >
                   {(localization?.timezone.options ?? [{ value: 'Asia/Jerusalem', label: 'Asia/Jerusalem' }]).map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -768,7 +727,7 @@ export function Settings() {
                   className="nx-glass-input"
                   value={locForm.date_format}
                   title={t('settings.localization.dateFormatNote')}
-                  onChange={(e) => setLocForm((f) => ({ ...f, date_format: e.target.value }))}
+                  onChange={(e) => autosave.changeLoc('date_format', e.target.value)}
                 >
                   {(localization?.date_format.options ?? [
                     { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY' },
@@ -787,7 +746,7 @@ export function Settings() {
                   className="nx-glass-input"
                   value={locForm.display_currency_code}
                   title={t('settings.localization.currencyNote')}
-                  onChange={(e) => setLocForm((f) => ({ ...f, display_currency_code: e.target.value }))}
+                  onChange={(e) => autosave.changeLoc('display_currency_code', e.target.value)}
                 >
                   {(localization?.display_currency.options ?? [
                     { code: 'ILS', label: 'ILS — ₪', symbol: '₪' },
@@ -801,21 +760,28 @@ export function Settings() {
                 </select>
               </label>
             </div>
-            {localizationSave}
-            {countryConfigBlock}
           </section>
 
           <section className="nx-glass-card nx-settings-pair-card">
             <div className="nx-settings-pair">
               <div className="nx-settings-pair__col">
-                <h2>{t('settings.documentIdentity.section')}</h2>
+                <div className="nx-settings-section-head">
+                  <h2>{t('settings.documentIdentity.section')}</h2>
+                  <SettingsAutosaveStatus
+                    domain="document"
+                    status={autosave.statuses.document}
+                    onRetry={autosave.retry}
+                    label={t('settings.autosave.saving')}
+                  />
+                </div>
                 <div className="nx-settings-fields">
                   <label className="nx-glass-label">
                     {t('settings.documentIdentity.displayNameOnDocuments')}
                     <input
                       type="text"
                       value={(form.displayNameOnDocuments as string) ?? ''}
-                      onChange={(e) => setForm((f) => ({ ...f, displayNameOnDocuments: e.target.value }))}
+                      onChange={(e) => autosave.changeField('displayNameOnDocuments', e.target.value, 'text')}
+                      onBlur={() => autosave.blurField('displayNameOnDocuments')}
                       className="nx-glass-input"
                       readOnly={!capabilities.canEditSettings}
                     />
@@ -824,7 +790,7 @@ export function Settings() {
                     <input
                       type="checkbox"
                       checked={!!form.displayPhoneOnDocuments}
-                      onChange={(e) => setForm((f) => ({ ...f, displayPhoneOnDocuments: e.target.checked }))}
+                      onChange={(e) => autosave.changeField('displayPhoneOnDocuments', e.target.checked, 'checkbox')}
                       disabled={!capabilities.canEditSettings}
                     />
                     {t('settings.documentIdentity.displayPhoneOnDocuments')}
@@ -833,7 +799,7 @@ export function Settings() {
                     <input
                       type="checkbox"
                       checked={!!form.displayWebsiteOnDocuments}
-                      onChange={(e) => setForm((f) => ({ ...f, displayWebsiteOnDocuments: e.target.checked }))}
+                      onChange={(e) => autosave.changeField('displayWebsiteOnDocuments', e.target.checked, 'checkbox')}
                       disabled={!capabilities.canEditSettings}
                     />
                     {t('settings.documentIdentity.displayWebsiteOnDocuments')}
@@ -842,7 +808,7 @@ export function Settings() {
                     <input
                       type="checkbox"
                       checked={!!form.displayAddressOnDocuments}
-                      onChange={(e) => setForm((f) => ({ ...f, displayAddressOnDocuments: e.target.checked }))}
+                      onChange={(e) => autosave.changeField('displayAddressOnDocuments', e.target.checked, 'checkbox')}
                       disabled={!capabilities.canEditSettings}
                     />
                     {t('settings.documentIdentity.displayAddressOnDocuments')}
@@ -852,7 +818,8 @@ export function Settings() {
                     <input
                       type="text"
                       value={(form.documentFooterNote as string) ?? ''}
-                      onChange={(e) => setForm((f) => ({ ...f, documentFooterNote: e.target.value }))}
+                      onChange={(e) => autosave.changeField('documentFooterNote', e.target.value, 'text')}
+                      onBlur={() => autosave.blurField('documentFooterNote')}
                       className="nx-glass-input"
                       placeholder={t('settings.documentIdentity.footerNotePlaceholder')}
                       readOnly={!capabilities.canEditSettings}
@@ -863,14 +830,23 @@ export function Settings() {
 
               {capabilities.showBankDetails && data?.bankDetails !== undefined && (
                 <div className="nx-settings-pair__col">
-                  <h2>{t('settings.bankDetails.section')}</h2>
+                  <div className="nx-settings-section-head">
+                    <h2>{t('settings.bankDetails.section')}</h2>
+                    <SettingsAutosaveStatus
+                      domain="bank"
+                      status={autosave.statuses.bank}
+                      onRetry={autosave.retry}
+                      label={t('settings.autosave.saving')}
+                    />
+                  </div>
                   <div className="nx-settings-fields">
                     <label className="nx-glass-label">
                       {t('settings.bankDetails.bankAccountHolder')}
                       <input
                         type="text"
                         value={(form.bankAccountHolder as string) ?? ''}
-                        onChange={(e) => setForm((f) => ({ ...f, bankAccountHolder: e.target.value }))}
+                        onChange={(e) => autosave.changeField('bankAccountHolder', e.target.value, 'text')}
+                        onBlur={() => autosave.blurField('bankAccountHolder')}
                         className="nx-glass-input"
                         readOnly={!capabilities.canEditSettings}
                       />
@@ -880,7 +856,8 @@ export function Settings() {
                       <input
                         type="text"
                         value={(form.bankName as string) ?? ''}
-                        onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))}
+                        onChange={(e) => autosave.changeField('bankName', e.target.value, 'text')}
+                        onBlur={() => autosave.blurField('bankName')}
                         className="nx-glass-input"
                         readOnly={!capabilities.canEditSettings}
                       />
@@ -890,7 +867,8 @@ export function Settings() {
                       <input
                         type="text"
                         value={(form.bankBranch as string) ?? ''}
-                        onChange={(e) => setForm((f) => ({ ...f, bankBranch: e.target.value }))}
+                        onChange={(e) => autosave.changeField('bankBranch', e.target.value, 'text')}
+                        onBlur={() => autosave.blurField('bankBranch')}
                         className="nx-glass-input"
                         readOnly={!capabilities.canEditSettings}
                       />
@@ -900,7 +878,8 @@ export function Settings() {
                       <input
                         type="text"
                         value={(form.bankAccountNumber as string) ?? ''}
-                        onChange={(e) => setForm((f) => ({ ...f, bankAccountNumber: e.target.value }))}
+                        onChange={(e) => autosave.changeField('bankAccountNumber', e.target.value, 'text')}
+                        onBlur={() => autosave.blurField('bankAccountNumber')}
                         className="nx-glass-input"
                         readOnly={!capabilities.canEditSettings}
                       />
@@ -910,7 +889,8 @@ export function Settings() {
                       <input
                         type="text"
                         value={(form.iban as string) ?? ''}
-                        onChange={(e) => setForm((f) => ({ ...f, iban: e.target.value }))}
+                        onChange={(e) => autosave.changeField('iban', e.target.value, 'text')}
+                        onBlur={() => autosave.blurField('iban')}
                         className="nx-glass-input"
                         readOnly={!capabilities.canEditSettings}
                       />
@@ -920,7 +900,8 @@ export function Settings() {
                       <input
                         type="text"
                         value={(form.swift as string) ?? ''}
-                        onChange={(e) => setForm((f) => ({ ...f, swift: e.target.value }))}
+                        onChange={(e) => autosave.changeField('swift', e.target.value, 'text')}
+                        onBlur={() => autosave.blurField('swift')}
                         className="nx-glass-input"
                         readOnly={!capabilities.canEditSettings}
                       />
@@ -929,7 +910,7 @@ export function Settings() {
                       <input
                         type="checkbox"
                         checked={!!form.displayBankDetailsOnDocuments}
-                        onChange={(e) => setForm((f) => ({ ...f, displayBankDetailsOnDocuments: e.target.checked }))}
+                        onChange={(e) => autosave.changeField('displayBankDetailsOnDocuments', e.target.checked, 'checkbox')}
                         disabled={!capabilities.canEditSettings}
                       />
                       {t('settings.bankDetails.displayBankDetailsOnDocuments')}
@@ -941,33 +922,29 @@ export function Settings() {
           </section>
 
           <section className="nx-glass-card">
-            <h2>{t('settings.signature.section')}</h2>
+            <div className="nx-settings-section-head">
+              <h2>{t('settings.signature.section')}</h2>
+              <SettingsAutosaveStatus
+                domain="signature"
+                status={autosave.statuses.signature}
+                onRetry={autosave.retry}
+                label={t('settings.autosave.saving')}
+              />
+            </div>
             <label className="nx-glass-label">
               {t('settings.signature.signatureText')}
               <input
                 type="text"
                 value={(form.signatureText as string) ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, signatureText: e.target.value }))}
+                onChange={(e) => autosave.changeField('signatureText', e.target.value, 'text')}
+                onBlur={() => autosave.blurField('signatureText')}
                 className="nx-glass-input"
                 placeholder={t('settings.signature.signatureTextPlaceholder')}
                 readOnly={!capabilities.canEditSettings}
               />
             </label>
           </section>
-
-          <div className="nx-settings-actions nx-settings-actions--footer">
-            <button type="submit" disabled={saving} className="nx-glass-btn nx-glass-btn--purple">
-              {saving ? t('common.loading') : t('common.save')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setReloadKey((k) => k + 1)}
-              className="nx-glass-btn nx-glass-btn--secondary"
-            >
-              {t('common.cancel')}
-            </button>
-          </div>
-        </form>
+        </div>
       )}
 
       {loading && !data && (
@@ -979,7 +956,15 @@ export function Settings() {
 
       {data && !capabilities.canEditSettings && (
         <section className="nx-glass-card">
-          <h2>{t('settings.profile.section')}</h2>
+          <div className="nx-settings-section-head">
+            <h2>{t('settings.profile.section')}</h2>
+            <SettingsAutosaveStatus
+              domain="localization"
+              status={autosave.statuses.localization}
+              onRetry={autosave.retry}
+              label={t('settings.autosave.saving')}
+            />
+          </div>
           <dl className="nx-settings-readonly-list">
             <dt>{t('settings.profile.organizationName')}</dt>
             <dd>{data.profile?.organizationName ?? '—'}</dd>
@@ -1002,8 +987,8 @@ export function Settings() {
             <dt>{t('settings.profile.website')}</dt>
             <dd>{data.profile?.website ?? '—'}</dd>
           </dl>
+          {countryFieldWarning ? <p className="nx-settings-warning">{countryFieldWarning}</p> : null}
           {localizationFields}
-          {countryConfigBlock}
         </section>
       )}
     </div>

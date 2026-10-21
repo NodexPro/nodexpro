@@ -39,7 +39,8 @@ test('Settings consolidates identity, profile localization, and document pairs',
   assert.match(settings, /settings\.localization\.dateFormat/);
   assert.match(settings, /settings\.localization\.language/);
   assert.match(settings, /settings\.localization\.timezone/);
-  assert.match(settings, /AUTH\.setLocalizationPreferences/);
+  const autosaveHook = readFileSync(join(root, 'src/pages/useSettingsAutosave.ts'), 'utf8');
+  assert.match(autosaveHook, /AUTH\.setLocalizationPreferences/);
   assert.match(settings, /settings\.documentIdentity\.section/);
   assert.match(settings, /settings\.bankDetails\.section/);
   assert.match(settings, /settings\.signature\.section/);
@@ -65,8 +66,7 @@ test('Company Identity is a five-row key/value table with masked secrets and sec
   assert.match(identityBlock, /password_indicator/);
   assert.match(identityBlock, /primary_email_verified/);
   assert.match(identityBlock, /requestPasswordReset/);
-  assert.ok(identityBlock.indexOf('</dl>') < identityBlock.indexOf('identityNote'));
-  assert.match(settings, /nx-settings-identity-note/);
+  assert.match(settings, /settings\.ownerIdentity\.identityNote/);
   assert.match(css, /nx-settings-identity-table/);
   assert.match(css, /grid-template-columns:\s*minmax\(7\.5rem, 38%\) minmax\(0, 1fr\)/);
   assert.match(en, /"retry": "Retry"/);
@@ -129,13 +129,45 @@ test('Account & Security matches Company Identity rows and profile fields follow
 
 test('Settings loads one organization settings aggregate and shows a shell while it loads', () => {
   const settings = readFileSync(join(root, 'src/pages/Settings.tsx'), 'utf8');
+  const autosave = readFileSync(join(root, 'src/pages/useSettingsAutosave.ts'), 'utf8');
   assert.match(settings, /apiJson<SettingsData>\(orgSettings\(orgId\)/);
-  assert.equal((settings.match(/orgSettings\(orgId\)/g) ?? []).length, 2);
+  assert.equal((settings.match(/orgSettings\(orgId\)/g) ?? []).length, 1);
+  assert.match(autosave, /orgSettings\(orgId\)/);
   assert.doesNotMatch(settings, /orgCountrySettings/);
+  assert.doesNotMatch(autosave, /orgCountrySettings/);
   assert.doesNotMatch(settings, /if \(loading\) return/);
   assert.match(settings, /nx-settings-placeholder/);
   assert.match(settings, /settings\.errors\.retry/);
   assert.match(settings, /country_configuration/);
+});
+
+test('Settings V4 hides country-config card and uses safe domain autosave', () => {
+  const settings = readFileSync(join(root, 'src/pages/Settings.tsx'), 'utf8');
+  const hook = readFileSync(join(root, 'src/pages/useSettingsAutosave.ts'), 'utf8');
+  const css = readFileSync(join(root, 'src/styles/nx-settings-deep-ocean.css'), 'utf8');
+  const en = readFileSync(join(root, 'src/i18n/en.json'), 'utf8');
+  const he = readFileSync(join(root, 'src/i18n/he.json'), 'utf8');
+  assert.doesNotMatch(settings, /settings\.profile\.countryStatus/);
+  assert.doesNotMatch(settings, /settings\.profile\.countryConfigured/);
+  assert.doesNotMatch(settings, /settings\.localization\.save/);
+  assert.doesNotMatch(settings, /nx-settings-actions--footer/);
+  assert.doesNotMatch(settings, /t\('common\.save'\)/);
+  assert.doesNotMatch(settings, /t\('common\.cancel'\)/);
+  assert.match(settings, /settings\.profile\.countryIncomplete/);
+  assert.equal((settings.match(/settings\.profile\.country(?![A-Za-z])/g) ?? []).length, 2);
+  assert.match(settings, /useSettingsAutosave/);
+  assert.match(settings, /changeField\('displayPhoneOnDocuments'/);
+  assert.match(settings, /changeLoc\('language_code'/);
+  assert.match(hook, /SETTINGS_AUTOSAVE_DEBOUNCE_MS/);
+  assert.match(hook, /method: 'PATCH'/);
+  assert.match(hook, /AUTH\.setLocalizationPreferences/);
+  assert.match(hook, /beforeunload/);
+  assert.match(hook, /mergeFormKeepingDirty/);
+  assert.doesNotMatch(hook, /requestAdditionalLoginEmail|change_password|resetPasswordForEmail/);
+  assert.match(css, /nx-settings-autosave/);
+  assert.match(css, /accent-color:\s*#13bfd0/);
+  assert.match(en, /"saving": "Saving…"/);
+  assert.match(he, /"saving": "שומר…"/);
 });
 
 test('Owner console exposes Currencies and Languages routes without user sidebar entries', () => {

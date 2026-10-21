@@ -279,6 +279,12 @@
       "currencyNote": "Display default only. This does not change Accounting Base currency, invoices, tax, or historical entries.",
       "save": "Save display preferences"
     },
+    "autosave": {
+      "saving": "Saving…",
+      "saved": "Saved",
+      "failed": "Not saved",
+      "retry": "Retry"
+    },
     "errors": {
       "loadFailed": "Failed to load settings",
       "saveFailed": "Failed to save settings",
