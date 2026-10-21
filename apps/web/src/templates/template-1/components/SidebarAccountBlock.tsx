@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { SidebarAccountBlockModel } from '../../../types/session';
+import { UiLanguageSwitch } from '../../../components/glass/UiLanguageSwitch';
 
 function initialsFromDisplayName(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -16,7 +17,7 @@ export function SidebarAccountBlock(props: {
   onLogout: () => void | Promise<void>;
   busy?: boolean;
 }) {
-  const { block, expanded, onSelectOrganization, onSetLanguage, onLogout, busy = false } = props;
+  const { block, expanded, onSelectOrganization, onLogout, busy = false } = props;
   const showLanguage = block.language_selector?.visible === true;
   const showLogout = block.logout_action?.visible !== false;
   const showOfficeContext = Boolean(block.office_context?.visible && block.office_context.name);
@@ -78,25 +79,10 @@ export function SidebarAccountBlock(props: {
 
       {showLanguage ? (
       <div className="t1-sidebar-account__field">
-        <label className="t1-sidebar-account__label" htmlFor="t1-sidebar-lang-select">
+        <span className="t1-sidebar-account__label" id="t1-sidebar-lang-label">
           {block.language_selector.label}
-        </label>
-        <select
-          id="t1-sidebar-lang-select"
-          className="t1-sidebar-account__select"
-          disabled={busy}
-          value={block.language_selector.current_value}
-          onChange={(e) => {
-            const v = e.target.value === 'he' ? 'he' : 'en';
-            void onSetLanguage(v);
-          }}
-        >
-          {block.language_selector.options.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+        </span>
+        <UiLanguageSwitch compact ariaLabel={block.language_selector.label} />
       </div>
       ) : null}
 

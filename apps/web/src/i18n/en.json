@@ -134,6 +134,50 @@
       "partner": "Partner",
       "other": "Other"
     },
+    "statusValue": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "archived": "Archived"
+    },
+    "lifecycleValue": {
+      "lead": "Lead",
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "importCsv": "Import CSV",
+    "exportCsv": "Export CSV",
+    "selectOrganization": "Select an organization.",
+    "selectAll": "Select all",
+    "selectRow": "Select {{name}}",
+    "updated": "Updated",
+    "bulk": {
+      "selected": "{{count}} selected",
+      "markActive": "Mark active",
+      "markInactive": "Mark inactive",
+      "archive": "Archive",
+      "restore": "Restore",
+      "exportSelected": "Export selected",
+      "clear": "Clear"
+    },
+    "import": {
+      "title": "Import clients (CSV)",
+      "hint": "Columns: name (required), email, phone, company_name, tax_id, address, city, country, notes. Max 10,000 rows.",
+      "preview": "Preview",
+      "confirm": "Confirm import",
+      "valid": "Valid: {{count}}",
+      "duplicates": "Duplicates (will skip): {{count}}",
+      "invalid": "Invalid: {{count}}",
+      "validRows": "Valid rows (to import)",
+      "duplicateRows": "Duplicates (skipped)",
+      "invalidRows": "Invalid rows",
+      "andMore": "… and {{count}} more",
+      "complete": "Import complete: {{imported}} imported, {{skipped}} skipped, {{errors}} errors.",
+      "colName": "name",
+      "colEmail": "email",
+      "colCompany": "company_name",
+      "colReason": "reason",
+      "colErrors": "errors"
+    },
     "errors": {
       "notFound": "Client not found.",
       "loadFailed": "Failed to load",
@@ -151,7 +195,9 @@
       "addNoteFailed": "Failed to add note",
       "addTagFailed": "Failed to add tag",
       "createTagFailed": "Failed to create tag",
-      "attachFileFailed": "Failed to attach file"
+      "attachFileFailed": "Failed to attach file",
+      "bulkFailed": "Bulk action failed",
+      "previewFailed": "Preview failed"
     }
   },
   "common": {

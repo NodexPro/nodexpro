@@ -36,6 +36,27 @@ export function isLocaleCode(code: string): boolean {
   return LOCALE.test(code.trim());
 }
 
+export type OfficeUiLanguage = 'en' | 'he';
+
+/** First-time default only. IL / Israel → Hebrew; every other country → English. */
+export function defaultUiLanguageFromCountry(countryCode: string | null | undefined): OfficeUiLanguage {
+  return String(countryCode ?? '').trim().toUpperCase().slice(0, 2) === 'IL' ? 'he' : 'en';
+}
+
+/**
+ * Canonical UI language: persisted explicit preference wins.
+ * Null / unknown persisted values fall back to English — never the active organization country
+ * (org switches must not change language).
+ */
+export function resolvePersistedUiLanguage(persisted: string | null | undefined): OfficeUiLanguage {
+  const code = String(persisted ?? '').trim().toLowerCase();
+  return code === 'he' ? 'he' : 'en';
+}
+
+export function uiLanguageDirection(language: OfficeUiLanguage): TextDirection {
+  return language === 'he' ? 'rtl' : 'ltr';
+}
+
 export function isIanaTimeZone(value: string): boolean {
   const tz = value.trim();
   if (tz === 'UTC') return true;

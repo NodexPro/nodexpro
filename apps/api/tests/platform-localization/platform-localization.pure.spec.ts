@@ -2,12 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   canPublishLanguage,
+  defaultUiLanguageFromCountry,
   flattenMessageTree,
   isIso4217Code,
   placeholdersMatch,
   publishedCurrencyOptions,
   publishedLanguageOptions,
+  resolvePersistedUiLanguage,
   translationCompleteness,
+  uiLanguageDirection,
   validateLocalizationPreferences,
 } from '../../src/domains/platform-localization/platform-localization.pure.js';
 
@@ -49,4 +52,26 @@ test('placeholder integrity and localization preference validation', () => {
     }).ok,
     true,
   );
+});
+
+test('registration-country default is first-time only: IL → he, every other country → en', () => {
+  assert.equal(defaultUiLanguageFromCountry('IL'), 'he');
+  assert.equal(defaultUiLanguageFromCountry('il'), 'he');
+  assert.equal(defaultUiLanguageFromCountry(' Israel '), 'en');
+  assert.equal(defaultUiLanguageFromCountry('US'), 'en');
+  assert.equal(defaultUiLanguageFromCountry('GB'), 'en');
+  assert.equal(defaultUiLanguageFromCountry(''), 'en');
+  assert.equal(defaultUiLanguageFromCountry(null), 'en');
+  assert.equal(defaultUiLanguageFromCountry(undefined), 'en');
+});
+
+test('persisted explicit preference wins over country; unknown/null falls back to English', () => {
+  assert.equal(resolvePersistedUiLanguage('he'), 'he');
+  assert.equal(resolvePersistedUiLanguage('HE'), 'he');
+  assert.equal(resolvePersistedUiLanguage('en'), 'en');
+  assert.equal(resolvePersistedUiLanguage(null), 'en');
+  assert.equal(resolvePersistedUiLanguage(''), 'en');
+  assert.equal(resolvePersistedUiLanguage('fr'), 'en');
+  assert.equal(uiLanguageDirection('he'), 'rtl');
+  assert.equal(uiLanguageDirection('en'), 'ltr');
 });

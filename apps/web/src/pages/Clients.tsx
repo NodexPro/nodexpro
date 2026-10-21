@@ -86,6 +86,11 @@ const SORT_OPTIONS: { value: string; sort_by: string; sort_dir: 'asc' | 'desc'; 
   { value: 'status_asc', sort_by: 'status', sort_dir: 'asc', labelKey: 'clients.sort.status' },
 ];
 const DEFAULT_SORT_OPTION = 'display_name_asc';
+function lookupLabel(t: (key: string) => string, key: string, raw: string): string {
+  const translated = t(key);
+  return translated === key ? raw : translated;
+}
+
 function getSortParams(sortOption: string): { sort_by: string; sort_dir: 'asc' | 'desc' } {
   const found = SORT_OPTIONS.find((o) => o.value === sortOption);
   if (found) return { sort_by: found.sort_by, sort_dir: found.sort_dir };
@@ -246,12 +251,12 @@ export function Clients() {
         clearSelection();
         setRefreshTrigger((t) => t + 1);
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Bulk action failed');
+        setError(e instanceof Error ? e.message : t('clients.errors.bulkFailed'));
       } finally {
         setBulkLoading(false);
       }
     },
-    [orgId, selectedIds, clearSelection]
+    [orgId, selectedIds, clearSelection, t]
   );
 
   const exportSelected = useCallback(async () => {
@@ -375,7 +380,7 @@ export function Clients() {
       body: JSON.stringify({ csv: importCsv }),
     })
       .then(setImportPreview)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Preview failed'))
+      .catch((e) => setError(e instanceof Error ? e.message : t('clients.errors.previewFailed')))
       .finally(() => setImportLoading(false));
   };
 
@@ -419,10 +424,12 @@ export function Clients() {
   };
 
   if (auth.status !== 'authenticated') return null;
-  if (!orgId) return <p className="nx-clients-empty">Select an organization.</p>;
+  if (!orgId) return <p className="nx-clients-empty">{t('clients.selectOrganization')}</p>;
+
+  const dir = lang === 'he' ? 'rtl' : 'ltr';
 
   return (
-    <div className="nx-glass-page nx-glass-page--wide nx-clients nx-clients--deep-ocean">
+    <div className="nx-glass-page nx-glass-page--wide nx-clients nx-clients--deep-ocean" dir={dir} lang={lang}>
       <h1 className="nx-glass-title">{t('clients.title')}</h1>
       <p className="nx-glass-subtitle">{t('clients.subtitle')}</p>
 
@@ -466,11 +473,11 @@ export function Clients() {
               </button>
               {canImport && (
               <button type="button" onClick={() => setShowImport(true)} className="nx-glass-btn nx-glass-btn--secondary">
-                Import CSV
+                {t('clients.importCsv')}
               </button>
               )}
               <button type="button" onClick={downloadExport} disabled={exportLoading} className="nx-glass-btn nx-glass-btn--secondary">
-                {exportLoading ? t('common.loading') : 'Export CSV'}
+                {exportLoading ? t('common.loading') : t('clients.exportCsv')}
               </button>
             </div>
           )}
@@ -527,46 +534,46 @@ export function Clients() {
 
       {selectedIds.size > 0 && (
         <div className="nx-glass-card nx-clients-bulk">
-          <strong>{selectedIds.size} selected</strong>
+          <strong>{t('clients.bulk.selected').replace('{{count}}', String(selectedIds.size))}</strong>
           {canReactivate && (
               <button type="button" onClick={() => runBulk('mark-active')} disabled={bulkLoading} className="nx-glass-btn nx-glass-btn--secondary">
-                Mark active
+                {t('clients.bulk.markActive')}
               </button>
           )}
           {canInactive && (
               <button type="button" onClick={() => runBulk('mark-inactive')} disabled={bulkLoading} className="nx-glass-btn nx-glass-btn--secondary">
-                Mark inactive
+                {t('clients.bulk.markInactive')}
               </button>
           )}
           {canArchive && (
               <button type="button" onClick={() => runBulk('archive')} disabled={bulkLoading} className="nx-glass-btn nx-glass-btn--secondary">
-                Archive
+                {t('clients.bulk.archive')}
               </button>
           )}
           {canRestore && (
               <button type="button" onClick={() => runBulk('restore')} disabled={bulkLoading} className="nx-glass-btn nx-glass-btn--secondary">
-                Restore
+                {t('clients.bulk.restore')}
               </button>
           )}
           {canWrite && (
             <button type="button" onClick={exportSelected} disabled={bulkLoading} className="nx-glass-btn nx-glass-btn--secondary">
-              Export selected
+              {t('clients.bulk.exportSelected')}
             </button>
           )}
           <button type="button" onClick={clearSelection} className="nx-glass-btn nx-glass-btn--secondary">
-            Clear
+            {t('clients.bulk.clear')}
           </button>
         </div>
       )}
 
       {showImport && canImport && (
         <div className="nx-glass-card nx-clients-import">
-          <h3>Import clients (CSV)</h3>
-          <p>Columns: name (required), email, phone, company_name, tax_id, address, city, country, notes. Max 10,000 rows.</p>
+          <h3>{t('clients.import.title')}</h3>
+          <p>{t('clients.import.hint')}</p>
           <div className="nx-clients-toolbar__row" style={{ marginBottom: 16 }}>
             <input type="file" accept=".csv" onChange={handleImportFile} className="nx-glass-input nx-glass-input--inline nx-clients-import__file" />
             <button type="button" onClick={loadImportPreview} disabled={!importCsv.trim() || importLoading} className="nx-glass-btn nx-glass-btn--secondary">
-              {importLoading ? t('common.loading') : 'Preview'}
+              {importLoading ? t('common.loading') : t('clients.import.preview')}
             </button>
             <button type="button" onClick={() => { setShowImport(false); setImportCsv(''); setImportPreview(null); setImportResult(null); setError(''); }} className="nx-glass-btn nx-glass-btn--secondary">
               {t('common.cancel')}
@@ -575,66 +582,69 @@ export function Clients() {
           {importPreview && (
             <>
               <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-                <span>Valid: {importPreview.valid_rows.length}</span>
-                <span>Duplicates (will skip): {importPreview.duplicates.length}</span>
-                <span>Invalid: {importPreview.invalid_rows.length}</span>
+                <span>{t('clients.import.valid').replace('{{count}}', String(importPreview.valid_rows.length))}</span>
+                <span>{t('clients.import.duplicates').replace('{{count}}', String(importPreview.duplicates.length))}</span>
+                <span>{t('clients.import.invalid').replace('{{count}}', String(importPreview.invalid_rows.length))}</span>
               </div>
               {importPreview.valid_rows.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <strong>Valid rows (to import)</strong>
+                  <strong>{t('clients.import.validRows')}</strong>
                   <div className="nx-clients-preview">
                     <table>
-                      <thead><tr><th>#</th><th>name</th><th>email</th><th>company_name</th></tr></thead>
+                      <thead><tr><th>#</th><th>{t('clients.import.colName')}</th><th>{t('clients.import.colEmail')}</th><th>{t('clients.import.colCompany')}</th></tr></thead>
                       <tbody>
                         {importPreview.valid_rows.slice(0, 20).map((r) => (
-                          <tr key={r.row_index}><td>{r.row_index}</td><td>{r.name}</td><td>{r.email}</td><td>{r.company_name}</td></tr>
+                          <tr key={r.row_index}><td>{r.row_index}</td><td>{r.name}</td><td className="nx-ltr">{r.email}</td><td>{r.company_name}</td></tr>
                         ))}
                       </tbody>
                     </table>
-                    {importPreview.valid_rows.length > 20 && <p className="nx-clients-hint" style={{ padding: 8 }}>… and {importPreview.valid_rows.length - 20} more</p>}
+                    {importPreview.valid_rows.length > 20 && <p className="nx-clients-hint" style={{ padding: 8 }}>{t('clients.import.andMore').replace('{{count}}', String(importPreview.valid_rows.length - 20))}</p>}
                   </div>
                 </div>
               )}
               {importPreview.duplicates.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <strong>Duplicates (skipped)</strong>
+                  <strong>{t('clients.import.duplicateRows')}</strong>
                   <div className="nx-clients-preview">
                     <table>
-                      <thead><tr><th>#</th><th>name</th><th>reason</th></tr></thead>
+                      <thead><tr><th>#</th><th>{t('clients.import.colName')}</th><th>{t('clients.import.colReason')}</th></tr></thead>
                       <tbody>
                         {importPreview.duplicates.slice(0, 10).map((r) => (
                           <tr key={r.row_index}><td>{r.row_index}</td><td>{r.name}</td><td>{r.reason ?? '—'}</td></tr>
                         ))}
                       </tbody>
                     </table>
-                    {importPreview.duplicates.length > 10 && <p className="nx-clients-hint" style={{ padding: 8 }}>… and {importPreview.duplicates.length - 10} more</p>}
+                    {importPreview.duplicates.length > 10 && <p className="nx-clients-hint" style={{ padding: 8 }}>{t('clients.import.andMore').replace('{{count}}', String(importPreview.duplicates.length - 10))}</p>}
                   </div>
                 </div>
               )}
               {importPreview.invalid_rows.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <strong>Invalid rows</strong>
+                  <strong>{t('clients.import.invalidRows')}</strong>
                   <div className="nx-clients-preview">
                     <table>
-                      <thead><tr><th>#</th><th>errors</th></tr></thead>
+                      <thead><tr><th>#</th><th>{t('clients.import.colErrors')}</th></tr></thead>
                       <tbody>
                         {importPreview.invalid_rows.slice(0, 10).map((r) => (
                           <tr key={r.row_index}><td>{r.row_index}</td><td>{r.errors.join('; ')}</td></tr>
                         ))}
                       </tbody>
                     </table>
-                    {importPreview.invalid_rows.length > 10 && <p className="nx-clients-hint" style={{ padding: 8 }}>… and {importPreview.invalid_rows.length - 10} more</p>}
+                    {importPreview.invalid_rows.length > 10 && <p className="nx-clients-hint" style={{ padding: 8 }}>{t('clients.import.andMore').replace('{{count}}', String(importPreview.invalid_rows.length - 10))}</p>}
                   </div>
                 </div>
               )}
               <button type="button" onClick={confirmImport} disabled={importLoading || importPreview.valid_rows.length === 0} className="nx-glass-btn nx-glass-btn--purple">
-                {importLoading ? t('common.loading') : 'Confirm import'}
+                {importLoading ? t('common.loading') : t('clients.import.confirm')}
               </button>
             </>
           )}
           {importResult && (
             <div className="nx-glass-alert" style={{ marginTop: 12 }}>
-              <strong>Import complete:</strong> {importResult.imported} imported, {importResult.skipped} skipped, {importResult.errors.length} errors.
+              {t('clients.import.complete')
+                .replace('{{imported}}', String(importResult.imported))
+                .replace('{{skipped}}', String(importResult.skipped))
+                .replace('{{errors}}', String(importResult.errors.length))}
             </div>
           )}
         </div>
@@ -678,7 +688,7 @@ export function Clients() {
                   onChange={(e) => { setCreateTaxId(e.target.value); if (createInvalidField === 'tax_id') setCreateInvalidField(null); }}
                   required
                   aria-invalid={createInvalidField === 'tax_id'}
-                  className={`nx-glass-input${createInvalidField === 'tax_id' ? ' is-invalid' : ''}`}
+                  className={`nx-glass-input nx-ltr${createInvalidField === 'tax_id' ? ' is-invalid' : ''}`}
                 />
               </label>
               <label>
@@ -713,7 +723,7 @@ export function Clients() {
               </label>
               <label>
                 {t('clients.contact.website')}
-                <input type="url" value={createWebsite} onChange={(e) => setCreateWebsite(e.target.value)} placeholder="https://" className="nx-glass-input" />
+                <input type="url" value={createWebsite} onChange={(e) => setCreateWebsite(e.target.value)} placeholder="https://" className="nx-glass-input nx-ltr" />
               </label>
               <h4 className="nx-client-create__span">
                 {t('clients.contact.section')}{' '}
@@ -730,7 +740,7 @@ export function Clients() {
                   placeholder={t('clients.contact.phonePlaceholder')}
                   aria-invalid={createInvalidField === 'contact'}
                   aria-describedby="nx-clients-create-contact-error"
-                  className={`nx-glass-input${createInvalidField === 'contact' ? ' is-invalid' : ''}`}
+                  className={`nx-glass-input nx-ltr${createInvalidField === 'contact' ? ' is-invalid' : ''}`}
                 />
               </label>
               <label>
@@ -743,7 +753,7 @@ export function Clients() {
                   placeholder={t('clients.contact.emailPlaceholder')}
                   aria-invalid={createInvalidField === 'contact'}
                   aria-describedby="nx-clients-create-contact-error"
-                  className={`nx-glass-input${createInvalidField === 'contact' ? ' is-invalid' : ''}`}
+                  className={`nx-glass-input nx-ltr${createInvalidField === 'contact' ? ' is-invalid' : ''}`}
                 />
               </label>
               <p
@@ -756,7 +766,7 @@ export function Clients() {
               <h4 className="nx-client-create__span">{t('clients.address.section')}</h4>
               <label>
                 {t('clients.address.country')}
-                <input type="text" value={createCountry} onChange={(e) => setCreateCountry(e.target.value)} placeholder="IL" maxLength={2} className="nx-glass-input" />
+                <input type="text" value={createCountry} onChange={(e) => setCreateCountry(e.target.value)} placeholder="IL" maxLength={2} className="nx-glass-input nx-ltr" />
               </label>
               <label>
                 {t('clients.address.city')}
@@ -802,7 +812,7 @@ export function Clients() {
                     type="checkbox"
                     checked={list.length > 0 && selectedIds.size === list.length}
                     onChange={toggleSelectAll}
-                    aria-label="Select all"
+                    aria-label={t('clients.selectAll')}
                   />
                 </th>
                 <th>{t('clients.table.name')}</th>
@@ -810,7 +820,7 @@ export function Clients() {
                 <th>{t('clients.table.type')}</th>
                 <th>{t('clients.table.status')}</th>
                 <th>{t('clients.table.lifecycle')}</th>
-                <th>Updated</th>
+                <th>{t('clients.updated')}</th>
                 <th></th>
               </tr>
             </thead>
@@ -822,7 +832,7 @@ export function Clients() {
                       type="checkbox"
                       checked={selectedIds.has(c.id)}
                       onChange={() => toggleSelect(c.id)}
-                      aria-label={`Select ${c.display_name}`}
+                      aria-label={t('clients.selectRow').replace('{{name}}', c.display_name)}
                     />
                   </td>
                   <td>
@@ -834,14 +844,14 @@ export function Clients() {
                       {c.display_name}
                     </button>
                   </td>
-                  <td className="nx-clients-table__mono">{c.tax_id ?? '—'}</td>
+                  <td className="nx-clients-table__mono nx-ltr">{c.tax_id ?? '—'}</td>
                   <td>{t(`clients.type.${c.client_type}`)}</td>
-                  <td>{c.status}</td>
-                  <td>{c.lifecycle_state}</td>
+                  <td>{lookupLabel(t, `clients.statusValue.${c.status}`, c.status)}</td>
+                  <td>{lookupLabel(t, `clients.lifecycleValue.${c.lifecycle_state}`, c.lifecycle_state)}</td>
                   <td className="nx-clients-table__muted">
                     {c.updated_at ? new Date(c.updated_at).toLocaleDateString() : '—'}
                   </td>
-                  <td>{c.is_archived ? <span className="nx-clients-table__muted">Archived</span> : null}</td>
+                  <td>{c.is_archived ? <span className="nx-clients-table__muted">{t('common.archived')}</span> : null}</td>
                 </tr>
               ))}
             </tbody>

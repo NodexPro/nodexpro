@@ -366,26 +366,27 @@ test('23. Migrations 184-186 exist and 187 is the next additive migration', () =
   assert.equal(names.filter((n) => n.startsWith('187_')).length, 1);
 });
 
-// Israel localization / RTL (backend-owned) and Manage Clients latency.
-test('25. Presentation comes from the organization country only: Israel = Hebrew + RTL, others English + LTR', () => {
+// Office UI language is the persisted user preference. Country is only the first-time default.
+test('25. Users & Roles presentation follows persisted UI language, not organization country', () => {
   assert.deepEqual(resolveUsersRolesPresentation('IL'), { locale: 'he', direction: 'rtl' });
   assert.deepEqual(resolveUsersRolesPresentation(' il '), { locale: 'he', direction: 'rtl' });
   for (const other of ['US', 'GB', 'DE', '', null, undefined]) {
     assert.deepEqual(resolveUsersRolesPresentation(other), { locale: 'en', direction: 'ltr' });
   }
-  const il = buildUsersRolesUi('IL');
-  assert.equal(il.direction, 'rtl');
-  assert.equal(il.text.title, 'משתמשים והרשאות');
-  assert.equal(buildUsersRolesUi('US').text.title, 'Users & Roles');
+  const he = buildUsersRolesUi('he');
+  assert.equal(he.direction, 'rtl');
+  assert.equal(he.text.title, 'משתמשים והרשאות');
+  assert.equal(buildUsersRolesUi('en').text.title, 'Users & Roles');
 
   const agg = api('domains/memberships/users-roles-aggregate.service.ts');
-  assert.match(agg, /select\('timezone, country_code'\)/);
-  assert.match(agg, /buildUsersRolesUi\(orgRow\?\.country_code\)/);
+  assert.match(agg, /resolvePersistedUiLanguage\(ctx\.user\.uiLanguage\)/);
+  assert.match(agg, /buildUsersRolesUi\(resolvePersistedUiLanguage/);
+  assert.doesNotMatch(agg, /buildUsersRolesUi\(orgRow\?\.country_code\)/);
   for (const rel of ['pages/UsersRoles.tsx', 'components/users-roles/UsersRolesModals.tsx']) {
     const src = web(rel);
-    assert.doesNotMatch(src, /navigator\.language|Accept-Language|i18n|\bcountry/i, `${rel}: no client-side locale truth`);
+    assert.doesNotMatch(src, /navigator\.language|Accept-Language|i18n/i, `${rel}: no client-side locale truth`);
   }
-  assert.match(web('pages/UsersRoles.tsx'), /dir=\{ui\?\.direction \?\? 'ltr'\}/);
+  assert.match(web('pages/UsersRoles.tsx'), /dir=\{ui\?\.direction \?\? \(sessionLang === 'he' \? 'rtl' : 'ltr'\)\}/);
   assert.match(web('components/users-roles/UsersRolesModals.tsx'), /dir=\{props\.ui\.direction\}/);
 });
 

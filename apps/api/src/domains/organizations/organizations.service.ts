@@ -145,6 +145,19 @@ export async function createOrganization(ctx: RequestContext, params: { name: st
   await seedOrganizationSettingsOnCreate(org.id, { name: params.name, countryCode: params.countryCode });
   await syncIncomeIssuerProfileFromOrganization(org.id, { actorUserId: ctx.user.id, audit: true });
 
+  // First-time UI language only. Never overwrite an explicit persisted preference.
+  if (!ctx.user.uiLanguage) {
+    const { defaultUiLanguageFromCountry } = await import('../platform-localization/platform-localization.pure.js');
+    await supabaseAdmin
+      .from('users')
+      .update({
+        ui_language: defaultUiLanguageFromCountry(params.countryCode),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', ctx.user.id)
+      .is('ui_language', null);
+  }
+
   await writeAudit({
     organizationId: org.id,
     actorUserId: ctx.user.id,

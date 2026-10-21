@@ -25,6 +25,7 @@ import {
   loadEnabledMemberModuleIdSet,
   loadOrganizationAssignableModuleNames,
 } from '../modules/member-module-access.service.js';
+import { resolvePersistedUiLanguage } from '../platform-localization/platform-localization.pure.js';
 import { listInvitesRbac, revokeUserAccessRbac } from './memberships-rbac.service.js';
 import { loadCloseAccessBlockers } from './member-close-access-blockers.service.js';
 import {
@@ -103,7 +104,7 @@ export type UsersRolesInvitationRow = {
 export type UsersRolesAggregate = {
   aggregate_key: 'users_roles_aggregate';
   organization_id: string;
-  /** Language, direction and screen text — from the organization's canonical country. */
+  /** Language, direction and screen text — from the user's persisted UI language. */
   ui: UsersRolesUi;
   available_actions: { invite_member: boolean };
   /** Roles an invitation may carry. Backend-owned; the form renders exactly these. */
@@ -162,7 +163,7 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
   if (profilesRes.error) throw profilesRes.error;
   const orgRow = orgRes.data as { timezone?: string | null; country_code?: string | null } | null;
   const timeZone = orgRow?.timezone ?? 'UTC';
-  const ui = buildUsersRolesUi(orgRow?.country_code);
+  const ui = buildUsersRolesUi(resolvePersistedUiLanguage(ctx.user.uiLanguage));
   const locale = ui.locale;
 
   const profileByMembership = new Map(

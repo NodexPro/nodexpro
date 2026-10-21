@@ -3,17 +3,17 @@
  *
  * The web renders exactly what is returned here; it never decides which sidebar controls exist for
  * which kind of user:
- *  - language selector is hidden for now (`visible: false`); the capability and stored data are untouched,
+ *  - language selector is the shared office EN/עב control (`visible: true`); it uses persisted UI language,
  *  - the sign-out control is not shown to employees (`worker` shell) — authentication/logout stays available,
  *  - employees get the office context block and the workspace greeting,
  *  - Owner / Admin keep the existing office identity behaviour.
  *
- * Office / greeting text language follows the organization's canonical country (same rule as Users & Roles),
- * with TEMPORARY_COUNTRY_PACK_PENDING until the Country Pack owns presentation locale.
+ * Office / greeting text language follows the user's persisted UI language — the same source as
+ * Clients, Settings, and Users & Roles. Organization country is not a UI-language override.
  */
 
 import type { ShellProfile, SidebarAccountBlockModel, UiLanguageCode } from '../../types/api.js';
-import { resolveUsersRolesPresentation } from '../memberships/users-roles-locale.pure.js';
+import { resolvePersistedUiLanguage, uiLanguageDirection } from '../platform-localization/platform-localization.pure.js';
 
 export type SidebarAccountBlockInput = {
   user: { email: string; fullName: string | null };
@@ -53,7 +53,7 @@ export function buildSidebarAccountBlock(input: SidebarAccountBlockInput): Sideb
       : { org: 'Organization', language: 'Language', logout: 'Sign out', en: 'English', he: 'עברית' };
 
   const isEmployee = shellProfile === 'worker';
-  const presentation = resolveUsersRolesPresentation(input.activeOrganizationCountryCode);
+  const greetingLocale = resolvePersistedUiLanguage(uiLanguage);
   const firstName = isEmployee ? resolveEmployeeFirstName(user.fullName) : null;
 
   return {
@@ -70,8 +70,7 @@ export function buildSidebarAccountBlock(input: SidebarAccountBlockInput): Sideb
       })),
     },
     language_selector: {
-      // Hidden for now. Capability (command + stored language) is intentionally kept.
-      visible: false,
+      visible: true,
       label: labels.language,
       current_value: uiLanguage,
       options: [
@@ -86,12 +85,12 @@ export function buildSidebarAccountBlock(input: SidebarAccountBlockInput): Sideb
     },
     office_context: {
       visible: isEmployee && Boolean(organizationName),
-      label: officeContextLabelFor(presentation.locale),
+      label: officeContextLabelFor(greetingLocale),
       name: organizationName,
     },
     workspace_greeting:
       firstName !== null
-        ? { text: workspaceGreetingFor(firstName, presentation.locale), direction: presentation.direction }
+        ? { text: workspaceGreetingFor(firstName, greetingLocale), direction: uiLanguageDirection(greetingLocale) }
         : null,
   };
 }

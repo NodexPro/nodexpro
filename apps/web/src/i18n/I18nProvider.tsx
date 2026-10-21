@@ -21,6 +21,8 @@ const I18nContext = createContext<I18nContextValue | undefined>(undefined);
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() => {
+    // Unauthenticated first paint only. Authenticated office language comes from the session
+    // aggregate (`users.ui_language`) via SessionLanguageSync — localStorage must not win.
     const stored = typeof window !== 'undefined' ? window.localStorage.getItem('lang') : null;
     return stored === 'he' ? 'he' : 'en';
   });

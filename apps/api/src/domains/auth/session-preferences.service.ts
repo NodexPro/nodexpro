@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { buildAccountSecurityAggregate } from '../account-security/account-security.service.js';
 import { buildUserLocalizationAggregate } from '../platform-localization/platform-localization.service.js';
+import { resolvePersistedUiLanguage } from '../platform-localization/platform-localization.pure.js';
 import type { AccountSecurityAggregate, LocalizationAggregate } from '../../types/api.js';
 
 function fallbackSlices(ctx: RequestContext): {
@@ -28,7 +29,7 @@ function fallbackSlices(ctx: RequestContext): {
           'Country is owned by Country Pack. Changing a UI preference does not silently change tax jurisdiction.',
       },
       language: {
-        current: ctx.user.uiLanguage ?? 'en',
+        current: resolvePersistedUiLanguage(ctx.user.uiLanguage),
         options: [
           { locale: 'en', name: 'English', direction: 'ltr' },
           { locale: 'he', name: 'עברית', direction: 'rtl' },
@@ -106,7 +107,9 @@ export async function loadSessionPreferenceSlices(
       timezone: typeof userRow?.timezone === 'string' ? userRow.timezone : null,
       dateFormat: typeof userRow?.date_format === 'string' ? userRow.date_format : null,
       displayCurrencyCode: typeof userRow?.display_currency_code === 'string' ? userRow.display_currency_code : null,
-      uiLanguage: ctx.user.uiLanguage ?? (typeof userRow?.ui_language === 'string' ? userRow.ui_language : 'en'),
+      uiLanguage: resolvePersistedUiLanguage(
+        ctx.user.uiLanguage ?? (typeof userRow?.ui_language === 'string' ? userRow.ui_language : null),
+      ),
       orgTimezone: typeof orgRow?.timezone === 'string' ? orgRow.timezone : null,
       orgCountryCode,
       countryOptions,

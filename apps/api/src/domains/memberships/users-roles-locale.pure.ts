@@ -1,12 +1,12 @@
 /**
  * Users & Roles — presentation locale (language + text direction) and the screen text.
  *
- * The locale is decided by the backend from the organization's canonical country
- * (`organizations.country_code`). It is NOT inferred from the browser and NOT stored a second time.
- * The frontend renders `ui.text[...]`, `ui.direction` and `ui.locale` exactly as returned.
+ * The screen locale follows the user's persisted UI language (`users.ui_language`), the same
+ * session preference as the rest of the office. It is NOT inferred from the browser, organization
+ * country, or a second store. The frontend renders `ui.text[...]`, `ui.direction` and `ui.locale`.
  *
- * TEMPORARY_COUNTRY_PACK_PENDING: the country → presentation mapping is a minimal table here until the
- * Country Pack framework owns presentation locale. Keep it additive and easy to migrate.
+ * `resolveUsersRolesPresentation(country)` remains the first-time registration/onboarding default
+ * (IL → he). It must not drive the page after an explicit language exists.
  */
 
 export type UsersRolesLocale = 'en' | 'he';
@@ -148,8 +148,11 @@ export const USERS_ROLES_TEXT: Readonly<Record<UsersRolesLocale, UsersRolesText>
 
 export type UsersRolesUi = UsersRolesPresentation & { text: UsersRolesText };
 
-export function buildUsersRolesUi(countryCode: string | null | undefined): UsersRolesUi {
-  const presentation = resolveUsersRolesPresentation(countryCode);
+export function buildUsersRolesUi(locale: UsersRolesLocale): UsersRolesUi {
+  const presentation: UsersRolesPresentation = {
+    locale,
+    direction: locale === 'he' ? 'rtl' : 'ltr',
+  };
   return { ...presentation, text: { ...USERS_ROLES_TEXT[presentation.locale] } };
 }
 

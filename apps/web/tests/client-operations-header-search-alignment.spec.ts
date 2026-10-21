@@ -163,18 +163,19 @@ test('8 filters + search remain combinable (search carries active filters; filte
   assert.match(pageSource, /\.\.\.query,\s*\.\.\.next,\s*operational_period_key: query\.operational_period_key,/);
 });
 
-test('9 unrelated routes retain account / language header chrome', () => {
-  // Generic AppHeader still renders org selector, language select and user menu.
-  assert.match(appHeaderSource, /t\('topBar\.language'\)/);
-  assert.match(appHeaderSource, /<option value="en">EN<\/option>/);
+test('9 unrelated routes retain account header chrome; language lives in the shared sidebar', () => {
+  // AppHeader kept org + user chrome. The independent header language select was a second
+  // localization source and is gone — office language is the sidebar UiLanguageSwitch.
+  assert.doesNotMatch(appHeaderSource, /t\('topBar\.language'\)/);
+  assert.doesNotMatch(appHeaderSource, /<option value="en">EN<\/option>/);
   assert.match(appHeaderSource, /\{user\.fullName \|\| user\.email\}/);
   assert.match(appHeaderSource, /activeOrg\?\.name \?\? 'Select organization'/);
   assert.match(appHeaderSource, /t\('topBar\.signOut'\)/);
-  // Layout still renders it for every non-CO, non-queue route.
   assert.match(layoutSource, /<AppHeader\s+organizations=\{organizations\}/);
   assert.match(layoutSource, /if \(!isWorkEngineQueuePage\) \{/);
-  // Slot context is null off the CO route → view falls back to inline search.
   assert.match(layoutSource, /isClientOperationsModule \? coHeaderSearchSlot : null/);
+  const sidebar = read('../src/templates/template-1/components/SidebarAccountBlock.tsx');
+  assert.match(sidebar, /<UiLanguageSwitch compact/);
 });
 
 test('10 header styles: dark blue glass search, approved palette — scoped to CO only', () => {

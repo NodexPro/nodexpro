@@ -14,7 +14,7 @@ export function AppHeader({
   user: { email: string; fullName: string | null };
   onSignOut: () => Promise<void> | void;
 }) {
-  const { lang, setLang, t } = useI18n();
+  const { t } = useI18n();
   const [orgOpen, setOrgOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -98,27 +98,6 @@ export function AppHeader({
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#6B7280' }}>
-          <span>{t('topBar.language')}</span>
-          <select
-            value={lang}
-            onChange={(e) => setLang(e.target.value === 'he' ? 'he' : 'en')}
-            style={{
-              padding: '0 10px',
-              height: 34,
-              borderRadius: 10,
-              border: '1px solid #D1D5DB',
-              fontSize: 14,
-              background: '#FFFFFF',
-              color: '#111827',
-              cursor: 'pointer',
-            }}
-          >
-            <option value="en">EN</option>
-            <option value="he">HE</option>
-          </select>
-        </label>
-
         <div style={{ position: 'relative' }}>
           <button
             type="button"

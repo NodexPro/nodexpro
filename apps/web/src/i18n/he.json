@@ -134,6 +134,50 @@
       "partner": "שותף",
       "other": "אחר"
     },
+    "statusValue": {
+      "active": "פעיל",
+      "inactive": "לא פעיל",
+      "archived": "בארכיון"
+    },
+    "lifecycleValue": {
+      "lead": "ליד",
+      "active": "פעיל",
+      "inactive": "לא פעיל"
+    },
+    "importCsv": "ייבוא CSV",
+    "exportCsv": "ייצוא CSV",
+    "selectOrganization": "בחרו ארגון.",
+    "selectAll": "בחירת הכל",
+    "selectRow": "בחירת {{name}}",
+    "updated": "עודכן",
+    "bulk": {
+      "selected": "{{count}} נבחרו",
+      "markActive": "סמן כפעיל",
+      "markInactive": "סמן כלא פעיל",
+      "archive": "העבר לארכיון",
+      "restore": "שחזר",
+      "exportSelected": "ייצוא נבחרים",
+      "clear": "נקה"
+    },
+    "import": {
+      "title": "ייבוא לקוחות (CSV)",
+      "hint": "עמודות: name (חובה), email, phone, company_name, tax_id, address, city, country, notes. עד 10,000 שורות.",
+      "preview": "תצוגה מקדימה",
+      "confirm": "אישור ייבוא",
+      "valid": "תקינות: {{count}}",
+      "duplicates": "כפילויות (ידלגו): {{count}}",
+      "invalid": "לא תקינות: {{count}}",
+      "validRows": "שורות תקינות (לייבוא)",
+      "duplicateRows": "כפילויות (דולגות)",
+      "invalidRows": "שורות לא תקינות",
+      "andMore": "… ועוד {{count}}",
+      "complete": "הייבוא הושלם: {{imported}} יובאו, {{skipped}} דולגו, {{errors}} שגיאות.",
+      "colName": "name",
+      "colEmail": "email",
+      "colCompany": "company_name",
+      "colReason": "reason",
+      "colErrors": "errors"
+    },
     "errors": {
       "notFound": "הלקוח לא נמצא.",
       "loadFailed": "טעינת הנתונים נכשלה",
@@ -151,7 +195,9 @@
       "addNoteFailed": "הוספת הערה נכשלה",
       "addTagFailed": "הוספת תגית נכשלה",
       "createTagFailed": "יצירת תגית נכשלה",
-      "attachFileFailed": "צירוף הקובץ נכשל"
+      "attachFileFailed": "צירוף הקובץ נכשל",
+      "bulkFailed": "פעולה מרובה נכשלה",
+      "previewFailed": "תצוגה מקדימה נכשלה"
     }
   },
   "common": {

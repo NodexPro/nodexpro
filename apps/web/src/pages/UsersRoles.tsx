@@ -66,6 +66,11 @@ export function UsersRoles() {
   const T = (key: string): string => (ui ? uiText(ui, key) : '');
   const fallbackError = ui ? uiText(ui, 'something_went_wrong') : 'Something went wrong. Please try again.';
 
+  const sessionLang =
+    auth.status === 'authenticated'
+      ? auth.me.localization?.language.current ?? auth.me.sidebar_account_block?.language_selector?.current_value
+      : null;
+
   const load = useCallback(async () => {
     if (!orgId) return;
     try {
@@ -78,7 +83,7 @@ export function UsersRoles() {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, sessionLang]);
 
   /** A command returned refreshed backend truth: render it and close the modal. */
   const applyTruth = (aggregate: UsersRolesAggregate) => {
@@ -147,7 +152,11 @@ export function UsersRoles() {
     : null;
 
   return (
-    <div className="nx-ur-page" dir={ui?.direction ?? 'ltr'} lang={ui?.locale ?? 'en'}>
+    <div
+      className="nx-ur-page"
+      dir={ui?.direction ?? (sessionLang === 'he' ? 'rtl' : 'ltr')}
+      lang={ui?.locale ?? (sessionLang === 'he' ? 'he' : 'en')}
+    >
       <div className="nx-ur-page__head">
         <div>
           <h1 className="nx-ur-page__title">{T('title')}</h1>

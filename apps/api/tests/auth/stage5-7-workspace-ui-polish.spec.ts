@@ -26,21 +26,24 @@ const base: SidebarAccountBlockInput = {
   activeOrganizationCountryCode: 'IL',
 };
 
-test('1. language selector is hidden for everyone (capability kept in the payload)', () => {
+test('1. language selector is visible for the shared office shell and keeps the stored language', () => {
   for (const shellProfile of ['worker', 'full_platform', 'income_only'] as const) {
     const block = buildSidebarAccountBlock({ ...base, shellProfile });
-    assert.equal(block.language_selector.visible, false);
+    assert.equal(block.language_selector.visible, true);
     assert.equal(block.language_selector.options.length, 2);
     assert.equal(block.language_selector.current_value, 'en');
   }
 });
 
-test('2. employee: no sign-out in the sidebar, office context + greeting from backend identity (Hebrew for IL)', () => {
-  const block = buildSidebarAccountBlock(base);
-  assert.equal(block.logout_action.visible, false);
-  assert.equal(block.logout_action.command_key, 'logout'); // capability untouched
-  assert.deepEqual(block.office_context, { visible: true, label: 'משרד', name: 'משרד רואה חשבון לוי' });
-  assert.deepEqual(block.workspace_greeting, { text: 'היי, דנה', direction: 'rtl' });
+test('2. employee: no sign-out in the sidebar, office context + greeting follow persisted UI language', () => {
+  const hebrew = buildSidebarAccountBlock({ ...base, uiLanguage: 'he' });
+  assert.equal(hebrew.logout_action.visible, false);
+  assert.equal(hebrew.logout_action.command_key, 'logout'); // capability untouched
+  assert.deepEqual(hebrew.office_context, { visible: true, label: 'משרד', name: 'משרד רואה חשבון לוי' });
+  assert.deepEqual(hebrew.workspace_greeting, { text: 'היי, דנה', direction: 'rtl' });
+  const english = buildSidebarAccountBlock(base);
+  assert.deepEqual(english.office_context, { visible: true, label: 'Office', name: 'משרד רואה חשבון לוי' });
+  assert.deepEqual(english.workspace_greeting, { text: 'Hi, דנה', direction: 'ltr' });
 });
 
 test('3. owner / admin keep the existing office identity behaviour (sign-out, no employee blocks)', () => {
@@ -51,11 +54,12 @@ test('3. owner / admin keep the existing office identity behaviour (sign-out, no
   assert.equal(block.organization_name, 'משרד רואה חשבון לוי');
 });
 
-test('4. non-IL organization renders English office / greeting text', () => {
+test('4. persisted English greeting is kept even when the organization country is IL', () => {
   const block = buildSidebarAccountBlock({
     ...base,
     user: { email: 'a@b.c', fullName: 'Dana Cohen' },
-    activeOrganizationCountryCode: 'US',
+    uiLanguage: 'en',
+    activeOrganizationCountryCode: 'IL',
   });
   assert.equal(block.office_context.label, 'Office');
   assert.deepEqual(block.workspace_greeting, { text: 'Hi, Dana', direction: 'ltr' });
@@ -86,7 +90,7 @@ test('7. registry view hides handler column/filter and the empty-state sentence 
   assert.doesNotMatch(view, /לא נמצאו לקוחות/);
 });
 
-test('8. sidebar: no internal scrollbar, language hidden by backend flag, sign-out + office context rendered from the block', () => {
+test('8. sidebar: no internal scrollbar, language visibility follows the backend flag, sign-out + office context rendered from the block', () => {
   const css = web('templates/template-1/t1-sidebar-account.css');
   assert.match(css, /\.t1-sidebar__nav\s*\{[^}]*scrollbar-width: none;/);
   assert.match(css, /\.t1-sidebar__nav::-webkit-scrollbar\s*\{\s*display: none;/);
