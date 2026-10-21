@@ -6,17 +6,43 @@ import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-test('Settings uses Deep Ocean tokens and does not reveal the current password', () => {
+test('Settings uses Dashboard glass cards and does not reveal the current password', () => {
   const settings = readFileSync(join(root, 'src/pages/Settings.tsx'), 'utf8');
   const css = readFileSync(join(root, 'src/styles/nx-settings-deep-ocean.css'), 'utf8');
   assert.match(settings, /nx-settings-deep-ocean/);
   assert.match(settings, /account_security/);
   assert.match(settings, /password_indicator/);
   assert.match(settings, /#nx-account-security/);
+  assert.match(settings, /nx-settings-pair/);
   assert.doesNotMatch(settings, /auth\.getUser\(\)[\s\S]*password/);
+  assert.doesNotMatch(settings, /current_password/);
+  assert.doesNotMatch(settings, /AUTH\.changePassword/);
+  assert.match(settings, /resetPasswordForEmail/);
   assert.match(css, /#8edfff/i);
   assert.match(css, /#00d9ff/i);
   assert.match(css, /#ffffff/i);
+  assert.match(css, /border-radius:\s*14px/);
+  assert.match(css, /rgba\(210,\s*238,\s*255/);
+  assert.match(css, /rgba\(70,\s*213,\s*255/);
+});
+
+test('Settings consolidates identity, profile localization, and document pairs', () => {
+  const settings = readFileSync(join(root, 'src/pages/Settings.tsx'), 'utf8');
+  assert.match(settings, /settings\.ownerIdentity\.section/);
+  assert.match(settings, /settings\.accountSecurity\.section/);
+  assert.match(settings, /settings\.profile\.section/);
+  assert.match(settings, /settings\.profile\.country/);
+  assert.match(settings, /settings\.localization\.currency/);
+  assert.match(settings, /settings\.localization\.dateFormat/);
+  assert.match(settings, /settings\.localization\.language/);
+  assert.match(settings, /settings\.localization\.timezone/);
+  assert.match(settings, /AUTH\.setLocalizationPreferences/);
+  assert.match(settings, /settings\.documentIdentity\.section/);
+  assert.match(settings, /settings\.bankDetails\.section/);
+  assert.match(settings, /settings\.signature\.section/);
+  assert.doesNotMatch(settings, /settings\.localization\.section/);
+  assert.doesNotMatch(settings, /settings\.localization\.country/);
+  assert.equal((settings.match(/settings\.profile\.country(?![A-Za-z])/g) ?? []).length, 2);
 });
 
 test('Owner console exposes Currencies and Languages routes without user sidebar entries', () => {

@@ -194,7 +194,10 @@
       "postalCode": "Postal code (optional)",
       "country": "Country",
       "phone": "Phone",
-      "website": "Website"
+      "website": "Website",
+      "countryStatus": "Country configuration",
+      "countryConfigured": "Country is configured and ready",
+      "countryIncomplete": "Country configuration incomplete. Contact support."
     },
     "legalEntityType": {
       "exempt_dealer": "Exempt dealer (עוסק פטור)",
@@ -258,7 +261,10 @@
       "confirmPassword": "Confirm new password",
       "showPassword": "Show new password",
       "savePassword": "Update password",
-      "recovery": "Forgot current password? Use password recovery."
+      "recovery": "Forgot current password? Use password recovery.",
+      "sendResetLink": "Send password-reset link",
+      "resetHint": "Set a new password through the existing verified recovery flow. The current password is never shown here.",
+      "resetSent": "If this address can receive mail, we sent a password-reset link. Open it on this device to set a new password."
     },
     "localization": {
       "section": "Country & Localization",
@@ -270,7 +276,8 @@
       "dateFormat": "Date format",
       "dateFormatNote": "Display format only. Legal and accounting source dates are unchanged.",
       "currency": "Display currency",
-      "currencyNote": "Display default only. This does not change Accounting Base currency, invoices, tax, or historical entries."
+      "currencyNote": "Display default only. This does not change Accounting Base currency, invoices, tax, or historical entries.",
+      "save": "Save display preferences"
     },
     "errors": {
       "loadFailed": "Failed to load settings",

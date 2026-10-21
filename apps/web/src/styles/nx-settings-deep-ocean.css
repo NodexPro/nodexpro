@@ -1,5 +1,6 @@
 /**
- * Settings page Deep Ocean Glass — scoped to `.nx-settings-deep-ocean` only.
+ * Settings page — Dashboard V2.5 glass cards + Create Client Deep Ocean inputs/buttons.
+ * Scoped to `.nx-settings-deep-ocean` only.
  * Does not restyle Dashboard, sidebar, Cosmic Horizon, or business modules.
  */
 
@@ -20,29 +21,87 @@
 .nx-settings-deep-ocean label,
 .nx-settings-deep-ocean dt,
 .nx-settings-deep-ocean dd,
-.nx-settings-deep-ocean small {
+.nx-settings-deep-ocean small,
+.nx-settings-deep-ocean strong,
+.nx-settings-deep-ocean a,
+.nx-settings-deep-ocean .nx-glass-link {
   color: #ffffff;
 }
 
 .nx-settings-deep-ocean .nx-glass-card {
   color: #ffffff;
-  border: 1px solid rgba(54, 169, 198, 0.55);
+  border: 1px solid rgba(210, 238, 255, 0.5);
+  border-radius: 14px;
   background:
-    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.28), transparent 58%),
-    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.14), transparent 50%),
-    linear-gradient(180deg, rgba(23, 84, 122, 0.32) 0%, rgba(16, 45, 73, 0.38) 100%);
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.2), transparent 48%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.1), transparent 52%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.16) 0%, rgba(16, 45, 73, 0.14) 100%);
   box-shadow:
-    0 0 0 1px rgba(54, 169, 198, 0.2),
-    0 12px 28px rgba(16, 45, 73, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22);
-  backdrop-filter: blur(18px) saturate(1.2);
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+    0 0 0 1px rgba(70, 213, 255, 0.14),
+    0 0 18px rgba(70, 213, 255, 0.12),
+    0 8px 18px rgba(8, 38, 82, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.nx-settings-deep-ocean .nx-settings-pair-card {
+  padding: 18px 20px;
+}
+
+.nx-settings-deep-ocean .nx-settings-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px 40px;
+  align-items: start;
+}
+
+.nx-settings-deep-ocean .nx-settings-pair__col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nx-settings-deep-ocean .nx-settings-pair__col > h2 {
+  margin: 0 0 4px;
+}
+
+.nx-settings-deep-ocean .nx-settings-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nx-settings-deep-ocean .nx-settings-identity-facts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nx-settings-deep-ocean .nx-settings-identity-facts dt,
+.nx-settings-deep-ocean .nx-settings-fields dt {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  margin-bottom: 4px;
+  color: #ffffff;
+}
+
+.nx-settings-deep-ocean .nx-settings-identity-facts dd,
+.nx-settings-deep-ocean .nx-settings-fields dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 .nx-settings-deep-ocean .nx-glass-input,
 .nx-settings-deep-ocean select.nx-glass-input,
 .nx-settings-deep-ocean textarea.nx-glass-input {
+  width: 100%;
   height: 34px;
+  box-sizing: border-box;
   color: #ffffff;
   color-scheme: dark;
   border: 1px solid rgba(54, 169, 198, 0.58);
@@ -75,6 +134,24 @@
 
 .nx-settings-deep-ocean .nx-glass-input option {
   background: #102d49;
+  color: #ffffff;
+}
+
+.nx-settings-deep-ocean .nx-glass-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  line-height: 1.2;
+  color: #ffffff;
+}
+
+.nx-settings-deep-ocean .nx-settings-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
   color: #ffffff;
 }
 
@@ -134,6 +211,19 @@
   font-size: 13px;
 }
 
+.nx-settings-deep-ocean .nx-settings-warning {
+  color: #ffd28a;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.nx-settings-deep-ocean .nx-settings-status-ok {
+  color: #8edfff;
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+}
+
 .nx-settings-deep-ocean .nx-settings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -141,8 +231,73 @@
   align-items: start;
 }
 
+.nx-settings-deep-ocean .nx-settings-localization-fields {
+  margin-top: 16px;
+}
+
+.nx-settings-deep-ocean .nx-settings-localization-save {
+  display: flex;
+  align-items: end;
+}
+
+.nx-settings-deep-ocean .nx-settings-country-status {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(210, 238, 255, 0.4);
+  border-radius: 14px;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.16), transparent 48%),
+    linear-gradient(180deg, rgba(248, 252, 255, 0.12) 0%, rgba(186, 216, 246, 0.08) 100%);
+}
+
+.nx-settings-deep-ocean .nx-settings-country-status h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  color: #ffffff;
+}
+
+.nx-settings-deep-ocean .nx-settings-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: end;
+}
+
+.nx-settings-deep-ocean .nx-settings-actions--footer {
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.nx-settings-deep-ocean .nx-settings-password-recovery {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.nx-settings-deep-ocean .nx-settings-password-recovery h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.nx-settings-deep-ocean .nx-settings-readonly-list {
+  margin: 0 0 16px;
+  display: grid;
+  gap: 8px 24px;
+  grid-template-columns: auto 1fr;
+}
+
+.nx-settings-deep-ocean .nx-settings-readonly-list dt,
+.nx-settings-deep-ocean .nx-settings-readonly-list dd {
+  color: #ffffff;
+  font-size: 14px;
+  margin: 0;
+}
+
 @media (max-width: 720px) {
-  .nx-settings-deep-ocean .nx-settings-grid {
+  .nx-settings-deep-ocean .nx-settings-grid,
+  .nx-settings-deep-ocean .nx-settings-pair {
     grid-template-columns: 1fr;
   }
 }

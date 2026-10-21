@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../api/client';
 import { AUTH, orgCountrySettings, orgSettings } from '../api/endpoints';
 import { AccountRequiredMark } from '../components/glass/AccountRequiredMark';
 import { useI18n } from '../i18n/I18nProvider';
+import { supabase } from '../lib/supabase';
 import '../styles/nx-glass-surface.css';
 import '../styles/nx-settings-deep-ocean.css';
 
@@ -117,13 +117,8 @@ export function Settings() {
   const [countryConfig, setCountryConfig] = useState<CountrySettingsData | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [additionalEmail, setAdditionalEmail] = useState('');
-  const [passwordForm, setPasswordForm] = useState({
-    current_password: '',
-    new_password: '',
-    confirm_password: '',
-  });
-  const [showNewPassword, setShowNewPassword] = useState(false);
   const [securityBusy, setSecurityBusy] = useState(false);
+  const [passwordResetSent, setPasswordResetSent] = useState(false);
   const [localizationBusy, setLocalizationBusy] = useState(false);
   const [locForm, setLocForm] = useState({
     language_code: 'en',
@@ -278,14 +273,6 @@ export function Settings() {
     }
   };
 
-  const profileLabelStyle: React.CSSProperties = {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 6,
-    margin: 0,
-    lineHeight: 1.2,
-  };
-
   if (auth.status !== 'authenticated') return null;
   if (!orgId) return <p className="nx-glass-page">{t('topBar.selectOrg')}</p>;
 
@@ -327,8 +314,28 @@ export function Settings() {
     }
   };
 
-  const saveLocalization = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const requestPasswordReset = async () => {
+    setSecurityBusy(true);
+    setError('');
+    setPasswordResetSent(false);
+    try {
+      const email = (security?.primary_login_email ?? auth.me.user.email ?? '').trim().toLowerCase();
+      if (!email) {
+        setError(t('settings.errors.saveFailed'));
+        return;
+      }
+      const redirectTo = `${window.location.origin}/reset-password`;
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+      if (resetErr) throw new Error(resetErr.message);
+      setPasswordResetSent(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('settings.errors.saveFailed'));
+    } finally {
+      setSecurityBusy(false);
+    }
+  };
+
+  const saveLocalization = async () => {
     setLocalizationBusy(true);
     setError('');
     try {
@@ -345,6 +352,102 @@ export function Settings() {
       setLocalizationBusy(false);
     }
   };
+
+  const localizationFields = (
+    <div className="nx-settings-grid nx-settings-localization-fields">
+      <label className="nx-glass-label">
+        {t('settings.localization.language')}
+        <select
+          className="nx-glass-input"
+          value={locForm.language_code}
+          onChange={(e) => setLocForm((f) => ({ ...f, language_code: e.target.value }))}
+        >
+          {(localization?.language.options ?? [
+            { locale: 'en', name: 'English' },
+            { locale: 'he', name: 'עברית' },
+          ]).map((opt) => (
+            <option key={opt.locale} value={opt.locale}>
+              {opt.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="nx-glass-label">
+        {t('settings.localization.timezone')}
+        <select
+          className="nx-glass-input"
+          value={locForm.timezone}
+          onChange={(e) => setLocForm((f) => ({ ...f, timezone: e.target.value }))}
+        >
+          {(localization?.timezone.options ?? [{ value: 'Asia/Jerusalem', label: 'Asia/Jerusalem' }]).map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <small className="nx-settings-muted">{t('settings.localization.timezoneNote')}</small>
+      </label>
+      <label className="nx-glass-label">
+        {t('settings.localization.dateFormat')}
+        <select
+          className="nx-glass-input"
+          value={locForm.date_format}
+          onChange={(e) => setLocForm((f) => ({ ...f, date_format: e.target.value }))}
+        >
+          {(localization?.date_format.options ?? [
+            { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY' },
+            { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY' },
+            { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD' },
+          ]).map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <small className="nx-settings-muted">{t('settings.localization.dateFormatNote')}</small>
+      </label>
+      <label className="nx-glass-label">
+        {t('settings.localization.currency')}
+        <select
+          className="nx-glass-input"
+          value={locForm.display_currency_code}
+          onChange={(e) => setLocForm((f) => ({ ...f, display_currency_code: e.target.value }))}
+        >
+          {(localization?.display_currency.options ?? [
+            { code: 'ILS', label: 'ILS — ₪', symbol: '₪' },
+            { code: 'USD', label: 'USD — $', symbol: '$' },
+            { code: 'EUR', label: 'EUR — €', symbol: '€' },
+          ]).map((opt) => (
+            <option key={opt.code} value={opt.code}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <small className="nx-settings-muted">{t('settings.localization.currencyNote')}</small>
+      </label>
+      <div className="nx-settings-localization-save">
+        <button
+          type="button"
+          className="nx-glass-btn nx-glass-btn--purple"
+          disabled={localizationBusy}
+          onClick={() => void saveLocalization()}
+        >
+          {t('settings.localization.save')}
+        </button>
+      </div>
+    </div>
+  );
+
+  const countryConfigBlock = (
+    <div className="nx-settings-country-status">
+      <h3>{t('settings.profile.countryStatus')}</h3>
+      <p className={isCountryConfigured ? 'nx-settings-status-ok' : 'nx-settings-warning'}>
+        {isCountryConfigured
+          ? t('settings.profile.countryConfigured')
+          : t('settings.profile.countryIncomplete')}
+      </p>
+    </div>
+  );
 
   return (
     <div className="nx-glass-page nx-glass-page--wide nx-settings nx-settings-deep-ocean" data-testid="nx-settings">
@@ -363,379 +466,153 @@ export function Settings() {
         </p>
       )}
 
-      {capabilities.showOwnerIdentity && data.ownerIdentity && (
-        <section className="nx-glass-card">
-          <h2>{t('settings.ownerIdentity.section')}</h2>
-          <dl style={{ margin: 0, display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', columnGap: 16, rowGap: 12 }}>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <dt
-                style={{
-                  display: 'block',
-                  fontSize: 14,
-                  color: 'rgba(238, 246, 255, 0.72)',
-                  marginBottom: 4,
-                  fontWeight: 500,
-                  lineHeight: 1.2,
-                }}
-              >
-                {t(data.ownerIdentity.legalIdLabelKey)}
-              </dt>
-              <dd
-                style={{
-                  display: 'block',
-                  margin: 0,
-                  fontFamily: 'monospace',
-                  fontWeight: 500,
-                  fontSize: 14,
-                  color: '#eef6ff',
-                  lineHeight: 1.4,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {data.ownerIdentity.masked ?? '***'}
-              </dd>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <dt
-                style={{
-                  display: 'block',
-                  fontSize: 14,
-                  color: 'rgba(238, 246, 255, 0.72)',
-                  marginBottom: 4,
-                  fontWeight: 500,
-                  lineHeight: 1.2,
-                }}
-              >
-                {t('settings.ownerIdentity.status')}
-              </dt>
-              <dd
-                style={{
-                  display: 'block',
-                  margin: 0,
-                  fontWeight: 500,
-                  fontSize: 14,
-                  color: '#eef6ff',
-                  lineHeight: 1.4,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {data.ownerIdentity.isLocked ? t('settings.ownerIdentity.locked') : t('settings.ownerIdentity.set')}
-              </dd>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <dt
-                style={{
-                  display: 'block',
-                  fontSize: 14,
-                  color: 'rgba(238, 246, 255, 0.72)',
-                  marginBottom: 4,
-                  fontWeight: 500,
-                  lineHeight: 1.2,
-                }}
-              >
-                {t('settings.ownerIdentity.trialStatus')}
-              </dt>
-              <dd
-                style={{
-                  display: 'block',
-                  margin: 0,
-                  fontWeight: 500,
-                  fontSize: 14,
-                  color: '#eef6ff',
-                  lineHeight: 1.4,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {trialDisplayText}
-              </dd>
-            </div>
-          </dl>
-          <div className="nx-settings-grid" style={{ marginTop: 16 }}>
-            <div>
-              <dt>{t('settings.loginEmail')}</dt>
-              <dd className="nx-settings-readonly">{security?.primary_login_email ?? auth.me.user.email}</dd>
-              <small className="nx-settings-muted">
-                {security?.primary_email_verified || auth.me.user.email_verified
-                  ? t('settings.loginEmailVerified')
-                  : t('settings.loginEmailUnverified')}
-              </small>
-            </div>
-            <div>
-              <dt>{t('settings.passwordMasked')}</dt>
-              <dd className="nx-settings-readonly" aria-label={t('settings.passwordMasked')}>
-                {security?.password_indicator ?? '••••••••••••'}
-              </dd>
-              <a className="nx-glass-link" href="#nx-account-security">
-                {t('settings.changePasswordAction')}
-              </a>
+      <section className="nx-glass-card nx-settings-pair-card">
+        <div className="nx-settings-pair">
+          <div className="nx-settings-pair__col">
+            <h2>{t('settings.ownerIdentity.section')}</h2>
+            {capabilities.showOwnerIdentity && data.ownerIdentity ? (
+              <>
+                <div className="nx-settings-identity-facts">
+                  <div>
+                    <dt>{t(data.ownerIdentity.legalIdLabelKey)}</dt>
+                    <dd className="nx-settings-readonly">{data.ownerIdentity.masked ?? '***'}</dd>
+                  </div>
+                  <div>
+                    <dt>{t('settings.ownerIdentity.status')}</dt>
+                    <dd className="nx-settings-readonly">
+                      {data.ownerIdentity.isLocked ? t('settings.ownerIdentity.locked') : t('settings.ownerIdentity.set')}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{t('settings.ownerIdentity.trialStatus')}</dt>
+                    <dd className="nx-settings-readonly">{trialDisplayText}</dd>
+                  </div>
+                </div>
+                <p className="nx-settings-muted">{t('settings.ownerIdentity.identityNote')}</p>
+              </>
+            ) : (
+              <p className="nx-settings-muted">{t('settings.noOwnerIdentity')}</p>
+            )}
+            <div className="nx-settings-fields">
+              <div>
+                <dt>{t('settings.loginEmail')}</dt>
+                <dd className="nx-settings-readonly">{security?.primary_login_email ?? auth.me.user.email}</dd>
+                <small className="nx-settings-muted">
+                  {security?.primary_email_verified || auth.me.user.email_verified
+                    ? t('settings.loginEmailVerified')
+                    : t('settings.loginEmailUnverified')}
+                </small>
+              </div>
+              <div>
+                <dt>{t('settings.passwordMasked')}</dt>
+                <dd className="nx-settings-readonly" aria-label={t('settings.passwordMasked')}>
+                  {security?.password_indicator ?? '••••••••••••'}
+                </dd>
+                <a className="nx-glass-link" href="#nx-account-security">
+                  {t('settings.changePasswordAction')}
+                </a>
+              </div>
             </div>
           </div>
-          <p style={{ marginTop: 16, marginBottom: 0, fontSize: 13 }} className="nx-settings-muted">{t('settings.ownerIdentity.identityNote')}</p>
-        </section>
-      )}
 
-      {!capabilities.showOwnerIdentity && (
-        <section className="nx-glass-card">
-          <h2>{t('settings.ownerIdentity.section')}</h2>
-          <div className="nx-settings-grid">
-            <div>
-              <dt>{t('settings.loginEmail')}</dt>
-              <dd className="nx-settings-readonly">{security?.primary_login_email ?? auth.me.user.email}</dd>
-              <small className="nx-settings-muted">
-                {security?.primary_email_verified || auth.me.user.email_verified
-                  ? t('settings.loginEmailVerified')
-                  : t('settings.loginEmailUnverified')}
-              </small>
+          <div className="nx-settings-pair__col" id="nx-account-security">
+            <h2>{t('settings.accountSecurity.section')}</h2>
+            <p className="nx-settings-muted">{t('settings.accountSecurity.additionalEmailHint')}</p>
+            {security?.additional_login_email ? (
+              <p>
+                {t('settings.accountSecurity.additionalEmail')}: <strong>{security.additional_login_email}</strong>{' '}
+                ({t('settings.accountSecurity.verified')})
+              </p>
+            ) : null}
+            {security?.additional_pending_email ? (
+              <p>
+                {t('settings.accountSecurity.pending')}: <strong>{security.additional_pending_email}</strong>
+              </p>
+            ) : null}
+            {(securityActions.has('request_additional_login_email') ||
+              securityActions.has('replace_additional_login_email')) && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void runSecurityCommand(
+                    securityActions.has('replace_additional_login_email')
+                      ? AUTH.replaceAdditionalLoginEmail
+                      : AUTH.requestAdditionalLoginEmail,
+                    { email: additionalEmail },
+                  );
+                }}
+                className="nx-settings-fields"
+              >
+                <label className="nx-glass-label">
+                  {t('settings.accountSecurity.additionalEmail')}
+                  <AccountRequiredMark />
+                  <input
+                    className="nx-glass-input"
+                    type="email"
+                    value={additionalEmail}
+                    placeholder="name@example.com"
+                    onChange={(e) => setAdditionalEmail(e.target.value)}
+                    required
+                  />
+                </label>
+                <div className="nx-settings-actions">
+                  <button type="submit" className="nx-glass-btn nx-glass-btn--purple" disabled={securityBusy}>
+                    {securityActions.has('replace_additional_login_email')
+                      ? t('settings.accountSecurity.replaceEmail')
+                      : t('settings.accountSecurity.addEmail')}
+                  </button>
+                </div>
+              </form>
+            )}
+            <div className="nx-settings-actions">
+              {securityActions.has('resend_additional_login_email') ? (
+                <button
+                  type="button"
+                  className="nx-glass-btn nx-glass-btn--secondary"
+                  disabled={securityBusy}
+                  onClick={() => void runSecurityCommand(AUTH.resendAdditionalLoginEmail, {})}
+                >
+                  {t('settings.accountSecurity.resend')}
+                </button>
+              ) : null}
+              {securityActions.has('remove_additional_login_email') ? (
+                <button
+                  type="button"
+                  className="nx-glass-btn nx-glass-btn--secondary"
+                  disabled={securityBusy}
+                  onClick={() => void runSecurityCommand(AUTH.removeAdditionalLoginEmail, {})}
+                >
+                  {t('settings.accountSecurity.removeEmail')}
+                </button>
+              ) : null}
             </div>
-            <div>
-              <dt>{t('settings.passwordMasked')}</dt>
-              <dd className="nx-settings-readonly">{security?.password_indicator ?? '••••••••••••'}</dd>
-              <a className="nx-glass-link" href="#nx-account-security">
-                {t('settings.changePasswordAction')}
-              </a>
-            </div>
-          </div>
-          <p className="nx-settings-muted" style={{ marginTop: 16, marginBottom: 0 }}>{t('settings.noOwnerIdentity')}</p>
-        </section>
-      )}
-
-      <section className="nx-glass-card" id="nx-account-security">
-        <h2>{t('settings.accountSecurity.section')}</h2>
-        <p className="nx-settings-muted">{t('settings.accountSecurity.additionalEmailHint')}</p>
-        {security?.additional_login_email ? (
-          <p>
-            {t('settings.accountSecurity.additionalEmail')}: <strong>{security.additional_login_email}</strong>{' '}
-            ({t('settings.accountSecurity.verified')})
-          </p>
-        ) : null}
-        {security?.additional_pending_email ? (
-          <p>
-            {t('settings.accountSecurity.pending')}: <strong>{security.additional_pending_email}</strong>
-          </p>
-        ) : null}
-        {(securityActions.has('request_additional_login_email') ||
-          securityActions.has('replace_additional_login_email')) && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              void runSecurityCommand(
-                securityActions.has('replace_additional_login_email')
-                  ? AUTH.replaceAdditionalLoginEmail
-                  : AUTH.requestAdditionalLoginEmail,
-                { email: additionalEmail },
-              );
-            }}
-            className="nx-settings-grid"
-          >
-            <label className="nx-glass-label">
-              {t('settings.accountSecurity.additionalEmail')}
-              <AccountRequiredMark />
-              <input
-                className="nx-glass-input"
-                type="email"
-                value={additionalEmail}
-                placeholder="name@example.com"
-                onChange={(e) => setAdditionalEmail(e.target.value)}
-                required
-              />
-            </label>
-            <div style={{ display: 'flex', alignItems: 'end', gap: 8 }}>
-              <button type="submit" className="nx-glass-btn nx-glass-btn--purple" disabled={securityBusy}>
-                {securityActions.has('replace_additional_login_email')
-                  ? t('settings.accountSecurity.replaceEmail')
-                  : t('settings.accountSecurity.addEmail')}
+            <div className="nx-settings-password-recovery">
+              <h3>{t('settings.changePasswordAction')}</h3>
+              <p className="nx-settings-muted">{t('settings.accountSecurity.resetHint')}</p>
+              <button
+                type="button"
+                className="nx-glass-btn nx-glass-btn--purple"
+                disabled={securityBusy}
+                onClick={() => void requestPasswordReset()}
+              >
+                {t('settings.accountSecurity.sendResetLink')}
               </button>
+              {passwordResetSent ? (
+                <p className="nx-settings-muted" role="status">
+                  {t('settings.accountSecurity.resetSent')}
+                </p>
+              ) : null}
             </div>
-          </form>
-        )}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-          {securityActions.has('resend_additional_login_email') ? (
-            <button
-              type="button"
-              className="nx-glass-btn nx-glass-btn--secondary"
-              disabled={securityBusy}
-              onClick={() => void runSecurityCommand(AUTH.resendAdditionalLoginEmail, {})}
-            >
-              {t('settings.accountSecurity.resend')}
-            </button>
-          ) : null}
-          {securityActions.has('remove_additional_login_email') ? (
-            <button
-              type="button"
-              className="nx-glass-btn nx-glass-btn--secondary"
-              disabled={securityBusy}
-              onClick={() => void runSecurityCommand(AUTH.removeAdditionalLoginEmail, {})}
-            >
-              {t('settings.accountSecurity.removeEmail')}
-            </button>
-          ) : null}
+          </div>
         </div>
-        <form
-          style={{ marginTop: 24 }}
-          onSubmit={(e) => {
-            e.preventDefault();
-            void runSecurityCommand(AUTH.changePassword, passwordForm).then((result) => {
-              if (result) setPasswordForm({ current_password: '', new_password: '', confirm_password: '' });
-            });
-          }}
-        >
-          <h3>{t('settings.changePasswordAction')}</h3>
-          <div className="nx-settings-grid">
-            <label className="nx-glass-label">
-              {t('settings.accountSecurity.currentPassword')}
-              <AccountRequiredMark />
-              <input
-                className="nx-glass-input"
-                type="password"
-                autoComplete="current-password"
-                value={passwordForm.current_password}
-                onChange={(e) => setPasswordForm((f) => ({ ...f, current_password: e.target.value }))}
-                required
-              />
-            </label>
-            <label className="nx-glass-label">
-              {t('settings.accountSecurity.newPassword')}
-              <AccountRequiredMark />
-              <input
-                className="nx-glass-input"
-                type={showNewPassword ? 'text' : 'password'}
-                autoComplete="new-password"
-                value={passwordForm.new_password}
-                onChange={(e) => setPasswordForm((f) => ({ ...f, new_password: e.target.value }))}
-                required
-              />
-            </label>
-            <label className="nx-glass-label">
-              {t('settings.accountSecurity.confirmPassword')}
-              <AccountRequiredMark />
-              <input
-                className="nx-glass-input"
-                type={showNewPassword ? 'text' : 'password'}
-                autoComplete="new-password"
-                value={passwordForm.confirm_password}
-                onChange={(e) => setPasswordForm((f) => ({ ...f, confirm_password: e.target.value }))}
-                required
-              />
-            </label>
-            <label className="nx-glass-label" style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <input type="checkbox" checked={showNewPassword} onChange={(e) => setShowNewPassword(e.target.checked)} />
-              {t('settings.accountSecurity.showPassword')}
-            </label>
-          </div>
-          <p className="nx-settings-muted">
-            <Link className="nx-glass-link" to="/forgot-password">
-              {t('settings.accountSecurity.recovery')}
-            </Link>
-          </p>
-          <button type="submit" className="nx-glass-btn nx-glass-btn--purple" disabled={securityBusy}>
-            {t('settings.accountSecurity.savePassword')}
-          </button>
-        </form>
-      </section>
-
-      <section className="nx-glass-card">
-        <h2>{t('settings.localization.section')}</h2>
-        <form onSubmit={saveLocalization}>
-          <div className="nx-settings-grid">
-            <label className="nx-glass-label">
-              {t('settings.localization.country')}
-              <select className="nx-glass-input" value={(form.country as string) ?? ''} disabled>
-                {(countryOptions as Array<{ code: string; label: string }>).map((opt) => (
-                  <option key={opt.code} value={opt.code}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <small className="nx-settings-muted">{t('settings.localization.countryNote')}</small>
-            </label>
-            <label className="nx-glass-label">
-              {t('settings.localization.language')}
-              <select
-                className="nx-glass-input"
-                value={locForm.language_code}
-                onChange={(e) => setLocForm((f) => ({ ...f, language_code: e.target.value }))}
-              >
-                {(localization?.language.options ?? [{ locale: 'en', name: 'English' }, { locale: 'he', name: 'עברית' }]).map(
-                  (opt) => (
-                    <option key={opt.locale} value={opt.locale}>
-                      {opt.name}
-                    </option>
-                  ),
-                )}
-              </select>
-            </label>
-            <label className="nx-glass-label">
-              {t('settings.localization.timezone')}
-              <select
-                className="nx-glass-input"
-                value={locForm.timezone}
-                onChange={(e) => setLocForm((f) => ({ ...f, timezone: e.target.value }))}
-              >
-                {(localization?.timezone.options ?? [{ value: 'Asia/Jerusalem', label: 'Asia/Jerusalem' }]).map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <small className="nx-settings-muted">{t('settings.localization.timezoneNote')}</small>
-            </label>
-            <label className="nx-glass-label">
-              {t('settings.localization.dateFormat')}
-              <select
-                className="nx-glass-input"
-                value={locForm.date_format}
-                onChange={(e) => setLocForm((f) => ({ ...f, date_format: e.target.value }))}
-              >
-                {(localization?.date_format.options ?? [
-                  { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY' },
-                  { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY' },
-                  { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD' },
-                ]).map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <small className="nx-settings-muted">{t('settings.localization.dateFormatNote')}</small>
-            </label>
-            <label className="nx-glass-label">
-              {t('settings.localization.currency')}
-              <select
-                className="nx-glass-input"
-                value={locForm.display_currency_code}
-                onChange={(e) => setLocForm((f) => ({ ...f, display_currency_code: e.target.value }))}
-              >
-                {(localization?.display_currency.options ?? [
-                  { code: 'ILS', label: 'ILS — ₪', symbol: '₪' },
-                  { code: 'USD', label: 'USD — $', symbol: '$' },
-                  { code: 'EUR', label: 'EUR — €', symbol: '€' },
-                ]).map((opt) => (
-                  <option key={opt.code} value={opt.code}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <small className="nx-settings-muted">{t('settings.localization.currencyNote')}</small>
-            </label>
-          </div>
-          <button type="submit" className="nx-glass-btn nx-glass-btn--purple" disabled={localizationBusy} style={{ marginTop: 16 }}>
-            {t('settings.save')}
-          </button>
-        </form>
       </section>
 
       {capabilities.canEditSettings && (
         <form onSubmit={save}>
           <section className="nx-glass-card">
             <h2>{t('settings.profile.section')}</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16, alignItems: 'start', fontSize: 14 }}>
-              <label className="nx-glass-label" style={profileLabelStyle}>
+            <div className="nx-settings-grid">
+              <label className="nx-glass-label">
                 {t('settings.profile.organizationName')}
                 <input
                   type="text"
@@ -745,7 +622,7 @@ export function Settings() {
                   readOnly={!capabilities.canEditSettings}
                 />
               </label>
-              <label className="nx-glass-label" style={profileLabelStyle}>
+              <label className="nx-glass-label">
                 {t('settings.profile.legalEntityType')}
                 <select
                   value={(form.legalEntityType as string) ?? ''}
@@ -761,7 +638,7 @@ export function Settings() {
                   ))}
                 </select>
               </label>
-              <label className="nx-glass-label" style={profileLabelStyle}>
+              <label className="nx-glass-label">
                 {t(legalIdLabelKey)}
                 <input
                   type="text"
@@ -771,7 +648,7 @@ export function Settings() {
                   readOnly={!capabilities.canEditSettings}
                 />
               </label>
-              <label className="nx-glass-label" style={profileLabelStyle}>
+              <label className="nx-glass-label">
                 {t('settings.profile.addressLine1')}
                 <input
                   type="text"
@@ -781,7 +658,7 @@ export function Settings() {
                   readOnly={!capabilities.canEditSettings}
                 />
               </label>
-              <label className="nx-glass-label" style={profileLabelStyle}>
+              <label className="nx-glass-label">
                 {t('settings.profile.addressLine2')}
                 <input
                   type="text"
@@ -791,7 +668,7 @@ export function Settings() {
                   readOnly={!capabilities.canEditSettings}
                 />
               </label>
-              <label className="nx-glass-label" style={profileLabelStyle}>
+              <label className="nx-glass-label">
                 {t('settings.profile.city')}
                 <input
                   type="text"
@@ -801,7 +678,7 @@ export function Settings() {
                   readOnly={!capabilities.canEditSettings}
                 />
               </label>
-              <label className="nx-glass-label" style={profileLabelStyle}>
+              <label className="nx-glass-label">
                 {t('settings.profile.postalCode')}
                 <input
                   type="text"
@@ -811,7 +688,7 @@ export function Settings() {
                   readOnly={!capabilities.canEditSettings}
                 />
               </label>
-              <label className="nx-glass-label" style={profileLabelStyle}>
+              <label className="nx-glass-label">
                 {t('settings.profile.country')}
                 <select
                   value={(form.country as string) ?? ''}
@@ -827,10 +704,10 @@ export function Settings() {
                   ))}
                 </select>
                 {data.profile?.countryWarning ? (
-                  <span style={{ fontSize: 12, color: '#b45309', fontWeight: 400 }}>{data.profile.countryWarning}</span>
+                  <span className="nx-settings-warning">{data.profile.countryWarning}</span>
                 ) : null}
               </label>
-              <label className="nx-glass-label" style={profileLabelStyle}>
+              <label className="nx-glass-label">
                 {t('settings.profile.phone')}
                 <input
                   type="tel"
@@ -840,7 +717,7 @@ export function Settings() {
                   readOnly={!capabilities.canEditSettings}
                 />
               </label>
-              <label className="nx-glass-label" style={profileLabelStyle}>
+              <label className="nx-glass-label">
                 {t('settings.profile.website')}
                 <input
                   type="url"
@@ -852,73 +729,148 @@ export function Settings() {
                 />
               </label>
             </div>
-            <div className="nx-glass-card" style={{ marginTop: 16, marginBottom: 0, padding: 12 }}>
-              <h3 style={{ margin: '0 0 10px 0', fontSize: 15, color: '#eef6ff' }}>Country Configuration</h3>
-              <p style={{ margin: 0, color: isCountryConfigured ? '#7decf7' : '#fde68a', fontSize: 14, fontWeight: 500 }}>
-                {isCountryConfigured
-                  ? '✔ Country is configured and ready'
-                  : '⚠ Country configuration incomplete. Contact support.'}
-              </p>
-            </div>
+            {localizationFields}
+            {countryConfigBlock}
           </section>
 
-          <section className="nx-glass-card">
-            <h2>{t('settings.documentIdentity.section')}</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <label className="nx-glass-label" style={profileLabelStyle}>
-                {t('settings.documentIdentity.displayNameOnDocuments')}
-                <input
-                  type="text"
-                  value={(form.displayNameOnDocuments as string) ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, displayNameOnDocuments: e.target.value }))}
-                  className="nx-glass-input"
-                  readOnly={!capabilities.canEditSettings}
-                />
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 500, color: 'rgba(238, 246, 255, 0.72)' }}>
-                <input
-                  type="checkbox"
-                  checked={!!form.displayPhoneOnDocuments}
-                  onChange={(e) => setForm((f) => ({ ...f, displayPhoneOnDocuments: e.target.checked }))}
-                  disabled={!capabilities.canEditSettings}
-                />
-                {t('settings.documentIdentity.displayPhoneOnDocuments')}
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 500, color: 'rgba(238, 246, 255, 0.72)' }}>
-                <input
-                  type="checkbox"
-                  checked={!!form.displayWebsiteOnDocuments}
-                  onChange={(e) => setForm((f) => ({ ...f, displayWebsiteOnDocuments: e.target.checked }))}
-                  disabled={!capabilities.canEditSettings}
-                />
-                {t('settings.documentIdentity.displayWebsiteOnDocuments')}
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 500, color: 'rgba(238, 246, 255, 0.72)' }}>
-                <input
-                  type="checkbox"
-                  checked={!!form.displayAddressOnDocuments}
-                  onChange={(e) => setForm((f) => ({ ...f, displayAddressOnDocuments: e.target.checked }))}
-                  disabled={!capabilities.canEditSettings}
-                />
-                {t('settings.documentIdentity.displayAddressOnDocuments')}
-              </label>
-              <label className="nx-glass-label" style={profileLabelStyle}>
-                {t('settings.documentIdentity.documentFooterNote')}
-                <input
-                  type="text"
-                  value={(form.documentFooterNote as string) ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, documentFooterNote: e.target.value }))}
-                  className="nx-glass-input"
-                  placeholder={t('settings.documentIdentity.footerNotePlaceholder')}
-                  readOnly={!capabilities.canEditSettings}
-                />
-              </label>
+          <section className="nx-glass-card nx-settings-pair-card">
+            <div className="nx-settings-pair">
+              <div className="nx-settings-pair__col">
+                <h2>{t('settings.documentIdentity.section')}</h2>
+                <div className="nx-settings-fields">
+                  <label className="nx-glass-label">
+                    {t('settings.documentIdentity.displayNameOnDocuments')}
+                    <input
+                      type="text"
+                      value={(form.displayNameOnDocuments as string) ?? ''}
+                      onChange={(e) => setForm((f) => ({ ...f, displayNameOnDocuments: e.target.value }))}
+                      className="nx-glass-input"
+                      readOnly={!capabilities.canEditSettings}
+                    />
+                  </label>
+                  <label className="nx-settings-check">
+                    <input
+                      type="checkbox"
+                      checked={!!form.displayPhoneOnDocuments}
+                      onChange={(e) => setForm((f) => ({ ...f, displayPhoneOnDocuments: e.target.checked }))}
+                      disabled={!capabilities.canEditSettings}
+                    />
+                    {t('settings.documentIdentity.displayPhoneOnDocuments')}
+                  </label>
+                  <label className="nx-settings-check">
+                    <input
+                      type="checkbox"
+                      checked={!!form.displayWebsiteOnDocuments}
+                      onChange={(e) => setForm((f) => ({ ...f, displayWebsiteOnDocuments: e.target.checked }))}
+                      disabled={!capabilities.canEditSettings}
+                    />
+                    {t('settings.documentIdentity.displayWebsiteOnDocuments')}
+                  </label>
+                  <label className="nx-settings-check">
+                    <input
+                      type="checkbox"
+                      checked={!!form.displayAddressOnDocuments}
+                      onChange={(e) => setForm((f) => ({ ...f, displayAddressOnDocuments: e.target.checked }))}
+                      disabled={!capabilities.canEditSettings}
+                    />
+                    {t('settings.documentIdentity.displayAddressOnDocuments')}
+                  </label>
+                  <label className="nx-glass-label">
+                    {t('settings.documentIdentity.documentFooterNote')}
+                    <input
+                      type="text"
+                      value={(form.documentFooterNote as string) ?? ''}
+                      onChange={(e) => setForm((f) => ({ ...f, documentFooterNote: e.target.value }))}
+                      className="nx-glass-input"
+                      placeholder={t('settings.documentIdentity.footerNotePlaceholder')}
+                      readOnly={!capabilities.canEditSettings}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {capabilities.showBankDetails && data.bankDetails !== undefined && (
+                <div className="nx-settings-pair__col">
+                  <h2>{t('settings.bankDetails.section')}</h2>
+                  <div className="nx-settings-fields">
+                    <label className="nx-glass-label">
+                      {t('settings.bankDetails.bankAccountHolder')}
+                      <input
+                        type="text"
+                        value={(form.bankAccountHolder as string) ?? ''}
+                        onChange={(e) => setForm((f) => ({ ...f, bankAccountHolder: e.target.value }))}
+                        className="nx-glass-input"
+                        readOnly={!capabilities.canEditSettings}
+                      />
+                    </label>
+                    <label className="nx-glass-label">
+                      {t('settings.bankDetails.bankName')}
+                      <input
+                        type="text"
+                        value={(form.bankName as string) ?? ''}
+                        onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))}
+                        className="nx-glass-input"
+                        readOnly={!capabilities.canEditSettings}
+                      />
+                    </label>
+                    <label className="nx-glass-label">
+                      {t('settings.bankDetails.bankBranch')}
+                      <input
+                        type="text"
+                        value={(form.bankBranch as string) ?? ''}
+                        onChange={(e) => setForm((f) => ({ ...f, bankBranch: e.target.value }))}
+                        className="nx-glass-input"
+                        readOnly={!capabilities.canEditSettings}
+                      />
+                    </label>
+                    <label className="nx-glass-label">
+                      {t('settings.bankDetails.bankAccountNumber')}
+                      <input
+                        type="text"
+                        value={(form.bankAccountNumber as string) ?? ''}
+                        onChange={(e) => setForm((f) => ({ ...f, bankAccountNumber: e.target.value }))}
+                        className="nx-glass-input"
+                        readOnly={!capabilities.canEditSettings}
+                      />
+                    </label>
+                    <label className="nx-glass-label">
+                      {t('settings.bankDetails.iban')}
+                      <input
+                        type="text"
+                        value={(form.iban as string) ?? ''}
+                        onChange={(e) => setForm((f) => ({ ...f, iban: e.target.value }))}
+                        className="nx-glass-input"
+                        readOnly={!capabilities.canEditSettings}
+                      />
+                    </label>
+                    <label className="nx-glass-label">
+                      {t('settings.bankDetails.swift')}
+                      <input
+                        type="text"
+                        value={(form.swift as string) ?? ''}
+                        onChange={(e) => setForm((f) => ({ ...f, swift: e.target.value }))}
+                        className="nx-glass-input"
+                        readOnly={!capabilities.canEditSettings}
+                      />
+                    </label>
+                    <label className="nx-settings-check">
+                      <input
+                        type="checkbox"
+                        checked={!!form.displayBankDetailsOnDocuments}
+                        onChange={(e) => setForm((f) => ({ ...f, displayBankDetailsOnDocuments: e.target.checked }))}
+                        disabled={!capabilities.canEditSettings}
+                      />
+                      {t('settings.bankDetails.displayBankDetailsOnDocuments')}
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 
           <section className="nx-glass-card">
             <h2>{t('settings.signature.section')}</h2>
-            <label className="nx-glass-label" style={profileLabelStyle}>
+            <label className="nx-glass-label">
               {t('settings.signature.signatureText')}
               <input
                 type="text"
@@ -931,84 +883,7 @@ export function Settings() {
             </label>
           </section>
 
-          {capabilities.showBankDetails && data.bankDetails !== undefined && (
-            <section className="nx-glass-card">
-              <h2>{t('settings.bankDetails.section')}</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 16, alignItems: 'start' }}>
-                <label className="nx-glass-label" style={profileLabelStyle}>
-                  {t('settings.bankDetails.bankAccountHolder')}
-                  <input
-                    type="text"
-                    value={(form.bankAccountHolder as string) ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, bankAccountHolder: e.target.value }))}
-                    className="nx-glass-input"
-                    readOnly={!capabilities.canEditSettings}
-                  />
-                </label>
-                <label className="nx-glass-label" style={profileLabelStyle}>
-                  {t('settings.bankDetails.bankName')}
-                  <input
-                    type="text"
-                    value={(form.bankName as string) ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))}
-                    className="nx-glass-input"
-                    readOnly={!capabilities.canEditSettings}
-                  />
-                </label>
-                <label className="nx-glass-label" style={profileLabelStyle}>
-                  {t('settings.bankDetails.bankBranch')}
-                  <input
-                    type="text"
-                    value={(form.bankBranch as string) ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, bankBranch: e.target.value }))}
-                    className="nx-glass-input"
-                    readOnly={!capabilities.canEditSettings}
-                  />
-                </label>
-                <label className="nx-glass-label" style={profileLabelStyle}>
-                  {t('settings.bankDetails.bankAccountNumber')}
-                  <input
-                    type="text"
-                    value={(form.bankAccountNumber as string) ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, bankAccountNumber: e.target.value }))}
-                    className="nx-glass-input"
-                    readOnly={!capabilities.canEditSettings}
-                  />
-                </label>
-                <label className="nx-glass-label" style={profileLabelStyle}>
-                  {t('settings.bankDetails.iban')}
-                  <input
-                    type="text"
-                    value={(form.iban as string) ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, iban: e.target.value }))}
-                    className="nx-glass-input"
-                    readOnly={!capabilities.canEditSettings}
-                  />
-                </label>
-                <label className="nx-glass-label" style={profileLabelStyle}>
-                  {t('settings.bankDetails.swift')}
-                  <input
-                    type="text"
-                    value={(form.swift as string) ?? ''}
-                    onChange={(e) => setForm((f) => ({ ...f, swift: e.target.value }))}
-                    className="nx-glass-input"
-                    readOnly={!capabilities.canEditSettings}
-                  />
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 500, color: 'rgba(238, 246, 255, 0.72)', gridColumn: '1 / -1' }}>
-                  <input
-                    type="checkbox"
-                    checked={!!form.displayBankDetailsOnDocuments}
-                    onChange={(e) => setForm((f) => ({ ...f, displayBankDetailsOnDocuments: e.target.checked }))}
-                    disabled={!capabilities.canEditSettings}
-                  />
-                  {t('settings.bankDetails.displayBankDetailsOnDocuments')}
-                </label>
-              </div>
-            </section>
-          )}
-
-          <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
+          <div className="nx-settings-actions nx-settings-actions--footer">
             <button type="submit" disabled={saving} className="nx-glass-btn nx-glass-btn--purple">
               {saving ? t('common.loading') : t('common.save')}
             </button>
@@ -1024,35 +899,29 @@ export function Settings() {
       )}
 
       {!capabilities.canEditSettings && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <section className="nx-glass-card">
-            <h2>{t('settings.profile.section')}</h2>
-            <dl style={{ margin: 0, display: 'grid', gap: '8px 24px', gridTemplateColumns: 'auto 1fr' }}>
-              <dt style={{ color: 'rgba(238, 246, 255, 0.72)', fontSize: 14 }}>{t('settings.profile.organizationName')}</dt>
-              <dd style={{ margin: 0 }}>{data.profile?.organizationName ?? '—'}</dd>
-              <dt style={{ color: 'rgba(238, 246, 255, 0.72)', fontSize: 14 }}>{t('settings.profile.legalEntityType')}</dt>
-              <dd style={{ margin: 0 }}>{data.profile?.legalEntityType ? t(`settings.legalEntityType.${data.profile.legalEntityType}`) : '—'}</dd>
-              <dt style={{ color: 'rgba(238, 246, 255, 0.72)', fontSize: 14 }}>{t(data.profile?.legalIdLabelKey ?? 'settings.legalIdLabel.generic')}</dt>
-              <dd style={{ margin: 0 }}>{data.profile?.legalIdNumber ?? '—'}</dd>
-              <dt style={{ color: 'rgba(238, 246, 255, 0.72)', fontSize: 14 }}>{t('settings.profile.addressLine1')}</dt>
-              <dd style={{ margin: 0 }}>{data.profile?.addressLine1 ?? '—'}</dd>
-              <dt style={{ color: 'rgba(238, 246, 255, 0.72)', fontSize: 14 }}>{t('settings.profile.city')}</dt>
-              <dd style={{ margin: 0 }}>{data.profile?.city ?? '—'}</dd>
-              <dt style={{ color: 'rgba(238, 246, 255, 0.72)', fontSize: 14 }}>{t('settings.profile.phone')}</dt>
-              <dd style={{ margin: 0 }}>{data.profile?.phone ?? '—'}</dd>
-              <dt style={{ color: 'rgba(238, 246, 255, 0.72)', fontSize: 14 }}>{t('settings.profile.website')}</dt>
-              <dd style={{ margin: 0 }}>{data.profile?.website ?? '—'}</dd>
-            </dl>
-            <div className="nx-glass-card" style={{ marginTop: 16, marginBottom: 0, padding: 12 }}>
-              <h3 style={{ margin: '0 0 10px 0', fontSize: 15, color: '#eef6ff' }}>Country Configuration</h3>
-              <p style={{ margin: 0, color: isCountryConfigured ? '#7decf7' : '#fde68a', fontSize: 14, fontWeight: 500 }}>
-                {isCountryConfigured
-                  ? '✔ Country is configured and ready'
-                  : '⚠ Country configuration incomplete. Contact support.'}
-              </p>
-            </div>
-          </section>
-        </div>
+        <section className="nx-glass-card">
+          <h2>{t('settings.profile.section')}</h2>
+          <dl className="nx-settings-readonly-list">
+            <dt>{t('settings.profile.organizationName')}</dt>
+            <dd>{data.profile?.organizationName ?? '—'}</dd>
+            <dt>{t('settings.profile.legalEntityType')}</dt>
+            <dd>{data.profile?.legalEntityType ? t(`settings.legalEntityType.${data.profile.legalEntityType}`) : '—'}</dd>
+            <dt>{t(data.profile?.legalIdLabelKey ?? 'settings.legalIdLabel.generic')}</dt>
+            <dd>{data.profile?.legalIdNumber ?? '—'}</dd>
+            <dt>{t('settings.profile.addressLine1')}</dt>
+            <dd>{data.profile?.addressLine1 ?? '—'}</dd>
+            <dt>{t('settings.profile.city')}</dt>
+            <dd>{data.profile?.city ?? '—'}</dd>
+            <dt>{t('settings.profile.country')}</dt>
+            <dd>{data.profile?.country ?? '—'}</dd>
+            <dt>{t('settings.profile.phone')}</dt>
+            <dd>{data.profile?.phone ?? '—'}</dd>
+            <dt>{t('settings.profile.website')}</dt>
+            <dd>{data.profile?.website ?? '—'}</dd>
+          </dl>
+          {localizationFields}
+          {countryConfigBlock}
+        </section>
       )}
     </div>
   );
