@@ -81,6 +81,52 @@ test('Company Identity is a five-row key/value table with masked secrets and sec
   assert.deepEqual(idOrder, [...idOrder].sort((a, b) => a - b));
 });
 
+test('Account & Security matches Company Identity rows and profile fields follow the approved order', () => {
+  const settings = readFileSync(join(root, 'src/pages/Settings.tsx'), 'utf8');
+  const css = readFileSync(join(root, 'src/styles/nx-settings-deep-ocean.css'), 'utf8');
+  const securityBlock = settings.slice(
+    settings.indexOf('id="nx-account-security"'),
+    settings.indexOf('settings.profile.section'),
+  );
+  const profileBlock = settings.slice(
+    settings.indexOf('nx-settings-profile-grid'),
+    settings.indexOf('settings.documentIdentity.section'),
+  );
+  assert.match(securityBlock, /nx-settings-identity-table/);
+  assert.match(securityBlock, /nx-settings-security-inline/);
+  assert.match(securityBlock, /settings\.accountSecurity\.additionalEmail/);
+  assert.match(securityBlock, /settings\.accountSecurity\.addEmail/);
+  assert.match(securityBlock, /settings\.changePasswordAction/);
+  assert.match(securityBlock, /settings\.accountSecurity\.sendResetLink/);
+  assert.match(securityBlock, /AUTH\.requestAdditionalLoginEmail/);
+  assert.match(securityBlock, /AUTH\.replaceAdditionalLoginEmail/);
+  assert.match(securityBlock, /AUTH\.resendAdditionalLoginEmail/);
+  assert.match(securityBlock, /AUTH\.removeAdditionalLoginEmail/);
+  assert.match(securityBlock, /resetPasswordForEmail|requestPasswordReset/);
+  assert.doesNotMatch(securityBlock, /<p className="nx-settings-muted">\{t\('settings\.accountSecurity\.additionalEmailHint'\)\}<\/p>/);
+  assert.doesNotMatch(securityBlock, /<h3>\{t\('settings\.changePasswordAction'\)\}<\/h3>/);
+  assert.match(css, /nx-settings-security-inline/);
+  const profileOrder = [
+    profileBlock.indexOf('settings.profile.organizationName'),
+    profileBlock.indexOf('settings.profile.legalEntityType'),
+    profileBlock.indexOf('legalIdNumber'),
+    profileBlock.indexOf('settings.profile.country'),
+    profileBlock.indexOf('settings.profile.addressLine1'),
+    profileBlock.indexOf('settings.profile.city'),
+    profileBlock.indexOf('settings.profile.addressLine2'),
+    profileBlock.indexOf('settings.profile.postalCode'),
+    profileBlock.indexOf('settings.profile.phone'),
+    profileBlock.indexOf('settings.profile.website'),
+    profileBlock.indexOf('settings.localization.language'),
+    profileBlock.indexOf('settings.localization.timezone'),
+    profileBlock.indexOf('settings.localization.dateFormat'),
+    profileBlock.indexOf('settings.localization.currency'),
+  ];
+  assert.ok(profileOrder.every((index) => index >= 0));
+  assert.deepEqual(profileOrder, [...profileOrder].sort((a, b) => a - b));
+  assert.match(profileBlock, /addressLine2 \(optional\)|settings\.profile\.addressLine2/);
+});
+
 test('Settings loads one organization settings aggregate and shows a shell while it loads', () => {
   const settings = readFileSync(join(root, 'src/pages/Settings.tsx'), 'utf8');
   assert.match(settings, /apiJson<SettingsData>\(orgSettings\(orgId\)/);

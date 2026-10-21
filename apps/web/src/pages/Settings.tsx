@@ -380,6 +380,20 @@ export function Settings() {
     </div>
   );
 
+  const localizationSave = (
+    <div className="nx-settings-localization-save">
+      <button
+        type="button"
+        className="nx-glass-btn nx-glass-btn--purple"
+        disabled={localizationBusy}
+        title={t('settings.localization.currencyNote')}
+        onClick={() => void saveLocalization()}
+      >
+        {t('settings.localization.save')}
+      </button>
+    </div>
+  );
+
   const countryConfigBlock = (
     <div className="nx-settings-country-status">
       <h3>{t('settings.profile.countryStatus')}</h3>
@@ -499,92 +513,98 @@ export function Settings() {
 
           <div className="nx-settings-pair__col" id="nx-account-security">
             <h2>{t('settings.accountSecurity.section')}</h2>
-            <p className="nx-settings-muted">{t('settings.accountSecurity.additionalEmailHint')}</p>
-            {security?.additional_login_email ? (
-              <p>
-                {t('settings.accountSecurity.additionalEmail')}: <strong>{security.additional_login_email}</strong>{' '}
-                ({t('settings.accountSecurity.verified')})
-              </p>
-            ) : null}
-            {security?.additional_pending_email ? (
-              <p>
-                {t('settings.accountSecurity.pending')}: <strong>{security.additional_pending_email}</strong>
-              </p>
-            ) : null}
-            {(securityActions.has('request_additional_login_email') ||
-              securityActions.has('replace_additional_login_email')) && (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void runSecurityCommand(
-                    securityActions.has('replace_additional_login_email')
-                      ? AUTH.replaceAdditionalLoginEmail
-                      : AUTH.requestAdditionalLoginEmail,
-                    { email: additionalEmail },
-                  );
-                }}
-                className="nx-settings-fields"
-              >
-                <label className="nx-glass-label">
+            <dl className="nx-settings-identity-table" data-testid="nx-settings-security-table">
+              <div className="nx-settings-identity-table__row">
+                <dt>
                   {t('settings.accountSecurity.additionalEmail')}
-                  <AccountRequiredMark />
-                  <input
-                    className="nx-glass-input"
-                    type="email"
-                    value={additionalEmail}
-                    placeholder="name@example.com"
-                    onChange={(e) => setAdditionalEmail(e.target.value)}
-                    required
-                  />
-                </label>
-                <div className="nx-settings-actions">
-                  <button type="submit" className="nx-glass-btn nx-glass-btn--purple" disabled={securityBusy}>
-                    {securityActions.has('replace_additional_login_email')
-                      ? t('settings.accountSecurity.replaceEmail')
-                      : t('settings.accountSecurity.addEmail')}
+                  {(securityActions.has('request_additional_login_email') ||
+                    securityActions.has('replace_additional_login_email')) && <AccountRequiredMark />}
+                </dt>
+                <dd>
+                  {security?.additional_login_email ? (
+                    <span>
+                      {security.additional_login_email}
+                      <span className="nx-settings-verified"> {t('settings.accountSecurity.verified')}</span>
+                    </span>
+                  ) : null}
+                  {security?.additional_pending_email ? (
+                    <span className="nx-settings-verified" title={t('settings.accountSecurity.additionalEmailHint')}>
+                      {t('settings.accountSecurity.pending')}: {security.additional_pending_email}
+                    </span>
+                  ) : null}
+                  {(securityActions.has('request_additional_login_email') ||
+                    securityActions.has('replace_additional_login_email')) && (
+                    <form
+                      className="nx-settings-security-inline"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void runSecurityCommand(
+                          securityActions.has('replace_additional_login_email')
+                            ? AUTH.replaceAdditionalLoginEmail
+                            : AUTH.requestAdditionalLoginEmail,
+                          { email: additionalEmail },
+                        );
+                      }}
+                    >
+                      <input
+                        className="nx-glass-input"
+                        type="email"
+                        value={additionalEmail}
+                        placeholder="name@example.com"
+                        aria-label={t('settings.accountSecurity.additionalEmail')}
+                        title={t('settings.accountSecurity.additionalEmailHint')}
+                        onChange={(e) => setAdditionalEmail(e.target.value)}
+                        required
+                      />
+                      <button type="submit" className="nx-glass-btn nx-glass-btn--purple" disabled={securityBusy}>
+                        {securityActions.has('replace_additional_login_email')
+                          ? t('settings.accountSecurity.replaceEmail')
+                          : t('settings.accountSecurity.addEmail')}
+                      </button>
+                    </form>
+                  )}
+                  {securityActions.has('resend_additional_login_email') ? (
+                    <button
+                      type="button"
+                      className="nx-glass-btn nx-glass-btn--secondary"
+                      disabled={securityBusy}
+                      onClick={() => void runSecurityCommand(AUTH.resendAdditionalLoginEmail, {})}
+                    >
+                      {t('settings.accountSecurity.resend')}
+                    </button>
+                  ) : null}
+                  {securityActions.has('remove_additional_login_email') ? (
+                    <button
+                      type="button"
+                      className="nx-glass-btn nx-glass-btn--secondary"
+                      disabled={securityBusy}
+                      onClick={() => void runSecurityCommand(AUTH.removeAdditionalLoginEmail, {})}
+                    >
+                      {t('settings.accountSecurity.removeEmail')}
+                    </button>
+                  ) : null}
+                </dd>
+              </div>
+              <div className="nx-settings-identity-table__row">
+                <dt>{t('settings.changePasswordAction')}</dt>
+                <dd>
+                  <button
+                    type="button"
+                    className="nx-glass-btn nx-glass-btn--purple"
+                    disabled={securityBusy}
+                    title={t('settings.accountSecurity.resetHint')}
+                    onClick={() => void requestPasswordReset()}
+                  >
+                    {t('settings.accountSecurity.sendResetLink')}
                   </button>
-                </div>
-              </form>
-            )}
-            <div className="nx-settings-actions">
-              {securityActions.has('resend_additional_login_email') ? (
-                <button
-                  type="button"
-                  className="nx-glass-btn nx-glass-btn--secondary"
-                  disabled={securityBusy}
-                  onClick={() => void runSecurityCommand(AUTH.resendAdditionalLoginEmail, {})}
-                >
-                  {t('settings.accountSecurity.resend')}
-                </button>
-              ) : null}
-              {securityActions.has('remove_additional_login_email') ? (
-                <button
-                  type="button"
-                  className="nx-glass-btn nx-glass-btn--secondary"
-                  disabled={securityBusy}
-                  onClick={() => void runSecurityCommand(AUTH.removeAdditionalLoginEmail, {})}
-                >
-                  {t('settings.accountSecurity.removeEmail')}
-                </button>
-              ) : null}
-            </div>
-            <div className="nx-settings-password-recovery">
-              <h3>{t('settings.changePasswordAction')}</h3>
-              <p className="nx-settings-muted">{t('settings.accountSecurity.resetHint')}</p>
-              <button
-                type="button"
-                className="nx-glass-btn nx-glass-btn--purple"
-                disabled={securityBusy}
-                onClick={() => void requestPasswordReset()}
-              >
-                {t('settings.accountSecurity.sendResetLink')}
-              </button>
-              {passwordResetSent ? (
-                <p className="nx-settings-muted" role="status">
-                  {t('settings.accountSecurity.resetSent')}
-                </p>
-              ) : null}
-            </div>
+                  {passwordResetSent ? (
+                    <span className="nx-settings-verified" role="status">
+                      {t('settings.accountSecurity.resetSent')}
+                    </span>
+                  ) : null}
+                </dd>
+              </div>
+            </dl>
           </div>
         </div>
       </section>
@@ -593,7 +613,7 @@ export function Settings() {
         <form onSubmit={save}>
           <section className="nx-glass-card">
             <h2>{t('settings.profile.section')}</h2>
-            <div className="nx-settings-grid">
+            <div className="nx-settings-grid nx-settings-profile-grid">
               <label className="nx-glass-label">
                 {t('settings.profile.organizationName')}
                 <input
@@ -631,46 +651,6 @@ export function Settings() {
                 />
               </label>
               <label className="nx-glass-label">
-                {t('settings.profile.addressLine1')}
-                <input
-                  type="text"
-                  value={(form.addressLine1 as string) ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, addressLine1: e.target.value }))}
-                  className="nx-glass-input"
-                  readOnly={!capabilities.canEditSettings}
-                />
-              </label>
-              <label className="nx-glass-label">
-                {t('settings.profile.addressLine2')}
-                <input
-                  type="text"
-                  value={(form.addressLine2 as string) ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, addressLine2: e.target.value }))}
-                  className="nx-glass-input"
-                  readOnly={!capabilities.canEditSettings}
-                />
-              </label>
-              <label className="nx-glass-label">
-                {t('settings.profile.city')}
-                <input
-                  type="text"
-                  value={(form.city as string) ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
-                  className="nx-glass-input"
-                  readOnly={!capabilities.canEditSettings}
-                />
-              </label>
-              <label className="nx-glass-label">
-                {t('settings.profile.postalCode')}
-                <input
-                  type="text"
-                  value={(form.postalCode as string) ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, postalCode: e.target.value }))}
-                  className="nx-glass-input"
-                  readOnly={!capabilities.canEditSettings}
-                />
-              </label>
-              <label className="nx-glass-label">
                 {t('settings.profile.country')}
                 <select
                   value={(form.country as string) ?? ''}
@@ -688,6 +668,46 @@ export function Settings() {
                 {data?.profile?.countryWarning ? (
                   <span className="nx-settings-warning">{data.profile.countryWarning}</span>
                 ) : null}
+              </label>
+              <label className="nx-glass-label">
+                {t('settings.profile.addressLine1')}
+                <input
+                  type="text"
+                  value={(form.addressLine1 as string) ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, addressLine1: e.target.value }))}
+                  className="nx-glass-input"
+                  readOnly={!capabilities.canEditSettings}
+                />
+              </label>
+              <label className="nx-glass-label">
+                {t('settings.profile.city')}
+                <input
+                  type="text"
+                  value={(form.city as string) ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, city: e.target.value }))}
+                  className="nx-glass-input"
+                  readOnly={!capabilities.canEditSettings}
+                />
+              </label>
+              <label className="nx-glass-label">
+                {t('settings.profile.addressLine2')}
+                <input
+                  type="text"
+                  value={(form.addressLine2 as string) ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, addressLine2: e.target.value }))}
+                  className="nx-glass-input"
+                  readOnly={!capabilities.canEditSettings}
+                />
+              </label>
+              <label className="nx-glass-label">
+                {t('settings.profile.postalCode')}
+                <input
+                  type="text"
+                  value={(form.postalCode as string) ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, postalCode: e.target.value }))}
+                  className="nx-glass-input"
+                  readOnly={!capabilities.canEditSettings}
+                />
               </label>
               <label className="nx-glass-label">
                 {t('settings.profile.phone')}
@@ -710,8 +730,78 @@ export function Settings() {
                   readOnly={!capabilities.canEditSettings}
                 />
               </label>
+              <label className="nx-glass-label">
+                {t('settings.localization.language')}
+                <select
+                  className="nx-glass-input"
+                  value={locForm.language_code}
+                  onChange={(e) => setLocForm((f) => ({ ...f, language_code: e.target.value }))}
+                >
+                  {(localization?.language.options ?? [
+                    { locale: 'en', name: 'English' },
+                    { locale: 'he', name: 'עברית' },
+                  ]).map((opt) => (
+                    <option key={opt.locale} value={opt.locale}>
+                      {opt.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="nx-glass-label">
+                {t('settings.localization.timezone')}
+                <select
+                  className="nx-glass-input"
+                  value={locForm.timezone}
+                  title={t('settings.localization.timezoneNote')}
+                  onChange={(e) => setLocForm((f) => ({ ...f, timezone: e.target.value }))}
+                >
+                  {(localization?.timezone.options ?? [{ value: 'Asia/Jerusalem', label: 'Asia/Jerusalem' }]).map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="nx-glass-label">
+                {t('settings.localization.dateFormat')}
+                <select
+                  className="nx-glass-input"
+                  value={locForm.date_format}
+                  title={t('settings.localization.dateFormatNote')}
+                  onChange={(e) => setLocForm((f) => ({ ...f, date_format: e.target.value }))}
+                >
+                  {(localization?.date_format.options ?? [
+                    { value: 'DD/MM/YYYY', label: 'DD/MM/YYYY' },
+                    { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY' },
+                    { value: 'YYYY-MM-DD', label: 'YYYY-MM-DD' },
+                  ]).map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="nx-glass-label">
+                {t('settings.localization.currency')}
+                <select
+                  className="nx-glass-input"
+                  value={locForm.display_currency_code}
+                  title={t('settings.localization.currencyNote')}
+                  onChange={(e) => setLocForm((f) => ({ ...f, display_currency_code: e.target.value }))}
+                >
+                  {(localization?.display_currency.options ?? [
+                    { code: 'ILS', label: 'ILS — ₪', symbol: '₪' },
+                    { code: 'USD', label: 'USD — $', symbol: '$' },
+                    { code: 'EUR', label: 'EUR — €', symbol: '€' },
+                  ]).map((opt) => (
+                    <option key={opt.code} value={opt.code}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
-            {localizationFields}
+            {localizationSave}
             {countryConfigBlock}
           </section>
 
@@ -897,12 +987,16 @@ export function Settings() {
             <dd>{data.profile?.legalEntityType ? t(`settings.legalEntityType.${data.profile.legalEntityType}`) : '—'}</dd>
             <dt>{t(data.profile?.legalIdLabelKey ?? 'settings.legalIdLabel.generic')}</dt>
             <dd>{data.profile?.legalIdNumber ?? '—'}</dd>
+            <dt>{t('settings.profile.country')}</dt>
+            <dd>{data.profile?.country ?? '—'}</dd>
             <dt>{t('settings.profile.addressLine1')}</dt>
             <dd>{data.profile?.addressLine1 ?? '—'}</dd>
             <dt>{t('settings.profile.city')}</dt>
             <dd>{data.profile?.city ?? '—'}</dd>
-            <dt>{t('settings.profile.country')}</dt>
-            <dd>{data.profile?.country ?? '—'}</dd>
+            <dt>{t('settings.profile.addressLine2')}</dt>
+            <dd>{data.profile?.addressLine2 ?? '—'}</dd>
+            <dt>{t('settings.profile.postalCode')}</dt>
+            <dd>{data.profile?.postalCode ?? '—'}</dd>
             <dt>{t('settings.profile.phone')}</dt>
             <dd>{data.profile?.phone ?? '—'}</dd>
             <dt>{t('settings.profile.website')}</dt>

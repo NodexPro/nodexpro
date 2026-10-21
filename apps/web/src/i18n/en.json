@@ -188,7 +188,7 @@
       "organizationName": "Organization name",
       "legalEntityType": "Legal entity type",
       "legalIdNumber": "Business identifier",
-      "addressLine1": "Address line 1",
+      "addressLine1": "Address line 1 (Street)",
       "addressLine2": "Address line 2 (optional)",
       "city": "City",
       "postalCode": "Postal code (optional)",
