@@ -41,6 +41,8 @@ export async function resolveSessionShell(params: {
   permissions: string[];
   allCoreNavItems: NavItemDto[];
   moduleAppNavItems: NavItemDto[];
+  preloadedIncomeOnboardingComplete?: boolean;
+  preloadedCommercialModuleCodes?: string[];
 }): Promise<SessionShellModel> {
   if (!params.activeOrgId) {
     return {
@@ -54,8 +56,14 @@ export async function resolveSessionShell(params: {
     };
   }
 
-  const incomeComplete = await isIncomeOnboardingComplete(params.activeOrgId);
-  const commercialModules = await loadActiveCommercialModuleCodes(params.activeOrgId);
+  const [incomeComplete, commercialModules] = await Promise.all([
+    params.preloadedIncomeOnboardingComplete !== undefined
+      ? Promise.resolve(params.preloadedIncomeOnboardingComplete)
+      : isIncomeOnboardingComplete(params.activeOrgId),
+    params.preloadedCommercialModuleCodes
+      ? Promise.resolve(params.preloadedCommercialModuleCodes)
+      : loadActiveCommercialModuleCodes(params.activeOrgId),
+  ]);
   return resolveSessionNavigation({
     roleCode: params.roleCode,
     membershipActive: params.membershipActive,

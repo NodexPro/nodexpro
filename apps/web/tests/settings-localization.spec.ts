@@ -184,6 +184,21 @@ test('Owner console exposes Currencies and Languages routes without user sidebar
   assert.doesNotMatch(template, /Languages & Translations/);
 });
 
+test('Settings isolates glass layers and uses a growing page main to avoid Cosmic Horizon paint holes', () => {
+  const css = readFileSync(join(root, 'src/styles/nx-settings-deep-ocean.css'), 'utf8');
+  const glass = readFileSync(join(root, 'src/styles/nx-glass-surface.css'), 'utf8');
+  const layout = readFileSync(join(root, 'src/templates/template-1/TemplateLayout.tsx'), 'utf8');
+  const auth = readFileSync(join(root, 'src/components/guards/RequireAuth.tsx'), 'utf8');
+  assert.match(css, /isolation:\s*isolate/);
+  assert.match(css, /transform:\s*translateZ\(0\)/);
+  assert.match(glass, /t1-pageMain--settings/);
+  assert.match(glass, /nx-session-boot/);
+  assert.match(layout, /t1-pageMain--settings/);
+  assert.match(auth, /nx-session-boot/);
+  assert.doesNotMatch(auth, /return <div>Loading\.\.\.<\/div>/);
+  assert.doesNotMatch(css, /t1-appShell--client-operations::after/);
+});
+
 test('login uses identifier API helper instead of revealing alias mapping', () => {
   const helper = readFileSync(join(root, 'src/lib/sign-in-with-identifier.ts'), 'utf8');
   const login = readFileSync(join(root, 'src/pages/Login.tsx'), 'utf8');

@@ -26,6 +26,12 @@
   margin: 0;
 }
 
+.t1-pageMain--settings {
+  flex: 1 1 auto;
+  min-height: min-content;
+  overflow: visible;
+}
+
 .nx-glass-title {
   font-size: 22px;
   font-weight: 700;
@@ -431,6 +437,20 @@ textarea.nx-glass-input {
 .nx-modules-current {
   margin-bottom: 20px;
   padding: 12px 16px;
+}
+
+.nx-session-boot {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: #eef6ff;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  background: #061a33;
 }
 
 html:has(.nx-glass-auth),

@@ -124,7 +124,9 @@ export function TemplateLayout({
               ? 't1-pageMain t1-pageMain--work-engine-queue'
               : isDashboard
                 ? 't1-pageMain t1-pageMain--dashboard'
-                : 't1-pageMain'
+                : isSettings
+                  ? 't1-pageMain t1-pageMain--settings'
+                  : 't1-pageMain'
           }
         >
           <div

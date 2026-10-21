@@ -426,7 +426,6 @@ export async function patchOrganizationSettings(
   body: PatchOrganizationSettingsBody
 ): Promise<OrganizationSettingsDto> {
   if (ctx.organizationId !== orgId) throw forbidden('Organization context required');
-  if (!(await isOwner(ctx, orgId))) throw forbidden('Only the organization owner can edit settings');
 
   if (body.legalEntityType != null && body.legalEntityType !== '' && !LEGAL_ENTITY_TYPES.includes(body.legalEntityType as (typeof LEGAL_ENTITY_TYPES)[number])) {
     throw badRequest('Invalid legal_entity_type');
@@ -442,8 +441,14 @@ export async function patchOrganizationSettings(
     fileAccess.assertFileAllowedForSettingsImage(sigFile);
   }
 
-  const { data: orgBefore } = await supabaseAdmin.from('organizations').select('country_code').eq('id', orgId).single();
+  const [{ data: orgBefore }, { data: existing }] = await Promise.all([
+    supabaseAdmin.from('organizations').select('country_code, owner_user_id').eq('id', orgId).single(),
+    supabaseAdmin.from('organization_settings').select('*').eq('organization_id', orgId).maybeSingle(),
+  ]);
   if (!orgBefore) throw notFound('Organization not found');
+  if ((orgBefore as { owner_user_id: string | null }).owner_user_id !== ctx.user.id) {
+    throw forbidden('Only the organization owner can edit settings');
+  }
   const previousOrgCountry = String((orgBefore as { country_code: string }).country_code).trim().toUpperCase().slice(0, 2);
 
   let effectiveCountryCode = previousOrgCountry;
@@ -472,27 +477,8 @@ export async function patchOrganizationSettings(
     effectiveCountryCode = cc;
   }
 
-  const { data: ocsBeforeCfg } = await supabaseAdmin
-    .from('organization_country_settings')
-    .select('country_code, settings_status, active_country_pack_id, active_ruleset_id')
-    .eq('organization_id', orgId)
-    .maybeSingle();
-  const ocs = ocsBeforeCfg as
-    | {
-        country_code?: string | null;
-        settings_status?: string | null;
-        active_country_pack_id?: string | null;
-        active_ruleset_id?: string | null;
-      }
-    | null;
-  const hasConfiguredBinding =
-    !!ocs &&
-    String(ocs.settings_status ?? '').toLowerCase() === 'configured' &&
-    !!ocs.active_country_pack_id &&
-    !!ocs.active_ruleset_id &&
-    String(ocs.country_code ?? '').trim().toUpperCase().slice(0, 2) === effectiveCountryCode;
   const shouldAutoConfigureCountrySettings =
-    effectiveCountryCode.length === 2 && (body.country !== undefined || !hasConfiguredBinding);
+    body.country !== undefined && effectiveCountryCode.length === 2;
 
   if (shouldAutoConfigureCountrySettings) {
     const autoCfg = await autoConfigureOrganizationCountrySettings(orgId, effectiveCountryCode);
@@ -511,7 +497,6 @@ export async function patchOrganizationSettings(
     });
   }
 
-  const { data: existing } = await supabaseAdmin.from('organization_settings').select('*').eq('organization_id', orgId).maybeSingle();
   const base = (existing ?? { organization_id: orgId }) as Record<string, unknown>;
 
   if (body.organizationName !== undefined) base.organization_name = body.organizationName?.trim() || null;
@@ -575,7 +560,14 @@ export async function patchOrganizationSettings(
     await supabaseAdmin.from('organizations').update({ name: body.organizationName.trim(), updated_at: new Date().toISOString() }).eq('id', orgId);
   }
 
-  await syncIncomeIssuerProfileFromOrganization(orgId, { actorUserId: ctx.user.id, audit: true });
+  const shouldSyncIssuerProfile =
+    body.organizationName !== undefined ||
+    body.legalEntityType !== undefined ||
+    body.legalIdNumber !== undefined ||
+    body.country !== undefined;
+  if (shouldSyncIssuerProfile) {
+    await syncIncomeIssuerProfileFromOrganization(orgId, { actorUserId: ctx.user.id, audit: true });
+  }
 
   return getOrganizationSettings(ctx, orgId);
 }

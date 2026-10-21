@@ -23,6 +23,7 @@ import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import type { RequestContext } from '../../shared/context.js';
 import { resolveSessionShell } from './session-shell.service.js';
 import { loadSessionPreferenceSlices } from './session-preferences.service.js';
+import { isIncomeOnboardingComplete } from '../income/income-issuer-profile-sync.service.js';
 import { filterSessionEnabledModuleCodes } from '../modules/entitlement.service.js';
 import { loadEnabledMemberModuleIdSet } from '../modules/member-module-access.service.js';
 import { roleHasOfficeClientAccess } from '../client-operations/organization-client-access.pure.js';
@@ -43,43 +44,71 @@ async function buildMeResponse(
   ctx: RequestContext,
   opts?: { preferredActiveOrganizationId?: string | null }
 ): Promise<MeResponse> {
-  const activeOrgIds = await listUserActiveOrganizationIds(ctx.user.id);
-  const orgList: Array<{ id: string; name: string }> = [];
-  const orgCountryById = new Map<string, string | null>();
-  if (activeOrgIds.length) {
-    const { data: orgRows } = await supabaseAdmin
-      .from('organizations')
-      .select('id, name, country_code')
-      .in('id', activeOrgIds);
-    const typedOrgRows = (orgRows ?? []) as Array<{ id: string; name: string; country_code?: string | null }>;
-    const byId = new Map(typedOrgRows.map((o) => [o.id, o.name]));
-    for (const o of typedOrgRows) orgCountryById.set(o.id, o.country_code ?? null);
-    for (const id of activeOrgIds) {
-      orgList.push({ id, name: byId.get(id) ?? '' });
-    }
-  }
-  const orgIdSet = new Set(orgList.map((o) => o.id).filter(Boolean));
+  const [activeOrgIds, preferenceSlices] = await Promise.all([
+    listUserActiveOrganizationIds(ctx.user.id),
+    loadSessionPreferenceSlices(ctx),
+  ]);
+  const orgIdSet = new Set(activeOrgIds.filter(Boolean));
   let activeOrgId = opts?.preferredActiveOrganizationId ?? ctx.organizationId ?? null;
   if (activeOrgId && !orgIdSet.has(activeOrgId)) activeOrgId = null;
   let permissions = ctx.membership?.permissions ?? [];
-  if (activeOrgId && permissions.length === 0) {
-    const { loadMembershipWithPermissions } = await import('../rbac/rbac.service.js');
-    const m = await loadMembershipWithPermissions(ctx.user.id, activeOrgId);
-    if (m) permissions = m.permissions;
-    else if (await mayUseLegacyOrganizationUsersAccessFallback(ctx.user.id, activeOrgId)) {
-      const { data: ou } = await supabaseAdmin
-        .from('organization_users')
-        .select('roles(code, role_permissions(permissions(code)))')
-        .eq('organization_id', activeOrgId)
-        .eq('user_id', ctx.user.id)
-        .eq('membership_status', 'active')
-        .single();
-      const role = supabaseEmbedOne(
-        ou?.roles as { role_permissions?: Array<{ permissions: { code: string } | null }> } | null | undefined
-      );
-      permissions = (role?.role_permissions ?? []).map((rp) => rp.permissions?.code).filter((c): c is string => !!c);
-    }
+
+  type SessionModuleNav = {
+    code: string;
+    nav_path: string | null;
+    nav_label: string | null;
+    nav_order: number | null;
+    is_system?: boolean | null;
+    is_active?: boolean | null;
+  };
+  const rowMod = (raw: unknown) =>
+    (Array.isArray(raw) ? raw[0] : raw) as SessionModuleNav | undefined;
+
+  const [orgRowsRes, modsRes, incomeComplete, refreshedMembership] = await Promise.all([
+    activeOrgIds.length
+      ? supabaseAdmin.from('organizations').select('id, name, country_code').in('id', activeOrgIds)
+      : Promise.resolve({ data: [] as Array<{ id: string; name: string; country_code?: string | null }> }),
+    activeOrgId
+      ? supabaseAdmin
+          .from('organization_modules')
+          .select('module_id, modules(code, nav_path, nav_label, nav_order, is_system, is_active)')
+          .eq('organization_id', activeOrgId)
+          .eq('status', 'active')
+      : Promise.resolve({ data: [] as Array<{ module_id: string; modules: unknown }> }),
+    activeOrgId ? isIncomeOnboardingComplete(activeOrgId) : Promise.resolve(false),
+    activeOrgId && permissions.length === 0
+      ? (async () => {
+          const { loadMembershipWithPermissions } = await import('../rbac/rbac.service.js');
+          return loadMembershipWithPermissions(ctx.user.id, activeOrgId);
+        })()
+      : Promise.resolve(null),
+  ]);
+
+  const orgList: Array<{ id: string; name: string }> = [];
+  const orgCountryById = new Map<string, string | null>();
+  const typedOrgRows = (orgRowsRes.data ?? []) as Array<{ id: string; name: string; country_code?: string | null }>;
+  const byId = new Map(typedOrgRows.map((o) => [o.id, o.name]));
+  for (const o of typedOrgRows) orgCountryById.set(o.id, o.country_code ?? null);
+  for (const id of activeOrgIds) {
+    orgList.push({ id, name: byId.get(id) ?? '' });
   }
+
+  if (refreshedMembership) {
+    permissions = refreshedMembership.permissions;
+  } else if (activeOrgId && permissions.length === 0 && (await mayUseLegacyOrganizationUsersAccessFallback(ctx.user.id, activeOrgId))) {
+    const { data: ou } = await supabaseAdmin
+      .from('organization_users')
+      .select('roles(code, role_permissions(permissions(code)))')
+      .eq('organization_id', activeOrgId)
+      .eq('user_id', ctx.user.id)
+      .eq('membership_status', 'active')
+      .single();
+    const role = supabaseEmbedOne(
+      ou?.roles as { role_permissions?: Array<{ permissions: { code: string } | null }> } | null | undefined
+    );
+    permissions = (role?.role_permissions ?? []).map((rp) => rp.permissions?.code).filter((c): c is string => !!c);
+  }
+
   let enabledModules: string[] = [];
   const navItems: { path: string; label: string; order: number }[] = [];
 
@@ -93,32 +122,29 @@ async function buildMeResponse(
   if (hasPermission(permissions, 'access_billing') || permissions.includes('subscriptions:read')) navItems.push({ path: '/billing', label: 'Billing', order: 40 });
 
   const moduleAppNavItems: { path: string; label: string; order: number }[] = [];
+  let commercialModuleCodes: string[] = [];
   if (activeOrgId) {
-    const mods = await supabaseAdmin
-      .from('organization_modules')
-      .select('module_id, modules(code, nav_path, nav_label, nav_order)')
-      .eq('organization_id', activeOrgId)
-      .eq('status', 'active');
-    const modList = (mods.data ?? []) as { module_id: string; modules: unknown }[];
-    const rowMod = (raw: unknown) =>
-      (Array.isArray(raw) ? raw[0] : raw) as
-        | { code: string; nav_path: string | null; nav_label: string | null; nav_order: number | null }
-        | undefined;
+    const modList = (modsRes.data ?? []) as { module_id: string; modules: unknown }[];
     const sessionModules = modList
       .map((m) => {
         const mo = rowMod(m.modules);
         if (!mo?.code) return null;
         return { moduleId: m.module_id, code: mo.code, nav: mo };
       })
-      .filter((m): m is { moduleId: string; code: string; nav: NonNullable<ReturnType<typeof rowMod>> } => m != null);
-    const entitledCodes = await filterSessionEnabledModuleCodes({
-      organizationId: activeOrgId,
-      modules: sessionModules.map((m) => ({ moduleId: m.moduleId, code: m.code })),
-    });
-    const roleCode = ctx.membership?.roleCode ?? '';
-    const memberModuleIds = roleHasOfficeClientAccess(roleCode)
-      ? null
-      : await loadEnabledMemberModuleIdSet(activeOrgId, ctx.user.id);
+      .filter((m): m is { moduleId: string; code: string; nav: SessionModuleNav } => m != null);
+    commercialModuleCodes = [...new Set(
+      sessionModules
+        .filter((m) => m.nav.is_system !== true && m.nav.is_active !== false)
+        .map((m) => m.code),
+    )].sort();
+    const roleCode = ctx.membership?.roleCode ?? refreshedMembership?.roleCode ?? '';
+    const [entitledCodes, memberModuleIds] = await Promise.all([
+      filterSessionEnabledModuleCodes({
+        organizationId: activeOrgId,
+        modules: sessionModules.map((m) => ({ moduleId: m.moduleId, code: m.code })),
+      }),
+      roleHasOfficeClientAccess(roleCode) ? Promise.resolve(null) : loadEnabledMemberModuleIdSet(activeOrgId, ctx.user.id),
+    ]);
     enabledModules = sessionModules
       .map((m) => m.code)
       .filter((code) => entitledCodes.has(code));
@@ -143,14 +169,15 @@ async function buildMeResponse(
   const uiLanguage = resolveUiLanguage(ctx);
   const shell = await resolveSessionShell({
     activeOrgId,
-    roleCode: ctx.membership?.roleCode ?? null,
-    membershipActive: Boolean(ctx.membership?.roleCode),
+    roleCode: ctx.membership?.roleCode ?? refreshedMembership?.roleCode ?? null,
+    membershipActive: Boolean(ctx.membership?.roleCode || refreshedMembership?.roleCode),
     permissions,
     allCoreNavItems: navItems,
     moduleAppNavItems,
+    preloadedIncomeOnboardingComplete: incomeComplete,
+    preloadedCommercialModuleCodes: commercialModuleCodes,
   });
   const exposedCoreNav = shell.available_navigation.filter((item) => !item.path.startsWith('/m/'));
-  const preferenceSlices = await loadSessionPreferenceSlices(ctx);
   const meCore: MeCoreForSidebar = {
     user: {
       id: ctx.user.id,

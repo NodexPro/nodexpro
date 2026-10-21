@@ -30,10 +30,17 @@ export async function updateUserStoredActiveOrganizationId(userId: string, organ
  * for orgs with NO memberships row (never when canonical status is revoked).
  */
 export async function listUserActiveOrganizationIds(userId: string): Promise<string[]> {
-  const { data: membershipRows } = await supabaseAdmin
-    .from('organization_memberships')
-    .select('organization_id, status')
-    .eq('user_id', userId);
+  const [{ data: membershipRows }, ou] = await Promise.all([
+    supabaseAdmin
+      .from('organization_memberships')
+      .select('organization_id, status')
+      .eq('user_id', userId),
+    supabaseAdmin
+      .from('organization_users')
+      .select('organization_id')
+      .eq('user_id', userId)
+      .eq('membership_status', 'active'),
+  ]);
 
   const ids = new Set<string>();
   const canonicalOrgIds = new Set<string>();
@@ -44,11 +51,6 @@ export async function listUserActiveOrganizationIds(userId: string): Promise<str
     if ((r as { status: string }).status === 'active') ids.add(orgId);
   }
 
-  const ou = await supabaseAdmin
-    .from('organization_users')
-    .select('organization_id')
-    .eq('user_id', userId)
-    .eq('membership_status', 'active');
   for (const r of ou.data ?? []) {
     const orgId = String((r as { organization_id: string }).organization_id ?? '');
     if (!orgId) continue;
