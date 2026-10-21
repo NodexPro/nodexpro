@@ -281,7 +281,8 @@
     },
     "errors": {
       "loadFailed": "Failed to load settings",
-      "saveFailed": "Failed to save settings"
+      "saveFailed": "Failed to save settings",
+      "retry": "Retry"
     }
   },
   "dashboard": {

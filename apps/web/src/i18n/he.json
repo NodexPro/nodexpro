@@ -281,7 +281,8 @@
     },
     "errors": {
       "loadFailed": "טעינת ההגדרות נכשלה",
-      "saveFailed": "שמירת ההגדרות נכשלה"
+      "saveFailed": "שמירת ההגדרות נכשלה",
+      "retry": "נסה שוב"
     }
   },
   "dashboard": {

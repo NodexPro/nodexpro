@@ -9,10 +9,11 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 test('Settings uses Dashboard glass cards and does not reveal the current password', () => {
   const settings = readFileSync(join(root, 'src/pages/Settings.tsx'), 'utf8');
   const css = readFileSync(join(root, 'src/styles/nx-settings-deep-ocean.css'), 'utf8');
+  const dashboard = readFileSync(join(root, 'src/styles/nx-dashboard.css'), 'utf8');
   assert.match(settings, /nx-settings-deep-ocean/);
   assert.match(settings, /account_security/);
   assert.match(settings, /password_indicator/);
-  assert.match(settings, /#nx-account-security/);
+  assert.match(settings, /id="nx-account-security"/);
   assert.match(settings, /nx-settings-pair/);
   assert.doesNotMatch(settings, /auth\.getUser\(\)[\s\S]*password/);
   assert.doesNotMatch(settings, /current_password/);
@@ -24,6 +25,8 @@ test('Settings uses Dashboard glass cards and does not reveal the current passwo
   assert.match(css, /border-radius:\s*14px/);
   assert.match(css, /rgba\(210,\s*238,\s*255/);
   assert.match(css, /rgba\(70,\s*213,\s*255/);
+  assert.match(dashboard, /rgba\(248,\s*252,\s*255,\s*0\.2\)/);
+  assert.match(css, /rgba\(248,\s*252,\s*255,\s*0\.2\)/);
 });
 
 test('Settings consolidates identity, profile localization, and document pairs', () => {
@@ -43,6 +46,50 @@ test('Settings consolidates identity, profile localization, and document pairs',
   assert.doesNotMatch(settings, /settings\.localization\.section/);
   assert.doesNotMatch(settings, /settings\.localization\.country/);
   assert.equal((settings.match(/settings\.profile\.country(?![A-Za-z])/g) ?? []).length, 2);
+});
+
+test('Company Identity is a five-row key/value table with masked secrets and secure reset', () => {
+  const settings = readFileSync(join(root, 'src/pages/Settings.tsx'), 'utf8');
+  const css = readFileSync(join(root, 'src/styles/nx-settings-deep-ocean.css'), 'utf8');
+  const en = readFileSync(join(root, 'src/i18n/en.json'), 'utf8');
+  const he = readFileSync(join(root, 'src/i18n/he.json'), 'utf8');
+  const identityBlock = settings.slice(
+    settings.indexOf('nx-settings-identity-table'),
+    settings.indexOf('nx-account-security'),
+  );
+  assert.match(identityBlock, /legalIdLabelKey \?\? 'settings\.legalIdLabel\.teudatZehut'/);
+  assert.match(identityBlock, /settings\.ownerIdentity\.status/);
+  assert.match(identityBlock, /settings\.ownerIdentity\.trialStatus/);
+  assert.match(identityBlock, /settings\.loginEmail/);
+  assert.match(identityBlock, /settings\.passwordMasked/);
+  assert.match(identityBlock, /password_indicator/);
+  assert.match(identityBlock, /primary_email_verified/);
+  assert.match(identityBlock, /requestPasswordReset/);
+  assert.ok(identityBlock.indexOf('</dl>') < identityBlock.indexOf('identityNote'));
+  assert.match(settings, /nx-settings-identity-note/);
+  assert.match(css, /nx-settings-identity-table/);
+  assert.match(css, /grid-template-columns:\s*minmax\(7\.5rem, 38%\) minmax\(0, 1fr\)/);
+  assert.match(en, /"retry": "Retry"/);
+  assert.match(he, /"retry": "נסה שוב"/);
+  const idOrder = [
+    identityBlock.indexOf('legalIdLabelKey'),
+    identityBlock.indexOf('settings.ownerIdentity.status'),
+    identityBlock.indexOf('settings.ownerIdentity.trialStatus'),
+    identityBlock.indexOf('settings.loginEmail'),
+    identityBlock.indexOf('settings.passwordMasked'),
+  ];
+  assert.deepEqual(idOrder, [...idOrder].sort((a, b) => a - b));
+});
+
+test('Settings loads one organization settings aggregate and shows a shell while it loads', () => {
+  const settings = readFileSync(join(root, 'src/pages/Settings.tsx'), 'utf8');
+  assert.match(settings, /apiJson<SettingsData>\(orgSettings\(orgId\)/);
+  assert.equal((settings.match(/orgSettings\(orgId\)/g) ?? []).length, 2);
+  assert.doesNotMatch(settings, /orgCountrySettings/);
+  assert.doesNotMatch(settings, /if \(loading\) return/);
+  assert.match(settings, /nx-settings-placeholder/);
+  assert.match(settings, /settings\.errors\.retry/);
+  assert.match(settings, /country_configuration/);
 });
 
 test('Owner console exposes Currencies and Languages routes without user sidebar entries', () => {

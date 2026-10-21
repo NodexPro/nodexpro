@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../api/client';
-import { AUTH, orgCountrySettings, orgSettings } from '../api/endpoints';
+import { AUTH, orgSettings } from '../api/endpoints';
 import { AccountRequiredMark } from '../components/glass/AccountRequiredMark';
 import { useI18n } from '../i18n/I18nProvider';
 import { supabase } from '../lib/supabase';
@@ -41,6 +41,11 @@ interface SettingsData {
     website: string | null;
     logoFileAssetId: string | null;
   };
+  country_configuration?: {
+    status: 'configured' | 'not_configured';
+    active_pack: string | null;
+    active_ruleset: string | null;
+  };
   documentIdentity?: {
     displayNameOnDocuments: string | null;
     displayPhoneOnDocuments: boolean;
@@ -63,41 +68,32 @@ interface SettingsData {
   };
 }
 
-interface CountrySettingsData {
-  aggregate_key: 'organization_country_settings_aggregate';
-  mode: 'read_only';
-  managed_by: 'platform_owner';
-  organization: {
-    id: string;
-    country_code: string | null;
-    name: string | null;
-  } | null;
-  settings_status: string;
-  eligible_packs: Array<{
-    id: string;
-    pack_code: string;
-    name: string;
-    status: string;
-    code_version: string;
-    status_badge?: { label?: string };
-  }>;
-  active_pack: {
-    id?: string;
-    pack_code?: string;
-    name?: string;
-    status?: string;
-  } | null;
-  active_ruleset: {
-    id?: string;
-    ruleset_code?: string;
-    ruleset_version?: string;
-    effective_from?: string;
-    effective_to?: string | null;
-    status?: string;
-  } | null;
-  diagnostics: string[];
-  warnings?: string[];
-  note: string;
+function formFromSettings(d: SettingsData): Record<string, unknown> {
+  return {
+    organizationName: d.profile?.organizationName ?? '',
+    legalEntityType: d.profile?.legalEntityType ?? '',
+    legalIdNumber: d.profile?.legalIdNumber ?? '',
+    addressLine1: d.profile?.addressLine1 ?? '',
+    addressLine2: d.profile?.addressLine2 ?? '',
+    city: d.profile?.city ?? '',
+    postalCode: d.profile?.postalCode ?? '',
+    country: (d.profile?.country ?? '').toUpperCase(),
+    phone: d.profile?.phone ?? '',
+    website: d.profile?.website ?? '',
+    displayNameOnDocuments: d.documentIdentity?.displayNameOnDocuments ?? '',
+    displayPhoneOnDocuments: d.documentIdentity?.displayPhoneOnDocuments,
+    displayWebsiteOnDocuments: d.documentIdentity?.displayWebsiteOnDocuments,
+    displayAddressOnDocuments: d.documentIdentity?.displayAddressOnDocuments,
+    documentFooterNote: d.documentIdentity?.documentFooterNote ?? '',
+    signatureText: d.signature?.signatureText ?? '',
+    bankAccountHolder: d.bankDetails?.bankAccountHolder ?? '',
+    bankName: d.bankDetails?.bankName ?? '',
+    bankBranch: d.bankDetails?.bankBranch ?? '',
+    bankAccountNumber: d.bankDetails?.bankAccountNumber ?? '',
+    iban: d.bankDetails?.iban ?? '',
+    swift: d.bankDetails?.swift ?? '',
+    displayBankDetailsOnDocuments: d.bankDetails?.displayBankDetailsOnDocuments,
+  };
 }
 
 const FALLBACK_COUNTRY_OPTIONS: Array<{ code: string; label: string }> = [
@@ -114,7 +110,6 @@ export function Settings() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<Record<string, unknown>>({});
-  const [countryConfig, setCountryConfig] = useState<CountrySettingsData | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [additionalEmail, setAdditionalEmail] = useState('');
   const [securityBusy, setSecurityBusy] = useState(false);
@@ -137,39 +132,11 @@ export function Settings() {
     const ac = new AbortController();
     setLoading(true);
     setError('');
-    Promise.all([
-      apiJson<SettingsData>(orgSettings(orgId), { signal: ac.signal }),
-      apiJson<CountrySettingsData>(orgCountrySettings(orgId), { signal: ac.signal }),
-    ])
-      .then(([d, countryCfg]) => {
+    apiJson<SettingsData>(orgSettings(orgId), { signal: ac.signal })
+      .then((d) => {
         if (ac.signal.aborted) return;
         setData(d);
-        setCountryConfig(countryCfg);
-        setForm({
-          organizationName: d.profile?.organizationName ?? '',
-          legalEntityType: d.profile?.legalEntityType ?? '',
-          legalIdNumber: d.profile?.legalIdNumber ?? '',
-          addressLine1: d.profile?.addressLine1 ?? '',
-          addressLine2: d.profile?.addressLine2 ?? '',
-          city: d.profile?.city ?? '',
-          postalCode: d.profile?.postalCode ?? '',
-          country: (d.profile?.country ?? '').toUpperCase(),
-          phone: d.profile?.phone ?? '',
-          website: d.profile?.website ?? '',
-          displayNameOnDocuments: d.documentIdentity?.displayNameOnDocuments ?? '',
-          displayPhoneOnDocuments: d.documentIdentity?.displayPhoneOnDocuments,
-          displayWebsiteOnDocuments: d.documentIdentity?.displayWebsiteOnDocuments,
-          displayAddressOnDocuments: d.documentIdentity?.displayAddressOnDocuments,
-          documentFooterNote: d.documentIdentity?.documentFooterNote ?? '',
-          signatureText: d.signature?.signatureText ?? '',
-          bankAccountHolder: d.bankDetails?.bankAccountHolder ?? '',
-          bankName: d.bankDetails?.bankName ?? '',
-          bankBranch: d.bankDetails?.bankBranch ?? '',
-          bankAccountNumber: d.bankDetails?.bankAccountNumber ?? '',
-          iban: d.bankDetails?.iban ?? '',
-          swift: d.bankDetails?.swift ?? '',
-          displayBankDetailsOnDocuments: d.bankDetails?.displayBankDetailsOnDocuments,
-        });
+        setForm(formFromSettings(d));
       })
       .catch((e) => {
         if (e instanceof Error && e.name === 'AbortError') return;
@@ -239,33 +206,7 @@ export function Settings() {
         body: JSON.stringify(payload),
       });
       setData(updated);
-      const countryCfg = await apiJson<CountrySettingsData>(orgCountrySettings(orgId));
-      setCountryConfig(countryCfg);
-      setForm({
-        organizationName: updated.profile?.organizationName ?? '',
-        legalEntityType: updated.profile?.legalEntityType ?? '',
-        legalIdNumber: updated.profile?.legalIdNumber ?? '',
-        addressLine1: updated.profile?.addressLine1 ?? '',
-        addressLine2: updated.profile?.addressLine2 ?? '',
-        city: updated.profile?.city ?? '',
-        postalCode: updated.profile?.postalCode ?? '',
-        country: (updated.profile?.country ?? '').toUpperCase(),
-        phone: updated.profile?.phone ?? '',
-        website: updated.profile?.website ?? '',
-        displayNameOnDocuments: updated.documentIdentity?.displayNameOnDocuments ?? '',
-        displayPhoneOnDocuments: updated.documentIdentity?.displayPhoneOnDocuments,
-        displayWebsiteOnDocuments: updated.documentIdentity?.displayWebsiteOnDocuments,
-        displayAddressOnDocuments: updated.documentIdentity?.displayAddressOnDocuments,
-        documentFooterNote: updated.documentIdentity?.documentFooterNote ?? '',
-        signatureText: updated.signature?.signatureText ?? '',
-        bankAccountHolder: updated.bankDetails?.bankAccountHolder ?? '',
-        bankName: updated.bankDetails?.bankName ?? '',
-        bankBranch: updated.bankDetails?.bankBranch ?? '',
-        bankAccountNumber: updated.bankDetails?.bankAccountNumber ?? '',
-        iban: updated.bankDetails?.iban ?? '',
-        swift: updated.bankDetails?.swift ?? '',
-        displayBankDetailsOnDocuments: updated.bankDetails?.displayBankDetailsOnDocuments,
-      });
+      setForm(formFromSettings(updated));
     } catch (e) {
       setError(e instanceof Error ? e.message : t('settings.errors.saveFailed'));
     } finally {
@@ -276,24 +217,25 @@ export function Settings() {
   if (auth.status !== 'authenticated') return null;
   if (!orgId) return <p className="nx-glass-page">{t('topBar.selectOrg')}</p>;
 
-  if (loading) return <p className="nx-glass-page">{t('common.loading')}</p>;
-  if (!data) return null;
-
-  const { capabilities } = data;
-  const legalEntityTypes = Object.keys(data.legalEntityTypeToLabelKey ?? {});
+  const capabilities = data?.capabilities ?? {
+    canEditSettings: false,
+    showBankDetails: false,
+    showOwnerIdentity: false,
+  };
+  const legalEntityTypes = Object.keys(data?.legalEntityTypeToLabelKey ?? {});
 
   const legalIdLabelKey =
-    (form.legalEntityType as string) && data.legalEntityTypeToLabelKey?.[form.legalEntityType as string]
+    (form.legalEntityType as string) && data?.legalEntityTypeToLabelKey?.[form.legalEntityType as string]
       ? data.legalEntityTypeToLabelKey[form.legalEntityType as string]
       : 'settings.legalIdLabel.generic';
 
-  const trialDisplayText = data.ownerIdentity
+  const trialDisplayText = data?.ownerIdentity
     ? data.ownerIdentity.trialStatusValue
       ? t(data.ownerIdentity.trialStatusLabelKey).replace('{{date}}', data.ownerIdentity.trialStatusValue)
       : t(data.ownerIdentity.trialStatusLabelKey)
     : '';
 
-  const isCountryConfigured = countryConfig?.settings_status === 'configured';
+  const isCountryConfigured = data?.country_configuration?.status === 'configured';
   const security = auth.status === 'authenticated' ? auth.me.account_security : undefined;
   const localization = auth.status === 'authenticated' ? auth.me.localization : undefined;
   const countryOptions =
@@ -441,11 +383,15 @@ export function Settings() {
   const countryConfigBlock = (
     <div className="nx-settings-country-status">
       <h3>{t('settings.profile.countryStatus')}</h3>
-      <p className={isCountryConfigured ? 'nx-settings-status-ok' : 'nx-settings-warning'}>
-        {isCountryConfigured
-          ? t('settings.profile.countryConfigured')
-          : t('settings.profile.countryIncomplete')}
-      </p>
+      {loading && !data ? (
+        <p className="nx-settings-placeholder" aria-busy="true">{t('common.loading')}</p>
+      ) : (
+        <p className={isCountryConfigured ? 'nx-settings-status-ok' : 'nx-settings-warning'}>
+          {isCountryConfigured
+            ? t('settings.profile.countryConfigured')
+            : t('settings.profile.countryIncomplete')}
+        </p>
+      )}
     </div>
   );
 
@@ -455,12 +401,19 @@ export function Settings() {
       <p className="nx-glass-subtitle">{t('settings.subtitle')}</p>
 
       {error && (
-        <div className="nx-glass-alert nx-glass-alert--error">
-          {error}
+        <div className="nx-glass-alert nx-glass-alert--error" role="alert">
+          <span>{error}</span>
+          <button
+            type="button"
+            className="nx-glass-btn nx-glass-btn--secondary"
+            onClick={() => setReloadKey((k) => k + 1)}
+          >
+            {t('settings.errors.retry')}
+          </button>
         </div>
       )}
 
-      {!capabilities.canEditSettings && (
+      {data && !capabilities.canEditSettings && (
         <p className="nx-glass-alert nx-glass-alert--warn">
           {t('settings.readOnly')}
         </p>
@@ -470,49 +423,78 @@ export function Settings() {
         <div className="nx-settings-pair">
           <div className="nx-settings-pair__col">
             <h2>{t('settings.ownerIdentity.section')}</h2>
-            {capabilities.showOwnerIdentity && data.ownerIdentity ? (
-              <>
-                <div className="nx-settings-identity-facts">
-                  <div>
-                    <dt>{t(data.ownerIdentity.legalIdLabelKey)}</dt>
-                    <dd className="nx-settings-readonly">{data.ownerIdentity.masked ?? '***'}</dd>
-                  </div>
-                  <div>
-                    <dt>{t('settings.ownerIdentity.status')}</dt>
-                    <dd className="nx-settings-readonly">
-                      {data.ownerIdentity.isLocked ? t('settings.ownerIdentity.locked') : t('settings.ownerIdentity.set')}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>{t('settings.ownerIdentity.trialStatus')}</dt>
-                    <dd className="nx-settings-readonly">{trialDisplayText}</dd>
-                  </div>
-                </div>
-                <p className="nx-settings-muted">{t('settings.ownerIdentity.identityNote')}</p>
-              </>
-            ) : (
-              <p className="nx-settings-muted">{t('settings.noOwnerIdentity')}</p>
-            )}
-            <div className="nx-settings-fields">
-              <div>
-                <dt>{t('settings.loginEmail')}</dt>
-                <dd className="nx-settings-readonly">{security?.primary_login_email ?? auth.me.user.email}</dd>
-                <small className="nx-settings-muted">
-                  {security?.primary_email_verified || auth.me.user.email_verified
-                    ? t('settings.loginEmailVerified')
-                    : t('settings.loginEmailUnverified')}
-                </small>
-              </div>
-              <div>
-                <dt>{t('settings.passwordMasked')}</dt>
-                <dd className="nx-settings-readonly" aria-label={t('settings.passwordMasked')}>
-                  {security?.password_indicator ?? '••••••••••••'}
+            <dl className="nx-settings-identity-table" data-testid="nx-settings-identity-table">
+              <div className="nx-settings-identity-table__row">
+                <dt>{t(data?.ownerIdentity?.legalIdLabelKey ?? 'settings.legalIdLabel.teudatZehut')}</dt>
+                <dd className="nx-settings-readonly">
+                  {loading && !data ? (
+                    <span className="nx-settings-placeholder" aria-busy="true">{t('common.loading')}</span>
+                  ) : (
+                    data?.ownerIdentity?.masked ?? '—'
+                  )}
                 </dd>
-                <a className="nx-glass-link" href="#nx-account-security">
-                  {t('settings.changePasswordAction')}
-                </a>
               </div>
-            </div>
+              <div className="nx-settings-identity-table__row">
+                <dt>{t('settings.ownerIdentity.status')}</dt>
+                <dd className="nx-settings-readonly">
+                  {loading && !data ? (
+                    <span className="nx-settings-placeholder" aria-busy="true">{t('common.loading')}</span>
+                  ) : data?.ownerIdentity ? (
+                    data.ownerIdentity.isLocked ? t('settings.ownerIdentity.locked') : t('settings.ownerIdentity.set')
+                  ) : (
+                    '—'
+                  )}
+                </dd>
+              </div>
+              <div className="nx-settings-identity-table__row">
+                <dt>{t('settings.ownerIdentity.trialStatus')}</dt>
+                <dd className="nx-settings-readonly">
+                  {loading && !data ? (
+                    <span className="nx-settings-placeholder" aria-busy="true">{t('common.loading')}</span>
+                  ) : (
+                    trialDisplayText || '—'
+                  )}
+                </dd>
+              </div>
+              <div className="nx-settings-identity-table__row">
+                <dt>{t('settings.loginEmail')}</dt>
+                <dd className="nx-settings-readonly">
+                  <span>{security?.primary_login_email ?? auth.me.user.email}</span>
+                  <span
+                    className={
+                      security?.primary_email_verified || auth.me.user.email_verified
+                        ? 'nx-settings-verified'
+                        : 'nx-settings-unverified'
+                    }
+                  >
+                    {security?.primary_email_verified || auth.me.user.email_verified
+                      ? t('settings.loginEmailVerified')
+                      : t('settings.loginEmailUnverified')}
+                  </span>
+                </dd>
+              </div>
+              <div className="nx-settings-identity-table__row">
+                <dt>{t('settings.passwordMasked')}</dt>
+                <dd className="nx-settings-readonly">
+                  <span aria-label={t('settings.passwordMasked')}>
+                    {security?.password_indicator ?? '••••••••••••'}
+                  </span>
+                  <button
+                    type="button"
+                    className="nx-glass-link nx-settings-identity-action"
+                    disabled={securityBusy}
+                    onClick={() => void requestPasswordReset()}
+                  >
+                    {t('settings.changePasswordAction')}
+                  </button>
+                </dd>
+              </div>
+            </dl>
+            {data?.ownerIdentity ? (
+              <p className="nx-settings-muted nx-settings-identity-note">{t('settings.ownerIdentity.identityNote')}</p>
+            ) : !loading ? (
+              <p className="nx-settings-muted nx-settings-identity-note">{t('settings.noOwnerIdentity')}</p>
+            ) : null}
           </div>
 
           <div className="nx-settings-pair__col" id="nx-account-security">
@@ -607,7 +589,7 @@ export function Settings() {
         </div>
       </section>
 
-      {capabilities.canEditSettings && (
+      {data && capabilities.canEditSettings && (
         <form onSubmit={save}>
           <section className="nx-glass-card">
             <h2>{t('settings.profile.section')}</h2>
@@ -703,7 +685,7 @@ export function Settings() {
                     </option>
                   ))}
                 </select>
-                {data.profile?.countryWarning ? (
+                {data?.profile?.countryWarning ? (
                   <span className="nx-settings-warning">{data.profile.countryWarning}</span>
                 ) : null}
               </label>
@@ -789,7 +771,7 @@ export function Settings() {
                 </div>
               </div>
 
-              {capabilities.showBankDetails && data.bankDetails !== undefined && (
+              {capabilities.showBankDetails && data?.bankDetails !== undefined && (
                 <div className="nx-settings-pair__col">
                   <h2>{t('settings.bankDetails.section')}</h2>
                   <div className="nx-settings-fields">
@@ -898,7 +880,14 @@ export function Settings() {
         </form>
       )}
 
-      {!capabilities.canEditSettings && (
+      {loading && !data && (
+        <section className="nx-glass-card" aria-busy="true">
+          <h2>{t('settings.profile.section')}</h2>
+          <p className="nx-settings-placeholder">{t('common.loading')}</p>
+        </section>
+      )}
+
+      {data && !capabilities.canEditSettings && (
         <section className="nx-glass-card">
           <h2>{t('settings.profile.section')}</h2>
           <dl className="nx-settings-readonly-list">

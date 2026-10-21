@@ -246,13 +246,21 @@ async function isOwner(ctx: RequestContext, orgId: string): Promise<boolean> {
 export async function getOrganizationSettings(ctx: RequestContext, orgId: string): Promise<OrganizationSettingsDto> {
   if (ctx.organizationId !== orgId) throw forbidden('Organization context required');
 
-  const owner = await isOwner(ctx, orgId);
   const perms = ctx.membership?.permissions ?? [];
+  const [owner, ownerIdentity, trial, orgRes, settingsRes, ocsRes] = await Promise.all([
+    isOwner(ctx, orgId),
+    legalIdentityService.getOwnerIdentityForSettings(orgId),
+    trialService.getTrialState(orgId),
+    supabaseAdmin.from('organizations').select('name, legal_name, country_code').eq('id', orgId).single(),
+    supabaseAdmin.from('organization_settings').select('*').eq('organization_id', orgId).maybeSingle(),
+    supabaseAdmin
+      .from('organization_country_settings')
+      .select('active_country_pack_id, active_ruleset_id')
+      .eq('organization_id', orgId)
+      .maybeSingle(),
+  ]);
   const canEditSettings =
     owner && (perms.includes('settings:write') || perms.includes('access_settings'));
-
-  const ownerIdentity = await legalIdentityService.getOwnerIdentityForSettings(orgId);
-  const trial = await trialService.getTrialState(orgId);
   const trialDisplay = getTrialStatusDisplay(trial.trialStatus, trial.endsAt);
 
   const result: OrganizationSettingsDto = {
@@ -279,17 +287,27 @@ export async function getOrganizationSettings(ctx: RequestContext, orgId: string
     };
   }
 
-  const { data: org } = await supabaseAdmin.from('organizations').select('name, legal_name, country_code').eq('id', orgId).single();
-  const { data: settings } = await supabaseAdmin
-    .from('organization_settings')
-    .select('*')
-    .eq('organization_id', orgId)
-    .maybeSingle();
-
-  const s = settings as Record<string, unknown> | null;
-  const orgRow = org as { name: string; legal_name: string | null; country_code: string } | null;
+  const s = settingsRes.data as Record<string, unknown> | null;
+  const orgRow = orgRes.data as { name: string; legal_name: string | null; country_code: string } | null;
 
   const profileCountry = orgRow?.country_code ?? (s?.country as string) ?? null;
+  const ocs = ocsRes.data as { active_country_pack_id?: string | null; active_ruleset_id?: string | null } | null;
+  const activePackId = String(ocs?.active_country_pack_id ?? '');
+  const activeRulesetId = String(ocs?.active_ruleset_id ?? '');
+
+  const [countryWarning, packRes, rulesetRes] = await Promise.all([
+    getCountryRegistryWarningForDisplay(profileCountry),
+    activePackId
+      ? supabaseAdmin.from('country_packs').select('pack_code').eq('id', activePackId).maybeSingle()
+      : Promise.resolve({ data: null }),
+    activeRulesetId
+      ? supabaseAdmin
+          .from('country_pack_rulesets')
+          .select('ruleset_code, ruleset_version')
+          .eq('id', activeRulesetId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   result.profile = {
     organizationName: (s?.organization_name as string) ?? orgRow?.name ?? null,
@@ -301,7 +319,7 @@ export async function getOrganizationSettings(ctx: RequestContext, orgId: string
     city: (s?.city as string) ?? null,
     postalCode: (s?.postal_code as string) ?? null,
     country: profileCountry,
-    countryWarning: await getCountryRegistryWarningForDisplay(profileCountry),
+    countryWarning,
     phone: (s?.phone as string) ?? null,
     website: (s?.website as string) ?? null,
     logoFileAssetId: (s?.logo_file_asset_id as string) ?? null,
@@ -332,30 +350,12 @@ export async function getOrganizationSettings(ctx: RequestContext, orgId: string
     };
   }
 
-  const { data: ocs } = await supabaseAdmin
-    .from('organization_country_settings')
-    .select('active_country_pack_id, active_ruleset_id')
-    .eq('organization_id', orgId)
-    .maybeSingle();
-  const activePackId = String((ocs as { active_country_pack_id?: string | null } | null)?.active_country_pack_id ?? '');
-  const activeRulesetId = String((ocs as { active_ruleset_id?: string | null } | null)?.active_ruleset_id ?? '');
-  let activePackCode: string | null = null;
+  const activePackCode = packRes.data?.pack_code ? String(packRes.data.pack_code) : null;
   let activeRulesetCode: string | null = null;
-  if (activePackId) {
-    const { data: p } = await supabaseAdmin.from('country_packs').select('pack_code').eq('id', activePackId).maybeSingle();
-    activePackCode = p?.pack_code ? String(p.pack_code) : null;
-  }
-  if (activeRulesetId) {
-    const { data: r } = await supabaseAdmin
-      .from('country_pack_rulesets')
-      .select('ruleset_code, ruleset_version')
-      .eq('id', activeRulesetId)
-      .maybeSingle();
-    if (r?.ruleset_code) {
-      activeRulesetCode = r.ruleset_version
-        ? `${String(r.ruleset_code)}.${String(r.ruleset_version)}`
-        : String(r.ruleset_code);
-    }
+  if (rulesetRes.data?.ruleset_code) {
+    activeRulesetCode = rulesetRes.data.ruleset_version
+      ? `${String(rulesetRes.data.ruleset_code)}.${String(rulesetRes.data.ruleset_version)}`
+      : String(rulesetRes.data.ruleset_code);
   }
   result.country_configuration = {
     status: activePackId && activeRulesetId ? 'configured' : 'not_configured',
