@@ -73,7 +73,7 @@ async function sendRecoverySmsE164(toE164: string, code: string): Promise<void> 
   if (config.nodeEnv === 'production') {
     throw new AppError(503, 'SMS provider is not configured.', 'SMS_PROVIDER_NOT_CONFIGURED');
   }
-  console.warn('[platform-owner-recovery-sms] Twilio not configured (dev only)');
+  console.warn('[platform-owner-recovery-sms] Twilio not configured — OTP delivery skipped');
 }
 
 export async function requestPlatformOwnerRecovery(params: {

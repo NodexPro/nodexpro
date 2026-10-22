@@ -3,6 +3,12 @@ import { supabaseAdmin } from '../../db/client.js';
 import { AppError, badRequest, forbidden } from '../../shared/errors.js';
 import type { RequestContext } from '../../shared/context.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
+import { config } from '../../config.js';
+import {
+  DEV_PAYMENT_OTP_ENV,
+  decideOtpSmsDelivery,
+  isTwilioSmsConfigured,
+} from '../../shared/sensitive-logging.pure.js';
 
 export type PaymentContext = 'vat' | 'income_tax';
 
@@ -63,12 +69,22 @@ async function insertPaymentCardEventLog(params: {
 }
 
 async function sendOtpSms(toPhone: string, code: string): Promise<void> {
+  const twilioConfigured = isTwilioSmsConfigured(process.env);
+  const precheck = decideOtpSmsDelivery({
+    nodeEnv: config.nodeEnv,
+    twilioConfigured,
+    allowDevSkip: process.env[DEV_PAYMENT_OTP_ENV] === '1' && config.nodeEnv !== 'production',
+  });
+  if (precheck.action === 'fail_closed') {
+    throw new AppError(503, 'שליחת קוד האימות נכשלה. נסה שוב מאוחר יותר.', precheck.code);
+  }
+
   const msg = `NodexPro — קוד אימות לפרטי כרטיס: ${code}`;
   const sid = process.env.TWILIO_ACCOUNT_SID?.trim();
   const token = process.env.TWILIO_AUTH_TOKEN?.trim();
   const from = process.env.TWILIO_FROM_NUMBER?.trim();
 
-  if (sid && token && from) {
+  if (precheck.action === 'send_sms' && sid && token && from) {
     const auth = Buffer.from(`${sid}:${token}`).toString('base64');
     const params = new URLSearchParams();
     params.set('To', toPhone);
@@ -84,13 +100,22 @@ async function sendOtpSms(toPhone: string, code: string): Promise<void> {
     });
     if (!res.ok) {
       const t = await res.text();
-      console.error('[twilio-sms]', res.status, t);
+      console.error('[twilio-sms]', res.status, t.slice(0, 80));
       throw new AppError(503, 'שליחת קוד האימות נכשלה. נסה שוב מאוחר יותר.', 'SMS_SEND_FAILED');
     }
     return;
   }
 
-  console.warn(`[payment-card-sms] Twilio not configured — OTP for ${toPhone}: ${code}`);
+  const decision = decideOtpSmsDelivery({
+    nodeEnv: config.nodeEnv,
+    twilioConfigured: false,
+    allowDevSkip: process.env[DEV_PAYMENT_OTP_ENV] === '1' && config.nodeEnv !== 'production',
+  });
+  if (decision.action === 'dev_skip') {
+    console.warn(decision.log);
+    return;
+  }
+  throw new AppError(503, 'שליחת קוד האימות נכשלה. נסה שוב מאוחר יותר.', 'SMS_PROVIDER_NOT_CONFIGURED');
 }
 
 async function deactivateExpiredSessions(orgId: string, clientId: string, userId: string): Promise<void> {

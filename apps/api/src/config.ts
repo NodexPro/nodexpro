@@ -7,6 +7,8 @@ export const config = {
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
   nodeEnv,
   internalCronSecret: process.env.INTERNAL_CRON_SECRET?.trim() || null,
+  // Keep this fallback so existing trial hashes stay matchable. Production must set
+  // LEGAL_IDENTITY_HASH_SALT; do not rotate it here (would orphan stored hashes).
   legalIdentityHashSalt: process.env.LEGAL_IDENTITY_HASH_SALT ?? 'dev-salt-change-in-production',
   platformOwner: {
     email: process.env.PLATFORM_OWNER_EMAIL?.trim().toLowerCase() ?? null,

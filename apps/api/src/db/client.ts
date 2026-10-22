@@ -2,6 +2,12 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { config } from '../config.js';
 import { timedFetch } from '../shared/request-timing.js';
 
+/**
+ * Service-role client. BYPASSRLS — RLS never applies to these queries.
+ * Tenant isolation and RBAC must be enforced in application code (organization_id from
+ * membership-checked context, requireOrg / requirePermission). Do not treat RLS as a
+ * backup for this client.
+ */
 export const supabaseAdmin: SupabaseClient = createClient(
   config.supabaseUrl,
   config.supabaseServiceRoleKey,

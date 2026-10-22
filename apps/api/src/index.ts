@@ -23,6 +23,10 @@ import {
   ENCRYPTION_NOT_CONFIGURED_CODE,
   getClientDataEncryptionEnvDiagnostic,
 } from './shared/field-encryption.js';
+import {
+  DEFAULT_LEGAL_IDENTITY_HASH_SALT,
+  isUnsafeDefaultSecret,
+} from './shared/sensitive-logging.pure.js';
 import { writeAudit, AUDIT_ACTIONS } from './shared/audit-events.js';
 import { clientOperationsModuleRouter } from './domains/client-operations/client-operations.routes.js';
 import { ownerCountryPackRoutes } from './routes/owner-country-pack.routes.js';
@@ -227,6 +231,16 @@ app.listen(config.port, () => {
   console.log(
     `[api] CLIENT_DATA_ENCRYPTION_KEY: env_set=${enc.env_set ? 'yes' : 'no'}, decoded_bytes=${len}, aes256_ok=${enc.valid_for_aes256 ? 'yes' : 'no'}`
   );
+  if (config.nodeEnv === 'production') {
+    if (isUnsafeDefaultSecret(config.legalIdentityHashSalt, DEFAULT_LEGAL_IDENTITY_HASH_SALT)) {
+      console.error(
+        '[api] LEGAL_IDENTITY_HASH_SALT is unset or still the development default. Set a unique production value. Do not rotate an in-use salt without a planned hash migration.',
+      );
+    }
+    if (!config.internalCronSecret) {
+      console.error('[api] INTERNAL_CRON_SECRET is unset — internal schedulers fail closed.');
+    }
+  }
   void logPdfEngineStartupProbe();
   logModuleLoaded();
 });

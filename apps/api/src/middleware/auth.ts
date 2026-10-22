@@ -7,6 +7,11 @@ import { timedFetch } from '../shared/request-timing.js';
 import type { AppUser, OrgMembership, RequestContext } from '../shared/context.js';
 import { ensureAppUser } from '../domains/auth/auth.service.js';
 import { loadOrgMembershipForUser, resolveStoredOrSingleAutoOrgContext } from '../domains/auth/active-organization.service.js';
+import {
+  APP_USER_NOT_ACTIVE_CODE,
+  APP_USER_NOT_ACTIVE_MESSAGE,
+  isAppUserStatusActive,
+} from '../domains/auth/user-authorization.pure.js';
 
 // `timedFetch` only adds per-request call accounting for the Server-Timing header (measurement, no behavior).
 const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey, { global: { fetch: timedFetch } });
@@ -48,6 +53,12 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
   }
   if (!appUserRow) {
     next(unauthorized('Application user not found'));
+    return;
+  }
+
+  // Re-read users.status every request. A valid JWT must not keep a suspended/deleted account authorized.
+  if (!isAppUserStatusActive(appUserRow.status)) {
+    next(unauthorized(APP_USER_NOT_ACTIVE_MESSAGE, APP_USER_NOT_ACTIVE_CODE));
     return;
   }
 
