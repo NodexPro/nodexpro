@@ -7,6 +7,7 @@ import { useI18n } from '../i18n/I18nProvider';
 import { supabase } from '../lib/supabase';
 import '../styles/nx-glass-surface.css';
 import '../styles/nx-settings-deep-ocean.css';
+import '../styles/nx-office-deep-ocean.css';
 import type { SettingsAutosaveDomain, SettingsAutosaveStatus } from './settings-autosave.pure';
 import { useSettingsAutosave } from './useSettingsAutosave';
 
@@ -352,7 +353,7 @@ export function Settings() {
   );
 
   return (
-    <div className="nx-glass-page nx-glass-page--wide nx-settings nx-settings-deep-ocean" data-testid="nx-settings">
+    <div className="nx-glass-page nx-glass-page--wide nx-settings nx-settings-deep-ocean nx-office-ocean" data-testid="nx-settings">
       <h1 className="nx-glass-title">{t('settings.title')}</h1>
       <p className="nx-glass-subtitle">{t('settings.subtitle')}</p>
 

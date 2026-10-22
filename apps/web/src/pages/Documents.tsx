@@ -7,6 +7,7 @@ import { useI18n } from '../i18n/I18nProvider';
 import { GlassFilePicker } from '../components/glass/GlassFilePicker';
 import '../styles/nx-glass-surface.css';
 import '../styles/nx-documents.css';
+import '../styles/nx-office-deep-ocean.css';
 
 interface DocumentRow {
   id: string;
@@ -127,7 +128,7 @@ export function Documents() {
   if (!orgId) return <p className="nx-glass-page">{t('topBar.selectOrg')}</p>;
 
   return (
-    <div className="nx-glass-page nx-glass-page--wide nx-documents nx-documents--deep-ocean" data-testid="nx-documents" dir={dir} lang={lang}>
+    <div className="nx-glass-page nx-glass-page--wide nx-documents nx-documents--deep-ocean nx-office-ocean" data-testid="nx-documents" dir={dir} lang={lang}>
       <h1 className="nx-glass-title">{t('documents.title')}</h1>
       <p className="nx-glass-subtitle">{t('documents.subtitle')}</p>
 

@@ -58,21 +58,34 @@
 .nx-dashboard-period__chip {
   height: 36px;
   min-height: 36px;
-  padding: 8px 14px;
-  border-radius: 6px;
-  font-size: 13px;
+  min-width: 96px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.2;
   cursor: pointer;
   font-family: Arial, sans-serif;
-  color: #eef6ff;
+  color: #ffffff;
   background:
-    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.18), transparent 48%),
-    linear-gradient(180deg, rgba(248, 252, 255, 0.16) 0%, rgba(186, 216, 246, 0.1) 100%);
-  border: 1px solid rgba(210, 238, 255, 0.45);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%);
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+}
+
+.nx-dashboard-period__chip:hover:not(:disabled) {
+  border-color: rgba(19, 191, 208, 0.7);
+  background: rgba(23, 84, 122, 0.38);
+}
+
+.nx-dashboard-period__chip:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.42),
+    0 0 14px rgba(19, 191, 208, 0.32);
 }
 
 @media (max-width: 900px) {
@@ -83,8 +96,13 @@
 }
 
 .nx-dashboard-period__chip.is-selected {
-  border-color: rgba(70, 213, 255, 0.55);
-  background: linear-gradient(115deg, rgba(39, 124, 255, 0.55) 0%, rgba(22, 93, 255, 0.42) 100%);
+  border-color: rgba(19, 191, 208, 0.78);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.34), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.62) 0%, rgba(19, 191, 208, 0.48) 100%);
+  box-shadow:
+    0 0 16px rgba(19, 191, 208, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }
 
 .nx-dashboard__title {
@@ -610,6 +628,24 @@ button.nx-dashboard-card--kpi:hover,
 
   .nx-dashboard-legend {
     grid-template-columns: 1fr;
+  }
+
+  .nx-dashboard-period__chip {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 430px) {
+  .nx-dashboard {
+    padding: 4px 0 20px;
+  }
+
+  .nx-dashboard__header-tools,
+  .nx-dashboard-period,
+  .nx-dashboard__header-tools .nx-glass-lang {
+    width: 100%;
+    flex-wrap: wrap;
   }
 }
 

@@ -12,6 +12,7 @@ import {
 import { uiText } from '../components/users-roles/users-roles-selection.pure';
 import { CoNavGlyph, ROW_ACTION_GLYPH } from '../templates/template-1/components/AppSidebar';
 import '../components/users-roles/UsersRoles.css';
+import '../styles/nx-office-deep-ocean.css';
 
 type ModalState =
   | { kind: 'profile' | 'clients' | 'modules' | 'close'; memberId: string }
@@ -153,7 +154,7 @@ export function UsersRoles() {
 
   return (
     <div
-      className="nx-ur-page"
+      className="nx-ur-page nx-office-ocean"
       dir={ui?.direction ?? (sessionLang === 'he' ? 'rtl' : 'ltr')}
       lang={ui?.locale ?? (sessionLang === 'he' ? 'he' : 'en')}
     >

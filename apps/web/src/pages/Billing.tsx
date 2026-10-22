@@ -11,6 +11,7 @@ import {
   type OfficeModulesState,
 } from '../modules/office-modules-state';
 import '../styles/nx-glass-surface.css';
+import '../styles/nx-office-deep-ocean.css';
 
 function formatBackendDate(value: string | null, locale: string): string | null {
   if (!value) return null;
@@ -60,7 +61,7 @@ export function Billing() {
   if (auth.status !== 'authenticated') return null;
 
   return (
-    <div className="nx-glass-page nx-glass-page--wide" data-testid="nx-billing">
+    <div className="nx-glass-page nx-glass-page--wide nx-office-ocean" data-testid="nx-billing">
       <h1 className="nx-glass-title">{t('billing.title')}</h1>
       <p className="nx-glass-subtitle">{t('billing.subtitle')}</p>
       {error && (

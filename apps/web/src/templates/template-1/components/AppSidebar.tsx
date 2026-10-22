@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { Template1SidebarItem } from '../TemplateLayout';
 import type { SidebarAccountBlockModel } from '../../../types/session';
@@ -164,7 +164,17 @@ export function AppSidebar({
   onLogout: () => void | Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [coarsePointer, setCoarsePointer] = useState(false);
   const coGlass = appearance === 'co-navy-glass';
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(hover: none), (pointer: coarse)');
+    const apply = () => setCoarsePointer(mq.matches);
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
 
   const showExpanded = mode !== 'collapsedHover' ? true : expanded;
   const width = mode === 'collapsedHover' ? (showExpanded ? 240 : 64) : 240;
@@ -176,8 +186,8 @@ export function AppSidebar({
   return (
     <aside
       className="t1-sidebar"
-      onMouseEnter={() => mode === 'collapsedHover' && setExpanded(true)}
-      onMouseLeave={() => mode === 'collapsedHover' && setExpanded(false)}
+      onMouseEnter={() => mode === 'collapsedHover' && !coarsePointer && setExpanded(true)}
+      onMouseLeave={() => mode === 'collapsedHover' && !coarsePointer && setExpanded(false)}
       style={{
         width,
         padding: showExpanded ? 16 : 10,
@@ -194,9 +204,26 @@ export function AppSidebar({
           flexShrink: 0,
         }}
       >
+        <button
+          type="button"
+          className="t1-sidebar__brand-toggle"
+          aria-expanded={showExpanded}
+          aria-label={showExpanded ? 'Collapse navigation' : 'Expand navigation'}
+          onClick={() => mode === 'collapsedHover' && coarsePointer && setExpanded((open) => !open)}
+          disabled={mode !== 'collapsedHover' || !coarsePointer}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0,
+            border: 0,
+            background: 'transparent',
+            cursor: mode === 'collapsedHover' && coarsePointer ? 'pointer' : 'default',
+          }}
+        >
         <img
           src={logoSrc}
-          alt="NodexPro"
+          alt=""
           style={{
             width: 42,
             height: 42,
@@ -205,6 +232,7 @@ export function AppSidebar({
             flexShrink: 0,
           }}
         />
+        </button>
         {showExpanded ? (
           <div
             className={coGlass ? 't1-sidebar__brand-name' : undefined}

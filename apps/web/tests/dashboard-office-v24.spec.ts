@@ -87,7 +87,8 @@ test('Roles page keeps aggregate commands and gains dashboard glass, not a light
   assert.match(usersRolesSrc, /fetchUsersRolesAggregate/);
   assert.match(usersRolesSrc, /available_actions\.invite_member/);
   assert.match(usersRolesSrc, /uiText\(ui, key\)/);
-  assert.match(usersRolesCss, /rgba\(128, 116, 242, 0\.42\)/);
+  assert.match(usersRolesCss, /rgba\(19, 191, 208, 0\.78\)/);
+  assert.doesNotMatch(usersRolesCss, /rgba\(128, 116, 242/);
   assert.match(usersRolesCss, /backdrop-filter: blur\(12px\)/);
   assert.doesNotMatch(usersRolesCss, /\.nx-ur-sheet \{[\s\S]*rgba\(247, 250, 255, 0\.97\)/);
   assert.doesNotMatch(usersRolesCss, /linear-gradient\(135deg, #1477e8, #00cfef\)/);

@@ -40,6 +40,7 @@ import {
 } from '../components/client-card/ClientCardSectionUi';
 import '../styles/nx-glass-surface.css';
 import '../styles/nx-clients.css';
+import '../styles/nx-office-deep-ocean.css';
 
 interface Client {
   id: string;
@@ -558,7 +559,7 @@ export function ClientCard() {
     : [...contacts];
 
   return (
-    <div className="nx-glass-page nx-glass-page--wide nx-clients-card">
+    <div className="nx-glass-page nx-glass-page--wide nx-clients-card nx-office-ocean">
       <div className="nx-clients-card__head">
         <button type="button" onClick={() => navigate('/clients')} className="nx-glass-btn nx-glass-btn--secondary">
           ← {t('clients.title')}

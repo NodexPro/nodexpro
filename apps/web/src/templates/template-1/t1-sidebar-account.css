@@ -1,3 +1,8 @@
+.t1-sidebar__brand-toggle:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
 .t1-sidebar {
   display: flex;
   flex-direction: column;
@@ -6,8 +11,11 @@
   align-self: flex-start;
   z-index: 6;
   min-height: 100vh;
+  min-height: 100dvh;
   height: 100vh;
+  height: 100dvh;
   max-height: 100vh;
+  max-height: 100dvh;
   background: #ffffff;
   border-right: 1px solid #e5e7eb;
   overflow: hidden;

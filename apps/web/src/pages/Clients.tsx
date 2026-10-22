@@ -27,6 +27,7 @@ import {
 import { AccountRequiredMark } from '../components/glass/AccountRequiredMark';
 import '../styles/nx-glass-surface.css';
 import '../styles/nx-clients.css';
+import '../styles/nx-office-deep-ocean.css';
 import '../styles/nx-client-create-royal-glass.css';
 import '../styles/nx-client-create-navy-royal-glass.css';
 import '../styles/nx-client-create-deep-ocean-glass.css';
@@ -429,7 +430,7 @@ export function Clients() {
   const dir = lang === 'he' ? 'rtl' : 'ltr';
 
   return (
-    <div className="nx-glass-page nx-glass-page--wide nx-clients nx-clients--deep-ocean" dir={dir} lang={lang}>
+    <div className="nx-glass-page nx-glass-page--wide nx-clients nx-clients--deep-ocean nx-office-ocean" dir={dir} lang={lang}>
       <h1 className="nx-glass-title">{t('clients.title')}</h1>
       <p className="nx-glass-subtitle">{t('clients.subtitle')}</p>
 

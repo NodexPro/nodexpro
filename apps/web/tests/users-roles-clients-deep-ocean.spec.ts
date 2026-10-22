@@ -49,7 +49,8 @@ test('Users & Roles invite controls reuse Create Client Deep Ocean V3 tokens', (
   assert.match(usersRolesCss, /\.nx-ur-invite-form \.nx-ur-field option \{[\s\S]*background:\s*#102d49[\s\S]*color:\s*#ffffff/);
   assert.match(usersRolesCss, /\.nx-ur-invite-form \.nx-ur-field input:focus-visible[\s\S]*rgba\(19, 191, 208, 0\.92\)/);
   assert.match(usersRolesSrc, /nx-ur-btn--secondary/);
-  assert.match(usersRolesCss, /rgba\(128, 116, 242, 0\.42\)/);
+  assert.match(usersRolesCss, /rgba\(19, 191, 208, 0\.78\)/);
+  assert.doesNotMatch(usersRolesCss, /rgba\(128, 116, 242/);
 });
 
 test('Clients toolbar applies Deep Ocean V3 without rewriting the table or CSV flow', () => {

@@ -13,6 +13,7 @@ import {
 import { useI18n } from '../i18n/I18nProvider';
 import { GlassFilePicker } from '../components/glass/GlassFilePicker';
 import '../styles/nx-glass-surface.css';
+import '../styles/nx-office-deep-ocean.css';
 
 interface Document {
   id: string;
@@ -283,7 +284,7 @@ export function DocumentCard() {
   if (!doc) return <p className="nx-glass-page">{t('documents.notFound')}</p>;
 
   return (
-    <div className="nx-glass-page nx-glass-page--wide" data-testid="nx-document-card">
+    <div className="nx-glass-page nx-glass-page--wide nx-office-ocean" data-testid="nx-document-card">
       <div className="nx-glass-header-row">
         <button type="button" className="nx-glass-btn nx-glass-btn--secondary" onClick={() => navigate('/documents')}>
           {t('documents.back')}

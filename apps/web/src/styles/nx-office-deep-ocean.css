@@ -1,0 +1,231 @@
+/**
+ * Shared Deep Ocean V3 office controls.
+ *
+ * Visual reference: Create Client modal (nx-client-create-deep-ocean-glass.css).
+ * Scope: `.nx-office-ocean` only. Does not restyle Modules commercial cards,
+ * Dashboard Cosmic Horizon surfaces, Owner Console, Tax Brain, Income, or portal.
+ *
+ * Palette: #102D49 / #17547A / #337493 / #36A9C6 / #13BFD0 / #FFFFFF
+ */
+
+.nx-office-ocean {
+  --nx-ocean-base: #102d49;
+  --nx-ocean-mid: #17547a;
+  --nx-ocean-hi: #337493;
+  --nx-ocean-border: #36a9c6;
+  --nx-ocean-accent: #13bfd0;
+  --nx-ocean-text: #ffffff;
+  --nx-ocean-placeholder: rgba(255, 255, 255, 0.86);
+  color: var(--nx-ocean-text);
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.nx-office-ocean .nx-glass-title,
+.nx-office-ocean .nx-glass-label,
+.nx-office-ocean h1,
+.nx-office-ocean h2,
+.nx-office-ocean h3,
+.nx-office-ocean label {
+  color: #ffffff;
+}
+
+.nx-office-ocean .nx-glass-subtitle,
+.nx-office-ocean .nx-glass-muted,
+.nx-office-ocean .nx-glass-check {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.nx-office-ocean .nx-glass-input,
+.nx-office-ocean select.nx-glass-input,
+.nx-office-ocean textarea.nx-glass-input,
+.nx-office-ocean .nx-office-ocean__control {
+  height: 34px;
+  color: #ffffff;
+  color-scheme: dark;
+  border-radius: 6px;
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 0 1px rgba(19, 191, 208, 0.04);
+}
+
+.nx-office-ocean textarea.nx-glass-input {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+}
+
+.nx-office-ocean .nx-glass-input::placeholder,
+.nx-office-ocean .nx-office-ocean__control::placeholder {
+  color: rgba(255, 255, 255, 0.86);
+  opacity: 1;
+}
+
+.nx-office-ocean .nx-glass-input:focus-visible,
+.nx-office-ocean select.nx-glass-input:focus-visible,
+.nx-office-ocean textarea.nx-glass-input:focus-visible {
+  outline: none;
+  border-color: rgba(19, 191, 208, 0.92);
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.3),
+    0 0 12px rgba(54, 169, 198, 0.28);
+}
+
+.nx-office-ocean .nx-glass-input:disabled,
+.nx-office-ocean .nx-glass-input[readonly] {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.nx-office-ocean .nx-glass-input option {
+  background: #102d49;
+  color: #ffffff;
+}
+
+.nx-office-ocean .nx-glass-input.is-invalid {
+  border-color: rgba(255, 138, 165, 0.9);
+  box-shadow: 0 0 0 2px rgba(255, 110, 150, 0.24);
+}
+
+.nx-office-ocean .nx-glass-alert--error,
+.nx-office-ocean [role='alert'] {
+  color: #ffd6de;
+}
+
+.nx-office-ocean .nx-glass-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: #13bfd0;
+}
+
+.nx-office-ocean .nx-glass-btn {
+  min-width: 96px;
+  min-height: 36px;
+  height: auto;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #ffffff;
+}
+
+.nx-office-ocean .nx-glass-btn--purple {
+  border: 1px solid rgba(19, 191, 208, 0.78);
+  color: #ffffff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.34), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.62) 0%, rgba(19, 191, 208, 0.48) 100%);
+  box-shadow:
+    0 0 16px rgba(19, 191, 208, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+.nx-office-ocean .nx-glass-btn--purple:hover:not(:disabled) {
+  border-color: rgba(120, 232, 240, 0.92);
+  background: linear-gradient(180deg, rgba(54, 169, 198, 0.74) 0%, rgba(19, 191, 208, 0.58) 100%);
+}
+
+.nx-office-ocean .nx-glass-btn--purple:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.42),
+    0 0 14px rgba(19, 191, 208, 0.32);
+}
+
+.nx-office-ocean .nx-glass-btn--secondary {
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  color: #ffffff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.nx-office-ocean .nx-glass-btn--secondary:hover:not(:disabled) {
+  border-color: rgba(19, 191, 208, 0.7);
+  background: rgba(23, 84, 122, 0.38);
+}
+
+.nx-office-ocean .nx-glass-btn--secondary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(19, 191, 208, 0.36);
+}
+
+.nx-office-ocean .nx-glass-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.nx-office-ocean .nx-glass-table-wrap,
+.nx-office-ocean .nx-ur-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+.nx-office-ocean .nx-glass-toolbar,
+.nx-office-ocean .nx-glass-header-row,
+.nx-office-ocean .nx-clients-card__head {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+/* Register — centered Create Client V3 glass card. */
+.nx-register-ocean.nx-glass-auth {
+  padding: 20px 12px;
+}
+
+.nx-register-ocean .nx-glass-auth__card {
+  max-width: 440px;
+  padding: 22px 22px 18px;
+  color: #ffffff;
+  border-radius: 14px;
+  border: 1px solid rgba(54, 169, 198, 0.62);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%);
+  box-shadow:
+    0 0 0 1px rgba(54, 169, 198, 0.28),
+    0 0 28px rgba(19, 191, 208, 0.18),
+    0 16px 36px rgba(16, 45, 73, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(19, 191, 208, 0.12);
+  backdrop-filter: blur(22px) saturate(1.25);
+  -webkit-backdrop-filter: blur(22px) saturate(1.25);
+}
+
+.nx-register-ocean .nx-glass-field {
+  min-width: 0;
+}
+
+.nx-register-ocean .nx-glass-auth__links .nx-glass-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(19, 191, 208, 0.4);
+  border-radius: 6px;
+}
+
+@media (max-width: 430px) {
+  .nx-register-ocean .nx-glass-auth__card {
+    padding: 18px 14px 14px;
+    border-radius: 12px;
+  }
+
+  .nx-office-ocean .nx-glass-btn {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .nx-office-ocean .nx-glass-dl {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px 0;
+  }
+}
