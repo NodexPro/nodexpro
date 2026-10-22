@@ -2,8 +2,11 @@ import { createHash } from 'crypto';
 import { supabaseAdmin } from '../../db/client.js';
 import { config } from '../../config.js';
 import { badRequest } from '../../shared/errors.js';
+import {
+  ISRAELI_TZ_DIGIT_LENGTH,
+  normalizeOwnerLegalIdentity,
+} from './legal-identity.pure.js';
 
-const TZ_LENGTH = 9;
 const MASK_LAST_DIGITS = 4;
 
 /**
@@ -23,12 +26,13 @@ export function normalizeLegalIdentity(
   legalIdentityType: string,
   value: string
 ): string {
-  if (legalIdentityType === 'tz' && countryCode.toLowerCase() === 'il') {
-    const digits = value.replace(/\D/g, '');
-    if (digits.length !== TZ_LENGTH) {
-      throw badRequest(`Teudat zehut must be ${TZ_LENGTH} digits`);
-    }
-    return digits;
+  const result = normalizeOwnerLegalIdentity(countryCode, legalIdentityType, value);
+  if (result.ok) return result.value;
+  if (result.code === 'digits') {
+    throw badRequest(`Teudat zehut must be ${ISRAELI_TZ_DIGIT_LENGTH} digits`);
+  }
+  if (result.code === 'checksum') {
+    throw badRequest('Invalid teudat zehut');
   }
   throw badRequest(`Unsupported legal identity type: ${legalIdentityType} for country ${countryCode}`);
 }
