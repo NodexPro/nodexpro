@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { badRequest } from '../../shared/errors.js';
+import { IMAGE_UPLOAD_KINDS, requireGuardedUpload } from '../../shared/file-content-guard.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import {
   isSupabaseMissingColumnError,
@@ -86,7 +87,6 @@ import {
 
 const BUCKET_ORG_ASSETS = 'organization-assets';
 const BRANDING_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
-const BRANDING_IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
 
 const BRANDING_MIGRATION_HINT =
   'Run Supabase migrations 130–133 for income_document_branding_profiles on production.';
@@ -810,19 +810,15 @@ async function uploadBrandingImage(
   if (!fileName) throw badRequest('file_name is required');
   if (!fileBase64) throw badRequest('file_base64 is required');
 
-  const mimeType = String(body.mime_type ?? 'image/png')
-    .toLowerCase()
-    .split(';')[0]
-    .trim();
-  if (!BRANDING_IMAGE_MIME.has(mimeType)) {
-    throw badRequest('Invalid image type. Allowed: PNG, JPEG, WebP', 'BRANDING_IMAGE_TYPE_INVALID');
-  }
-
   const buf = Buffer.from(fileBase64, 'base64');
-  if (buf.length === 0) throw badRequest('File is empty');
-  if (buf.length > BRANDING_IMAGE_MAX_BYTES) {
-    throw badRequest('File too large. Maximum 5MB', 'BRANDING_IMAGE_TOO_LARGE');
-  }
+  const guarded = requireGuardedUpload({
+    buf,
+    fileName,
+    claimedMime: typeof body.mime_type === 'string' ? body.mime_type : null,
+    maxBytes: BRANDING_IMAGE_MAX_BYTES,
+    allowedKinds: IMAGE_UPLOAD_KINDS.filter((k) => k !== 'gif'),
+  });
+  const mimeType = guarded.mime;
 
   await ensureOrgAssetsBucket();
   const storageKey = `${scope.org_id}/income-branding/${scope.issuer_business_id}/${slot}-${Date.now()}`;

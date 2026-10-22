@@ -132,7 +132,7 @@ test('Settings loads one organization settings aggregate and shows a shell while
   const autosave = readFileSync(join(root, 'src/pages/useSettingsAutosave.ts'), 'utf8');
   assert.match(settings, /apiJson<SettingsData>\(orgSettings\(orgId\)/);
   assert.equal((settings.match(/orgSettings\(orgId\)/g) ?? []).length, 1);
-  assert.match(autosave, /orgSettings\(orgId\)/);
+  assert.match(autosave, /orgSettingsUpdateCommand/);
   assert.doesNotMatch(settings, /orgCountrySettings/);
   assert.doesNotMatch(autosave, /orgCountrySettings/);
   assert.doesNotMatch(settings, /if \(loading\) return/);
@@ -159,7 +159,8 @@ test('Settings V4 hides country-config card and uses safe domain autosave', () =
   assert.match(settings, /changeField\('displayPhoneOnDocuments'/);
   assert.match(settings, /changeLoc\('language_code'/);
   assert.match(hook, /SETTINGS_AUTOSAVE_DEBOUNCE_MS/);
-  assert.match(hook, /method: 'PATCH'/);
+  assert.match(hook, /orgSettingsUpdateCommand/);
+  assert.match(hook, /method: 'POST'/);
   assert.match(hook, /AUTH\.setLocalizationPreferences/);
   assert.match(hook, /beforeunload/);
   assert.match(hook, /mergeFormKeepingDirty/);

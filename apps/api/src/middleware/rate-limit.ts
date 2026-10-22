@@ -23,6 +23,11 @@ type Bucket = { resetAt: number; count: number };
 // NOTE: This is sufficient as a baseline; for multi-instance deployments, use a shared store (e.g. Redis).
 const buckets = new Map<string, Bucket>();
 
+/** Test-only: clear in-memory buckets between cases. */
+export function resetRateLimitBucketsForTests(): void {
+  buckets.clear();
+}
+
 export function rateLimit(opts: RateLimitOptions) {
   const windowMs = opts.windowMs;
   const max = opts.max;

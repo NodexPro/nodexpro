@@ -2,22 +2,12 @@ import { supabaseAdmin } from '../../db/client.js';
 import { forbidden, badRequest } from '../../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
+import { requireGuardedUpload } from '../../shared/file-content-guard.js';
 import { assertCanAccessClientFromContext } from '../client-operations/organization-client-access.js';
 import { assertDocumentClientAccess } from './document-client-access.js';
 
 const BUCKET = 'document-files';
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-const ALLOWED_MIME = [
-  'application/pdf',
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'text/plain',
-  'text/csv',
-];
 
 let bucketEnsured = false;
 async function ensureBucket(): Promise<void> {
@@ -54,17 +44,17 @@ export async function uploadDocument(
   const uploadClientId = String(body.primary_client_id ?? '').trim();
   if (uploadClientId) await assertCanAccessClientFromContext(ctx, uploadClientId);
 
-  const fileName = body.file_name?.trim();
-  if (!fileName) throw badRequest('file_name is required');
-  const mimeType = body.mime_type ?? 'application/octet-stream';
-  if (ALLOWED_MIME.length > 0 && !ALLOWED_MIME.includes(mimeType)) {
-    throw badRequest(`Unsupported file type: ${mimeType}`);
-  }
-
-  const buf = Buffer.from(body.file_base64, 'base64');
+  if (!body.file_name?.trim()) throw badRequest('file_name is required');
+  const buf = Buffer.from(body.file_base64 ?? '', 'base64');
+  const guarded = requireGuardedUpload({
+    buf,
+    fileName: body.file_name,
+    claimedMime: body.mime_type,
+    maxBytes: MAX_FILE_SIZE,
+  });
+  const fileName = guarded.fileName;
+  const mimeType = guarded.mime;
   const fileSize = buf.length;
-  if (fileSize > MAX_FILE_SIZE) throw badRequest(`File too large. Max ${MAX_FILE_SIZE / 1024 / 1024}MB`);
-  if (fileSize === 0) throw badRequest('File is empty');
 
   await ensureBucket();
   const storageKey = `${orgId}/documents/${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -182,17 +172,17 @@ export async function uploadNewVersion(
   await assertDocumentClientAccess(ctx, (doc as { primary_client_id?: string | null }).primary_client_id);
   if ((doc as { is_archived?: boolean }).is_archived) throw badRequest('Cannot add version to archived document');
 
-  const fileName = body.file_name?.trim();
-  if (!fileName) throw badRequest('file_name is required');
-  const mimeType = body.mime_type ?? 'application/octet-stream';
-  if (ALLOWED_MIME.length > 0 && !ALLOWED_MIME.includes(mimeType)) {
-    throw badRequest(`Unsupported file type: ${mimeType}`);
-  }
-
-  const buf = Buffer.from(body.file_base64, 'base64');
+  if (!body.file_name?.trim()) throw badRequest('file_name is required');
+  const buf = Buffer.from(body.file_base64 ?? '', 'base64');
+  const guarded = requireGuardedUpload({
+    buf,
+    fileName: body.file_name,
+    claimedMime: body.mime_type,
+    maxBytes: MAX_FILE_SIZE,
+  });
+  const fileName = guarded.fileName;
+  const mimeType = guarded.mime;
   const fileSize = buf.length;
-  if (fileSize > MAX_FILE_SIZE) throw badRequest(`File too large. Max ${MAX_FILE_SIZE / 1024 / 1024}MB`);
-  if (fileSize === 0) throw badRequest('File is empty');
 
   await ensureBucket();
   const storageKey = `${orgId}/documents/${documentId}/${Date.now()}-${Math.random().toString(36).slice(2)}`;

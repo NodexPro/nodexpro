@@ -6,6 +6,7 @@ import {
   authorizedClientIdsForViewer,
 } from '../client-operations/organization-client-access.js';
 import { type IncomeRequestIds, incomeRequestHasResourceIds } from './income-request-resource-ids.pure.js';
+import { loadWorkItemClientIdsForOrg } from '../work-engine/work-engine-source-lookups.service.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -103,13 +104,7 @@ export async function assertIncomeRequestClientAccess(ctx: RequestContext, ids: 
 
   const workItemIds = [...ids.work_item_ids.filter((id) => UUID_RE.test(id)), ...candidateWorkItemIds];
   if (workItemIds.length) {
-    const { data, error } = await supabaseAdmin
-      .from('work_items')
-      .select('id, client_id')
-      .eq('org_id', orgId)
-      .in('id', workItemIds);
-    if (error) throw error;
-    const byId = new Map((data ?? []).map((r) => [String((r as { id: string }).id), (r as { client_id?: string | null }).client_id ?? null]));
+    const byId = await loadWorkItemClientIdsForOrg(orgId, workItemIds);
     for (const id of workItemIds) {
       if (!byId.has(id)) throw notFound('Work item not found');
       check(byId.get(id), 'Work item');

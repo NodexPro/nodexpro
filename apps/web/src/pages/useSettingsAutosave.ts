@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { apiJson } from '../api/client';
-import { AUTH, orgSettings } from '../api/endpoints';
+import { AUTH, orgSettingsUpdateCommand } from '../api/endpoints';
 import {
   SETTINGS_AUTOSAVE_DEBOUNCE_MS,
   bankPatchFromForm,
@@ -180,8 +180,8 @@ export function useSettingsAutosave<TSettings>(options: {
 
       const orgId = orgIdRef.current;
       if (!orgId) return true;
-      const updated = await apiJson<TSettings>(orgSettings(orgId), {
-        method: 'PATCH',
+      const updated = await apiJson<TSettings>(orgSettingsUpdateCommand(orgId), {
+        method: 'POST',
         body: JSON.stringify(payload),
       });
       lastPayloadRef.current[domain] = payload;

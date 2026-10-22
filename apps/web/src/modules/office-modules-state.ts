@@ -57,9 +57,23 @@ export type OfficeTrialState = {
   blocked: boolean;
 };
 
+export type OfficeBillingSubscriptionRow = {
+  module_id: string;
+  name: string;
+  activation_status: string;
+  billing_period: string | null;
+  currency: string;
+  price_amount: number;
+  started_at: string;
+  ends_at: string | null;
+};
+
 export type OfficeModulesState = {
   trialState: OfficeTrialState;
   modules: OfficeModuleStateItem[];
+  billing?: {
+    subscribed_commercial_modules: OfficeBillingSubscriptionRow[];
+  };
 };
 
 export function commercialModules(modules: OfficeModuleStateItem[]): OfficeModuleStateItem[] {

@@ -96,4 +96,16 @@ router.patch('/:id/settings', ...withSettingsWrite, async (req, res, next) => {
   }
 });
 
+router.post('/:id/settings/commands/update_organization_settings', ...withSettingsWrite, async (req, res, next) => {
+  try {
+    if (req.params.id !== req.context!.organizationId) {
+      return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+    }
+    const settings = await settingsService.patchOrganizationSettings(req.context!, req.params.id, req.body ?? {});
+    return res.json(settings);
+  } catch (e) {
+    next(e);
+  }
+});
+
 export const organizationSettingsRoutes = router;

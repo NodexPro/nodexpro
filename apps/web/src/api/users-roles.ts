@@ -125,6 +125,12 @@ export const closeMemberAccessCommand = (orgId: string, memberId: string) =>
     body: JSON.stringify({}),
   });
 
+export const changeMemberRoleCommand = (orgId: string, memberId: string, role_code: string) =>
+  apiJson<UsersRolesAggregate>(`${base(orgId)}/members/${memberId}/commands/change_member_role`, {
+    method: 'POST',
+    body: JSON.stringify({ role_code }),
+  });
+
 export const fetchMemberClientAccessEditor = (orgId: string, memberId: string) =>
   apiJson<MemberClientAccessEditorAggregate>(`${base(orgId)}/members/${memberId}/aggregates/client-access`);
 

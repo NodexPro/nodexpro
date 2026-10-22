@@ -5,9 +5,7 @@ import { apiJson } from '../api/client';
 import { orgModulesState } from '../api/endpoints';
 import { useI18n } from '../i18n/I18nProvider';
 import {
-  matchingPlan,
-  subscribedCommercialModules,
-  type OfficeModuleStateItem,
+  type OfficeBillingSubscriptionRow,
   type OfficeModulesState,
 } from '../modules/office-modules-state';
 import '../styles/nx-glass-surface.css';
@@ -29,7 +27,7 @@ function billingPeriodLabel(period: string | null | undefined, t: (key: string) 
 export function Billing() {
   const auth = useAuth();
   const { t, lang } = useI18n();
-  const [modules, setModules] = useState<OfficeModuleStateItem[]>([]);
+  const [billingRows, setBillingRows] = useState<OfficeBillingSubscriptionRow[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -45,7 +43,9 @@ export function Billing() {
     setError('');
     apiJson<OfficeModulesState>(orgModulesState(orgId), { signal: ac.signal })
       .then((res) => {
-        if (!ac.signal.aborted) setModules(res.modules);
+        if (!ac.signal.aborted) {
+          setBillingRows(res.billing?.subscribed_commercial_modules ?? []);
+        }
       })
       .catch((e) => {
         if (!ac.signal.aborted && (e as Error)?.name !== 'AbortError') setError(e.message);
@@ -56,7 +56,7 @@ export function Billing() {
     return () => ac.abort();
   }, [orgId]);
 
-  const withSubscription = subscribedCommercialModules(modules);
+  const withSubscription = billingRows;
 
   if (auth.status !== 'authenticated') return null;
 
@@ -77,7 +77,7 @@ export function Billing() {
           <dd>
             {withSubscription.length === 0
               ? t('billing.empty')
-              : withSubscription.map((module) => module.name).join(', ')}
+              : withSubscription.map((row) => row.name).join(', ')}
           </dd>
           <dt>{t('billing.tax')}</dt>
           <dd>{t('billing.taxUnavailable')}</dd>
@@ -117,24 +117,22 @@ export function Billing() {
                 </tr>
               </thead>
               <tbody>
-                {withSubscription.map((module) => {
-                  const subscription = module.currentSubscription!;
-                  const plan = matchingPlan(module);
+                {withSubscription.map((row) => {
                   return (
-                    <tr key={module.moduleId}>
-                      <td>{module.name}</td>
+                    <tr key={row.module_id}>
+                      <td>{row.name}</td>
                       <td>
-                        {t(`modules.activationStatus.${module.activationStatus}`) ===
-                        `modules.activationStatus.${module.activationStatus}`
-                          ? module.activationStatus
-                          : t(`modules.activationStatus.${module.activationStatus}`)}
+                        {t(`modules.activationStatus.${row.activation_status}`) ===
+                        `modules.activationStatus.${row.activation_status}`
+                          ? row.activation_status
+                          : t(`modules.activationStatus.${row.activation_status}`)}
                       </td>
-                      <td>{billingPeriodLabel(plan?.billingPeriod, t)}</td>
+                      <td>{billingPeriodLabel(row.billing_period, t)}</td>
                       <td>
-                        {subscription.currency} {subscription.priceAmount}
+                        {row.currency} {row.price_amount}
                       </td>
-                      <td>{formatBackendDate(subscription.startedAt, lang) ?? t('common.unavailable')}</td>
-                      <td>{formatBackendDate(subscription.endsAt, lang) ?? t('common.unavailable')}</td>
+                      <td>{formatBackendDate(row.started_at, lang) ?? t('common.unavailable')}</td>
+                      <td>{formatBackendDate(row.ends_at, lang) ?? t('common.unavailable')}</td>
                       <td>
                         <Link className="nx-glass-link" to="/modules">
                           {t('billing.manageModules')}

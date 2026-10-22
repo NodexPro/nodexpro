@@ -8,6 +8,7 @@ import * as documentVersionsService from './document-versions.service.js';
 import * as documentUploadService from './document-upload.service.js';
 import * as documentLinksService from './document-links.service.js';
 import * as documentCardService from './document-card.service.js';
+import * as documentsCommands from './documents-commands.service.js';
 
 const router = Router();
 
@@ -55,6 +56,15 @@ router.patch('/:id/documents/:documentId', authMiddleware, requireOrg, requirePe
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
     const doc = await documentsService.updateDocument(req.context!, req.params.id, req.params.documentId, req.body);
     return res.json(doc);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/:id/documents/:documentId/commands/update_document', authMiddleware, requireOrg, requirePermission('documents:write'), async (req, res, next) => {
+  try {
+    if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+    return res.json(await documentsCommands.executeUpdateDocumentCommand(req.context!, req.params.id, req.params.documentId, req.body ?? {}));
   } catch (e) {
     next(e);
   }

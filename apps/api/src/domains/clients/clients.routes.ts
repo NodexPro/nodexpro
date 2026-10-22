@@ -13,6 +13,7 @@ import * as fileLinksService from './entity-file-links.service.js';
 import { searchClients, searchClientsWithData } from './search-index.service.js';
 import * as clientCardService from './client-card.service.js';
 import * as clientImportExport from './client-import-export.service.js';
+import * as clientsCommands from './clients-commands.service.js';
 
 const router = Router();
 const ENTITY_TYPE_CLIENT = 'client';
@@ -212,6 +213,69 @@ router.patch('/:id/clients/:clientId', authMiddleware, requireOrg, requirePermis
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
     const client = await clientsService.updateClient(req.context!, req.params.id, req.params.clientId, req.body);
     return res.json(client);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/:id/clients/:clientId/commands/update_client', authMiddleware, requireOrg, requirePermission('clients:write'), async (req, res, next) => {
+  try {
+    if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+    return res.json(await clientsCommands.executeUpdateClientCommand(req.context!, req.params.id, req.params.clientId, req.body ?? {}));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/:id/clients/:clientId/commands/add_contact', authMiddleware, requireOrg, requirePermission('clients:write'), async (req, res, next) => {
+  try {
+    if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+    return res.status(201).json(await clientsCommands.executeAddContactCommand(req.context!, req.params.id, req.params.clientId, req.body ?? {}));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/:id/clients/:clientId/contacts/:contactId/commands/update_contact', authMiddleware, requireOrg, requirePermission('clients:write'), async (req, res, next) => {
+  try {
+    if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+    return res.json(await clientsCommands.executeUpdateContactCommand(req.context!, req.params.id, req.params.clientId, req.params.contactId, req.body ?? {}));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/:id/clients/:clientId/contacts/:contactId/commands/delete_contact', authMiddleware, requireOrg, requirePermission('clients:write'), async (req, res, next) => {
+  try {
+    if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+    return res.json(await clientsCommands.executeDeleteContactCommand(req.context!, req.params.id, req.params.clientId, req.params.contactId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/:id/clients/:clientId/commands/add_note', authMiddleware, requireOrg, requirePermission('clients:write'), async (req, res, next) => {
+  try {
+    if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+    return res.status(201).json(await clientsCommands.executeAddNoteCommand(req.context!, req.params.id, req.params.clientId, req.body ?? {}));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/:id/clients/:clientId/notes/:noteId/commands/update_note', authMiddleware, requireOrg, requirePermission('clients:write'), async (req, res, next) => {
+  try {
+    if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+    return res.json(await clientsCommands.executeUpdateNoteCommand(req.context!, req.params.id, req.params.clientId, req.params.noteId, req.body ?? {}));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/:id/clients/:clientId/notes/:noteId/commands/delete_note', authMiddleware, requireOrg, requirePermission('clients:write'), async (req, res, next) => {
+  try {
+    if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+    return res.json(await clientsCommands.executeDeleteNoteCommand(req.context!, req.params.id, req.params.clientId, req.params.noteId));
   } catch (e) {
     next(e);
   }

@@ -6,6 +6,7 @@ import { getTrialState } from '../trial/trial.service.js';
 import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import { roleHasOfficeClientAccess } from '../client-operations/organization-client-access.pure.js';
 import { loadEnabledMemberModuleIdSet } from './member-module-access.service.js';
+import { buildModulesBillingSlice } from './modules-billing-slice.pure.js';
 
 const LOG_MODULES_STATE_TIMING = process.env.LOG_MODULES_STATE_TIMING === 'true';
 
@@ -45,7 +46,11 @@ export async function getModulesState(ctx: RequestContext, organizationId: strin
 
   const modules = modulesRes.data ?? [];
   if (!modules.length) {
-    return { trialState: { hasLegalIdentity: trialState.hasLegalIdentity, trialStatus: trialState.trialStatus, startedAt: trialState.startedAt, endsAt: trialState.endsAt, blocked: trialState.blocked }, modules: [] };
+    return {
+      trialState: { hasLegalIdentity: trialState.hasLegalIdentity, trialStatus: trialState.trialStatus, startedAt: trialState.startedAt, endsAt: trialState.endsAt, blocked: trialState.blocked },
+      modules: [],
+      billing: { subscribed_commercial_modules: [] },
+    };
   }
 
   for (const m of modules) {
@@ -292,6 +297,7 @@ export async function getModulesState(ctx: RequestContext, organizationId: strin
           availablePlans: [],
           currentSubscription: null,
         })),
+      billing: { subscribed_commercial_modules: [] },
     };
   }
 
@@ -304,5 +310,6 @@ export async function getModulesState(ctx: RequestContext, organizationId: strin
       blocked: trialState.blocked,
     },
     modules: result,
+    billing: buildModulesBillingSlice(result),
   };
 }

@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
 import { badRequest, forbidden } from '../../shared/errors.js';
+import { requireGuardedUpload } from '../../shared/file-content-guard.js';
 
 const BUCKET_CLIENT_FILES = 'client-files';
 const MAX_CLIENT_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -24,18 +25,10 @@ const ALLOWED_EXT = new Set([
   '.odt',
 ]);
 
-/** DocFlow thread uploads: allow common documents/images; reject unknown extensions with no matching MIME. */
-export function assertDocflowClientFileUploadAllowed(fileName: string, mimeType: string | null | undefined): void {
+/** First-pass extension allowlist. Content bytes are validated separately. */
+export function assertDocflowClientFileUploadAllowed(fileName: string, _mimeType: string | null | undefined): void {
   const ext = fileName.includes('.') ? fileName.slice(fileName.lastIndexOf('.')).toLowerCase() : '';
-  const m = (mimeType ?? '').trim().toLowerCase();
   if (ext && ALLOWED_EXT.has(ext)) return;
-  if (m.startsWith('image/')) return;
-  if (m === 'application/pdf') return;
-  if (m.startsWith('application/vnd.openxmlformats')) return;
-  if (m.startsWith('application/vnd.ms-')) return;
-  if (m === 'application/msword') return;
-  if (m === 'application/rtf') return;
-  if (m.startsWith('text/plain') || m === 'text/csv') return;
   throw badRequest('File type not allowed for DocFlow');
 }
 
@@ -86,21 +79,27 @@ export async function uploadSharedClientFileAssetForOffice(
   const perms = ctx.membership?.permissions ?? [];
   if (!perms.includes('clients:write')) throw forbidden('Insufficient permission');
 
-  const fileName = String(params.payload.file_name ?? '').trim();
-  if (!fileName) throw badRequest('file_name is required');
-  assertDocflowClientFileUploadAllowed(fileName, params.payload.mime_type);
+  if (!String(params.payload.file_name ?? '').trim()) throw badRequest('file_name is required');
+  assertDocflowClientFileUploadAllowed(params.payload.file_name, params.payload.mime_type);
   const b64 = params.payload.file_base64;
   if (typeof b64 !== 'string' || !b64.length) throw badRequest('file_base64 is required');
   if (b64.length > MAX_CLIENT_FILE_BASE64_LENGTH) throw badRequest(`File too large. Max ${MAX_CLIENT_FILE_SIZE / 1024 / 1024}MB`);
 
   const buf = Buffer.from(b64, 'base64');
+  const guarded = requireGuardedUpload({
+    buf,
+    fileName: params.payload.file_name,
+    claimedMime: params.payload.mime_type,
+    maxBytes: MAX_CLIENT_FILE_SIZE,
+  });
+  const fileName = guarded.fileName;
+  const mimeType = guarded.mime;
   const fileSize = buf.length;
-  if (fileSize > MAX_CLIENT_FILE_SIZE) throw badRequest(`File too large. Max ${MAX_CLIENT_FILE_SIZE / 1024 / 1024}MB`);
 
   const storageKey = `${params.orgId}/${params.clientId}/${Date.now()}-${Math.random().toString(36).slice(2)}`;
   await ensureBucketExists();
   const { error: uploadError } = await supabaseAdmin.storage.from(BUCKET_CLIENT_FILES).upload(storageKey, buf, {
-    contentType: params.payload.mime_type ?? 'application/octet-stream',
+    contentType: mimeType,
     upsert: false,
   });
   if (uploadError) throw new Error('Failed to upload file to storage');
@@ -113,7 +112,7 @@ export async function uploadSharedClientFileAssetForOffice(
       storage_bucket: BUCKET_CLIENT_FILES,
       storage_key: storageKey,
       file_name: fileName,
-      mime_type: params.payload.mime_type ?? null,
+      mime_type: mimeType,
       file_size: fileSize,
       uploaded_by: ctx.user.id,
       access_level: 'organization',
@@ -142,7 +141,7 @@ export async function uploadSharedClientFileAssetForOffice(
   return {
     file_asset_id: fileAsset.id,
     file_name: fileName,
-    mime_type: params.payload.mime_type ?? null,
+    mime_type: mimeType,
     file_size: fileSize,
   };
 }
@@ -157,21 +156,27 @@ export async function uploadSharedClientFileAssetForPortal(params: {
   portalUserId: string;
   payload: UploadPayload;
 }): Promise<{ file_asset_id: string; file_name: string; mime_type: string | null; file_size: number }> {
-  const fileName = String(params.payload.file_name ?? '').trim();
-  if (!fileName) throw badRequest('file_name is required');
-  assertDocflowClientFileUploadAllowed(fileName, params.payload.mime_type);
+  if (!String(params.payload.file_name ?? '').trim()) throw badRequest('file_name is required');
+  assertDocflowClientFileUploadAllowed(params.payload.file_name, params.payload.mime_type);
   const b64 = params.payload.file_base64;
   if (typeof b64 !== 'string' || !b64.length) throw badRequest('file_base64 is required');
   if (b64.length > MAX_CLIENT_FILE_BASE64_LENGTH) throw badRequest(`File too large. Max ${MAX_CLIENT_FILE_SIZE / 1024 / 1024}MB`);
 
   const buf = Buffer.from(b64, 'base64');
+  const guarded = requireGuardedUpload({
+    buf,
+    fileName: params.payload.file_name,
+    claimedMime: params.payload.mime_type,
+    maxBytes: MAX_CLIENT_FILE_SIZE,
+  });
+  const fileName = guarded.fileName;
+  const mimeType = guarded.mime;
   const fileSize = buf.length;
-  if (fileSize > MAX_CLIENT_FILE_SIZE) throw badRequest(`File too large. Max ${MAX_CLIENT_FILE_SIZE / 1024 / 1024}MB`);
 
   const storageKey = `${params.orgId}/${params.clientId}/${Date.now()}-${Math.random().toString(36).slice(2)}`;
   await ensureBucketExists();
   const { error: uploadError } = await supabaseAdmin.storage.from(BUCKET_CLIENT_FILES).upload(storageKey, buf, {
-    contentType: params.payload.mime_type ?? 'application/octet-stream',
+    contentType: mimeType,
     upsert: false,
   });
   if (uploadError) throw new Error('Failed to upload file to storage');
@@ -184,7 +189,7 @@ export async function uploadSharedClientFileAssetForPortal(params: {
       storage_bucket: BUCKET_CLIENT_FILES,
       storage_key: storageKey,
       file_name: fileName,
-      mime_type: params.payload.mime_type ?? null,
+      mime_type: mimeType,
       file_size: fileSize,
       uploaded_by: null,
       access_level: 'organization',
@@ -214,7 +219,7 @@ export async function uploadSharedClientFileAssetForPortal(params: {
   return {
     file_asset_id: fileAsset.id,
     file_name: fileName,
-    mime_type: params.payload.mime_type ?? null,
+    mime_type: mimeType,
     file_size: fileSize,
   };
 }

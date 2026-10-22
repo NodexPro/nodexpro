@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { forbidden, badRequest } from '../../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
+import { requireGuardedUpload } from '../../shared/file-content-guard.js';
 import { addTimelineEvent, TIMELINE_SOURCE, TIMELINE_EVENTS } from './timeline.service.js';
 
 const ENTITY_TYPE_CLIENT = 'client';
@@ -97,6 +98,7 @@ export async function attachFileToClient(
     if (!fileName) throw badRequest('file_name is required when file_asset_id is not provided');
     const storageKey = `${orgId}/${clientId}/${Date.now()}-${Math.random().toString(36).slice(2)}`;
     let fileSize = body.file_size ?? null;
+    let detectedMime: string | null = null;
 
     if (body.file_base64) {
       await ensureBucketExists();
@@ -105,12 +107,16 @@ export async function attachFileToClient(
         throw badRequest(`File too large. Max ${MAX_CLIENT_FILE_SIZE / 1024 / 1024}MB`);
       }
       const buf = Buffer.from(body.file_base64, 'base64');
+      const guarded = requireGuardedUpload({
+        buf,
+        fileName,
+        claimedMime: body.mime_type,
+        maxBytes: MAX_CLIENT_FILE_SIZE,
+      });
       fileSize = buf.length;
-      if (fileSize > MAX_CLIENT_FILE_SIZE) {
-        throw badRequest(`File too large. Max ${MAX_CLIENT_FILE_SIZE / 1024 / 1024}MB`);
-      }
+      detectedMime = guarded.mime;
       const { error: uploadError } = await supabaseAdmin.storage.from(BUCKET_CLIENT_FILES).upload(storageKey, buf, {
-        contentType: body.mime_type ?? 'application/octet-stream',
+        contentType: guarded.mime,
         upsert: false,
       });
       if (uploadError) throw new Error('Failed to upload file to storage');
@@ -123,7 +129,7 @@ export async function attachFileToClient(
         storage_provider: 'supabase',
         storage_key: storageKey,
         file_name: fileName,
-        mime_type: body.mime_type ?? null,
+        mime_type: detectedMime,
         file_size: fileSize,
         uploaded_by: ctx.user.id,
         access_level: 'organization',

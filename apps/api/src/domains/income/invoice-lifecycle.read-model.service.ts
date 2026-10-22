@@ -38,6 +38,7 @@ import {
   type InvoiceLifecycleAllowedAction,
 } from './invoice-lifecycle.types.js';
 import { composeInvoiceLifecycleRibbon } from './invoice-lifecycle-ribbon.pure.js';
+import { loadActiveCollectionWorkItemForSource } from '../work-engine/work-engine-source-lookups.service.js';
 import { composeInvoiceLifecycleHealth } from './invoice-lifecycle-health.pure.js';
 
 const ACTIVE_COLLECTION_WORK_TYPE = 'invoice_collection_followup';
@@ -92,21 +93,13 @@ async function loadActiveCollectionWorkItem(params: {
   orgId: string;
   incomeDocumentId: string;
 }): Promise<{ work_item_id: string; work_state: string } | null> {
-  const { data, error } = await supabaseAdmin
-    .from('work_items')
-    .select('id, work_state')
-    .eq('org_id', params.orgId)
-    .eq('module_key', INCOME_WORK_ENGINE_SOURCE_MODULE)
-    .eq('work_type', ACTIVE_COLLECTION_WORK_TYPE)
-    .eq('source_entity_type', INCOME_WORK_ENGINE_ENTITY_TYPE)
-    .eq('source_entity_id', params.incomeDocumentId)
-    .not('work_state', 'in', '(done,archived)')
-    .order('updated_at', { ascending: false })
-    .limit(1);
-  throwIfSupabaseError(error, 'invoiceLifecycleLoadCollectionWorkItem');
-  const row = data?.[0] as { id?: string; work_state?: string } | undefined;
-  if (!row?.id) return null;
-  return { work_item_id: String(row.id), work_state: String(row.work_state ?? '') };
+  return loadActiveCollectionWorkItemForSource({
+    orgId: params.orgId,
+    moduleKey: INCOME_WORK_ENGINE_SOURCE_MODULE,
+    sourceEntityType: INCOME_WORK_ENGINE_ENTITY_TYPE,
+    sourceEntityId: params.incomeDocumentId,
+    workType: ACTIVE_COLLECTION_WORK_TYPE,
+  });
 }
 
 function buildAllowedActions(params: {

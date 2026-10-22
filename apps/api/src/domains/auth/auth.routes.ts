@@ -243,7 +243,18 @@ function toAuthSessionAggregate(me: MeResponse): AuthSessionAggregateResponse {
   };
 }
 
-router.post('/register', async (req, res, next) => {
+router.post(
+  '/register',
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    keyGenerator: (req) => {
+      const email = typeof req.body?.email === 'string' ? req.body.email.toLowerCase().trim() : '';
+      return `${req.ip ?? 'unknown'}:${email || 'no-email'}`;
+    },
+    message: 'Too many registration attempts. Please wait and try again later.',
+  }),
+  async (req, res, next) => {
   try {
     const { email, password, fullName } = req.body ?? {};
     if (!email || !password) return res.status(400).json({ code: 'BAD_REQUEST', message: 'email and password required' });
@@ -252,7 +263,8 @@ router.post('/register', async (req, res, next) => {
   } catch (e) {
     next(e);
   }
-});
+  }
+);
 
 router.post(
   '/login',

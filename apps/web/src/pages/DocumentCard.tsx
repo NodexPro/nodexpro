@@ -5,6 +5,7 @@ import { apiJson } from '../api/client';
 import {
   orgDocument,
   orgDocumentFull,
+  orgDocumentUpdateCommand,
   orgDocumentVersions,
   orgDocumentOpen,
   orgDocumentLinks,
@@ -172,7 +173,21 @@ export function DocumentCard() {
     }
   };
 
-  const refetchDoc = () => orgId && documentId && apiJson<Document>(orgDocument(orgId, documentId)).then(setDoc).catch(() => {});
+  const applyDocumentCard = (data: { document: Document; versions: Version[]; links: Link[]; activity: Activity[] }) => {
+    const d = data.document;
+    setDoc(d);
+    setVersions(Array.isArray(data.versions) ? data.versions : []);
+    setLinks(Array.isArray(data.links) ? data.links : []);
+    setActivity(Array.isArray(data.activity) ? data.activity : []);
+    if (d) {
+      setEditTitle(d.title ?? '');
+      setEditType(d.document_type_code);
+      setEditAmount(d.amount_total != null ? String(d.amount_total) : '');
+      setEditCurrency(d.currency ?? '');
+      setEditDate(d.document_date ?? d.issue_date ?? '');
+    }
+  };
+
   const refetchLinks = () => orgId && documentId && apiJson<Link[]>(orgDocumentLinks(orgId, documentId)).then((l) => setLinks(Array.isArray(l) ? l : [])).catch(() => {});
   const refetchVersions = () => orgId && documentId && apiJson<Version[]>(orgDocumentVersions(orgId, documentId)).then((v) => setVersions(Array.isArray(v) ? v : [])).catch(() => {});
 
@@ -182,19 +197,21 @@ export function DocumentCard() {
     setSaving(true);
     setError('');
     try {
-      const updated = await apiJson<Document>(orgDocument(orgId, documentId), {
-        method: 'PATCH',
-        body: JSON.stringify({
-          title: editTitle.trim() || null,
-          document_type_code: editType,
-          amount_total: editAmount ? parseFloat(editAmount) : null,
-          currency: editCurrency || null,
-          document_date: editDate || null,
-        }),
-      });
+      const card = await apiJson<{ document: Document; versions: Version[]; links: Link[]; activity: Activity[] }>(
+        orgDocumentUpdateCommand(orgId, documentId),
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            title: editTitle.trim() || null,
+            document_type_code: editType,
+            amount_total: editAmount ? parseFloat(editAmount) : null,
+            currency: editCurrency || null,
+            document_date: editDate || null,
+          }),
+        },
+      );
+      applyDocumentCard(card);
       setEditing(false);
-      if (updated) setDoc(updated);
-      else refetchDoc();
     } catch (e) {
       setError(e instanceof Error ? e.message : t('documents.errors.updateFailed'));
     } finally {

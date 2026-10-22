@@ -159,6 +159,20 @@ router.patch('/:id/members/:memberId/role', ...withChangeRole, async (req, res, 
   }
 });
 
+router.post('/:id/members/:memberId/commands/change_member_role', ...withChangeRole, async (req, res, next) => {
+  try {
+    if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+    const { role_code } = req.body ?? {};
+    if (!role_code || typeof role_code !== 'string') {
+      return res.status(400).json({ code: 'BAD_REQUEST', message: 'role_code required' });
+    }
+    await membershipsRbac.changeUserRoleRbac(req.context!, req.params.id, req.params.memberId, role_code);
+    return res.json(await buildUsersRolesAggregate(req.context!, req.params.id));
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.delete('/:id/members/:memberId', ...withRevoke, async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });

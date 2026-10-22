@@ -65,6 +65,7 @@ export const orgLegalIdentity = (id: string) => `/organizations/${id}/legal-iden
 export const orgOwnerIdentity = (id: string) => `/organizations/${id}/owner-identity`;
 export const orgCompanyLegalIdentity = (id: string) => `/organizations/${id}/settings/company/legal-identity`;
 export const orgSettings = (id: string) => `/organizations/${id}/settings`;
+export const orgSettingsUpdateCommand = (id: string) => `/organizations/${id}/settings/commands/update_organization_settings`;
 export const orgCountrySettings = (id: string) => `/organizations/${id}/country-settings`;
 export const orgSettingsFileOpen = (orgId: string, fileAssetId: string) =>
   `/organizations/${orgId}/settings/files/${fileAssetId}/open`;
@@ -85,6 +86,20 @@ export const orgClientsBulkRestore = (orgId: string) => `/organizations/${orgId}
 export const orgClientsBulkExport = (orgId: string) => `/organizations/${orgId}/clients/bulk/export`;
 export const orgClient = (orgId: string, clientId: string) => `/organizations/${orgId}/clients/${clientId}`;
 export const orgClientFull = (orgId: string, clientId: string) => `/organizations/${orgId}/clients/${clientId}/full`;
+export const orgClientUpdateCommand = (orgId: string, clientId: string) =>
+  `/organizations/${orgId}/clients/${clientId}/commands/update_client`;
+export const orgClientAddContactCommand = (orgId: string, clientId: string) =>
+  `/organizations/${orgId}/clients/${clientId}/commands/add_contact`;
+export const orgClientUpdateContactCommand = (orgId: string, clientId: string, contactId: string) =>
+  `/organizations/${orgId}/clients/${clientId}/contacts/${contactId}/commands/update_contact`;
+export const orgClientDeleteContactCommand = (orgId: string, clientId: string, contactId: string) =>
+  `/organizations/${orgId}/clients/${clientId}/contacts/${contactId}/commands/delete_contact`;
+export const orgClientAddNoteCommand = (orgId: string, clientId: string) =>
+  `/organizations/${orgId}/clients/${clientId}/commands/add_note`;
+export const orgClientUpdateNoteCommand = (orgId: string, clientId: string, noteId: string) =>
+  `/organizations/${orgId}/clients/${clientId}/notes/${noteId}/commands/update_note`;
+export const orgClientDeleteNoteCommand = (orgId: string, clientId: string, noteId: string) =>
+  `/organizations/${orgId}/clients/${clientId}/notes/${noteId}/commands/delete_note`;
 export const orgClientContacts = (orgId: string, clientId: string) => `/organizations/${orgId}/clients/${clientId}/contacts`;
 export const orgClientContact = (orgId: string, clientId: string, contactId: string) =>
   `/organizations/${orgId}/clients/${clientId}/contacts/${contactId}`;
@@ -104,6 +119,8 @@ export const orgDocuments = (orgId: string) => `/organizations/${orgId}/document
 export const orgDocumentsForClient = (orgId: string, clientId: string) => `/organizations/${orgId}/documents?linkedToClientId=${clientId}`;
 export const orgDocumentsUpload = (orgId: string) => `/organizations/${orgId}/documents/upload`;
 export const orgDocument = (orgId: string, documentId: string) => `/organizations/${orgId}/documents/${documentId}`;
+export const orgDocumentUpdateCommand = (orgId: string, documentId: string) =>
+  `/organizations/${orgId}/documents/${documentId}/commands/update_document`;
 export const orgDocumentFull = (orgId: string, documentId: string) => `/organizations/${orgId}/documents/${documentId}?full=true`;
 export const orgDocumentVersions = (orgId: string, documentId: string) => `/organizations/${orgId}/documents/${documentId}/versions`;
 export const orgDocumentOpen = (orgId: string, documentId: string) => `/organizations/${orgId}/documents/${documentId}/open`;

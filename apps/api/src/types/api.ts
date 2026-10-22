@@ -189,9 +189,23 @@ export interface TrialStateDto {
   blocked: boolean;
 }
 
+export interface ModulesBillingSubscriptionRow {
+  module_id: string;
+  name: string;
+  activation_status: string;
+  billing_period: string | null;
+  currency: string;
+  price_amount: number;
+  started_at: string;
+  ends_at: string | null;
+}
+
 export interface ModulesStateResponse {
   trialState: TrialStateDto;
   modules: ModuleStateItem[];
+  billing: {
+    subscribed_commercial_modules: ModulesBillingSubscriptionRow[];
+  };
 }
 
 export interface CreateOrganizationBody {

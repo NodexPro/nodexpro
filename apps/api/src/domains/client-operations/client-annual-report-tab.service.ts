@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError, badRequest, conflict, forbidden } from '../../shared/errors.js';
+import { requireGuardedUpload } from '../../shared/file-content-guard.js';
 import { syncAnnualScopeMaterialWorkEvent } from './client-operations-work-engine-bridge.js';
 
 const BUCKET = 'client-files';
@@ -1025,11 +1026,16 @@ export async function uploadAnnualReportDocument(
 
   await ensureAnnualBucket();
   const buf = Buffer.from(b64, 'base64');
-  if (buf.length > MAX_FILE) throw badRequest('File too large');
+  const guarded = requireGuardedUpload({
+    buf,
+    fileName,
+    claimedMime: body.mime_type,
+    maxBytes: MAX_FILE,
+  });
   const storageScope = scope === 'capital_declaration' ? 'capital-declaration' : 'annual-report';
   const storageKey = `${orgId}/${storageScope}/${clientId}/${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const { error: upErr } = await supabaseAdmin.storage.from(BUCKET).upload(storageKey, buf, {
-    contentType: body.mime_type ?? 'application/octet-stream',
+    contentType: guarded.mime,
     upsert: false,
   });
   if (upErr) throw new AppError(500, upErr.message ?? 'upload failed', 'SUPABASE_ERROR');
@@ -1040,8 +1046,8 @@ export async function uploadAnnualReportDocument(
       organization_id: orgId,
       storage_provider: 'supabase',
       storage_key: storageKey,
-      file_name: fileName,
-      mime_type: body.mime_type ?? null,
+      file_name: guarded.fileName,
+      mime_type: guarded.mime,
       file_size: buf.length,
       uploaded_by: ctx.user.id,
       access_level: 'organization',

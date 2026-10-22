@@ -66,7 +66,20 @@ async function logModuleLoaded(): Promise<void> {
 }
 
 const app = express();
-app.use(helmet());
+app.set('trust proxy', 1);
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'none'"],
+      },
+    },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }),
+);
 app.use(correlationMiddleware);
 // Measurement only: `Server-Timing` response header (API time + Supabase call count/avg/max). No behavior.
 app.use(requestTimingMiddleware);

@@ -19,6 +19,8 @@ const heI18n = readFileSync(join(dir, '../src/i18n/he.json'), 'utf8');
 
 test('Billing reads one modules aggregate and never fabricates money or cards', () => {
   assert.match(billingSrc, /orgModulesState\(orgId\)/);
+  assert.match(billingSrc, /subscribed_commercial_modules/);
+  assert.doesNotMatch(billingSrc, /subscribedCommercialModules|matchingPlan/);
   assert.doesNotMatch(billingSrc, /orgSubscription\(/);
   assert.doesNotMatch(billingSrc, /staff-seat-entitlement/);
   assert.doesNotMatch(billingSrc, /priceAmount\s*\+|reduce\(|total\s*=/);
@@ -56,7 +58,8 @@ test('Documents keep upload/archive contracts and only restyle the file picker',
   assert.match(documentsSrc, /file_base64/);
   assert.match(documentsSrc, /GlassFilePicker/);
   assert.match(documentCardSrc, /\/archive'/);
-  assert.match(documentCardSrc, /method: 'PATCH'/);
+  assert.match(documentCardSrc, /orgDocumentUpdateCommand/);
+  assert.match(documentCardSrc, /method: 'POST'/);
   assert.match(documentCardSrc, /GlassFilePicker/);
 });
 

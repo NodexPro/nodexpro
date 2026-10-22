@@ -1,17 +1,19 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { apiJson, apiFetch } from '../api/client';
+import { apiJson } from '../api/client';
 import {
-  orgClientFull,
   orgClient,
-  orgClientContacts,
-  orgClientContact,
-  orgClientNotes,
-  orgClientNote,
+  orgClientFull,
+  orgClientUpdateCommand,
+  orgClientAddContactCommand,
+  orgClientUpdateContactCommand,
+  orgClientDeleteContactCommand,
+  orgClientAddNoteCommand,
+  orgClientUpdateNoteCommand,
+  orgClientDeleteNoteCommand,
   orgClientRestore,
   orgClientTags,
-  orgClientTimeline,
   orgClientFiles,
   orgClientFileOpen,
   orgClientFileRemove,
@@ -110,6 +112,16 @@ interface DocSummary {
   lifecycle_state: string;
 }
 
+type ClientCardAggregate = {
+  client: Client;
+  contacts: Contact[];
+  notes: Note[];
+  tags: Tag[];
+  timeline: TimelineEvent[];
+  files: FileLink[];
+  documents?: DocSummary[];
+};
+
 export function ClientCard() {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
@@ -164,6 +176,16 @@ export function ClientCard() {
   const canArchive = officeActions.includes('archive_client');
   const canRestore = officeActions.includes('restore_client');
 
+  const applyClientCard = (data: ClientCardAggregate) => {
+    setClient(data.client as Client);
+    setContacts(Array.isArray(data.contacts) ? data.contacts : []);
+    setNotes(Array.isArray(data.notes) ? data.notes : []);
+    setTags(Array.isArray(data.tags) ? data.tags : []);
+    setTimeline(Array.isArray(data.timeline) ? data.timeline : []);
+    setFiles(Array.isArray(data.files) ? data.files : []);
+    setDocuments(Array.isArray(data.documents) ? data.documents : []);
+  };
+
   useEffect(() => {
     if (!orgId || !clientId) {
       setLoading(false);
@@ -173,16 +195,10 @@ export function ClientCard() {
     let cancelled = false;
     setLoading(true);
     setError('');
-    apiJson<{ client: Client; contacts: Contact[]; notes: Note[]; tags: Tag[]; timeline: TimelineEvent[]; files: FileLink[]; documents?: DocSummary[] }>(orgClientFull(orgId, clientId), { signal: ac.signal })
+    apiJson<ClientCardAggregate>(orgClientFull(orgId, clientId), { signal: ac.signal })
       .then((data) => {
         if (cancelled) return;
-        setClient(data.client as Client);
-        setContacts(Array.isArray(data.contacts) ? data.contacts : []);
-        setNotes(Array.isArray(data.notes) ? data.notes : []);
-        setTags(Array.isArray(data.tags) ? data.tags : []);
-        setTimeline(Array.isArray(data.timeline) ? data.timeline : []);
-        setFiles(Array.isArray(data.files) ? data.files : []);
-        setDocuments(Array.isArray(data.documents) ? data.documents : []);
+        applyClientCard(data);
       })
       .catch((e) => {
         if (!cancelled && (e as Error)?.name !== 'AbortError') setError(e instanceof Error ? e.message : 'Failed to load');
@@ -234,21 +250,19 @@ export function ClientCard() {
       };
 
       if (contactMode === 'add') {
-        await apiJson(orgClientContacts(orgId, clientId), {
+        applyClientCard(await apiJson<ClientCardAggregate>(orgClientAddContactCommand(orgId, clientId), {
           method: 'POST',
           body: JSON.stringify(body),
-        });
+        }));
       } else if (contactMode === 'edit' && editingContactId) {
-        await apiJson(orgClientContact(orgId, clientId, editingContactId), {
-          method: 'PATCH',
+        applyClientCard(await apiJson<ClientCardAggregate>(orgClientUpdateContactCommand(orgId, clientId, editingContactId), {
+          method: 'POST',
           body: JSON.stringify(body),
-        });
+        }));
       } else {
         return;
       }
 
-      const next = await apiJson<Contact[]>(orgClientContacts(orgId, clientId));
-      setContacts(Array.isArray(next) ? next : []);
       cancelContactForm();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save contact');
@@ -259,9 +273,10 @@ export function ClientCard() {
     if (!orgId || !clientId || !canWrite) return;
     setError('');
     try {
-      await apiFetch(orgClientContact(orgId, clientId, contactId), { method: 'DELETE' });
-      const next = await apiJson<Contact[]>(orgClientContacts(orgId, clientId));
-      setContacts(Array.isArray(next) ? next : []);
+      applyClientCard(await apiJson<ClientCardAggregate>(orgClientDeleteContactCommand(orgId, clientId, contactId), {
+        method: 'POST',
+        body: JSON.stringify({}),
+      }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to delete contact');
     }
@@ -272,10 +287,11 @@ export function ClientCard() {
     if (!orgId || !clientId || !newNoteText.trim() || !canWrite) return;
     setError('');
     try {
-      await apiJson(orgClientNotes(orgId, clientId), { method: 'POST', body: JSON.stringify({ note_text: newNoteText.trim() }) });
+      applyClientCard(await apiJson<ClientCardAggregate>(orgClientAddNoteCommand(orgId, clientId), {
+        method: 'POST',
+        body: JSON.stringify({ note_text: newNoteText.trim() }),
+      }));
       setNewNoteText('');
-      const next = await apiJson<Note[]>(orgClientNotes(orgId, clientId));
-      setNotes(Array.isArray(next) ? next : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to add note');
     }
@@ -319,8 +335,8 @@ export function ClientCard() {
     setSaving(true);
     setError('');
     try {
-      const updated = await apiJson<Client>(orgClient(orgId, clientId), {
-        method: 'PATCH',
+      applyClientCard(await apiJson<ClientCardAggregate>(orgClientUpdateCommand(orgId, clientId), {
+        method: 'POST',
         body: JSON.stringify({
           display_name: editName.trim(),
           tax_id: editTaxId.trim() || undefined,
@@ -335,8 +351,7 @@ export function ClientCard() {
           street: editStreet.trim() || null,
           postal_code: editPostalCode.trim() || null,
         }),
-      });
-      setClient(updated);
+      }));
       setEditing(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to update');
@@ -386,16 +401,10 @@ export function ClientCard() {
     setDeletingNoteId(noteId);
     setError('');
     try {
-      const delRes = await apiFetch(orgClientNote(orgId, clientId, noteId), { method: 'DELETE' });
-      if (!delRes.ok) {
-        const body = await delRes.json().catch(() => ({}));
-        throw new Error((body as { message?: string }).message ?? delRes.statusText);
-      }
-      setNotes((prev) => prev.filter((n) => n.id !== noteId));
-      const [nextTimeline] = await Promise.all([
-        apiJson<TimelineEvent[]>(orgClientTimeline(orgId, clientId)),
-      ]);
-      setTimeline(Array.isArray(nextTimeline) ? nextTimeline : []);
+      applyClientCard(await apiJson<ClientCardAggregate>(orgClientDeleteNoteCommand(orgId, clientId, noteId), {
+        method: 'POST',
+        body: JSON.stringify({}),
+      }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to delete note');
     } finally {
@@ -409,16 +418,10 @@ export function ClientCard() {
     setSavingNote(true);
     setError('');
     try {
-      await apiJson(orgClientNote(orgId, clientId, noteId), {
-        method: 'PATCH',
+      applyClientCard(await apiJson<ClientCardAggregate>(orgClientUpdateNoteCommand(orgId, clientId, noteId), {
+        method: 'POST',
         body: JSON.stringify({ note_text: editingNoteText.trim() }),
-      });
-      const [nextNotes, nextTimeline] = await Promise.all([
-        apiJson<Note[]>(orgClientNotes(orgId, clientId)),
-        apiJson<TimelineEvent[]>(orgClientTimeline(orgId, clientId)),
-      ]);
-      setNotes(Array.isArray(nextNotes) ? nextNotes : []);
-      setTimeline(Array.isArray(nextTimeline) ? nextTimeline : []);
+      }));
       setEditingNoteId(null);
       setEditingNoteText('');
     } catch (e) {
