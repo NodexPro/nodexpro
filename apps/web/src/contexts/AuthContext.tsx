@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { apiJson } from '../api/client';
 import { AUTH } from '../api/endpoints';
 import { setBackendActiveOrganizationId } from '../api/org-context';
+import { shouldClearLocalAuthSession } from '../lib/session-auth-failure.pure';
 import type { SessionNavItemDto, ShellProfile, SidebarAccountBlockModel, UiLanguageCode } from '../types/session';
 
 export interface MeData {
@@ -104,6 +105,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (signal?.aborted) return null;
         setBackendActiveOrganizationId(null);
         setState({ status: 'unauthenticated' });
+        // Leftover JWT would remount → /auth/session 401 → login. Clear Auth session
+        // locally; do not call /auth/logout (that route also requires an active user).
+        if (shouldClearLocalAuthSession(e)) {
+          try {
+            await supabase.auth.signOut();
+          } catch {
+            // best-effort local clear
+          }
+        }
         return null;
       } finally {
         isFetchingMe.current = false;

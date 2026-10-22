@@ -5,10 +5,15 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const dir = dirname(fileURLToPath(import.meta.url));
-const migration = readFileSync(
+const migration191 = readFileSync(
   join(dir, '../../../../supabase/migrations/191_postgrest_rls_tenant_hardening.sql'),
   'utf8',
 );
+const migration192 = readFileSync(
+  join(dir, '../../../../supabase/migrations/192_postgrest_select_lockdown.sql'),
+  'utf8',
+);
+const migration = migration191;
 
 test('RLS helper uses canonical organization_memberships and active users only', () => {
   assert.match(migration, /organization_memberships om/);
@@ -32,4 +37,16 @@ test('first-party WEB has no PostgREST table client — Auth only', () => {
   assert.doesNotMatch(web, /\.from\(/);
   const client = readFileSync(join(dir, '../../../web/src/api/client.ts'), 'utf8');
   assert.match(client, /Authorization.*Bearer/);
+});
+
+test('192 revokes leftover PostgREST SELECT and membership-helper EXECUTE', () => {
+  assert.match(migration192, /revoke select on table public\.%I from anon, authenticated, public/);
+  assert.match(migration192, /pg_views/);
+  assert.match(
+    migration192,
+    /revoke all on function public\.organizations_for_current_auth_user\(\) from anon, authenticated, public/,
+  );
+  assert.doesNotMatch(migration192, /grant select/i);
+  assert.doesNotMatch(migration192, /auth\.users/);
+  assert.doesNotMatch(migration192, /storage\.objects/);
 });
