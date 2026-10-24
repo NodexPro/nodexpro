@@ -1,6 +1,7 @@
+import { resolvePublicApiBaseUrl } from '../lib/resolve-public-api-base-url.pure';
 import { getBackendActiveOrganizationId } from './org-context';
 
-const API_URL = import.meta.env.VITE_API_URL ?? '';
+const API_URL = resolvePublicApiBaseUrl(import.meta.env.VITE_API_URL, import.meta.env.PROD);
 
 /** API error JSON `{ code, message, ...details }` — use `code` for secure-session / encryption flows */
 export class ApiError extends Error {
