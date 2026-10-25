@@ -1,8 +1,12 @@
 import { createHash } from 'node:crypto';
 import { config } from '../config.js';
 import { writeAudit } from './audit-events.js';
+import { enqueueSecurityAlert } from './security-alert-delivery.service.js';
 import { decideSecurityAlert, securityTestAlertBody } from './security-alert.pure.js';
+import { securityAlertSeverity, shouldQueueSecurityAlert } from './security-alert-policy.pure.js';
 import { decideSecurityRecord, safeSecurityPayload } from './security-event.pure.js';
+import { enrichGeoIp } from './geoip-dbip.service.js';
+import { resolveTrustedSourceIp } from './request-source.pure.js';
 
 const WINDOW_MS = 10 * 60 * 1000;
 type Bucket = { count: number; resetAt: number; repeatedWritten: boolean };
@@ -22,6 +26,7 @@ export async function recordSecurityEvent(input: {
   actorUserId?: string | null;
   organizationId?: string | null;
   correlationId?: string | null;
+  sourceIp?: string | null;
   payload?: Record<string, unknown> | null;
 }): Promise<{ recorded: boolean }> {
   try {
@@ -36,10 +41,13 @@ export async function recordSecurityEvent(input: {
     if (!decision.record) return { recorded: false };
     if (decision.repeated && bucket.repeatedWritten) return { recorded: false };
     if (decision.repeated) bucket.repeatedWritten = true;
+    const sourceIp = resolveTrustedSourceIp({ reqIp: input.sourceIp });
+    const geo = await enrichGeoIp(sourceIp);
     const payload = safeSecurityPayload({
       ...(input.payload ?? {}),
       correlation_id: input.correlationId ?? null,
       repeated: decision.repeated,
+      ...geo,
     });
     await writeAudit({
       organizationId: input.organizationId ?? null,
@@ -48,6 +56,16 @@ export async function recordSecurityEvent(input: {
       action: decision.action,
       payload,
     });
+    if (shouldQueueSecurityAlert(decision.action)) {
+      await enqueueSecurityAlert({
+        eventAction: decision.action,
+        severity: securityAlertSeverity(decision.action),
+        eventKind: 'security',
+        dedupeKey: `alert:${input.dedupeKey}:${decision.action}`,
+        correlationId: input.correlationId ?? null,
+        safeContext: payload,
+      }).catch(() => undefined);
+    }
     if (decision.repeated) await deliverSecurityAlert(decision.action, input.correlationId ?? null);
     return { recorded: true };
   } catch {

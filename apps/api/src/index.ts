@@ -51,6 +51,7 @@ import {
 import { correlationMiddleware, getRequestCorrelationId } from './middleware/correlation.js';
 import { requestTimingMiddleware } from './shared/request-timing.js';
 import { supabaseAdmin } from './db/client.js';
+import { ensureDbIpLiteDatabase, writeDbIpLiteProvisioningReadme } from './shared/geoip-dbip.service.js';
 
 ensureDefaultPuppeteerCacheDir();
 registerExampleModuleHook();
@@ -244,5 +245,10 @@ app.listen(config.port, () => {
     }
   }
   void logPdfEngineStartupProbe();
+  void writeDbIpLiteProvisioningReadme()
+    .then(() => ensureDbIpLiteDatabase(false))
+    .catch(() => {
+      console.error('[api] DB-IP Lite provisioning failed; security GeoIP enrichment will fall back to Unknown.');
+    });
   logModuleLoaded();
 });

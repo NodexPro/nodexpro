@@ -1,10 +1,15 @@
 import { Router } from 'express';
 import type { Request, Response, NextFunction } from 'express';
 import { authMiddleware } from '../middleware/auth.js';
+import { rateLimit } from '../middleware/rate-limit.js';
+import { config } from '../config.js';
 import type { RequestContext } from '../shared/context.js';
-import { badRequest } from '../shared/errors.js';
+import { badRequest, forbidden } from '../shared/errors.js';
 import { assertPlatformOwner } from '../shared/platform-owner.js';
 import { AUDIT_ACTIONS, writeAudit } from '../shared/audit-events.js';
+import { processSecurityAlertDeliveries } from '../shared/security-alert-delivery.service.js';
+import { recordSecurityEvent, securitySubjectKey } from '../shared/security-event.service.js';
+import { ensureDbIpLiteDatabase } from '../shared/geoip-dbip.service.js';
 import { executeCountryPackCommand } from '../domains/country-pack/country-pack-commands.service.js';
 import {
   buildActiveRulesetContextAggregate,
@@ -46,6 +51,13 @@ import {
 
 const router = Router();
 
+function requireInternalCronSecret(req: Request): void {
+  const secret = String(req.headers['x-internal-cron-secret'] ?? '').trim();
+  if (!config.internalCronSecret || !secret || secret !== config.internalCronSecret) {
+    throw forbidden('Invalid internal cron secret');
+  }
+}
+
 async function assertOwnerOrAuditFailure(ctx: RequestContext, req: Request): Promise<void> {
   await refreshPrivilegedMfaGate();
   try {
@@ -64,6 +76,18 @@ async function assertOwnerOrAuditFailure(ctx: RequestContext, req: Request): Pro
       ipAddress: req.ip ?? null,
       userAgent: req.headers['user-agent'] ?? null,
     });
+    await recordSecurityEvent({
+      action: 'security.forbidden',
+      dedupeKey: securitySubjectKey(`owner:${ctx.user.id}:${req.method}:${req.path}`),
+      actorUserId: ctx.user.id,
+      correlationId: getRequestCorrelationId(req),
+      sourceIp: typeof req.ip === 'string' ? req.ip : null,
+      payload: {
+        http_status: 403,
+        code: 'PLATFORM_OWNER_REQUIRED',
+        kind: 'forbidden_privileged_operation',
+      },
+    });
     throw error;
   }
 }
@@ -76,6 +100,36 @@ router.get('/session', authMiddleware, async (req: Request, res: Response, next:
     return res.json({
       aggregate_key: 'platform_owner_session_aggregate',
       allowed: true,
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/internal/security-alert-deliveries/process', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    requireInternalCronSecret(req);
+    const limit = typeof req.body?.limit === 'number' ? req.body.limit : 20;
+    const result = await processSecurityAlertDeliveries(limit);
+    return res.json({
+      ok: true,
+      ...result,
+      correlation_id: getRequestCorrelationId(req),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/internal/geoip/update', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    requireInternalCronSecret(req);
+    const force = req.body?.force === true;
+    const result = await ensureDbIpLiteDatabase(force);
+    return res.json({
+      ok: true,
+      ...result,
+      correlation_id: getRequestCorrelationId(req),
     });
   } catch (e) {
     next(e);
@@ -220,16 +274,26 @@ router.post('/commands/activate_platform_owner_mfa', async (req: Request, res: R
   }
 });
 
-router.post('/commands/deliver_security_test_alert', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const ctx = req.context as RequestContext;
-    await assertOwnerOrAuditFailure(ctx, req);
-    const token = req.headers.authorization?.slice(7) ?? '';
-    return res.json(await deliverOwnerSecurityTestAlert(ctx, getRequestCorrelationId(req), token));
-  } catch (e) {
-    next(e);
-  }
-});
+router.post(
+  '/commands/deliver_security_test_alert',
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 3,
+    keyGenerator: (req) => req.context?.user.id ?? req.ip ?? 'unknown',
+    code: 'SECURITY_TEST_ALERT_RATE_LIMIT',
+    message: 'Too many security test alerts. Please try again later.',
+  }),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const ctx = req.context as RequestContext;
+      await assertOwnerOrAuditFailure(ctx, req);
+      const token = req.headers.authorization?.slice(7) ?? '';
+      return res.json(await deliverOwnerSecurityTestAlert(ctx, getRequestCorrelationId(req), token));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 router.get('/system-health', async (req: Request, res: Response, next: NextFunction) => {
   try {

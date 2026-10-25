@@ -1,19 +1,37 @@
 import { config } from '../../config.js';
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
+import { writeAudit } from '../../shared/audit-events.js';
 import { AppError } from '../../shared/errors.js';
 import { assertPlatformOwner } from '../../shared/platform-owner.js';
-import { deliverSecurityTestAlert } from '../../shared/security-event.service.js';
+import { getSecurityAlertDeliverySummary, sendQueuedSecurityTestAlert } from '../../shared/security-alert-delivery.service.js';
+import { securityAlertSeverity } from '../../shared/security-alert-policy.pure.js';
+import { DBIP_ATTRIBUTION_TEXT, DBIP_ATTRIBUTION_URL } from '../../shared/geoip-dbip.service.js';
 import { buildPermanentMfaPanel } from '../auth/privileged-mfa.service.js';
 
-const SAFE_PAYLOAD_KEYS = new Set(['http_status', 'code', 'kind', 'failure_count', 'signal', 'repeated', 'correlation_id']);
+const SAFE_PAYLOAD_KEYS = new Set([
+  'http_status',
+  'code',
+  'kind',
+  'failure_count',
+  'signal',
+  'repeated',
+  'correlation_id',
+  'source_ip',
+  'country',
+  'country_code',
+  'city',
+  'region',
+  'asn',
+  'network',
+  'risk',
+  'provider',
+  'looked_up_at',
+  'accuracy_note',
+]);
 
 export function securityEventSeverity(action: string): 'critical' | 'high' | 'medium' | 'low' {
-  if (action === 'security.alert_delivery_failed' || action === 'security.privileged_mfa_failed') return 'critical';
-  if (action === 'security.platform_owner_mfa_activated') return 'critical';
-  if (action === 'security.suspicious_sign_in' || action === 'security.suspicious_repeated') return 'high';
-  if (action === 'security.forbidden' || action === 'security.unauthorized' || action === 'security.sensitive_access') return 'medium';
-  return 'low';
+  return securityAlertSeverity(action);
 }
 
 function safePayload(value: unknown): Record<string, string | number | boolean | null> {
@@ -47,10 +65,16 @@ export async function buildOwnerSecurityEventsAggregate(ctx: RequestContext, acc
     payload: safePayload(row.payload_json),
   }));
   const permanentMfa = accessToken ? await buildPermanentMfaPanel(ctx, accessToken) : null;
+  const delivery = await getSecurityAlertDeliverySummary();
   return {
     aggregate_key: 'owner_security_events' as const,
     window_hours: 24,
-    alert_delivery: config.securityAlertWebhookUrl ? ('configured' as const) : ('not_configured' as const),
+    alert_delivery: delivery.configured || config.securityAlertWebhookUrl ? ('configured' as const) : ('not_configured' as const),
+    alert_delivery_channel: delivery,
+    geoip_attribution: {
+      text: DBIP_ATTRIBUTION_TEXT,
+      url: DBIP_ATTRIBUTION_URL,
+    },
     delivery_failure_count: events.filter((event) => event.action === 'security.alert_delivery_failed').length,
     events,
     permanent_mfa: permanentMfa,
@@ -59,7 +83,17 @@ export async function buildOwnerSecurityEventsAggregate(ctx: RequestContext, acc
 
 export async function deliverOwnerSecurityTestAlert(ctx: RequestContext, correlationId: string, accessToken?: string) {
   assertPlatformOwner(ctx);
-  const testDelivery = await deliverSecurityTestAlert(correlationId);
+  await writeAudit({
+    organizationId: null,
+    actorUserId: ctx.user.id,
+    entityType: 'security',
+    action: 'security.test_alert',
+    payload: { kind: 'test', correlation_id: correlationId },
+  });
+  const testDelivery = await sendQueuedSecurityTestAlert({
+    correlationId,
+    actorUserId: ctx.user.id,
+  });
   const aggregate = await buildOwnerSecurityEventsAggregate(ctx, accessToken);
   return { ...aggregate, test_delivery: testDelivery };
 }

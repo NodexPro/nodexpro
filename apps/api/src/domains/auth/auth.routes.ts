@@ -303,11 +303,12 @@ router.post(
     const result = await authService.login({ email, password });
     const failureCount = Math.max(0, Number(res.locals.rateLimitCount ?? 0) - 1);
     if (failureCount >= 5 && result.appUserId) {
-      await writeAudit({
-        organizationId: null,
-        actorUserId: result.appUserId,
-        entityType: 'security',
+      await recordSecurityEvent({
         action: 'security.suspicious_sign_in',
+        dedupeKey: securitySubjectKey(`suspicious-sign-in:${String(email).toLowerCase().trim()}`),
+        actorUserId: result.appUserId,
+        correlationId: getRequestCorrelationId(req),
+        sourceIp: typeof req.ip === 'string' ? req.ip : null,
         payload: { failure_count: failureCount, signal: 'failure_burst' },
       });
     }
@@ -318,6 +319,7 @@ router.post(
       action: 'security.login_failed',
       dedupeKey: securitySubjectKey(`login:${identifier}`),
       correlationId: getRequestCorrelationId(req),
+      sourceIp: typeof req.ip === 'string' ? req.ip : null,
       payload: { http_status: e instanceof AppError ? e.statusCode : 400 },
     });
     next(e);

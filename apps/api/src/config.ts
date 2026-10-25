@@ -11,6 +11,12 @@ export const config = {
   // LEGAL_IDENTITY_HASH_SALT; do not rotate it here (would orphan stored hashes).
   legalIdentityHashSalt: process.env.LEGAL_IDENTITY_HASH_SALT ?? 'dev-salt-change-in-production',
   securityAlertWebhookUrl: process.env.SECURITY_ALERT_WEBHOOK_URL?.trim() || null,
+  dbIpLite: {
+    cityDbPath: process.env.DBIP_CITY_LITE_DB_PATH?.trim() || null,
+    dataDir: process.env.DBIP_LITE_DATA_DIR?.trim() || '/tmp/nodexpro-dbip-lite',
+    updateDays: Number.parseInt(process.env.DBIP_LITE_UPDATE_DAYS ?? '32', 10),
+    downloadTimeoutMs: Number.parseInt(process.env.DBIP_LITE_DOWNLOAD_TIMEOUT_MS ?? '60000', 10),
+  },
   platformOwner: {
     email: process.env.PLATFORM_OWNER_EMAIL?.trim().toLowerCase() ?? null,
     phone: process.env.PLATFORM_OWNER_PHONE?.trim() ?? null,
