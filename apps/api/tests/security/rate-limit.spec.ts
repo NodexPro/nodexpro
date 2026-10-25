@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { NextFunction, Request, Response } from 'express';
-import { rateLimit, resetRateLimitBucketsForTests } from '../../src/middleware/rate-limit.js';
+import { classifyRateLimitStoreError, rateLimit, resetRateLimitBucketsForTests } from '../../src/middleware/rate-limit.js';
 
 function mockReq(overrides: Partial<Request> = {}): Request {
   return {
@@ -20,6 +23,7 @@ function mockRes(): Response & { statusCode: number; body: unknown; headers: Rec
     statusCode: 200,
     body: null as unknown,
     headers: {} as Record<string, string>,
+    locals: {} as Record<string, unknown>,
     setHeader(name: string, value: string) {
       res.headers[name.toLowerCase()] = String(value);
       return res;
@@ -105,4 +109,14 @@ test('register limiter isolates buckets by email so a second user is not locked 
   }) as NextFunction);
   assert.equal(otherNext, true);
   assert.equal(other.statusCode, 200);
+});
+
+test('a missing shared limiter degrades and any other store error fails closed', () => {
+  assert.equal(classifyRateLimitStoreError('Could not find the function public.consume_security_rate_bucket', 'PGRST202'), 'missing');
+  assert.equal(classifyRateLimitStoreError('consume_security_rate_bucket failed', 'P0001'), 'unavailable');
+  assert.equal(classifyRateLimitStoreError('connection refused', '08006'), 'unavailable');
+  const sql = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../../../supabase/migrations/202_security_rate_buckets.sql'), 'utf8');
+  assert.match(sql, /returning b\.request_count into v_count/);
+  assert.match(sql, /force row level security/);
+  assert.match(sql, /revoke all on function public\.consume_security_rate_bucket/);
 });

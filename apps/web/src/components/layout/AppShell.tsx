@@ -7,6 +7,7 @@ import { ReminderToasts } from '../ReminderToasts';
 import { DocflowFloatingWidget } from '../DocflowFloatingWidget';
 import { isClientOperationsReminderToastsEnabled } from '../../lib/client-operations-reminder-toasts-access.pure';
 import { RequireWorkerRoute } from '../guards/RequireWorkerRoute';
+import { AccountSecurityPanel } from '../../security/AccountSecurityPanel';
 
 function SessionLanguageSync() {
   const auth = useAuth();
@@ -70,6 +71,7 @@ export function AppShell() {
   return (
     <>
       <SessionLanguageSync />
+      <AccountSecurityPanel mode="prompt" />
       <TemplateLayout
         organizations={me.organizations}
         activeOrganizationId={me.activeOrganizationId}

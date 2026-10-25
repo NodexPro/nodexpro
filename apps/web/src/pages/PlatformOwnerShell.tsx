@@ -1,4 +1,6 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { AccountSecurityPanel } from '../security/AccountSecurityPanel';
+import { OwnerSecurityEventsPanel } from './OwnerSecurityEventsPanel';
 import './owner-modules/nx-owner-modules.css';
 
 const NAV = [
@@ -55,6 +57,8 @@ export function PlatformOwnerShell() {
         </nav>
       </aside>
       <main className="nx-owner-shell__main">
+        <AccountSecurityPanel mode="both" />
+        <OwnerSecurityEventsPanel />
         <Outlet />
       </main>
     </div>

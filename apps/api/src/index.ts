@@ -19,6 +19,7 @@ import { documentsRoutes } from './domains/documents/documents.routes.js';
 import { dashboardRoutes } from './domains/dashboard/dashboard.routes.js';
 import { config } from './config.js';
 import { AppError } from './shared/errors.js';
+import { refreshPrivilegedMfaGate } from './domains/auth/privileged-mfa.service.js';
 import {
   ENCRYPTION_NOT_CONFIGURED_CODE,
   getClientDataEncryptionEnvDiagnostic,
@@ -224,6 +225,7 @@ app.use((err: unknown, req: express.Request, res: express.Response, _next: expre
 
 app.listen(config.port, () => {
   console.log(`API listening on port ${config.port}`);
+  void refreshPrivilegedMfaGate();
   logNodexproApiBoot();
   const enc = getClientDataEncryptionEnvDiagnostic();
   const len =

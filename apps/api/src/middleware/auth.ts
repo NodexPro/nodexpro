@@ -12,6 +12,10 @@ import {
   APP_USER_NOT_ACTIVE_MESSAGE,
   isAppUserStatusActive,
 } from '../domains/auth/user-authorization.pure.js';
+import { readAuthenticatorAssurance } from '../shared/privileged-mfa.pure.js';
+import { getPrivilegedMfaGate } from '../shared/privileged-mfa-gate.js';
+import { deviceCredentialFromCookie } from '../domains/auth/mfa-trusted-device.pure.js';
+import { recognizeTrustedDevice } from '../domains/auth/mfa-trusted-device.service.js';
 
 // `timedFetch` only adds per-request call accounting for the Server-Timing header (measurement, no behavior).
 const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey, { global: { fetch: timedFetch } });
@@ -94,11 +98,33 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
     membership = resolved.membership;
   }
 
+  const deviceCredential = deviceCredentialFromCookie(typeof req.headers.cookie === 'string' ? req.headers.cookie : undefined);
+  let trustedDevice = false;
+  if (deviceCredential && getPrivilegedMfaGate().trustedDevicesReady) {
+    trustedDevice = await recognizeTrustedDevice(user.id, deviceCredential).catch(() => false);
+  }
+
+  let suspiciousSignIn = false;
+  const ownerEmail = config.platformOwner.email?.trim().toLowerCase() ?? '';
+  if (ownerEmail && user.email.trim().toLowerCase() === ownerEmail && !membership?.roleCode) {
+    const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const found = await supabaseAdmin
+      .from('audit_log')
+      .select('id', { head: true, count: 'exact' })
+      .eq('actor_user_id', user.id)
+      .eq('action', 'security.suspicious_sign_in')
+      .gte('created_at', since);
+    suspiciousSignIn = !found.error && (found.count ?? 0) > 0;
+  }
+
   req.context = {
     user,
     membership,
     organizationId,
     correlationId: req.correlationId,
+    authenticatorAssurance: readAuthenticatorAssurance(token),
+    trustedDevice,
+    suspiciousSignIn,
   } as RequestContext;
   next();
 }

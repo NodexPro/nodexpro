@@ -10,6 +10,7 @@ import '../styles/nx-settings-deep-ocean.css';
 import '../styles/nx-office-deep-ocean.css';
 import type { SettingsAutosaveDomain, SettingsAutosaveStatus } from './settings-autosave.pure';
 import { useSettingsAutosave } from './useSettingsAutosave';
+import { AccountSecurityPanel } from '../security/AccountSecurityPanel';
 
 interface SettingsData {
   capabilities: {
@@ -356,6 +357,7 @@ export function Settings() {
     <div className="nx-glass-page nx-glass-page--wide nx-settings nx-settings-deep-ocean nx-office-ocean" data-testid="nx-settings">
       <h1 className="nx-glass-title">{t('settings.title')}</h1>
       <p className="nx-glass-subtitle">{t('settings.subtitle')}</p>
+      <AccountSecurityPanel mode="section" />
 
       {error && (
         <div className="nx-glass-alert nx-glass-alert--error" role="alert">

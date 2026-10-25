@@ -10,6 +10,7 @@ export const config = {
   // Keep this fallback so existing trial hashes stay matchable. Production must set
   // LEGAL_IDENTITY_HASH_SALT; do not rotate it here (would orphan stored hashes).
   legalIdentityHashSalt: process.env.LEGAL_IDENTITY_HASH_SALT ?? 'dev-salt-change-in-production',
+  securityAlertWebhookUrl: process.env.SECURITY_ALERT_WEBHOOK_URL?.trim() || null,
   platformOwner: {
     email: process.env.PLATFORM_OWNER_EMAIL?.trim().toLowerCase() ?? null,
     phone: process.env.PLATFORM_OWNER_PHONE?.trim() ?? null,

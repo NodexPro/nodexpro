@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../middleware/auth.js';
-import { rateLimit } from '../../middleware/rate-limit.js';
+import { rateLimit, sharedLoginRateLimit } from '../../middleware/rate-limit.js';
 import { authService } from './auth.service.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import {
@@ -17,6 +17,25 @@ import type {
   UiLanguageCode,
 } from '../../types/api.js';
 import { supabaseAdmin } from '../../db/client.js';
+import { AppError } from '../../shared/errors.js';
+import { getRequestCorrelationId } from '../../middleware/correlation.js';
+import { recordSecurityEvent, securitySubjectKey } from '../../shared/security-event.service.js';
+import { deviceCookieHeader } from './mfa-trusted-device.pure.js';
+import {
+  acknowledgeMfaPrompt,
+  buildMfaOnboardingAggregate,
+  cancelMfaEnrollment,
+  enrollMfaFactor,
+  issueMfaRecoveryCodes,
+  recoverMfaFactor,
+  refreshAuthSession,
+  verifyMfaRecovery,
+  removeMfaFactor,
+  replaceMfaFactor,
+  revokeTrustedDevice,
+  trustMfaDevice,
+  verifyMfaFactor,
+} from './privileged-mfa.service.js';
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../../config.js';
 import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
@@ -268,7 +287,7 @@ router.post(
 
 router.post(
   '/login',
-  rateLimit({
+  sharedLoginRateLimit({
     windowMs: 10 * 60 * 1000,
     max: 10,
     keyGenerator: (req) => {
@@ -282,8 +301,25 @@ router.post(
     const { email, password } = req.body ?? {};
     if (!email || !password) return res.status(400).json({ code: 'BAD_REQUEST', message: 'email and password required' });
     const result = await authService.login({ email, password });
-    return res.json(result);
+    const failureCount = Math.max(0, Number(res.locals.rateLimitCount ?? 0) - 1);
+    if (failureCount >= 5 && result.appUserId) {
+      await writeAudit({
+        organizationId: null,
+        actorUserId: result.appUserId,
+        entityType: 'security',
+        action: 'security.suspicious_sign_in',
+        payload: { failure_count: failureCount, signal: 'failure_burst' },
+      });
+    }
+    return res.json({ session: result.session, user: result.user });
   } catch (e) {
+    const identifier = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    await recordSecurityEvent({
+      action: 'security.login_failed',
+      dedupeKey: securitySubjectKey(`login:${identifier}`),
+      correlationId: getRequestCorrelationId(req),
+      payload: { http_status: e instanceof AppError ? e.statusCode : 400 },
+    });
     next(e);
   }
   }
@@ -539,5 +575,190 @@ router.post('/commands/change_password', authMiddleware, async (req, res, next) 
     next(e);
   }
 });
+
+router.get('/aggregates/mfa', authMiddleware, async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.slice(7) ?? '';
+    return res.json(await buildMfaOnboardingAggregate(req.context!, token));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post(
+  '/commands/acknowledge_mfa_prompt',
+  authMiddleware,
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyGenerator: (req) => req.context?.user.id ?? 'anon' }),
+  async (req, res, next) => {
+    try {
+      const token = req.headers.authorization?.slice(7) ?? '';
+      return res.json(await acknowledgeMfaPrompt(req.context!, token, req.body?.decision, req.body?.warning_version));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/commands/enroll_mfa',
+  authMiddleware,
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyGenerator: (req) => req.context?.user.id ?? 'anon' }),
+  async (req, res, next) => {
+    try {
+      const token = req.headers.authorization?.slice(7) ?? '';
+      return res.status(201).json(await enrollMfaFactor(req.context!, token, req.body?.recovery_enrollment_grant));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/commands/verify_mfa',
+  authMiddleware,
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyGenerator: (req) => req.context?.user.id ?? 'anon' }),
+  async (req, res, next) => {
+    try {
+      const token = req.headers.authorization?.slice(7) ?? '';
+      return res.json(await verifyMfaFactor(
+        req.context!,
+        token,
+        String(req.body?.factor_id ?? ''),
+        String(req.body?.code ?? ''),
+        req.body?.recovery_enrollment_grant,
+      ));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/commands/cancel_mfa_enrollment',
+  authMiddleware,
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyGenerator: (req) => req.context?.user.id ?? 'anon' }),
+  async (req, res, next) => {
+    try {
+      const token = req.headers.authorization?.slice(7) ?? '';
+      return res.json(await cancelMfaEnrollment(req.context!, token));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/commands/remove_mfa_factor',
+  authMiddleware,
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyGenerator: (req) => req.context?.user.id ?? 'anon' }),
+  async (req, res, next) => {
+    try {
+      const token = req.headers.authorization?.slice(7) ?? '';
+      return res.json(await removeMfaFactor(req.context!, token, req.body?.factor_id));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/commands/replace_mfa_factor',
+  authMiddleware,
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyGenerator: (req) => req.context?.user.id ?? 'anon' }),
+  async (req, res, next) => {
+    try {
+      const token = req.headers.authorization?.slice(7) ?? '';
+      return res.status(201).json(await replaceMfaFactor(req.context!, token));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/commands/issue_mfa_recovery_codes',
+  authMiddleware,
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 3, keyGenerator: (req) => req.context?.user.id ?? 'anon' }),
+  async (req, res, next) => {
+    try {
+      const token = req.headers.authorization?.slice(7) ?? '';
+      return res.status(201).json(await issueMfaRecoveryCodes(req.context!, token));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/commands/recover_mfa',
+  authMiddleware,
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyGenerator: (req) => req.context?.user.id ?? 'anon' }),
+  async (req, res, next) => {
+    try {
+      const token = req.headers.authorization?.slice(7) ?? '';
+      return res.json(await recoverMfaFactor(req.context!, token, req.body?.recovery_code));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/commands/verify_mfa_recovery',
+  authMiddleware,
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyGenerator: (req) => req.context?.user.id ?? 'anon' }),
+  async (req, res, next) => {
+    try {
+      const token = req.headers.authorization?.slice(7) ?? '';
+      return res.json(await verifyMfaRecovery(req.context!, token, req.body?.recovery_code));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/commands/trust_mfa_device',
+  authMiddleware,
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 5, keyGenerator: (req) => req.context?.user.id ?? 'anon' }),
+  async (req, res, next) => {
+    try {
+      const token = req.headers.authorization?.slice(7) ?? '';
+      const issued = await trustMfaDevice(req.context!, token);
+      res.setHeader('Set-Cookie', deviceCookieHeader(issued.credential, config.nodeEnv === 'production'));
+      const { credential: _credential, ...body } = issued;
+      return res.status(201).json(body);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/commands/revoke_trusted_device',
+  authMiddleware,
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyGenerator: (req) => req.context?.user.id ?? 'anon' }),
+  async (req, res, next) => {
+    try {
+      const token = req.headers.authorization?.slice(7) ?? '';
+      return res.json(await revokeTrustedDevice(req.context!, token, req.body?.device_id));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+router.post(
+  '/commands/refresh_session',
+  authMiddleware,
+  rateLimit({ windowMs: 15 * 60 * 1000, max: 20, keyGenerator: (req) => req.context?.user.id ?? 'anon' }),
+  async (req, res, next) => {
+    try {
+      return res.json(await refreshAuthSession(req.context!, String(req.body?.refresh_token ?? '')));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 export const authRoutes = router;

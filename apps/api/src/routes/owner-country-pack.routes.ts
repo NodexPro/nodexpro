@@ -18,6 +18,13 @@ import {
 import { buildOwnerEmailProviderConfigAggregate } from '../shared/owner-email-provider-config.service.js';
 import { buildOwnerSystemHealthAggregate } from '../domains/owner-system-health/owner-system-health.service.js';
 import {
+  buildOwnerSecurityEventsAggregate,
+  deliverOwnerSecurityTestAlert,
+} from '../domains/owner-system-health/owner-security-events.service.js';
+import { refreshPrivilegedMfaGate } from '../domains/auth/privileged-mfa.service.js';
+import { activatePlatformOwnerMfa, verifyPlatformOwnerMfaRecovery } from '../domains/auth/platform-owner-mfa-activation.service.js';
+import { getRequestCorrelationId } from '../middleware/correlation.js';
+import {
   buildOwnerClientDetailAggregate,
   buildOwnerClientsListAggregate,
 } from '../domains/owner-clients/owner-clients.service.js';
@@ -40,6 +47,7 @@ import {
 const router = Router();
 
 async function assertOwnerOrAuditFailure(ctx: RequestContext, req: Request): Promise<void> {
+  await refreshPrivilegedMfaGate();
   try {
     assertPlatformOwner(ctx);
   } catch (error) {
@@ -174,6 +182,50 @@ router.get('/email-provider-config', async (req: Request, res: Response, next: N
       aggregate_key: 'owner_email_provider_config_aggregate',
       ...aggregate,
     });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/aggregates/security-events', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    await assertOwnerOrAuditFailure(ctx, req);
+    const token = req.headers.authorization?.slice(7) ?? '';
+    return res.json(await buildOwnerSecurityEventsAggregate(ctx, token));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/commands/verify_platform_owner_mfa_recovery', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    await assertOwnerOrAuditFailure(ctx, req);
+    const token = req.headers.authorization?.slice(7) ?? '';
+    return res.json(await verifyPlatformOwnerMfaRecovery(ctx, token, req.body?.recovery_code));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/commands/activate_platform_owner_mfa', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    await assertOwnerOrAuditFailure(ctx, req);
+    const token = req.headers.authorization?.slice(7) ?? '';
+    return res.json(await activatePlatformOwnerMfa(ctx, token, req.body?.activation_request_id));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/commands/deliver_security_test_alert', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    await assertOwnerOrAuditFailure(ctx, req);
+    const token = req.headers.authorization?.slice(7) ?? '';
+    return res.json(await deliverOwnerSecurityTestAlert(ctx, getRequestCorrelationId(req), token));
   } catch (e) {
     next(e);
   }

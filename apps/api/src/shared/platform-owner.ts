@@ -1,6 +1,8 @@
 import { config } from '../config.js';
 import type { RequestContext } from './context.js';
-import { forbidden } from './errors.js';
+import { forbidden, unauthorized } from './errors.js';
+import { getPrivilegedMfaGate } from './privileged-mfa-gate.js';
+import { decidePrivilegedMfa } from './privileged-mfa.pure.js';
 
 export interface PlatformOwnerIdentity {
   email: string;
@@ -38,6 +40,18 @@ export function assertPlatformOwner(ctx: RequestContext): PlatformOwnerIdentity 
 
   if (ctx.membership?.roleCode) {
     throw forbidden('Platform owner access must not run in tenant RBAC context', 'PLATFORM_OWNER_TENANT_CONTEXT_FORBIDDEN');
+  }
+
+  const gate = getPrivilegedMfaGate();
+  const decision = decidePrivilegedMfa({
+    activationState: gate.activationState,
+    assurance: ctx.authenticatorAssurance ?? 'aal1',
+    privileged: true,
+    enrollmentRoute: false,
+    suspiciousSignIn: ctx.suspiciousSignIn === true,
+  });
+  if (decision.outcome === 'deny') {
+    throw unauthorized('Privileged MFA required', decision.code);
   }
 
   return ownerIdentity;

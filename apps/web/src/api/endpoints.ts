@@ -28,6 +28,8 @@ export const AUTH = {
   removeAdditionalLoginEmail: '/auth/commands/remove_additional_login_email',
   verifyAdditionalLoginEmail: '/auth/commands/verify_additional_login_email',
   changePassword: '/auth/commands/change_password',
+  mfaAggregate: '/auth/aggregates/mfa',
+  mfaCommand: (command: string) => `/auth/commands/${encodeURIComponent(command)}`,
 } as const;
 
 /** Single aggregated payload for dashboard; requires X-Organization-Id. */
@@ -426,6 +428,10 @@ export const OWNER = {
   passwordRecoveryComplete: '/owner/password-recovery/complete',
   /** Single aggregate for Platform Owner Legal Control screen */
   legalControl: '/owner/legal-control',
+  securityEvents: '/owner/aggregates/security-events',
+  deliverSecurityTestAlert: '/owner/commands/deliver_security_test_alert',
+  activatePlatformOwnerMfa: '/owner/commands/activate_platform_owner_mfa',
+  verifyPlatformOwnerMfaRecovery: '/owner/commands/verify_platform_owner_mfa_recovery',
   countryPacks: '/owner/country-packs',
   legalValues: '/owner/legal-values',
   pricing: '/owner/pricing',

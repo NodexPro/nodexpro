@@ -26,6 +26,12 @@ export interface RequestContext {
   organizationId: string | null;
   /** P11.5 — request-scoped correlation (set by correlation middleware + auth). */
   correlationId?: string;
+  /** Supabase authenticator assurance from the verified access token. Missing values are aal1. */
+  authenticatorAssurance?: 'aal1' | 'aal2';
+  /** True only after the httpOnly device credential matched an unexpired row for this user. */
+  trustedDevice?: boolean;
+  /** True when this platform-owner account had a recent failure burst. Not derived from IP. */
+  suspiciousSignIn?: boolean;
 }
 
 declare global {

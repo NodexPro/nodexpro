@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../../config.js';
 import { supabaseAdmin } from '../../db/client.js';
-import { badRequest, conflict } from '../../shared/errors.js';
+import { badRequest, conflict, unauthorized } from '../../shared/errors.js';
+import { APP_USER_NOT_ACTIVE_CODE, APP_USER_NOT_ACTIVE_MESSAGE, isAppUserStatusActive } from './user-authorization.pure.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 
 const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey);
@@ -33,7 +34,12 @@ export async function login(params: { email: string; password: string }) {
     password: params.password,
   });
   if (error) throw badRequest('Invalid email or password');
-  const appUser = await supabaseAdmin.from('users').select('id').eq('auth_user_id', data.user.id).single();
+  const appUser = await supabaseAdmin.from('users').select('id, status').eq('auth_user_id', data.user.id).single();
+  if (appUser.data && !isAppUserStatusActive(appUser.data.status)) {
+    const issued = data.session?.access_token;
+    if (issued) await supabaseAuth.auth.admin.signOut(issued).catch(() => {});
+    throw unauthorized(APP_USER_NOT_ACTIVE_MESSAGE, APP_USER_NOT_ACTIVE_CODE);
+  }
   if (appUser.data) {
     await supabaseAdmin.from('users').update({ last_login_at: new Date().toISOString() }).eq('id', appUser.data.id);
     await writeAudit({
@@ -44,7 +50,7 @@ export async function login(params: { email: string; password: string }) {
       payload: { identifier_kind: canonicalEmail === params.email.trim().toLowerCase() ? 'primary' : 'additional' },
     });
   }
-  return { session: data.session, user: data.user };
+  return { session: data.session, user: data.user, appUserId: appUser.data?.id ?? null };
 }
 
 export async function ensureAppUser(authUserId: string, email: string, fullName?: string) {
