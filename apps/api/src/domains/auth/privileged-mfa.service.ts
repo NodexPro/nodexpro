@@ -7,6 +7,10 @@ import { writeAudit } from '../../shared/audit-events.js';
 import { AppError, badRequest } from '../../shared/errors.js';
 import { getPrivilegedMfaGate, setPrivilegedMfaGate } from '../../shared/privileged-mfa-gate.js';
 import {
+  PRIVILEGED_MFA_GATE_REFRESH_MIN_INTERVAL_MS,
+  decidePrivilegedMfaGateRefresh,
+} from '../../shared/privileged-mfa-gate-refresh.pure.js';
+import {
   decideRecoveryEnrollment,
   decideRecoveryGrantIssue,
   decideRecoveryGrantStatus,
@@ -84,17 +88,19 @@ export async function readPrivilegedMfaActivationState(): Promise<PrivilegedMfaA
   });
 }
 
-export async function refreshPrivilegedMfaGate(): Promise<void> {
+let privilegedMfaGateRefreshAt = 0;
+let privilegedMfaGateRefreshInFlight: Promise<void> | null = null;
+
+async function loadPrivilegedMfaGate(): Promise<void> {
   const previous = getPrivilegedMfaGate();
   try {
-    const { error } = await supabaseAdmin
-      .from('privileged_mfa_recovery_codes')
-      .select('id', { head: true })
-      .limit(1);
-    const trusted = await supabaseAdmin.from('mfa_trusted_devices').select('id', { head: true }).limit(1);
-    const activationState = await readPrivilegedMfaActivationState();
+    const [recovery, trusted, activationState] = await Promise.all([
+      supabaseAdmin.from('privileged_mfa_recovery_codes').select('id', { head: true }).limit(1),
+      supabaseAdmin.from('mfa_trusted_devices').select('id', { head: true }).limit(1),
+      readPrivilegedMfaActivationState(),
+    ]);
     setPrivilegedMfaGate({
-      recoveryReady: !error,
+      recoveryReady: !recovery.error,
       trustedDevicesReady: !trusted.error,
       activationState,
     });
@@ -104,6 +110,30 @@ export async function refreshPrivilegedMfaGate(): Promise<void> {
       trustedDevicesReady: previous.trustedDevicesReady,
       activationState: previous.activationState === 'permanently_active' ? 'permanently_active' : 'unreadable',
     });
+  }
+}
+
+export async function refreshPrivilegedMfaGate(options?: { force?: boolean }): Promise<void> {
+  const force = options?.force === true;
+  const decision = decidePrivilegedMfaGateRefresh({
+    force,
+    activationState: getPrivilegedMfaGate().activationState,
+    msSinceLastRefresh: Date.now() - privilegedMfaGateRefreshAt,
+    minIntervalMs: PRIVILEGED_MFA_GATE_REFRESH_MIN_INTERVAL_MS,
+    hasInFlight: privilegedMfaGateRefreshInFlight !== null,
+  });
+  if (decision === 'skip') return;
+  if (decision === 'join-inflight' && privilegedMfaGateRefreshInFlight) {
+    await privilegedMfaGateRefreshInFlight;
+    if (!force) return;
+  }
+  const run = loadPrivilegedMfaGate();
+  privilegedMfaGateRefreshInFlight = run;
+  try {
+    await run;
+  } finally {
+    if (privilegedMfaGateRefreshInFlight === run) privilegedMfaGateRefreshInFlight = null;
+    privilegedMfaGateRefreshAt = Date.now();
   }
 }
 
@@ -339,11 +369,14 @@ async function recordedPromptVersion(userId: string): Promise<string | null> {
 export async function buildMfaOnboardingAggregate(ctx: RequestContext, accessToken: string, assurance?: 'aal1' | 'aal2') {
   const copy = mfaPromptCopy();
   const screen = mfaSecurityCopy();
-  const factors = await totpFactors(accessToken);
-  const verified = factors.verifiedIds.length > 0;
-  const recorded = await recordedPromptVersion(ctx.user.id);
-  const show = mfaPromptVisibility({ verifiedFactor: verified, recordedWarningVersion: recorded });
   const gate = getPrivilegedMfaGate();
+  const [factors, recorded, devices] = await Promise.all([
+    totpFactors(accessToken),
+    recordedPromptVersion(ctx.user.id),
+    gate.trustedDevicesReady ? listTrustedDevices(ctx.user.id) : Promise.resolve([]),
+  ]);
+  const verified = factors.verifiedIds.length > 0;
+  const show = mfaPromptVisibility({ verifiedFactor: verified, recordedWarningVersion: recorded });
   const policy = mfaPolicyView({
     platformOwner: isPlatformOwnerSession({
       userEmail: ctx.user.email,
@@ -355,7 +388,6 @@ export async function buildMfaOnboardingAggregate(ctx: RequestContext, accessTok
     trustedDevicesReady: gate.trustedDevicesReady,
   });
   const status = buildMfaStatusAggregate({ ...ctx, authenticatorAssurance: assurance ?? ctx.authenticatorAssurance });
-  const devices = gate.trustedDevicesReady ? await listTrustedDevices(ctx.user.id) : [];
   const thisDevice = !gate.trustedDevicesReady ? 'unavailable' : ctx.trustedDevice ? 'trusted' : 'untrusted';
   const deviceStatusHe = thisDevice === 'trusted'
     ? 'המכשיר הזה מהימן'
@@ -620,10 +652,12 @@ export async function hasVerifiedTotp(accessToken: string): Promise<boolean> {
 export async function buildPermanentMfaPanel(ctx: RequestContext, accessToken: string) {
   await refreshPrivilegedMfaGate();
   const gate = getPrivilegedMfaGate();
-  const unused = await loadUnusedRecoveryCodes(ctx.user.id);
-  const latestDrillAt = await loadLatestRecoveryDrillAt(ctx.user.id);
-  const totpVerified = await hasVerifiedTotp(accessToken);
-  const activation = await loadActivationRow();
+  const [unused, latestDrillAt, totpVerified, activation] = await Promise.all([
+    loadUnusedRecoveryCodes(ctx.user.id),
+    loadLatestRecoveryDrillAt(ctx.user.id),
+    hasVerifiedTotp(accessToken),
+    loadActivationRow(),
+  ]);
   return permanentMfaPanelView({
     activationState: activation.state === 'unreadable' ? gate.activationState : activation.state,
     totpVerified,
@@ -826,7 +860,7 @@ export async function recoverMfaFactor(ctx: RequestContext, accessToken: string,
     actorUserId: ctx.user.id,
     payload: { kind: 'mfa_recovery_consumed' },
   });
-  await refreshPrivilegedMfaGate();
+  await refreshPrivilegedMfaGate({ force: true });
   const shouldIssue = decideRecoveryGrantIssue({
     permanentlyActive: getPrivilegedMfaGate().activationState === 'permanently_active',
     platformOwner: isCurrentPlatformOwner(ctx),

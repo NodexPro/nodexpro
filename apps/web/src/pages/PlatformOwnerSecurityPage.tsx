@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiJson, ApiError } from '../api/client';
 import { OWNER } from '../api/endpoints';
@@ -48,7 +48,9 @@ export function PlatformOwnerSecurityPage() {
   const [data, setData] = useState<SecurityEventsAggregate | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [recoveryCode, setRecoveryCode] = useState('');
+  const busyRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,6 +60,9 @@ export function PlatformOwnerSecurityPage() {
       })
       .catch((e: unknown) => {
         if (!cancelled) setError(e instanceof ApiError ? e.message : copy.loadFailed);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
@@ -72,6 +77,8 @@ export function PlatformOwnerSecurityPage() {
   }
 
   async function sendTest() {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError('');
     try {
@@ -82,13 +89,15 @@ export function PlatformOwnerSecurityPage() {
     } catch (e) {
       setError(e instanceof ApiError ? e.message : copy.commandFailed);
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
 
   async function activatePermanently() {
     const panel = data?.permanent_mfa;
-    if (!panel?.activate_enabled) return;
+    if (!panel?.activate_enabled || busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError('');
     try {
@@ -99,6 +108,7 @@ export function PlatformOwnerSecurityPage() {
     } catch (e) {
       setError(e instanceof ApiError ? e.message : copy.commandFailed);
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -106,7 +116,8 @@ export function PlatformOwnerSecurityPage() {
   async function verifyRecovery(event: FormEvent) {
     event.preventDefault();
     const panel = data?.permanent_mfa;
-    if (!panel?.verify_recovery_enabled) return;
+    if (!panel?.verify_recovery_enabled || busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError('');
     try {
@@ -118,6 +129,7 @@ export function PlatformOwnerSecurityPage() {
     } catch (e) {
       setError(e instanceof ApiError ? e.message : copy.commandFailed);
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -151,8 +163,7 @@ export function PlatformOwnerSecurityPage() {
       </div>
       {error ? <p role="alert">{error}</p> : null}
 
-      {tab === 'mfa' ? (
-        <section data-testid="owner-security-mfa">
+      <section data-testid="owner-security-mfa" hidden={tab !== 'mfa'}>
           <AccountSecurityPanel mode="both" locale="en" />
           {panel ? (
             <section data-testid="owner-permanent-mfa" className="nx-owner-security__block">
@@ -186,7 +197,7 @@ export function PlatformOwnerSecurityPage() {
                     onChange={(event) => setRecoveryCode(event.target.value)}
                   />
                   <button type="submit" className="nx-btn nx-btn-taxes-compact" disabled={busy}>
-                    {copy.verifyRecovery}
+                    {busy ? copy.working : copy.verifyRecovery}
                   </button>
                 </form>
               ) : null}
@@ -200,14 +211,16 @@ export function PlatformOwnerSecurityPage() {
                   disabled={busy || !panel.activate_enabled}
                   onClick={() => void activatePermanently()}
                 >
-                  {copy.activate}
+                  {busy ? copy.activating : copy.activate}
                 </button>
               )}
             </section>
+          ) : loading ? (
+            <p>{copy.enrollLoading}</p>
           ) : null}
-        </section>
-      ) : (
-        <section data-testid="owner-security-alerts">
+      </section>
+        <section data-testid="owner-security-alerts" hidden={tab !== 'alerts'}>
+          {loading && !data ? <p>{copy.eventsLoading}</p> : null}
           {data ? (
             <>
               <p data-testid="owner-alert-delivery">
@@ -222,7 +235,7 @@ export function PlatformOwnerSecurityPage() {
                 </p>
               ) : null}
               <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy} onClick={() => void sendTest()}>
-                {copy.sendTestAlert}
+                {busy ? copy.sendingTestAlert : copy.sendTestAlert}
               </button>
               {data.events.length === 0 ? <p>{copy.noEvents}</p> : null}
               <ul className="nx-owner-security__events">
@@ -235,7 +248,6 @@ export function PlatformOwnerSecurityPage() {
             </>
           ) : null}
         </section>
-      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { resolvePublicApiBaseUrl } from '../lib/resolve-public-api-base-url.pure';
+import { supabase } from '../lib/supabase';
 import { getBackendActiveOrganizationId } from './org-context';
 
 const API_URL = resolvePublicApiBaseUrl(import.meta.env.VITE_API_URL, import.meta.env.PROD);
@@ -105,7 +106,6 @@ export function userFacingApiMessage(e: unknown): string {
 
 async function getToken(): Promise<string | null> {
   try {
-    const { supabase } = await import('../lib/supabase');
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token ?? null;
   } catch {

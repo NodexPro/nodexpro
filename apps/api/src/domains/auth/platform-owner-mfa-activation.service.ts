@@ -98,7 +98,7 @@ export async function activatePlatformOwnerMfa(
     }
   }
 
-  await refreshPrivilegedMfaGate();
+  await refreshPrivilegedMfaGate({ force: true });
   const persisted = await loadActivationRow();
   const write = resolveActivationWrite({
     inserted,

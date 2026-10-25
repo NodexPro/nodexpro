@@ -56,4 +56,18 @@ test('dedicated Security route owns MFA and Alerts', () => {
   assert.equal(page.includes('Threat Detection'), false);
   assert.equal(/\bOFF\b/.test(page), false);
   assert.equal(hebrew.test(page), false);
+  assert.match(page, /hidden=\{tab !== 'mfa'\}/);
+  assert.match(page, /busyRef/);
+  assert.match(page, /sendingTestAlert/);
+});
+
+test('MFA buttons disable immediately and stay mounted across Security tabs', () => {
+  const panel = read('../src/security/AccountSecurityPanel.tsx');
+  const section = read('../src/security/MfaOnboardingPrompt.tsx');
+  const page = read('../src/pages/PlatformOwnerSecurityPage.tsx');
+  assert.match(panel, /busyRef\.current/);
+  assert.match(panel, /account-security-busy/);
+  assert.match(section, /disabled=\{props\.busy\}/);
+  assert.match(page, /<AccountSecurityPanel mode="both" locale="en" \/>/);
+  assert.match(page, /hidden=\{tab !== 'mfa'\}/);
 });

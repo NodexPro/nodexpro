@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiJson, ApiError } from '../api/client';
 import { AUTH } from '../api/endpoints';
 import { supabase } from '../lib/supabase';
@@ -34,6 +34,8 @@ export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [recoveryGrant, setRecoveryGrant] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
 
   const load = useCallback(async () => {
     const next = await apiJson<MfaAggregate>(AUTH.mfaAggregate, { credentials: 'include' });
@@ -55,6 +57,9 @@ export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both
   }, []);
 
   async function runCommand(command: string, body?: Record<string, string>) {
+    if (busyRef.current) return null;
+    busyRef.current = true;
+    setBusy(true);
     setError('');
     try {
       const payload = { ...(body ?? {}) };
@@ -117,6 +122,9 @@ export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both
         : (backendMessage && /[\u0590-\u05FF]/.test(backendMessage) ? backendMessage : 'הפעולה נכשלה');
       setError(message);
       return null;
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
   }
 
@@ -128,7 +136,8 @@ export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both
   }
 
   if (!aggregate) {
-    return error ? <p role="alert">{error}</p> : null;
+    if (error) return <p role="alert">{error}</p>;
+    return <p data-testid="account-security-loading">{props.locale === 'en' ? OWNER_SECURITY_COPY.enrollLoading : 'טוען…'}</p>;
   }
   const showPrompt = props.mode !== 'section';
   const showSection = props.mode !== 'prompt';
@@ -137,12 +146,14 @@ export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both
   return (
     <div data-testid="account-security-panel">
       {error ? <p role="alert">{error}</p> : null}
-      {showPrompt ? <MfaOnboardingPrompt locale={props.locale} prompt={aggregate.prompt} onCommand={(command, body) => void onPrompt(command, body)} /> : null}
+      {busy ? <p data-testid="account-security-busy">{props.locale === 'en' ? OWNER_SECURITY_COPY.working : 'מבצע…'}</p> : null}
+      {showPrompt ? <MfaOnboardingPrompt locale={props.locale} busy={busy} prompt={aggregate.prompt} onCommand={(command, body) => void onPrompt(command, body)} /> : null}
       {showSection ? (
         <>
           {props.locale === 'en' ? null : <h2>{aggregate.account_security.settings_title_he}</h2>}
           <AccountSecuritySection
             locale={props.locale}
+            busy={busy}
             security={aggregate.account_security}
             enrollment={enrollment}
             onCommand={(command, body) => void runCommand(command, body)}
