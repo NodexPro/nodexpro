@@ -9,6 +9,7 @@ import {
   type MfaEnrollment,
   type MfaPromptFields,
 } from './MfaOnboardingPrompt';
+import { OWNER_SECURITY_COPY } from '../pages/owner-security-copy.pure';
 
 interface MfaAggregate {
   prompt: MfaPromptFields;
@@ -27,7 +28,7 @@ interface CommandResult {
   aggregate?: MfaAggregate;
 }
 
-export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both' }) {
+export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both'; locale?: 'en' }) {
   const [aggregate, setAggregate] = useState<MfaAggregate | null>(null);
   const [enrollment, setEnrollment] = useState<MfaEnrollment | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
@@ -46,7 +47,7 @@ export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both
         if (!cancelled) setAggregate(next);
       })
       .catch(() => {
-        if (!cancelled) setError('לא ניתן לטעון את מצב האימות');
+        if (!cancelled) setError(props.locale === 'en' ? OWNER_SECURITY_COPY.enrollLoadFailed : 'לא ניתן לטעון את מצב האימות');
       });
     return () => {
       cancelled = true;
@@ -71,7 +72,7 @@ export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both
           refresh_token: result.refresh_token,
         });
         if (saved.error) {
-          setError('האימות הצליח, אבל הסשן לא עודכן. התנתקו ונכנסו שוב לפני פעולה רגישה.');
+          setError(props.locale === 'en' ? OWNER_SECURITY_COPY.sessionUpdateFailed : 'האימות הצליח, אבל הסשן לא עודכן. התנתקו ונכנסו שוב לפני פעולה רגישה.');
         }
       }
       if (result.aggregate) setAggregate(result.aggregate);
@@ -102,7 +103,7 @@ export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both
             setEnrollment({ factorId: enrolled.factor_id, otpauthUri: enrolled.otpauth_uri });
           }
         }).catch(() => {
-          setError('השחזור הצליח, אבל הרישום מחדש לא התחיל. נסו הפעלה ידנית.');
+          setError(props.locale === 'en' ? OWNER_SECURITY_COPY.recoveryReenrollFailed : 'השחזור הצליח, אבל הרישום מחדש לא התחיל. נסו הפעלה ידנית.');
         });
       }
       if (command === 'trust_mfa_device' || command === 'revoke_trusted_device') {
@@ -110,7 +111,10 @@ export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both
       }
       return result;
     } catch (e) {
-      const message = e instanceof ApiError && /[\u0590-\u05FF]/.test(e.message) ? e.message : 'הפעולה נכשלה';
+      const backendMessage = e instanceof ApiError ? e.message : '';
+      const message = props.locale === 'en'
+        ? (backendMessage && !/[\u0590-\u05FF]/.test(backendMessage) ? backendMessage : OWNER_SECURITY_COPY.commandFailed)
+        : (backendMessage && /[\u0590-\u05FF]/.test(backendMessage) ? backendMessage : 'הפעולה נכשלה');
       setError(message);
       return null;
     }
@@ -133,18 +137,19 @@ export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both
   return (
     <div data-testid="account-security-panel">
       {error ? <p role="alert">{error}</p> : null}
-      {showPrompt ? <MfaOnboardingPrompt prompt={aggregate.prompt} onCommand={(command, body) => void onPrompt(command, body)} /> : null}
+      {showPrompt ? <MfaOnboardingPrompt locale={props.locale} prompt={aggregate.prompt} onCommand={(command, body) => void onPrompt(command, body)} /> : null}
       {showSection ? (
         <>
-          <h2>{aggregate.account_security.settings_title_he}</h2>
+          {props.locale === 'en' ? null : <h2>{aggregate.account_security.settings_title_he}</h2>}
           <AccountSecuritySection
+            locale={props.locale}
             security={aggregate.account_security}
             enrollment={enrollment}
             onCommand={(command, body) => void runCommand(command, body)}
           />
           {recoveryCodes ? (
             <div data-testid="mfa-recovery-codes">
-              <p>הקודים מוצגים פעם אחת. שמרו אותם מחוץ לדפדפן. כל קוד פועל פעם אחת בלבד.</p>
+              <p>{props.locale === 'en' ? OWNER_SECURITY_COPY.recoveryCodesOnce : 'הקודים מוצגים פעם אחת. שמרו אותם מחוץ לדפדפן. כל קוד פועל פעם אחת בלבד.'}</p>
               <ul>
                 {recoveryCodes.map((code) => (
                   <li key={code}>{code}</li>

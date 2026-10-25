@@ -1,9 +1,7 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { AccountSecurityPanel } from '../security/AccountSecurityPanel';
-import { OwnerSecurityEventsPanel } from './OwnerSecurityEventsPanel';
 import './owner-modules/nx-owner-modules.css';
 
-const NAV = [
+export const PLATFORM_OWNER_NAV = [
   { to: '/platform-owner/legal-control', label: 'Legal Control', end: true },
   { to: '/platform-owner/modules', label: 'Modules', end: false },
   { to: '/platform-owner/legal-control?section=system', label: 'System', end: true },
@@ -15,9 +13,10 @@ const NAV = [
   },
   { to: '/platform-owner/currencies', label: 'Currencies', end: false },
   { to: '/platform-owner/languages', label: 'Languages & Translations', end: false },
+  { to: '/platform-owner/security', label: 'Security', end: false },
 ] as const;
 
-function navActive(pathname: string, search: string, item: (typeof NAV)[number]): boolean {
+function navActive(pathname: string, search: string, item: (typeof PLATFORM_OWNER_NAV)[number]): boolean {
   if (item.to.startsWith('/platform-owner/modules')) {
     return pathname.startsWith('/platform-owner/modules');
   }
@@ -26,6 +25,9 @@ function navActive(pathname: string, search: string, item: (typeof NAV)[number])
   }
   if (item.to.startsWith('/platform-owner/languages')) {
     return pathname.startsWith('/platform-owner/languages');
+  }
+  if (item.to.startsWith('/platform-owner/security')) {
+    return pathname.startsWith('/platform-owner/security');
   }
   if (!pathname.startsWith('/platform-owner/legal-control')) return false;
   const section = new URLSearchParams(search).get('section');
@@ -42,7 +44,7 @@ export function PlatformOwnerShell() {
       <aside className="nx-owner-shell__sidebar" aria-label="Platform Owner">
         <div className="nx-owner-shell__brand">NodexPro Owner</div>
         <nav className="nx-owner-shell__nav">
-          {NAV.map((item) => (
+          {PLATFORM_OWNER_NAV.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -57,8 +59,6 @@ export function PlatformOwnerShell() {
         </nav>
       </aside>
       <main className="nx-owner-shell__main">
-        <AccountSecurityPanel mode="both" />
-        <OwnerSecurityEventsPanel />
         <Outlet />
       </main>
     </div>

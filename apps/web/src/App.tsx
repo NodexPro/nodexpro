@@ -30,6 +30,7 @@ import { PlatformOwnerLegalControl } from './pages/PlatformOwnerLegalControl';
 import { PlatformOwnerShell } from './pages/PlatformOwnerShell';
 import { PlatformOwnerCurrenciesPage } from './pages/PlatformOwnerCurrenciesPage';
 import { PlatformOwnerLanguagesPage } from './pages/PlatformOwnerLanguagesPage';
+import { PlatformOwnerSecurityPage } from './pages/PlatformOwnerSecurityPage';
 import { VerifyAdditionalEmail } from './pages/VerifyAdditionalEmail';
 import { PlatformOwnerModulesPage } from './pages/owner-modules/PlatformOwnerModulesPage';
 import { PlatformOwnerModuleDetailPage } from './pages/owner-modules/PlatformOwnerModuleDetailPage';
@@ -136,6 +137,7 @@ function AppRoutes() {
         <Route path="modules/:moduleCode" element={<PlatformOwnerModuleDetailPage />} />
         <Route path="currencies" element={<PlatformOwnerCurrenciesPage />} />
         <Route path="languages" element={<PlatformOwnerLanguagesPage />} />
+        <Route path="security" element={<PlatformOwnerSecurityPage />} />
       </Route>
       <Route path="/register" element={<Register />} />
       <Route path="/invite/accept" element={<InviteAccept />} />

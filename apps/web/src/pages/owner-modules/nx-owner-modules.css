@@ -408,6 +408,52 @@
   direction: ltr;
 }
 
+.nx-owner-security__tabs {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 18px;
+}
+
+.nx-owner-security__tab {
+  padding: 8px 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  color: #111827;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.nx-owner-security__tab.is-active {
+  background: #111827;
+  border-color: #111827;
+  color: #fff;
+}
+
+.nx-owner-security__block {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.nx-owner-security__events {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nx-owner-security__events li {
+  padding: 8px 0;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 13px;
+}
+
+.nx-owner-security .nx-btn {
+  margin-top: 10px;
+}
+
 @media (max-width: 900px) {
   .nx-owner-shell {
     grid-template-columns: 1fr;
