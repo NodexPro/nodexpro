@@ -57,7 +57,7 @@ let executablePath = null;
 try {
   const puppeteer = await import('puppeteer');
   executablePath =
-    typeof puppeteer.executablePath === 'function' ? puppeteer.executablePath() : null;
+    typeof puppeteer.executablePath === 'function' ? await puppeteer.executablePath() : null;
 } catch (err) {
   failOrWarn('unable to resolve puppeteer.executablePath() after chrome install', {
     cacheDir,

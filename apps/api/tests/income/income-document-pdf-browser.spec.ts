@@ -146,3 +146,8 @@ test('puppeteer.executablePath preferred over system when env unset', () => {
   assert.equal(resolved.source, 'puppeteer_executable_path');
   assert.equal(resolved.path, '/cache/chrome-for-testing');
 });
+
+test('Puppeteer 25 async executablePath is awaited by runtime and install probe', () => {
+  assert.match(browserServiceSource, /const path = await executablePathFn\(\)/);
+  assert.match(ensureScriptSource, /await puppeteer\.executablePath\(\)/);
+});

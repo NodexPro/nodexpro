@@ -45,12 +45,12 @@ export function ensureDefaultPuppeteerCacheDir(): string {
 async function readPuppeteerExecutablePath(): Promise<string | null> {
   try {
     const mod = (await import('puppeteer')) as {
-      executablePath?: () => string;
-      default?: { executablePath?: () => string };
+      executablePath?: () => string | Promise<string>;
+      default?: { executablePath?: () => string | Promise<string> };
     };
     const executablePathFn = mod.executablePath ?? mod.default?.executablePath;
     if (typeof executablePathFn !== 'function') return null;
-    const path = executablePathFn();
+    const path = await executablePathFn();
     return typeof path === 'string' && path.trim() ? path : null;
   } catch {
     return null;
