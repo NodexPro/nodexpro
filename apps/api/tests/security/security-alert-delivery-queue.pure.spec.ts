@@ -14,6 +14,9 @@ const migration = readFileSync(
 );
 const geoIpService = readFileSync(join(dir, '../../src/shared/geoip-dbip.service.ts'), 'utf8');
 const alertDeliveryService = readFileSync(join(dir, '../../src/shared/security-alert-delivery.service.ts'), 'utf8');
+const apiIndex = readFileSync(join(dir, '../../src/index.ts'), 'utf8');
+const authRoutes = readFileSync(join(dir, '../../src/domains/auth/auth.routes.ts'), 'utf8');
+const ownerRoutes = readFileSync(join(dir, '../../src/routes/owner-country-pack.routes.ts'), 'utf8');
 
 test('migration 204 keeps security alert queue service-role only and retry-safe', () => {
   assert.match(migration, /create table if not exists public\.security_alert_deliveries/);
@@ -27,10 +30,12 @@ test('migration 204 keeps security alert queue service-role only and retry-safe'
 });
 
 test('trusted source IP resolver uses server-derived Express req.ip only', () => {
+  assert.match(apiIndex, /app\.set\('trust proxy', 1\)/);
   assert.equal(resolveTrustedSourceIp({ reqIp: '::ffff:203.0.113.10' }), '203.0.113.10');
   assert.equal(resolveTrustedSourceIp({ reqIp: '2001:db8::1' }), '2001:db8::1');
   assert.equal(resolveTrustedSourceIp({ reqIp: 'not-an-ip' }), null);
   assert.equal(resolveTrustedSourceIp({ reqIp: null }), null);
+  assert.doesNotMatch(geoIpService, /x-forwarded-for/i);
 });
 
 test('private, reserved, invalid, and unresolvable IPs return explicit Unknown GeoIP', async () => {
@@ -71,6 +76,14 @@ test('DB-IP Lite attribution and email location context are present without secr
   assert.match(alertDeliveryService, /Approximate location:/);
   assert.match(alertDeliveryService, /Source IP:/);
   assert.doesNotMatch(alertDeliveryService, /password|token|secret/i);
+});
+
+test('auth and owner security event paths pass trusted req.ip into backend-owned events', () => {
+  assert.match(authRoutes, /sourceIp: typeof req\.ip === 'string' \? req\.ip : null/);
+  assert.match(ownerRoutes, /sourceIp: typeof req\.ip === 'string' \? req\.ip : null/);
+  assert.match(ownerRoutes, /action: 'security\.forbidden'/);
+  assert.doesNotMatch(authRoutes, /headers\[['"]x-forwarded-for['"]\]/i);
+  assert.doesNotMatch(ownerRoutes, /headers\[['"]x-forwarded-for['"]\]/i);
 });
 
 test('alert severity policy distinguishes high-risk security events', () => {
