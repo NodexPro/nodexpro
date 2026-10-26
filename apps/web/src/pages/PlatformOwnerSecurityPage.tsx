@@ -39,6 +39,7 @@ interface SecurityEventsAggregate {
   alert_delivery: 'configured' | 'not_configured';
   alert_delivery_channel?: {
     channel: 'email';
+    sms_channel?: { available: false; reason: 'provider_not_configured' };
     configured: boolean;
     destination_status: 'verified' | 'not_configured' | 'unverified';
     destination_masked: string | null;

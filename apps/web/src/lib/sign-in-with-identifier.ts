@@ -5,6 +5,11 @@ import { readLoginStamp } from './login-cooldown.pure';
 
 type LoginSessionPayload = {
   session: { access_token: string; refresh_token: string } | null;
+  login_challenge?: { required?: boolean; command?: string | null };
+};
+
+export type SignInResult = {
+  challengeRequired: boolean;
 };
 
 /** Canonical login through the API so a verified additional email maps to the same user without leaking the primary address. */
@@ -12,7 +17,7 @@ export async function signInWithIdentifier(
   supabase: SupabaseClient,
   identifier: string,
   password: string,
-): Promise<void> {
+): Promise<SignInResult> {
   const result = await apiJsonPublic<LoginSessionPayload>(AUTH.login, {
     method: 'POST',
     headers: {
@@ -28,4 +33,5 @@ export async function signInWithIdentifier(
     refresh_token: result.session.refresh_token,
   });
   if (error) throw error;
+  return { challengeRequired: result.login_challenge?.required === true };
 }

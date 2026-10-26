@@ -17,6 +17,7 @@ import { getPrivilegedMfaGate } from '../shared/privileged-mfa-gate.js';
 import { deviceCredentialFromCookie } from '../domains/auth/mfa-trusted-device.pure.js';
 import { recognizeTrustedDevice } from '../domains/auth/mfa-trusted-device.service.js';
 import { assertRequestNotContained } from '../shared/security-containment.service.js';
+import { isHighRiskChallengePath, isHighRiskLoginPending } from '../shared/login-risk.service.js';
 
 // `timedFetch` only adds per-request call accounting for the Server-Timing header (measurement, no behavior).
 const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey, { global: { fetch: timedFetch } });
@@ -137,6 +138,15 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
     });
   } catch (error) {
     next(error);
+    return;
+  }
+  const path = String(req.originalUrl ?? req.path ?? '').split('?')[0] ?? '';
+  if (
+    (req.context.authenticatorAssurance ?? 'aal1') !== 'aal2'
+    && !isHighRiskChallengePath(path)
+    && await isHighRiskLoginPending(user.authUserId)
+  ) {
+    next(unauthorized('Additional authentication is required', 'LOGIN_CHALLENGE_REQUIRED'));
     return;
   }
   next();

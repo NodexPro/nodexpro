@@ -12,16 +12,24 @@ import {
   shouldApplyFailedLoginCooldown,
   shouldCreateFailedLoginIncident,
   shouldNotifyOwnerForFailedLogin,
+  shouldOfferPasswordRecovery,
+  shouldSkipPasswordVerification,
 } from '../../src/shared/failed-login-policy.pure.js';
 
 test('failed login stages stay journal-only until 10 and never lock a victim', () => {
   assert.equal(failedLoginStage(1), 'journal');
-  assert.equal(failedLoginStage(4), 'journal');
+  assert.equal(failedLoginStage(2), 'journal');
+  assert.equal(failedLoginStage(3), 'recovery');
+  assert.equal(failedLoginStage(4), 'suspicious');
   assert.equal(failedLoginStage(5), 'suspicious');
   assert.equal(failedLoginStage(6), 'suspicious');
   assert.equal(failedLoginStage(7), 'cooldown');
   assert.equal(failedLoginStage(9), 'cooldown');
   assert.equal(failedLoginStage(10), 'incident');
+  assert.equal(shouldOfferPasswordRecovery(2), false);
+  assert.equal(shouldOfferPasswordRecovery(3), true);
+  assert.equal(shouldSkipPasswordVerification({ cooldownAlreadyActive: true, loginSucceeded: false }), true);
+  assert.equal(shouldSkipPasswordVerification({ cooldownAlreadyActive: true, loginSucceeded: true }), false);
   assert.equal(shouldCreateFailedLoginIncident(9), false);
   assert.equal(shouldNotifyOwnerForFailedLogin(9), false);
   assert.equal(shouldNotifyOwnerForFailedLogin(10), true);
@@ -99,8 +107,10 @@ test('11 rotating proxy IPs still cooldown at 7 and incident at 10 without locki
     const targetCount = index + 1;
     return failedLoginCorrelationCounts({ patternCount, stampCount, targetCount });
   });
+  assert.equal(attempts[2]?.detectionCount, 3);
+  assert.equal(failedLoginStage(attempts[2]!.detectionCount), 'recovery');
   assert.equal(attempts[3]?.detectionCount, 4);
-  assert.equal(failedLoginStage(attempts[3]!.detectionCount), 'journal');
+  assert.equal(failedLoginStage(attempts[3]!.detectionCount), 'suspicious');
   assert.equal(failedLoginStage(attempts[4]!.detectionCount), 'suspicious');
   assert.equal(shouldApplyFailedLoginCooldown({
     countInWindow: attempts[6]!.cooldownCount,

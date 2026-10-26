@@ -2,10 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { apiJson, apiJsonPublic, ApiError } from '../api/client';
-import { OWNER } from '../api/endpoints';
+import { AUTH, OWNER } from '../api/endpoints';
 import { useAuth } from '../contexts/AuthContext';
 import { signInWithIdentifier } from '../lib/sign-in-with-identifier';
-import { loginCooldownMessage, remainingCooldownSeconds, retryAfterSecondsFromFailure } from '../lib/login-cooldown.pure';
+import { loginCooldownMessage, offerRecoveryFromFailure, remainingCooldownSeconds, retryAfterSecondsFromFailure } from '../lib/login-cooldown.pure';
 
 type RecoveryStep = 1 | 2 | 3 | 4;
 
@@ -14,6 +14,9 @@ export function PlatformOwnerLogin() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [offerRecovery, setOfferRecovery] = useState(false);
+  const [challengeRequired, setChallengeRequired] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const cooldownSeconds = remainingCooldownSeconds(cooldownUntil, nowMs);
@@ -62,7 +65,21 @@ export function PlatformOwnerLogin() {
     setError('');
     setLoading(true);
     try {
-      await signInWithIdentifier(supabase, email.trim().toLowerCase(), password);
+      if (challengeRequired) {
+        await apiJson(AUTH.mfaCommand('verify_mfa'), {
+          method: 'POST',
+          credentials: 'include',
+          body: JSON.stringify({ code: mfaCode.trim() }),
+        });
+      } else {
+        const signedIn = await signInWithIdentifier(supabase, email.trim().toLowerCase(), password);
+        if (signedIn.challengeRequired) {
+          setChallengeRequired(true);
+          setError('Enter the authenticator code to continue.');
+          setLoading(false);
+          return;
+        }
+      }
       await refetchMe();
       try {
         await apiJson(OWNER.session);
@@ -80,6 +97,9 @@ export function PlatformOwnerLogin() {
       const retryAfter = err instanceof ApiError
         ? retryAfterSecondsFromFailure({ status: err.status, retryAfter: err.details?.retry_after })
         : 0;
+      setOfferRecovery(err instanceof ApiError
+        ? offerRecoveryFromFailure({ offerRecovery: err.details?.offer_recovery })
+        : false);
       if (retryAfter > 0) {
         setCooldownUntil(Date.now() + retryAfter * 1000);
         setNowMs(Date.now());
@@ -193,11 +213,36 @@ export function PlatformOwnerLogin() {
             Forgot password?
           </button>
         </div>
+        {challengeRequired ? (
+          <div style={{ marginBottom: 12 }}>
+            <label htmlFor="owner-mfa-code">Authenticator code</label>
+            <input
+              id="owner-mfa-code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={mfaCode}
+              onChange={(e) => setMfaCode(e.target.value)}
+              required
+              style={{ display: 'block', width: '100%', padding: 8 }}
+            />
+          </div>
+        ) : null}
         {error ? <p style={{ color: 'red', marginBottom: 12 }}>{error}</p> : null}
         <button type="submit" disabled={loading || cooldownSeconds > 0}>
-          {cooldownSeconds > 0 ? loginCooldownMessage(cooldownSeconds) : loading ? 'Signing in...' : 'Sign in'}
+          {cooldownSeconds > 0
+            ? loginCooldownMessage(cooldownSeconds)
+            : loading
+              ? 'Signing in...'
+              : challengeRequired
+                ? 'Verify code'
+                : 'Sign in'}
         </button>
       </form>
+      {offerRecovery ? (
+        <p style={{ marginTop: 16, padding: 12, border: '1px solid #2563eb', background: '#eff6ff', fontWeight: 700 }}>
+          Use Forgot password? below to recover this account.
+        </p>
+      ) : null}
 
       {recoveryOpen ? (
         <div

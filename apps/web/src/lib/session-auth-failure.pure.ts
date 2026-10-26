@@ -14,5 +14,6 @@ export function shouldClearLocalAuthSession(error: unknown): boolean {
       ? (error as { code: string }).code
       : undefined;
   if (code === 'USER_NOT_ACTIVE') return true;
+  if (code === 'LOGIN_CHALLENGE_REQUIRED') return false;
   return status === 401;
 }

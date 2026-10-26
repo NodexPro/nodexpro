@@ -17,6 +17,18 @@ export function remainingCooldownSeconds(untilMs: number, nowMs: number): number
   return Math.max(0, Math.ceil((untilMs - nowMs) / 1000));
 }
 
+export function offerRecoveryFromFailure(input: { offerRecovery?: unknown }): boolean {
+  return input.offerRecovery === true;
+}
+
+export function loginChallengeFromResponse(input: {
+  required?: unknown;
+  command?: unknown;
+}): { required: boolean; command: 'verify_mfa' | null } {
+  if (input.required !== true) return { required: false, command: null };
+  return { required: true, command: input.command === 'verify_mfa' ? 'verify_mfa' : 'verify_mfa' };
+}
+
 export function readLoginStamp(storage: Pick<Storage, 'getItem' | 'setItem'> | null): string {
   const existing = storage?.getItem('nx_login_stamp');
   if (existing && /^[a-f0-9]{32}$/.test(existing)) return existing;

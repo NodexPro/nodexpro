@@ -1,10 +1,16 @@
 const SENSITIVE_KEY = /email|password|token|authorization|secret|storage_key|body|otp|cookie/i;
 
+const ALLOWED_MASKED_KEYS = new Set(['masked_target']);
+
 export function safeSecurityPayload(input: Record<string, unknown> | null | undefined): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(input ?? {})) {
     if (SENSITIVE_KEY.test(key)) continue;
     if (typeof value === 'string') {
+      if (ALLOWED_MASKED_KEYS.has(key)) {
+        out[key] = value.slice(0, 80);
+        continue;
+      }
       if (value.includes('@') || value.includes('eyJ') || value.includes('sbp_') || value.includes('sb_')) continue;
       out[key] = value.slice(0, 80);
       continue;

@@ -4,7 +4,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  loginChallengeFromResponse,
   loginCooldownMessage,
+  offerRecoveryFromFailure,
   readLoginStamp,
   remainingCooldownSeconds,
   retryAfterSecondsFromFailure,
@@ -47,4 +49,11 @@ test('login pages render backend cooldown and do not sign in around the API', ()
   assert.equal(owner.includes('Enter the SMS code'), false);
   assert.match(signIn, /x-nodexpro-login-stamp/);
   assert.match(signIn, /AUTH\.login/);
+  assert.match(login, /offerRecoveryFromFailure/);
+  assert.match(login, /Forgot password/);
+  assert.match(login, /challengeRequired/);
+  assert.match(login, /verify_mfa/);
+  assert.equal(offerRecoveryFromFailure({ offerRecovery: true }), true);
+  assert.equal(offerRecoveryFromFailure({ offerRecovery: false }), false);
+  assert.equal(loginChallengeFromResponse({ required: true, command: 'verify_mfa' }).required, true);
 });

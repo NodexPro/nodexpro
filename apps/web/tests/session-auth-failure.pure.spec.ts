@@ -9,6 +9,7 @@ const dir = dirname(fileURLToPath(import.meta.url));
 
 test('401 USER_NOT_ACTIVE and generic 401 clear leftover JWT; other errors do not', () => {
   assert.equal(shouldClearLocalAuthSession({ status: 401, code: 'USER_NOT_ACTIVE' }), true);
+  assert.equal(shouldClearLocalAuthSession({ status: 401, code: 'LOGIN_CHALLENGE_REQUIRED' }), false);
   assert.equal(shouldClearLocalAuthSession({ status: 401, code: 'UNAUTHORIZED' }), true);
   assert.equal(shouldClearLocalAuthSession({ status: 401 }), true);
   assert.equal(shouldClearLocalAuthSession({ status: 403, code: 'FORBIDDEN' }), false);

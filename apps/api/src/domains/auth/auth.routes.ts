@@ -46,6 +46,13 @@ import { filterSessionEnabledModuleCodes } from '../modules/entitlement.service.
 import { loadEnabledMemberModuleIdSet } from '../modules/member-module-access.service.js';
 import { roleHasOfficeClientAccess } from '../client-operations/organization-client-access.pure.js';
 import { buildSidebarAccountBlock } from './sidebar-account-block.pure.js';
+import { decideHighRiskPasswordLogin, highRiskLoginChallenge } from '../../shared/login-risk.pure.js';
+import { isHighRiskLoginPending, markHighRiskLoginPending } from '../../shared/login-risk.service.js';
+import { readAuthenticatorAssurance } from '../../shared/privileged-mfa.pure.js';
+import { enqueueSecurityAlert, processSecurityAlertDeliveries } from '../../shared/security-alert-delivery.service.js';
+import { officeAlertDedupeKey } from '../../shared/office-login-alert.pure.js';
+import { maskAttemptedIdentifier } from '../../shared/failed-login-policy.pure.js';
+import { displaySourceIp } from '../../shared/trusted-proxy.pure.js';
 
 const router = Router();
 const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey);
@@ -235,12 +242,20 @@ async function buildMeResponse(
   };
 }
 
-function toAuthSessionAggregate(me: MeResponse): AuthSessionAggregateResponse {
+function toAuthSessionAggregate(me: MeResponse, challengeRequired = false): AuthSessionAggregateResponse {
   const ownerEmail = (config.platformOwner.email ?? '').trim().toLowerCase();
   const userEmail = (me.user.email ?? '').trim().toLowerCase();
   const isPlatformOwner = Boolean(ownerEmail) && userEmail === ownerEmail && me.organizations.length === 0;
   const isBlocked = (me.user.status ?? '').trim().toLowerCase() !== 'active';
 
+  if (challengeRequired) {
+    return {
+      ...me,
+      session_state: 'mfa_challenge',
+      redirect_to: '/login',
+      allowed_actions: ['verify_mfa'],
+    };
+  }
   if (isBlocked) {
     return { ...me, session_state: 'blocked', redirect_to: '/login', allowed_actions: [] };
   }
@@ -258,6 +273,24 @@ function toAuthSessionAggregate(me: MeResponse): AuthSessionAggregateResponse {
     session_state: 'ready',
     redirect_to: me.default_route || '/dashboard',
     allowed_actions: [],
+  };
+}
+
+const GENERIC_LOGIN_FAILURE = 'Invalid email or password';
+
+function failedLoginBody(input: { cooldown: boolean; retryAfterSeconds: number; offerRecovery: boolean }) {
+  if (input.cooldown) {
+    return {
+      code: 'TOO_MANY_REQUESTS',
+      message: 'Too many login attempts. Please wait and try again later.',
+      retry_after: input.retryAfterSeconds || 180,
+      offer_recovery: true,
+    };
+  }
+  return {
+    code: 'BAD_REQUEST',
+    message: GENERIC_LOGIN_FAILURE,
+    offer_recovery: input.offerRecovery,
   };
 }
 
@@ -288,30 +321,102 @@ router.post(
   '/login',
   async (req, res, next) => {
   try {
-    const { email, password } = req.body ?? {};
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const password = typeof req.body?.password === 'string' ? req.body.password : '';
     if (!email || !password) return res.status(400).json({ code: 'BAD_REQUEST', message: 'email and password required' });
-    const result = await authService.login({ email, password });
-    return res.json({ session: result.session, user: result.user });
-  } catch (e) {
-    const { recordFailedLoginAttempt } = await import('../../shared/failed-login.service.js');
-    const identifier = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
-    const outcome = await recordFailedLoginAttempt({
+    const {
+      isFailedLoginCooldownActive,
+      listOfficeOwnersForEmail,
+      recentFailedLoginCount,
+      recordFailedLoginAttempt,
+    } = await import('../../shared/failed-login.service.js');
+    const attemptInput = {
       sourceIp: req.trustedClientIp ?? null,
       userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
-      attemptedEmail: identifier || null,
+      attemptedEmail: email,
       loginStamp: typeof req.headers['x-nodexpro-login-stamp'] === 'string' ? req.headers['x-nodexpro-login-stamp'] : null,
       correlationId: getRequestCorrelationId(req),
-      loginSucceeded: false,
-      isPlatformOwnerEmergency: false,
-    }).catch(() => ({ stage: 'journal' as const, count: 1, retryAfterSeconds: 0, cooldown: false }));
-    if (outcome.cooldown) {
+    };
+    const cooldownAlreadyActive = await isFailedLoginCooldownActive(attemptInput).catch(() => false);
+    if (cooldownAlreadyActive) {
+      const outcome = await recordFailedLoginAttempt({
+        ...attemptInput,
+        loginSucceeded: false,
+        isPlatformOwnerEmergency: false,
+      }).catch(() => ({ stage: 'journal' as const, count: 1, retryAfterSeconds: 180, cooldown: true, offerRecovery: true }));
       res.setHeader('Retry-After', String(outcome.retryAfterSeconds || 180));
-      return res.status(429).json({
-        code: 'TOO_MANY_REQUESTS',
-        message: 'Too many login attempts. Please wait and try again later.',
-        retry_after: outcome.retryAfterSeconds || 180,
-      });
+      return res.status(429).json(failedLoginBody({
+        cooldown: true,
+        retryAfterSeconds: outcome.retryAfterSeconds || 180,
+        offerRecovery: true,
+      }));
     }
+    try {
+      const result = await authService.login({ email, password });
+      const recentFailCount = await recentFailedLoginCount(attemptInput).catch(() => 0);
+      const authUserId = typeof result.user?.id === 'string' ? result.user.id : '';
+      const factors = authUserId
+        ? await supabaseAdmin.auth.admin.mfa.listFactors({ userId: authUserId }).catch(() => null)
+        : null;
+      const mfaEnrolled = (factors?.data?.factors ?? []).some((factor) => factor.status === 'verified');
+      const assurance = readAuthenticatorAssurance(result.session?.access_token ?? '');
+      const decision = decideHighRiskPasswordLogin({ recentFailCount, mfaEnrolled, assurance });
+      const login_challenge = highRiskLoginChallenge(decision);
+      if (decision !== 'allow') {
+        const displayIp = displaySourceIp(req.trustedClientIp ?? null);
+        const actorKey = authUserId || email;
+        await enqueueSecurityAlert({
+          eventAction: 'security.high_risk_login',
+          severity: 'high',
+          eventKind: 'security',
+          dedupeKey: `alert:login-actor:${actorKey}:high-risk`,
+          correlationId: attemptInput.correlationId,
+          safeContext: {
+            display_ip: displayIp,
+            source_ip: displayIp === 'Unknown' ? null : displayIp,
+            masked_target: maskAttemptedIdentifier(email),
+          },
+        }).catch(() => undefined);
+        const offices = await listOfficeOwnersForEmail(email).catch(() => []);
+        for (const office of offices) {
+          await enqueueSecurityAlert({
+            eventAction: 'security.high_risk_login',
+            severity: 'high',
+            eventKind: 'security',
+            dedupeKey: officeAlertDedupeKey(office.organizationId, `${actorKey}:high-risk`),
+            correlationId: attemptInput.correlationId,
+            safeContext: {
+              audience: 'office',
+              organization_id: office.organizationId,
+              display_ip: displayIp,
+              source_ip: displayIp === 'Unknown' ? null : displayIp,
+              masked_target: maskAttemptedIdentifier(email),
+            },
+          }).catch(() => undefined);
+        }
+        await processSecurityAlertDeliveries(5).catch(() => undefined);
+      }
+      if (decision === 'require_aal2' && authUserId) {
+        await markHighRiskLoginPending(authUserId);
+      }
+      return res.json({ session: result.session, user: result.user, login_challenge });
+    } catch (e) {
+      if (e instanceof AppError && e.code === 'USER_NOT_ACTIVE') {
+        next(e);
+        return;
+      }
+      const outcome = await recordFailedLoginAttempt({
+        ...attemptInput,
+        loginSucceeded: false,
+        isPlatformOwnerEmergency: false,
+      }).catch(() => ({ stage: 'journal' as const, count: 1, retryAfterSeconds: 0, cooldown: false, offerRecovery: false }));
+      if (outcome.cooldown) {
+        res.setHeader('Retry-After', String(outcome.retryAfterSeconds || 180));
+        return res.status(429).json(failedLoginBody(outcome));
+      }
+      return res.status(400).json(failedLoginBody(outcome));
+    }
+  } catch (e) {
     next(e);
   }
   }
@@ -331,7 +436,9 @@ router.get('/me', authMiddleware, async (req, res, next) => {
   try {
     const ctx = req.context!;
     const body = await buildMeResponse(ctx);
-    return res.json(body);
+    const challengeRequired = (ctx.authenticatorAssurance ?? 'aal1') !== 'aal2'
+      && await isHighRiskLoginPending(ctx.user.authUserId);
+    return res.json(challengeRequired ? toAuthSessionAggregate(body, true) : body);
   } catch (e) {
     next(e);
   }
@@ -341,7 +448,9 @@ router.get('/session', authMiddleware, async (req, res, next) => {
   try {
     const ctx = req.context!;
     const me = await buildMeResponse(ctx);
-    return res.json(toAuthSessionAggregate(me));
+    const challengeRequired = (ctx.authenticatorAssurance ?? 'aal1') !== 'aal2'
+      && await isHighRiskLoginPending(ctx.user.authUserId);
+    return res.json(toAuthSessionAggregate(me, challengeRequired));
   } catch (e) {
     next(e);
   }

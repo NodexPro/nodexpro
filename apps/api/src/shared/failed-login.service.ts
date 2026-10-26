@@ -19,12 +19,73 @@ import {
   shouldApplyFailedLoginCooldown,
   shouldCreateFailedLoginIncident,
   shouldNotifyOwnerForFailedLogin,
+  shouldOfferPasswordRecovery,
 } from './failed-login-policy.pure.js';
+import { officeAlertDedupeKey } from './office-login-alert.pure.js';
 import { displaySourceIp } from './trusted-proxy.pure.js';
 import { processSecurityAlertDeliveries } from './security-alert-delivery.service.js';
 
 function hashValue(value: string): string {
   return createHash('sha256').update(value).digest('hex');
+}
+
+async function peekBucket(key: string, windowSeconds: number): Promise<number> {
+  try {
+    const read = await supabaseAdmin
+      .from('security_rate_buckets')
+      .select('request_count, window_started_at')
+      .eq('bucket_key', key)
+      .maybeSingle();
+    if (read.error || !read.data) return 0;
+    const started = Date.parse(String(read.data.window_started_at ?? ''));
+    if (!Number.isFinite(started) || Date.now() - started > windowSeconds * 1000) return 0;
+    return Math.max(0, Number(read.data.request_count ?? 0));
+  } catch {
+    return 0;
+  }
+}
+
+function correlationKeys(input: { sourceIp: string | null; userAgent?: string | null; loginStamp?: string | null; attemptedEmail?: string | null }) {
+  const displayIp = displaySourceIp(input.sourceIp);
+  const stamp = normalizeLoginStamp(input.loginStamp);
+  const patternKey = hashValue(`login-pattern:${displayIp}:${String(input.userAgent ?? '').slice(0, 80)}`).slice(0, 40);
+  const stampKey = stamp ? hashValue(`login-stamp:${stamp}`).slice(0, 40) : null;
+  const identifierHash = input.attemptedEmail ? hashValue(String(input.attemptedEmail).trim().toLowerCase()) : null;
+  return { displayIp, stamp, patternKey, stampKey, identifierHash, cooldownKey: `cd:${stampKey ?? patternKey}`.slice(0, 40) };
+}
+
+export async function isFailedLoginCooldownActive(input: {
+  sourceIp: string | null;
+  userAgent?: string | null;
+  loginStamp?: string | null;
+}): Promise<boolean> {
+  const keys = correlationKeys(input);
+  return (await peekBucket(keys.cooldownKey, FAILED_LOGIN_COOLDOWN_SECONDS)) >= 1;
+}
+
+export async function recentFailedLoginCount(input: {
+  sourceIp: string | null;
+  userAgent?: string | null;
+  loginStamp?: string | null;
+}): Promise<number> {
+  const keys = correlationKeys(input);
+  const patternCount = await peekBucket(keys.patternKey, FAILED_LOGIN_WINDOW_SECONDS);
+  const stampCount = keys.stampKey ? await peekBucket(keys.stampKey, FAILED_LOGIN_WINDOW_SECONDS) : 0;
+  return Math.max(patternCount, stampCount);
+}
+
+export async function listOfficeOwnersForEmail(email: string): Promise<Array<{ organizationId: string }>> {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return [];
+  const user = await supabaseAdmin.from('users').select('id').eq('email', normalized).maybeSingle();
+  if (user.error || !user.data?.id) return [];
+  const memberships = await supabaseAdmin
+    .from('organization_memberships')
+    .select('organization_id')
+    .eq('user_id', user.data.id)
+    .eq('status', 'active');
+  const orgIds = [...new Set((memberships.data ?? []).map((row) => String(row.organization_id ?? '')).filter(Boolean))];
+  return orgIds.map((organizationId) => ({ organizationId }));
 }
 
 async function consumeBucket(key: string, windowSeconds: number, max: number): Promise<number> {
@@ -50,7 +111,13 @@ export async function recordFailedLoginAttempt(input: {
   correlationId?: string | null;
   loginSucceeded: boolean;
   isPlatformOwnerEmergency: boolean;
-}): Promise<{ stage: ReturnType<typeof failedLoginStage>; count: number; retryAfterSeconds: number; cooldown: boolean }> {
+}): Promise<{
+  stage: ReturnType<typeof failedLoginStage>;
+  count: number;
+  retryAfterSeconds: number;
+  cooldown: boolean;
+  offerRecovery: boolean;
+}> {
   const displayIp = displaySourceIp(input.sourceIp);
   const stamp = normalizeLoginStamp(input.loginStamp);
   const patternKey = hashValue(`login-pattern:${displayIp}:${String(input.userAgent ?? '').slice(0, 80)}`).slice(0, 40);
@@ -111,6 +178,7 @@ export async function recordFailedLoginAttempt(input: {
     city: geo.city,
     source_ip: displayIp === 'Unknown' ? null : displayIp,
     correlation_id: input.correlationId ?? null,
+    masked_target: identifier,
   });
   await writeAudit({
     organizationId: null,
@@ -158,7 +226,25 @@ export async function recordFailedLoginAttempt(input: {
       correlationId: input.correlationId ?? null,
       safeContext: payload,
     }).catch(() => undefined);
+    if (input.attemptedEmail) {
+      const offices = await listOfficeOwnersForEmail(input.attemptedEmail).catch(() => []);
+      for (const office of offices) {
+        await enqueueSecurityAlert({
+          eventAction: 'security.login_failed',
+          severity: 'high',
+          eventKind: 'security',
+          dedupeKey: officeAlertDedupeKey(office.organizationId, actorKey),
+          correlationId: input.correlationId ?? null,
+          safeContext: {
+            ...payload,
+            audience: 'office',
+            organization_id: office.organizationId,
+            masked_target: identifier,
+          },
+        }).catch(() => undefined);
+      }
+    }
     await processSecurityAlertDeliveries(5).catch(() => undefined);
   }
-  return { stage, count, retryAfterSeconds, cooldown };
+  return { stage, count, retryAfterSeconds, cooldown, offerRecovery: shouldOfferPasswordRecovery(count) };
 }

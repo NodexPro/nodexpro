@@ -1,20 +1,34 @@
 export const FAILED_LOGIN_WINDOW_SECONDS = 10 * 60;
 export const FAILED_LOGIN_COOLDOWN_SECONDS = 3 * 60;
-export const FAILED_LOGIN_SUSPICIOUS_AT = 5;
+export const FAILED_LOGIN_RECOVERY_AT = 3;
+export const FAILED_LOGIN_SUSPICIOUS_AT = 4;
 export const FAILED_LOGIN_COOLDOWN_AT = 7;
 export const FAILED_LOGIN_INCIDENT_AT = 10;
 
-export type FailedLoginStage = 'journal' | 'suspicious' | 'cooldown' | 'incident';
+export type FailedLoginStage = 'journal' | 'recovery' | 'suspicious' | 'cooldown' | 'incident';
 
 export function failedLoginStage(countInWindow: number): FailedLoginStage {
   if (countInWindow >= FAILED_LOGIN_INCIDENT_AT) return 'incident';
   if (countInWindow >= FAILED_LOGIN_COOLDOWN_AT) return 'cooldown';
   if (countInWindow >= FAILED_LOGIN_SUSPICIOUS_AT) return 'suspicious';
+  if (countInWindow >= FAILED_LOGIN_RECOVERY_AT) return 'recovery';
   return 'journal';
 }
 
+export function shouldOfferPasswordRecovery(countInWindow: number): boolean {
+  return countInWindow >= FAILED_LOGIN_RECOVERY_AT;
+}
+
+export function shouldSkipPasswordVerification(input: {
+  cooldownAlreadyActive: boolean;
+  loginSucceeded: boolean;
+}): boolean {
+  if (input.loginSucceeded) return false;
+  return input.cooldownAlreadyActive;
+}
+
 export function failedLoginSeverity(stage: FailedLoginStage): 'low' | 'high' {
-  return stage === 'journal' ? 'low' : 'high';
+  return stage === 'journal' || stage === 'recovery' ? 'low' : 'high';
 }
 
 export function shouldCreateFailedLoginIncident(countInWindow: number): boolean {
@@ -78,6 +92,7 @@ export function failedLoginDetectionReason(stage: FailedLoginStage, distinctTarg
   }
   if (stage === 'cooldown') return 'Failed-login attempt pattern reached the temporary cooldown threshold.';
   if (stage === 'suspicious') return 'Repeated failed logins from the same attempt pattern.';
+  if (stage === 'recovery') return 'Failed login recorded; password recovery is offered.';
   return 'Failed login recorded in the security journal.';
 }
 

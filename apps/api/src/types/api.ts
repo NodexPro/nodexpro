@@ -119,7 +119,8 @@ export type AuthSessionState =
   | 'needs_onboarding'
   | 'needs_org_selection'
   | 'ready'
-  | 'blocked';
+  | 'blocked'
+  | 'mfa_challenge';
 
 export interface AuthSessionAggregateResponse extends MeResponse {
   session_state: AuthSessionState;

@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { supabaseAdmin } from '../db/client.js';
 import { createEmailDeliveryAdapter } from './email-delivery.adapter.js';
 import { getOwnerEmailProviderConfigGlobal } from './owner-email-provider-config.service.js';
+import { listOfficeOwnerEmails } from './office-login-alert.service.js';
 import { safeSecurityPayload } from './security-event.pure.js';
 
 type Severity = 'critical' | 'high' | 'medium' | 'low';
@@ -24,8 +25,18 @@ type DeliveryRow = {
   failure_code?: string | null;
 };
 
+export type OptionalSmsChannel = {
+  available: false;
+  reason: 'provider_not_configured';
+};
+
+export function optionalSmsChannel(): OptionalSmsChannel {
+  return { available: false, reason: 'provider_not_configured' };
+}
+
 export type SecurityAlertDeliverySummary = {
   channel: 'email';
+  sms_channel: OptionalSmsChannel;
   configured: boolean;
   destination_status: 'verified' | 'not_configured' | 'unverified';
   destination_masked: string | null;
@@ -63,6 +74,7 @@ function retryDelayMs(attempt: number): number {
 
 function safeFailureCode(error: unknown): string {
   const message = error instanceof Error ? error.message : '';
+  if (/office_destination_unverified/.test(message)) return 'OFFICE_DESTINATION_UNVERIFIED';
   if (/destination_unverified/.test(message)) return 'OWNER_DESTINATION_UNVERIFIED';
   if (/email_provider_not_configured/.test(message)) return 'EMAIL_PROVIDER_NOT_CONFIGURED';
   if (/email_send_failed/.test(message)) return 'EMAIL_PROVIDER_REJECTED';
@@ -98,16 +110,20 @@ function emailBody(row: DeliveryRow): { subject: string; text: string; html: str
   const title = test ? 'NodexPro security alert test' : `NodexPro ${row.severity} security alert`;
   const context = safeSecurityPayload(row.safe_context ?? {});
   const correlation = typeof context.correlation_id === 'string' ? context.correlation_id : row.correlation_id;
-  const sourceIp = typeof context.source_ip === 'string' ? context.source_ip : null;
+  const sourceIp = typeof context.source_ip === 'string' ? context.source_ip : typeof context.display_ip === 'string' ? context.display_ip : null;
   const country = typeof context.country === 'string' ? context.country : null;
   const city = typeof context.city === 'string' ? context.city : null;
+  const maskedTarget = typeof context.masked_target === 'string' ? context.masked_target : null;
+  const eventTime = typeof row.created_at === 'string' ? row.created_at : new Date().toISOString();
   const lines = [
     test ? 'This is a user-requested test alert. It is not a security incident.' : 'A confirmed NodexPro security event was recorded.',
     `Event: ${row.event_action}`,
     `Severity: ${row.severity}`,
+    `Time: ${eventTime}`,
     `Alert ID: ${row.id}`,
     ...(correlation ? [`Correlation ID: ${correlation}`] : []),
-    ...(sourceIp ? [`Source IP: ${sourceIp}`] : []),
+    ...(maskedTarget ? [`Attempted identity: ${maskedTarget}`] : []),
+    ...(sourceIp ? [`Source IP: ${sourceIp}`] : ['Source IP: Unknown']),
     ...(country || city ? [`Approximate location: ${country ?? 'Unknown'}, ${city ?? 'Unknown'}`] : []),
   ];
   const text = lines.join('\n');
@@ -146,20 +162,34 @@ export async function enqueueSecurityAlert(input: {
   return { id: inserted.data?.id ? String(inserted.data.id) : null, queued: true };
 }
 
+async function resolveDeliveryDestinations(row: DeliveryRow): Promise<Array<{ email: string; masked: string }>> {
+  const context = row.safe_context ?? {};
+  if (context.audience === 'office' && typeof context.organization_id === 'string') {
+    const emails = await listOfficeOwnerEmails(context.organization_id);
+    if (!emails.length) throw new Error('office_destination_unverified');
+    return emails.map((email) => ({ email, masked: maskEmail(email) }));
+  }
+  return [await resolveVerifiedOwnerDestination()];
+}
+
 async function processRow(row: DeliveryRow): Promise<{ status: 'accepted' | 'failed'; code: string | null }> {
   try {
-    const [provider, destination] = await Promise.all([
+    const [provider, destinations] = await Promise.all([
       getOwnerEmailProviderConfigGlobal(),
-      resolveVerifiedOwnerDestination(),
+      resolveDeliveryDestinations(row),
     ]);
     if (!provider?.isConfigured) throw new Error('email_provider_not_configured');
     const body = emailBody(row);
-    const sent = await createEmailDeliveryAdapter(provider).sendEmail({
-      to: destination.email,
-      subject: body.subject,
-      text: body.text,
-      html: body.html,
-    });
+    const adapter = createEmailDeliveryAdapter(provider);
+    let sent = { providerMessageId: null as string | null };
+    for (const destination of destinations) {
+      sent = await adapter.sendEmail({
+        to: destination.email,
+        subject: body.subject,
+        text: body.text,
+        html: body.html,
+      });
+    }
     const { error } = await supabaseAdmin
       .from('security_alert_deliveries')
       .update({
@@ -252,6 +282,7 @@ export async function getSecurityAlertDeliverySummary(): Promise<SecurityAlertDe
   const rows = (data ?? []) as DeliveryRow[];
   return {
     channel: 'email',
+    sms_channel: optionalSmsChannel(),
     configured: Boolean(provider?.isConfigured && destination),
     destination_status: destination ? 'verified' : config.platformOwner.email ? 'unverified' : 'not_configured',
     destination_masked: destination?.masked ?? null,

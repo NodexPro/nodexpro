@@ -48,7 +48,7 @@ export interface MeData {
   available_actions?: string[];
   income_onboarding_complete?: boolean;
   sidebar_account_block: SidebarAccountBlockModel;
-  session_state?: 'platform_owner' | 'needs_onboarding' | 'needs_org_selection' | 'ready' | 'blocked';
+  session_state?: 'platform_owner' | 'needs_onboarding' | 'needs_org_selection' | 'ready' | 'blocked' | 'mfa_challenge';
   redirect_to?: string;
   allowed_actions?: string[];
 }
