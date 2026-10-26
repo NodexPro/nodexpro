@@ -41,6 +41,27 @@ DocFlow invite delivery / email provider (only if used in production):
 - `TWILIO_AUTH_TOKEN`
 - `TWILIO_FROM_NUMBER`
 
+Phase 5 containment kill switch (Render → nodexpro → Environment):
+
+- `SECURITY_CONTAINMENT_ENABLED` — optional. Exact value `true` enables automatic containment enforcement.
+- If the variable is missing, empty, `false`, or any other value, enforcement stays **disabled**.
+- Detection, incident logging and security-alert notifications continue while enforcement is off.
+- Existing containment rows remain stored; they are not enforced until the switch is `true`.
+- This does not disable login, RBAC, tenant isolation or ordinary authorization.
+
+Emergency disable (no UI required):
+
+1. Render → service `nodexpro` → Environment.
+2. Set `SECURITY_CONTAINMENT_ENABLED=false` or delete the variable.
+3. Save and wait for the service restart.
+4. Confirm `GET /api/v1/health` is healthy. Owner Security will show containment enforcement disabled.
+
+Re-enable only after explicit Owner approval:
+
+1. Set `SECURITY_CONTAINMENT_ENABLED=true`.
+2. Save and wait for restart.
+3. Confirm Owner Security shows containment enforcement enabled.
+
 Health check endpoint for Render:
 
 - `GET /api/v1/health` (expects `200` and `{ "ok": true, "db": "ok", "pdf_engine": "ok"|"unavailable" }`)

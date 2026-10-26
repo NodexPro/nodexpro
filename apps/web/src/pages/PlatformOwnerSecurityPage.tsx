@@ -62,10 +62,44 @@ interface SecurityEventsAggregate {
     text: string;
     url: string;
   };
+  phase5_status?: 'ready' | 'migration_required';
+  containment_enforcement?: 'enabled' | 'disabled';
+  active_incidents?: SecurityIncident[];
+  incident_history?: SecurityIncident[];
   delivery_failure_count: number;
   events: SecurityEvent[];
   test_delivery?: { queued: boolean; status: 'accepted' | 'failed' | 'pending'; reason?: string };
   permanent_mfa: PermanentMfaPanel | null;
+}
+
+interface SecurityIncident {
+  id: string;
+  event_type: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  confidence: 'confirmed' | 'suspicious' | 'benign';
+  status: string;
+  rule_id: string;
+  evidence_summary: string;
+  evidence: Record<string, string | number | boolean | null>;
+  source_ip: string | null;
+  actor_user_id: string | null;
+  organization_id: string | null;
+  correlation_id: string | null;
+  containment_action: string;
+  containment_status: string;
+  created_at: string;
+  released_at: string | null;
+  containment_rules: Array<{
+    id: string;
+    scope: string;
+    action: string;
+    status: string;
+    reason: string;
+    starts_at: string;
+    expires_at: string;
+    released_at: string | null;
+  }>;
+  allowed_actions: Array<{ action_key: string; label: string }>;
 }
 
 export function PlatformOwnerSecurityPage() {
@@ -121,6 +155,29 @@ export function PlatformOwnerSecurityPage() {
       busyRef.current = false;
       setBusy(false);
     }
+  }
+
+  async function releaseIncident(incidentId: string) {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError('');
+    try {
+      setData(await apiJson<SecurityEventsAggregate>(OWNER.releaseSecurityContainment, {
+        method: 'POST',
+        body: JSON.stringify({ incident_id: incidentId, reason: 'Platform Owner manual release' }),
+      }));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : copy.commandFailed);
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
+
+  function payloadTextFromIncident(incident: SecurityIncident, key: string) {
+    const value = incident.evidence?.[key];
+    return typeof value === 'string' && value.trim() ? value : copy.sourceUnknown;
   }
 
   async function activatePermanently() {
@@ -275,6 +332,10 @@ export function PlatformOwnerSecurityPage() {
                 {data.alert_delivery === 'configured' ? copy.alertsConfigured : copy.alertsNotConfigured}
               </p>
               <p>{copy.deliveryFailures(data.window_hours, data.delivery_failure_count)}</p>
+              {data.phase5_status === 'migration_required' ? <p role="status">{copy.phase5MigrationRequired}</p> : null}
+              <p data-testid="owner-containment-enforcement">
+                {data.containment_enforcement === 'enabled' ? copy.containmentEnforcementOn : copy.containmentEnforcementOff}
+              </p>
               {data.test_delivery ? (
                 <p data-testid="owner-alert-test">
                   {data.test_delivery.status === 'accepted'
@@ -298,6 +359,33 @@ export function PlatformOwnerSecurityPage() {
                   </p>
                 </div>
               ) : null}
+              <section data-testid="owner-active-security-incidents" className="nx-owner-security__delivery">
+                <h2 className="nx-owner-security__subtitle">{copy.activeIncidents}</h2>
+                {(data.active_incidents ?? []).length === 0 ? <p>{copy.noActiveIncidents}</p> : null}
+                {(data.active_incidents ?? []).map((incident) => (
+                  <article key={incident.id} className="nx-owner-security__incident">
+                    <strong>{englishSeverity(incident.severity)} · {incident.event_type}</strong>
+                    <p>{incident.evidence_summary}</p>
+                    <p>Detected: {incident.created_at}</p>
+                    <p>Source IP: {incident.source_ip ?? copy.sourceUnknown}</p>
+                    <p>Location: {payloadTextFromIncident(incident, 'country')}, {payloadTextFromIncident(incident, 'city')}</p>
+                    <p>{copy.containment}: {incident.containment_status} · {incident.containment_action}</p>
+                    {incident.containment_rules.map((rule) => (
+                      <p key={rule.id}>Rule: {rule.scope} · {rule.action} · expires {rule.expires_at}</p>
+                    ))}
+                    {incident.allowed_actions.some((action) => action.action_key === 'release_security_containment') ? (
+                      <button
+                        type="button"
+                        className="nx-btn nx-btn-taxes-compact"
+                        disabled={busy}
+                        onClick={() => void releaseIncident(incident.id)}
+                      >
+                        {copy.releaseContainment}
+                      </button>
+                    ) : null}
+                  </article>
+                ))}
+              </section>
               <div className="nx-owner-security__filters" aria-label="Security alert filters">
                 <label>
                   {copy.filterSeverity}
@@ -350,6 +438,18 @@ export function PlatformOwnerSecurityPage() {
                         <br />
                         {deliveryLabel(delivery.status)} · Attempts: {delivery.attempt_count}
                         {delivery.failure_code ? ` · Error: ${delivery.failure_code}` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+              {(data.incident_history ?? []).length ? (
+                <>
+                  <h2 className="nx-owner-security__subtitle">{copy.incidentHistory}</h2>
+                  <ul className="nx-owner-security__events">
+                    {(data.incident_history ?? []).slice(0, 20).map((incident) => (
+                      <li key={incident.id}>
+                        {englishSeverity(incident.severity)} · {incident.event_type} · {incident.status} · {incident.created_at}
                       </li>
                     ))}
                   </ul>

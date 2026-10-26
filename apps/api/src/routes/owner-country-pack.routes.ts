@@ -25,6 +25,7 @@ import { buildOwnerSystemHealthAggregate } from '../domains/owner-system-health/
 import {
   buildOwnerSecurityEventsAggregate,
   deliverOwnerSecurityTestAlert,
+  releaseOwnerSecurityContainment,
 } from '../domains/owner-system-health/owner-security-events.service.js';
 import { refreshPrivilegedMfaGate } from '../domains/auth/privileged-mfa.service.js';
 import { activatePlatformOwnerMfa, verifyPlatformOwnerMfaRecovery } from '../domains/auth/platform-owner-mfa-activation.service.js';
@@ -80,6 +81,7 @@ async function assertOwnerOrAuditFailure(ctx: RequestContext, req: Request): Pro
       action: 'security.forbidden',
       dedupeKey: securitySubjectKey(`owner:${ctx.user.id}:${req.method}:${req.path}`),
       actorUserId: ctx.user.id,
+      actorEmail: ctx.user.email,
       correlationId: getRequestCorrelationId(req),
       sourceIp: typeof req.ip === 'string' ? req.ip : null,
       payload: {
@@ -294,6 +296,22 @@ router.post(
     }
   },
 );
+
+router.post('/commands/release_security_containment', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    await assertOwnerOrAuditFailure(ctx, req);
+    const token = req.headers.authorization?.slice(7) ?? '';
+    return res.json(await releaseOwnerSecurityContainment(
+      ctx,
+      req.body?.incident_id,
+      typeof req.body?.reason === 'string' ? req.body.reason : null,
+      token,
+    ));
+  } catch (e) {
+    next(e);
+  }
+});
 
 router.get('/system-health', async (req: Request, res: Response, next: NextFunction) => {
   try {

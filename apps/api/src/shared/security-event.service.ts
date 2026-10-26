@@ -7,6 +7,7 @@ import { securityAlertSeverity, shouldQueueSecurityAlert } from './security-aler
 import { decideSecurityRecord, safeSecurityPayload } from './security-event.pure.js';
 import { enrichGeoIp } from './geoip-dbip.service.js';
 import { resolveTrustedSourceIp } from './request-source.pure.js';
+import { handleSecurityDetection } from './security-containment.service.js';
 
 const WINDOW_MS = 10 * 60 * 1000;
 type Bucket = { count: number; resetAt: number; repeatedWritten: boolean };
@@ -24,6 +25,7 @@ export async function recordSecurityEvent(input: {
   action: string;
   dedupeKey: string;
   actorUserId?: string | null;
+  actorEmail?: string | null;
   organizationId?: string | null;
   correlationId?: string | null;
   sourceIp?: string | null;
@@ -55,6 +57,16 @@ export async function recordSecurityEvent(input: {
       entityType: 'security',
       action: decision.action,
       payload,
+    });
+    await handleSecurityDetection({
+      action: decision.action,
+      dedupeKey: input.dedupeKey,
+      actorUserId: input.actorUserId ?? null,
+      actorEmail: input.actorEmail ?? null,
+      organizationId: input.organizationId ?? null,
+      correlationId: input.correlationId ?? null,
+      sourceIp,
+      safeContext: payload,
     });
     if (shouldQueueSecurityAlert(decision.action)) {
       await enqueueSecurityAlert({

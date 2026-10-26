@@ -16,6 +16,7 @@ import { readAuthenticatorAssurance } from '../shared/privileged-mfa.pure.js';
 import { getPrivilegedMfaGate } from '../shared/privileged-mfa-gate.js';
 import { deviceCredentialFromCookie } from '../domains/auth/mfa-trusted-device.pure.js';
 import { recognizeTrustedDevice } from '../domains/auth/mfa-trusted-device.service.js';
+import { assertRequestNotContained } from '../shared/security-containment.service.js';
 
 // `timedFetch` only adds per-request call accounting for the Server-Timing header (measurement, no behavior).
 const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey, { global: { fetch: timedFetch } });
@@ -126,5 +127,17 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
     trustedDevice,
     suspiciousSignIn,
   } as RequestContext;
+  try {
+    await assertRequestNotContained({
+      sourceIp: typeof req.ip === 'string' ? req.ip : null,
+      actorUserId: user.id,
+      actorEmail: user.email,
+      path: req.path,
+      sensitiveCommand: req.method !== 'GET' && /\/commands?\/|\/command$|\/commands$/.test(req.path),
+    });
+  } catch (error) {
+    next(error);
+    return;
+  }
   next();
 }

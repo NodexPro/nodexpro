@@ -1,0 +1,69 @@
+name: Security Alert Delivery Queue
+
+on:
+  schedule:
+    # Every 5 minutes (UTC). The backend owns claim/lock, retry and idempotency.
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: security-alert-delivery-queue
+  cancel-in-progress: false
+
+jobs:
+  process-security-alert-deliveries:
+    name: Process Security Alert Deliveries
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Validate security alert cron secret is configured
+        env:
+          SECURITY_ALERT_CRON_SECRET: ${{ secrets.SECURITY_ALERT_CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SECURITY_ALERT_CRON_SECRET:-}" ]; then
+            echo "::error::Repository secret SECURITY_ALERT_CRON_SECRET is not set or does not match Render INTERNAL_CRON_SECRET."
+            exit 1
+          fi
+
+      - name: Call protected security alert delivery processor
+        env:
+          SECURITY_ALERT_CRON_SECRET: ${{ secrets.SECURITY_ALERT_CRON_SECRET }}
+          SECURITY_ALERT_QUEUE_URL: https://nodexpro.onrender.com/api/v1/owner/internal/security-alert-deliveries/process
+          REQUEST_BODY: '{"limit":20}'
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+
+          http_code="$(
+            curl -sS \
+              --max-time 120 \
+              --retry 1 \
+              --retry-delay 10 \
+              --retry-connrefused \
+              -o "$response_file" \
+              -w '%{http_code}' \
+              -X POST "$SECURITY_ALERT_QUEUE_URL" \
+              -H "Content-Type: application/json" \
+              -H "X-Internal-Cron-Secret: ${SECURITY_ALERT_CRON_SECRET}" \
+              -d "$REQUEST_BODY"
+          )"
+
+          echo "HTTP status: ${http_code}"
+          if command -v jq >/dev/null 2>&1 && jq -e . >/dev/null 2>&1 <"$response_file"; then
+            jq -c '{ ok: (.ok // false), accepted: (.accepted // 0), failed: (.failed // 0), correlation_id: (.correlation_id // null) }' "$response_file"
+          else
+            echo "Summary: non-JSON response body"
+          fi
+
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "::error::Security alert queue request failed with HTTP ${http_code}"
+            exit 1
+          fi
+          if command -v jq >/dev/null 2>&1 && ! jq -e '.ok == true' >/dev/null 2>&1 <"$response_file"; then
+            echo "::error::Security alert queue returned ok=false"
+            exit 1
+          fi
+

@@ -11,6 +11,8 @@ export const config = {
   // LEGAL_IDENTITY_HASH_SALT; do not rotate it here (would orphan stored hashes).
   legalIdentityHashSalt: process.env.LEGAL_IDENTITY_HASH_SALT ?? 'dev-salt-change-in-production',
   securityAlertWebhookUrl: process.env.SECURITY_ALERT_WEBHOOK_URL?.trim() || null,
+  // Phase 5 containment enforcement. Exact "true" only. Absent/invalid defaults to disabled.
+  securityContainmentEnabled: String(process.env.SECURITY_CONTAINMENT_ENABLED ?? '').trim().toLowerCase() === 'true',
   dbIpLite: {
     cityDbPath: process.env.DBIP_CITY_LITE_DB_PATH?.trim() || null,
     dataDir: process.env.DBIP_LITE_DATA_DIR?.trim() || '/tmp/nodexpro-dbip-lite',

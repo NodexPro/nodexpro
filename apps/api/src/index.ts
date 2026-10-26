@@ -52,6 +52,9 @@ import { correlationMiddleware, getRequestCorrelationId } from './middleware/cor
 import { requestTimingMiddleware } from './shared/request-timing.js';
 import { supabaseAdmin } from './db/client.js';
 import { ensureDbIpLiteDatabase, writeDbIpLiteProvisioningReadme } from './shared/geoip-dbip.service.js';
+import { securityContainmentMiddleware } from './shared/security-containment.service.js';
+import { recordSecurityEvent, securitySubjectKey } from './shared/security-event.service.js';
+import { securityActionForStatus } from './shared/security-event.pure.js';
 
 ensureDefaultPuppeteerCacheDir();
 registerExampleModuleHook();
@@ -89,6 +92,7 @@ app.use(
 app.use(correlationMiddleware);
 // Measurement only: `Server-Timing` response header (API time + Supabase call count/avg/max). No behavior.
 app.use(requestTimingMiddleware);
+app.use(securityContainmentMiddleware());
 const corsAllowedOriginsRaw = process.env.CORS_ALLOWED_ORIGINS ?? '';
 /** Each configured origin plus its www ↔ apex twin (same scheme/port) to avoid prod footguns. */
 function expandCorsOriginsWithWwwVariants(origins: string[]): string[] {
@@ -200,9 +204,26 @@ app.use('/api/v1/work-engine', workEngineRoutes);
 app.use('/api/v1/income', incomeRoutes);
 app.use('/api/v1/accounting-base', accountingBaseRoutes);
 
-app.use((err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use(async (err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const correlation_id = getRequestCorrelationId(req);
   if (err instanceof AppError) {
+    const securityAction = securityActionForStatus(err.statusCode, err.code);
+    if (securityAction) {
+      await recordSecurityEvent({
+        action: securityAction,
+        dedupeKey: securitySubjectKey(`${securityAction}:${req.method}:${req.path}:${req.ip ?? 'unknown'}:${req.context?.user?.id ?? 'anonymous'}`),
+        actorUserId: req.context?.user?.id ?? null,
+        actorEmail: req.context?.user?.email ?? null,
+        organizationId: req.context?.organizationId ?? null,
+        correlationId: correlation_id,
+        sourceIp: typeof req.ip === 'string' ? req.ip : null,
+        payload: {
+          http_status: err.statusCode,
+          code: err.code ?? null,
+          path_kind: req.path.startsWith('/api/v1/owner') ? 'owner' : req.path.startsWith('/api/v1/') ? 'api' : 'other',
+        },
+      });
+    }
     if (err.code === ENCRYPTION_NOT_CONFIGURED_CODE) {
       console.error(
         '[api] CLIENT_DATA_ENCRYPTION_KEY missing or invalid — set 32-byte key as base64 in apps/api/.env',
