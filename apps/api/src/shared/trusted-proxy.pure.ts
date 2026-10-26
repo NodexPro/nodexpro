@@ -65,6 +65,37 @@ export function isCloudflareIp(ip: string | null | undefined): boolean {
   return CF_IPV6_PREFIXES.some((prefix) => lower === prefix || lower.startsWith(`${prefix}:`));
 }
 
+/** Published Vercel anycast/control ranges. Outbound rewrite egress is often AWS and is not listed. */
+const VERCEL_IPV4: Array<[string, number]> = [
+  ['76.76.21.0', 24],
+  ['66.33.60.0', 24],
+  ['64.29.17.0', 24],
+  ['64.239.109.0', 24],
+  ['64.239.123.0', 24],
+  ['216.198.79.0', 24],
+  ['216.150.1.0', 24],
+  ['216.150.16.0', 24],
+  ['198.169.1.0', 24],
+  ['198.169.2.0', 24],
+  ['143.13.0.0', 16],
+  ['155.121.0.0', 16],
+];
+
+export function isVercelIp(ip: string | null | undefined): boolean {
+  const value = normalizedIp(ip);
+  if (!value || isIP(value) === 0) return false;
+  if (isIP(value) === 6) return value.toLowerCase().startsWith('2607:db00');
+  return VERCEL_IPV4.some(([base, bits]) => inCidr(value, base, bits));
+}
+
+export function isTrustedPlatformHop(ip: string | null | undefined): boolean {
+  return isPrivateOrReservedIp(ip ?? null) || isCloudflareIp(ip) || isVercelIp(ip);
+}
+
+export function isVercelRegionId(raw: string | null | undefined): boolean {
+  return /^[a-z]{3}[0-9]?::/i.test(String(raw ?? '').trim());
+}
+
 export function originPullSecretMatches(provided: string | null | undefined, expected: string | null | undefined): boolean {
   const left = String(provided ?? '');
   const right = String(expected ?? '');
@@ -92,18 +123,28 @@ export function displaySourceIp(ip: string | null | undefined): string {
   return value;
 }
 
+function publicNonInfraIp(ip: string | null | undefined): string | null {
+  const value = normalizedIp(ip);
+  if (!value || isTrustedPlatformHop(value)) return null;
+  return value;
+}
+
 /**
  * Walk the trusted platform chain from the right (peer first).
- * Render/Cloudflare private hops are skipped. Spoofed leftmost XFF is ignored.
- * Private or unverified results become Unknown and are not stored as source IP.
+ * Render/Cloudflare/Vercel hops are skipped. Spoofed leftmost XFF from an
+ * untrusted public peer is ignored. Vercel rewrite client headers are used
+ * only with a Vercel region token and a client IP that is not the TCP peer.
  */
 export function resolvePublicClientIp(input: {
   reqIp?: string | null;
   peerIp?: string | null;
   forwardedFor?: string | null;
   cfConnectingIp?: string | null;
+  vercelForwardedFor?: string | null;
+  vercelId?: string | null;
+  realIp?: string | null;
   originPullVerified?: boolean;
-}): { ip: string | null; display: string; source: 'cf_connecting_ip' | 'trusted_chain' | 'req_ip' | 'unknown' } {
+}): { ip: string | null; display: string; source: 'cf_connecting_ip' | 'trusted_chain' | 'vercel_forwarded_for' | 'req_ip' | 'unknown' } {
   const cfIp = normalizedIp(input.cfConnectingIp);
   const peer = normalizedIp(input.peerIp);
   const canUseCf = Boolean(
@@ -113,14 +154,23 @@ export function resolvePublicClientIp(input: {
     return { ip: cfIp, display: displaySourceIp(cfIp), source: 'cf_connecting_ip' };
   }
 
-  const peerTrusted = Boolean(peer && (isPrivateOrReservedIp(peer) || isCloudflareIp(peer)));
+  const vercelClient = publicNonInfraIp(input.vercelForwardedFor) ?? publicNonInfraIp(input.realIp);
+  const vercelRewrite = isVercelRegionId(input.vercelId) && Boolean(vercelClient);
+  const peerTrusted = Boolean(peer && isTrustedPlatformHop(peer));
   if (peerTrusted) {
     const hops = [...parseForwardedFor(input.forwardedFor), peer].filter((item): item is string => Boolean(item));
     for (let i = hops.length - 1; i >= 0; i -= 1) {
-      if (isPrivateOrReservedIp(hops[i]) || isCloudflareIp(hops[i])) continue;
+      if (isTrustedPlatformHop(hops[i])) continue;
       return { ip: hops[i], display: hops[i], source: 'trusted_chain' };
     }
+    if (vercelClient) {
+      return { ip: vercelClient, display: vercelClient, source: 'vercel_forwarded_for' };
+    }
     return { ip: null, display: 'Unknown', source: 'unknown' };
+  }
+
+  if (vercelRewrite && vercelClient && peer && vercelClient !== peer) {
+    return { ip: vercelClient, display: vercelClient, source: 'vercel_forwarded_for' };
   }
 
   const reqIp = normalizedIp(input.reqIp);
@@ -139,8 +189,11 @@ export function resolveEdgeTrustedIp(input: {
   cfConnectingIp?: string | null;
   peerIp?: string | null;
   forwardedFor?: string | null;
+  vercelForwardedFor?: string | null;
+  vercelId?: string | null;
+  realIp?: string | null;
   originPullVerified?: boolean;
-}): { ip: string | null; source: 'req_ip' | 'cf_connecting_ip' | 'trusted_chain' | 'unknown' | 'none' } {
+}): { ip: string | null; source: 'req_ip' | 'cf_connecting_ip' | 'trusted_chain' | 'vercel_forwarded_for' | 'unknown' | 'none' } {
   const resolved = resolvePublicClientIp(input);
   return { ip: resolved.ip, source: resolved.source === 'unknown' ? 'unknown' : resolved.source };
 }

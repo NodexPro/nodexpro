@@ -31,7 +31,7 @@ test('migration 204 keeps security alert queue service-role only and retry-safe'
 
 test('trusted source IP resolver uses server-derived Express req.ip only', () => {
   assert.match(apiIndex, /app\.set\('trust proxy'/);
-  assert.match(apiIndex, /isPrivateOrReservedIp\(ip\) \|\| isCloudflareIp\(ip\)/);
+  assert.match(apiIndex, /isPrivateOrReservedIp\(ip\) \|\| isCloudflareIp\(ip\) \|\| isVercelIp\(ip\)/);
   assert.equal(resolveTrustedSourceIp({ reqIp: '::ffff:203.0.113.10' }), '203.0.113.10');
   assert.equal(resolveTrustedSourceIp({ reqIp: '2001:db8::1' }), '2001:db8::1');
   assert.equal(resolveTrustedSourceIp({ reqIp: 'not-an-ip' }), null);
@@ -81,6 +81,12 @@ test('DB-IP Lite attribution and email location context are present without secr
 
 test('auth and owner security event paths pass trusted req.ip into backend-owned events', () => {
   assert.match(authRoutes, /sourceIp: req\.trustedClientIp/);
+  assert.match(authRoutes, /x-nodexpro-login-stamp/);
+  const failedLogin = readFileSync(join(dir, '../../src/shared/failed-login.service.ts'), 'utf8');
+  const containment = readFileSync(join(dir, '../../src/shared/security-containment.service.ts'), 'utf8');
+  assert.match(failedLogin, /incidentReady: true/);
+  assert.match(failedLogin, /processSecurityAlertDeliveries/);
+  assert.match(containment, /incidentReady/);
   assert.match(ownerRoutes, /sourceIp: req\.trustedClientIp/);
   assert.match(ownerRoutes, /action: 'security\.forbidden'/);
   assert.doesNotMatch(authRoutes, /headers\[['"]x-forwarded-for['"]\]/i);

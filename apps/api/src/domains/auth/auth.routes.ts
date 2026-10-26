@@ -299,6 +299,7 @@ router.post(
       sourceIp: req.trustedClientIp ?? null,
       userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
       attemptedEmail: identifier || null,
+      loginStamp: typeof req.headers['x-nodexpro-login-stamp'] === 'string' ? req.headers['x-nodexpro-login-stamp'] : null,
       correlationId: getRequestCorrelationId(req),
       loginSucceeded: false,
       isPlatformOwnerEmergency: false,

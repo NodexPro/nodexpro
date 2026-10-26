@@ -58,7 +58,7 @@ import { securityActionForStatus } from './shared/security-event.pure.js';
 import { apiSecurityMiddleware } from './middleware/api-security.js';
 import { UPLOAD_JSON_MAX_BYTES } from './shared/api-security.pure.js';
 import { isPrivateOrReservedIp } from './shared/request-source.pure.js';
-import { isCloudflareIp } from './shared/trusted-proxy.pure.js';
+import { isCloudflareIp, isVercelIp } from './shared/trusted-proxy.pure.js';
 
 ensureDefaultPuppeteerCacheDir();
 registerExampleModuleHook();
@@ -79,7 +79,7 @@ async function logModuleLoaded(): Promise<void> {
 }
 
 const app = express();
-app.set('trust proxy', (ip: string) => isPrivateOrReservedIp(ip) || isCloudflareIp(ip));
+app.set('trust proxy', (ip: string) => isPrivateOrReservedIp(ip) || isCloudflareIp(ip) || isVercelIp(ip));
 app.use(
   helmet({
     contentSecurityPolicy: {

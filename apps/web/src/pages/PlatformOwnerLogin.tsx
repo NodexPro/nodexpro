@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { apiJson, apiJsonPublic, ApiError } from '../api/client';
 import { OWNER } from '../api/endpoints';
 import { useAuth } from '../contexts/AuthContext';
+import { signInWithIdentifier } from '../lib/sign-in-with-identifier';
+import { loginCooldownMessage, remainingCooldownSeconds, retryAfterSecondsFromFailure } from '../lib/login-cooldown.pure';
 
 type RecoveryStep = 1 | 2 | 3 | 4;
 
@@ -12,6 +14,9 @@ export function PlatformOwnerLogin() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const cooldownSeconds = remainingCooldownSeconds(cooldownUntil, nowMs);
 
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [recoveryStep, setRecoveryStep] = useState<RecoveryStep>(1);
@@ -42,14 +47,22 @@ export function PlatformOwnerLogin() {
     setRecoveryBusy(false);
   }
 
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return undefined;
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [cooldownSeconds]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (cooldownSeconds > 0) {
+      setError(loginCooldownMessage(cooldownSeconds));
+      return;
+    }
     setError('');
     setLoading(true);
     try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) throw new Error(signInError.message);
-      if (!data.session) throw new Error('No session after sign in');
+      await signInWithIdentifier(supabase, email.trim().toLowerCase(), password);
       await refetchMe();
       try {
         await apiJson(OWNER.session);
@@ -64,7 +77,16 @@ export function PlatformOwnerLogin() {
       }
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      const retryAfter = err instanceof ApiError
+        ? retryAfterSecondsFromFailure({ status: err.status, retryAfter: err.details?.retry_after })
+        : 0;
+      if (retryAfter > 0) {
+        setCooldownUntil(Date.now() + retryAfter * 1000);
+        setNowMs(Date.now());
+        setError(loginCooldownMessage(retryAfter));
+      } else {
+        setError(err instanceof Error ? err.message : 'Login failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -172,8 +194,8 @@ export function PlatformOwnerLogin() {
           </button>
         </div>
         {error ? <p style={{ color: 'red', marginBottom: 12 }}>{error}</p> : null}
-        <button type="submit" disabled={loading}>
-          {loading ? 'Signing in...' : 'Sign in'}
+        <button type="submit" disabled={loading || cooldownSeconds > 0}>
+          {cooldownSeconds > 0 ? loginCooldownMessage(cooldownSeconds) : loading ? 'Signing in...' : 'Sign in'}
         </button>
       </form>
 
@@ -225,7 +247,7 @@ export function PlatformOwnerLogin() {
 
             {recoveryStep === 2 ? (
               <form onSubmit={handleRecoveryVerify}>
-                <p style={{ color: '#666', fontSize: 14 }}>Step 2 — Enter the SMS code</p>
+                <p style={{ color: '#666', fontSize: 14 }}>Step 2 — Enter the verification code</p>
                 <p style={{ color: '#15803d', fontSize: 14 }}>Recovery email sent</p>
                 <label htmlFor="recovery-otp">Code</label>
                 <input

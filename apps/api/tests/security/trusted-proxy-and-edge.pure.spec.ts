@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   displaySourceIp,
   isCloudflareIp,
+  isVercelIp,
   originPullSecretMatches,
   resolveEdgeTrustedIp,
   resolvePublicClientIp,
@@ -36,6 +37,39 @@ test('Render private hops expose the public client and ignore spoofed leftmost X
       forwardedFor: '1.1.1.1',
       cfConnectingIp: '9.9.9.9',
       originPullVerified: false,
+    }).ip,
+    '8.8.8.8',
+  );
+});
+
+test('Vercel rewrite rotating egress still exposes the visitor and ignores spoofed XFF', () => {
+  assert.equal(isVercelIp('76.76.21.21'), true);
+  const first = resolvePublicClientIp({
+    peerIp: '3.64.1.20',
+    reqIp: '3.64.1.20',
+    forwardedFor: '5.6.7.8, 3.64.1.20',
+    vercelForwardedFor: '5.6.7.8',
+    vercelId: 'fra1::abc',
+    realIp: '5.6.7.8',
+  });
+  const second = resolvePublicClientIp({
+    peerIp: '3.127.9.40',
+    reqIp: '3.127.9.40',
+    forwardedFor: '5.6.7.8, 3.127.9.40',
+    vercelForwardedFor: '5.6.7.8',
+    vercelId: 'fra1::def',
+    realIp: '5.6.7.8',
+  });
+  assert.equal(first.ip, '5.6.7.8');
+  assert.equal(second.ip, '5.6.7.8');
+  assert.equal(first.source, 'vercel_forwarded_for');
+  assert.equal(
+    resolvePublicClientIp({
+      peerIp: '8.8.8.8',
+      reqIp: '8.8.8.8',
+      forwardedFor: '1.1.1.1',
+      vercelForwardedFor: '9.9.9.9',
+      vercelId: null,
     }).ip,
     '8.8.8.8',
   );

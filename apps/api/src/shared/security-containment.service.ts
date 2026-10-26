@@ -108,7 +108,14 @@ async function createIncidentAndContainment(input: {
     .select('id')
     .maybeSingle();
   if (incident.error) {
-    if (incident.error.code === '23505') return { incidentId: null, contained: false };
+    if (incident.error.code === '23505') {
+      const existing = await supabaseAdmin
+        .from('security_incidents')
+        .select('id')
+        .eq('dedupe_key', input.dedupeKey)
+        .maybeSingle();
+      return { incidentId: existing.data?.id ? String(existing.data.id) : null, contained: false };
+    }
     throw incident.error;
   }
   const incidentId = incident.data?.id ? String(incident.data.id) : null;
@@ -155,6 +162,7 @@ export async function handleSecurityDetection(input: {
   sourceIp?: string | null;
   safeContext?: Record<string, unknown> | null;
   sessionFingerprint?: string | null;
+  incidentReady?: boolean;
 }): Promise<{ incidentId: string | null; contained: boolean; countInWindow: number | null }> {
   const decision = ruleForSecurityAction(input.action);
   if (!decision) return { incidentId: null, contained: false, countInWindow: null };
@@ -169,7 +177,9 @@ export async function handleSecurityDetection(input: {
     }
     const row = (Array.isArray(bucket.data) ? bucket.data[0] : bucket.data) as { request_count?: number } | null;
     const countInWindow = Math.max(1, Number(row?.request_count ?? 1));
-    if (!shouldCreateIncident(countInWindow, decision)) return { incidentId: null, contained: false, countInWindow };
+    if (!input.incidentReady && !shouldCreateIncident(countInWindow, decision)) {
+      return { incidentId: null, contained: false, countInWindow };
+    }
     const result = await createIncidentAndContainment({
       action: input.action,
       decision,

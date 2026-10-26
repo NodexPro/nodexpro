@@ -28,6 +28,9 @@ export function attachTrustedClientIp(req: Request): string | null {
     cfConnectingIp: typeof req.headers['cf-connecting-ip'] === 'string' ? req.headers['cf-connecting-ip'] : null,
     peerIp: req.socket?.remoteAddress ?? null,
     forwardedFor: forwarded,
+    vercelForwardedFor: typeof req.headers['x-vercel-forwarded-for'] === 'string' ? req.headers['x-vercel-forwarded-for'] : null,
+    vercelId: typeof req.headers['x-vercel-id'] === 'string' ? req.headers['x-vercel-id'] : null,
+    realIp: typeof req.headers['x-real-ip'] === 'string' ? req.headers['x-real-ip'] : null,
     originPullVerified: verified,
   });
   req.trustedClientIp = resolved.ip;

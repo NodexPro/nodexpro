@@ -25,6 +25,27 @@ export function shouldNotifyOwnerForFailedLogin(countInWindow: number): boolean 
   return countInWindow >= FAILED_LOGIN_INCIDENT_AT;
 }
 
+export function normalizeLoginStamp(raw: string | null | undefined): string | null {
+  const value = String(raw ?? '').trim().toLowerCase();
+  if (!/^[a-f0-9]{16,64}$/.test(value)) return null;
+  return value;
+}
+
+export function failedLoginCorrelationCounts(input: {
+  patternCount: number;
+  stampCount: number;
+  targetCount: number;
+}): { detectionCount: number; cooldownCount: number; incidentCount: number } {
+  const patternCount = Math.max(0, input.patternCount);
+  const stampCount = Math.max(0, input.stampCount);
+  const targetCount = Math.max(0, input.targetCount);
+  return {
+    detectionCount: Math.max(patternCount, stampCount, targetCount),
+    cooldownCount: Math.max(patternCount, stampCount),
+    incidentCount: Math.max(patternCount, stampCount, targetCount),
+  };
+}
+
 export function shouldApplyFailedLoginCooldown(input: {
   countInWindow: number;
   loginSucceeded: boolean;
@@ -63,8 +84,11 @@ export function failedLoginDetectionReason(stage: FailedLoginStage, distinctTarg
 export function failedLoginGroupKey(input: {
   displayIp: string;
   attemptedIdentifierHash: string | null;
+  stampHash?: string | null;
 }): string {
-  return `login:${input.displayIp}:${input.attemptedIdentifierHash ?? 'none'}`;
+  if (input.stampHash) return `login:stamp:${input.stampHash}:${input.attemptedIdentifierHash ?? 'none'}`;
+  if (input.attemptedIdentifierHash) return `login:target:${input.attemptedIdentifierHash}`;
+  return `login:ip:${input.displayIp}`;
 }
 
 export type JournalGroup = {

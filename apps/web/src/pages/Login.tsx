@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { signInWithIdentifier } from '../lib/sign-in-with-identifier';
 import { useAuth } from '../contexts/AuthContext';
+import { ApiError } from '../api/client';
+import { loginCooldownMessage, remainingCooldownSeconds, retryAfterSecondsFromFailure } from '../lib/login-cooldown.pure';
 import {
   captureInviteReturnPath,
   readStoredInviteReturnPath,
@@ -14,6 +16,9 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const cooldownSeconds = remainingCooldownSeconds(cooldownUntil, nowMs);
   const navigate = useNavigate();
   const location = useLocation();
   const { refetchMe } = useAuth();
@@ -28,8 +33,18 @@ export function Login() {
     : '/register';
   const passwordResetOk = Boolean((location.state as { passwordResetOk?: boolean } | null)?.passwordResetOk);
 
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return undefined;
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [cooldownSeconds]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (cooldownSeconds > 0) {
+      setError(loginCooldownMessage(cooldownSeconds));
+      return;
+    }
     setError('');
     setLoading(true);
     try {
@@ -52,7 +67,16 @@ export function Login() {
       });
       navigate(redirectTo, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      const retryAfter = err instanceof ApiError
+        ? retryAfterSecondsFromFailure({ status: err.status, retryAfter: err.details?.retry_after })
+        : 0;
+      if (retryAfter > 0) {
+        setCooldownUntil(Date.now() + retryAfter * 1000);
+        setNowMs(Date.now());
+        setError(loginCooldownMessage(retryAfter));
+      } else {
+        setError(err instanceof Error ? err.message : 'Login failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -88,7 +112,9 @@ export function Login() {
           />
         </div>
         {error && <p style={{ color: 'red', marginBottom: 16 }}>{error}</p>}
-        <button type="submit" disabled={loading}>Sign in</button>
+        <button type="submit" disabled={loading || cooldownSeconds > 0}>
+          {cooldownSeconds > 0 ? loginCooldownMessage(cooldownSeconds) : 'Sign in'}
+        </button>
       </form>
       <p style={{ marginTop: 12 }}>
         <Link to="/forgot-password">Forgot password?</Link>

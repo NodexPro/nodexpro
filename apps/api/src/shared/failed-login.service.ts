@@ -9,16 +9,19 @@ import { securitySubjectKey } from './security-event.service.js';
 import {
   FAILED_LOGIN_COOLDOWN_SECONDS,
   FAILED_LOGIN_WINDOW_SECONDS,
+  failedLoginCorrelationCounts,
   failedLoginDetectionReason,
   failedLoginGroupKey,
   failedLoginSeverity,
   failedLoginStage,
   maskAttemptedIdentifier,
+  normalizeLoginStamp,
   shouldApplyFailedLoginCooldown,
   shouldCreateFailedLoginIncident,
   shouldNotifyOwnerForFailedLogin,
 } from './failed-login-policy.pure.js';
 import { displaySourceIp } from './trusted-proxy.pure.js';
+import { processSecurityAlertDeliveries } from './security-alert-delivery.service.js';
 
 function hashValue(value: string): string {
   return createHash('sha256').update(value).digest('hex');
@@ -43,42 +46,55 @@ export async function recordFailedLoginAttempt(input: {
   sourceIp: string | null;
   userAgent?: string | null;
   attemptedEmail?: string | null;
+  loginStamp?: string | null;
   correlationId?: string | null;
   loginSucceeded: boolean;
   isPlatformOwnerEmergency: boolean;
 }): Promise<{ stage: ReturnType<typeof failedLoginStage>; count: number; retryAfterSeconds: number; cooldown: boolean }> {
   const displayIp = displaySourceIp(input.sourceIp);
+  const stamp = normalizeLoginStamp(input.loginStamp);
   const patternKey = hashValue(`login-pattern:${displayIp}:${String(input.userAgent ?? '').slice(0, 80)}`).slice(0, 40);
+  const stampKey = stamp ? hashValue(`login-stamp:${stamp}`).slice(0, 40) : null;
   const identifier = maskAttemptedIdentifier(input.attemptedEmail);
   const identifierHash = input.attemptedEmail ? hashValue(String(input.attemptedEmail).trim().toLowerCase()) : null;
-  const count = await consumeBucket(patternKey, FAILED_LOGIN_WINDOW_SECONDS, 1000);
+  const targetKey = identifierHash ? hashValue(`login-target:${identifierHash}`).slice(0, 40) : null;
+  const patternCount = await consumeBucket(patternKey, FAILED_LOGIN_WINDOW_SECONDS, 1000);
+  const stampCount = stampKey ? await consumeBucket(stampKey, FAILED_LOGIN_WINDOW_SECONDS, 1000) : 0;
+  const targetCount = targetKey ? await consumeBucket(targetKey, FAILED_LOGIN_WINDOW_SECONDS, 1000) : 0;
+  const counts = failedLoginCorrelationCounts({ patternCount, stampCount, targetCount });
+  const count = counts.detectionCount;
   const distinctTargets = await consumeBucket(
-    hashValue(`login-targets:${displayIp}`).slice(0, 40),
+    hashValue(`login-targets:${stampKey ?? displayIp}`).slice(0, 40),
     FAILED_LOGIN_WINDOW_SECONDS,
     1000,
   );
   const stage = failedLoginStage(count);
   const cooldown = shouldApplyFailedLoginCooldown({
-    countInWindow: count,
+    countInWindow: counts.cooldownCount,
     loginSucceeded: input.loginSucceeded,
     isPlatformOwnerEmergency: input.isPlatformOwnerEmergency,
   });
   let retryAfterSeconds = 0;
   if (cooldown) {
-    const coolCount = await consumeBucket(`cd:${patternKey}`.slice(0, 40), FAILED_LOGIN_COOLDOWN_SECONDS, 1000);
+    await consumeBucket(`cd:${stampKey ?? patternKey}`.slice(0, 40), FAILED_LOGIN_COOLDOWN_SECONDS, 1000);
     retryAfterSeconds = FAILED_LOGIN_COOLDOWN_SECONDS;
-    if (coolCount > 1) retryAfterSeconds = FAILED_LOGIN_COOLDOWN_SECONDS;
   }
   const geo = await enrichGeoIp(input.sourceIp);
   const detectionReason = failedLoginDetectionReason(stage, distinctTargets);
-  const groupKey = failedLoginGroupKey({ displayIp, attemptedIdentifierHash: identifierHash });
-  const notify = shouldNotifyOwnerForFailedLogin(count);
-  const incident = shouldCreateFailedLoginIncident(count)
+  const groupKey = failedLoginGroupKey({
+    displayIp,
+    attemptedIdentifierHash: identifierHash,
+    stampHash: stampKey,
+  });
+  const notify = shouldNotifyOwnerForFailedLogin(counts.incidentCount);
+  const actorKey = stampKey ?? identifierHash ?? displayIp;
+  const incident = shouldCreateFailedLoginIncident(counts.incidentCount)
     ? await handleSecurityDetection({
         action: 'security.login_failed',
-        dedupeKey: securitySubjectKey(`login-pattern:${displayIp}`),
+        dedupeKey: securitySubjectKey(`login-actor:${actorKey}`),
         sourceIp: input.sourceIp,
         correlationId: input.correlationId ?? null,
+        incidentReady: true,
         safeContext: {
           attempt_count: count,
           distinct_targets: distinctTargets,
@@ -138,10 +154,11 @@ export async function recordFailedLoginAttempt(input: {
       eventAction: 'security.login_failed',
       severity: 'high',
       eventKind: 'security',
-      dedupeKey: `alert:login-pattern:${displayIp}:incident`,
+      dedupeKey: `alert:login-actor:${actorKey}:incident`,
       correlationId: input.correlationId ?? null,
       safeContext: payload,
     }).catch(() => undefined);
+    await processSecurityAlertDeliveries(5).catch(() => undefined);
   }
   return { stage, count, retryAfterSeconds, cooldown };
 }
