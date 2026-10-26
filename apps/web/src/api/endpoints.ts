@@ -431,6 +431,7 @@ export const OWNER = {
   securityEvents: '/owner/aggregates/security-events',
   deliverSecurityTestAlert: '/owner/commands/deliver_security_test_alert',
   releaseSecurityContainment: '/owner/commands/release_security_containment',
+  clearSecurityJournal: '/owner/commands/clear_security_journal',
   activatePlatformOwnerMfa: '/owner/commands/activate_platform_owner_mfa',
   verifyPlatformOwnerMfaRecovery: '/owner/commands/verify_platform_owner_mfa_recovery',
   countryPacks: '/owner/country-packs',

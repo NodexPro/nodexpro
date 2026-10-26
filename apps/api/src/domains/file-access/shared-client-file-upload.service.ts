@@ -5,7 +5,7 @@ import { badRequest, forbidden } from '../../shared/errors.js';
 import { requireGuardedUpload } from '../../shared/file-content-guard.js';
 
 const BUCKET_CLIENT_FILES = 'client-files';
-const MAX_CLIENT_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_CLIENT_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_CLIENT_FILE_BASE64_LENGTH = Math.ceil(MAX_CLIENT_FILE_SIZE / 3) * 4;
 
 const ALLOWED_EXT = new Set([
@@ -23,6 +23,11 @@ const ALLOWED_EXT = new Set([
   '.xlsx',
   '.rtf',
   '.odt',
+  '.heic',
+  '.heif',
+  '.tif',
+  '.tiff',
+  '.xml',
 ]);
 
 /** First-pass extension allowlist. Content bytes are validated separately. */
@@ -86,7 +91,7 @@ export async function uploadSharedClientFileAssetForOffice(
   if (b64.length > MAX_CLIENT_FILE_BASE64_LENGTH) throw badRequest(`File too large. Max ${MAX_CLIENT_FILE_SIZE / 1024 / 1024}MB`);
 
   const buf = Buffer.from(b64, 'base64');
-  const guarded = requireGuardedUpload({
+  const guarded = await requireGuardedUpload({
     buf,
     fileName: params.payload.file_name,
     claimedMime: params.payload.mime_type,
@@ -116,6 +121,7 @@ export async function uploadSharedClientFileAssetForOffice(
       file_size: fileSize,
       uploaded_by: ctx.user.id,
       access_level: 'organization',
+      scan_status: guarded.scanStatus,
     })
     .select('id')
     .single();
@@ -163,7 +169,7 @@ export async function uploadSharedClientFileAssetForPortal(params: {
   if (b64.length > MAX_CLIENT_FILE_BASE64_LENGTH) throw badRequest(`File too large. Max ${MAX_CLIENT_FILE_SIZE / 1024 / 1024}MB`);
 
   const buf = Buffer.from(b64, 'base64');
-  const guarded = requireGuardedUpload({
+  const guarded = await requireGuardedUpload({
     buf,
     fileName: params.payload.file_name,
     claimedMime: params.payload.mime_type,
@@ -193,6 +199,7 @@ export async function uploadSharedClientFileAssetForPortal(params: {
       file_size: fileSize,
       uploaded_by: null,
       access_level: 'organization',
+      scan_status: guarded.scanStatus,
     })
     .select('id')
     .single();

@@ -13,6 +13,15 @@ export const config = {
   securityAlertWebhookUrl: process.env.SECURITY_ALERT_WEBHOOK_URL?.trim() || null,
   // Phase 5 containment enforcement. Exact "true" only. Absent/invalid defaults to disabled.
   securityContainmentEnabled: String(process.env.SECURITY_CONTAINMENT_ENABLED ?? '').trim().toLowerCase() === 'true',
+  cloudflareOriginProtection: String(process.env.CLOUDFLARE_ORIGIN_PROTECTION ?? '').trim().toLowerCase() === 'true',
+  cloudflareOriginPullSecret: process.env.CLOUDFLARE_ORIGIN_PULL_SECRET?.trim() || null,
+  edgeProtectionVerified: String(process.env.EDGE_PROTECTION_VERIFIED ?? '').trim().toLowerCase() === 'true',
+  documentScanner: {
+    clamdHost: process.env.CLAMD_HOST?.trim() || null,
+    clamdPort: Number.parseInt(process.env.CLAMD_PORT ?? '3310', 10),
+    httpUrl: process.env.DOCUMENT_SCAN_URL?.trim() || null,
+    timeoutMs: Number.parseInt(process.env.DOCUMENT_SCAN_TIMEOUT_MS ?? '8000', 10),
+  },
   dbIpLite: {
     cityDbPath: process.env.DBIP_CITY_LITE_DB_PATH?.trim() || null,
     dataDir: process.env.DBIP_LITE_DATA_DIR?.trim() || '/tmp/nodexpro-dbip-lite',

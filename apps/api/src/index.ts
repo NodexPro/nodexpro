@@ -55,6 +55,10 @@ import { ensureDbIpLiteDatabase, writeDbIpLiteProvisioningReadme } from './share
 import { securityContainmentMiddleware } from './shared/security-containment.service.js';
 import { recordSecurityEvent, securitySubjectKey } from './shared/security-event.service.js';
 import { securityActionForStatus } from './shared/security-event.pure.js';
+import { apiSecurityMiddleware } from './middleware/api-security.js';
+import { UPLOAD_JSON_MAX_BYTES } from './shared/api-security.pure.js';
+import { isPrivateOrReservedIp } from './shared/request-source.pure.js';
+import { isCloudflareIp } from './shared/trusted-proxy.pure.js';
 
 ensureDefaultPuppeteerCacheDir();
 registerExampleModuleHook();
@@ -75,7 +79,7 @@ async function logModuleLoaded(): Promise<void> {
 }
 
 const app = express();
-app.set('trust proxy', 1);
+app.set('trust proxy', (ip: string) => isPrivateOrReservedIp(ip) || isCloudflareIp(ip));
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -87,12 +91,18 @@ app.use(
       },
     },
     crossOriginResourcePolicy: { policy: 'cross-origin' },
+    strictTransportSecurity: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: false,
+    },
   }),
 );
 app.use(correlationMiddleware);
 // Measurement only: `Server-Timing` response header (API time + Supabase call count/avg/max). No behavior.
 app.use(requestTimingMiddleware);
 app.use(securityContainmentMiddleware());
+app.use(apiSecurityMiddleware());
 const corsAllowedOriginsRaw = process.env.CORS_ALLOWED_ORIGINS ?? '';
 /** Each configured origin plus its www ↔ apex twin (same scheme/port) to avoid prod footguns. */
 function expandCorsOriginsWithWwwVariants(origins: string[]): string[] {
@@ -154,7 +164,7 @@ const corsOptions: cors.CorsOptions = {
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
-app.use(express.json({ limit: '15mb' }));
+app.use(express.json({ limit: UPLOAD_JSON_MAX_BYTES }));
 
 app.get('/api/v1/health', async (_req, res) => {
   // Safe deploy + minimal DB connectivity probe (no secrets, no aggregate work).
@@ -216,13 +226,25 @@ app.use(async (err: unknown, req: express.Request, res: express.Response, _next:
         actorEmail: req.context?.user?.email ?? null,
         organizationId: req.context?.organizationId ?? null,
         correlationId: correlation_id,
-        sourceIp: typeof req.ip === 'string' ? req.ip : null,
+        sourceIp: req.trustedClientIp ?? (typeof req.ip === 'string' ? req.ip : null),
         payload: {
           http_status: err.statusCode,
           code: err.code ?? null,
           path_kind: req.path.startsWith('/api/v1/owner') ? 'owner' : req.path.startsWith('/api/v1/') ? 'api' : 'other',
+          has_authorization: Boolean(req.headers.authorization),
         },
       });
+      if (securityAction === 'security.unauthorized' && req.headers.authorization) {
+        await recordSecurityEvent({
+          action: 'security.token_abuse',
+          dedupeKey: securitySubjectKey(`token-abuse:${req.trustedClientIp ?? req.ip ?? 'unknown'}`),
+          actorUserId: req.context?.user?.id ?? null,
+          organizationId: req.context?.organizationId ?? null,
+          correlationId: correlation_id,
+          sourceIp: req.trustedClientIp ?? (typeof req.ip === 'string' ? req.ip : null),
+          payload: { http_status: err.statusCode, code: err.code ?? null },
+        });
+      }
     }
     if (err.code === ENCRYPTION_NOT_CONFIGURED_CODE) {
       console.error(

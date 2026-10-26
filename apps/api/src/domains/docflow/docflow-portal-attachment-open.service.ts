@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { forbidden } from '../../shared/errors.js';
 import { writeAudit } from '../../shared/audit-events.js';
+import { assertFileAssetDownloadable } from '../../shared/document-download-guard.js';
 
 const BUCKET_CLIENT_FILES = 'client-files';
 const SIGNED_URL_EXPIRES_SEC = 60;
@@ -38,11 +39,12 @@ export async function getPortalDocflowAttachmentSignedUrl(params: {
 
   const { data: fileAsset, error: faErr } = await supabaseAdmin
     .from('file_assets')
-    .select('id, storage_bucket, storage_key, organization_id')
+    .select('id, storage_bucket, storage_key, organization_id, scan_status')
     .eq('id', params.fileAssetId)
     .single();
   if (faErr) throw faErr;
   if (!fileAsset || fileAsset.organization_id !== params.orgId) throw forbidden('File not found');
+  assertFileAssetDownloadable((fileAsset as { scan_status?: string | null }).scan_status);
 
   const bucket = String(fileAsset.storage_bucket ?? BUCKET_CLIENT_FILES);
   if (bucket === BUCKET_CLIENT_FILES) await ensureBucketExists();
@@ -96,11 +98,12 @@ export async function getOfficeDocflowAttachmentSignedUrl(params: {
 
   const { data: fileAsset, error: faErr } = await supabaseAdmin
     .from('file_assets')
-    .select('id, storage_bucket, storage_key, organization_id')
+    .select('id, storage_bucket, storage_key, organization_id, scan_status')
     .eq('id', params.fileAssetId)
     .single();
   if (faErr) throw faErr;
   if (!fileAsset || fileAsset.organization_id !== params.orgId) throw forbidden('File not found');
+  assertFileAssetDownloadable((fileAsset as { scan_status?: string | null }).scan_status);
 
   const bucket = String(fileAsset.storage_bucket ?? BUCKET_CLIENT_FILES);
   if (bucket === BUCKET_CLIENT_FILES) await ensureBucketExists();

@@ -493,6 +493,33 @@
   font-size: 13px;
 }
 
+.nx-owner-security__journal-row {
+  display: block;
+  width: 100%;
+  text-align: start;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.nx-owner-security__journal-details {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.nx-owner-security__journal-details p,
+.nx-owner-security__journal-details li {
+  margin: 0 0 4px;
+  border: 0;
+  padding: 0;
+}
+
 .nx-owner-security__attribution {
   margin: 16px 0 0;
   color: #6b7280;

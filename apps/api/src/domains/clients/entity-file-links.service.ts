@@ -3,6 +3,7 @@ import { forbidden, badRequest } from '../../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
 import { requireGuardedUpload } from '../../shared/file-content-guard.js';
+import { assertFileAssetDownloadable } from '../../shared/document-download-guard.js';
 import { addTimelineEvent, TIMELINE_SOURCE, TIMELINE_EVENTS } from './timeline.service.js';
 
 const ENTITY_TYPE_CLIENT = 'client';
@@ -44,7 +45,7 @@ export async function listFilesForClient(ctx: RequestContext, orgId: string, cli
 
 const BUCKET_CLIENT_FILES = 'client-files';
 const SIGNED_URL_EXPIRES_SEC = 60;
-const MAX_CLIENT_FILE_SIZE = 10 * 1024 * 1024; // 10MB (baseline parity with documents)
+const MAX_CLIENT_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_CLIENT_FILE_BASE64_LENGTH = Math.ceil(MAX_CLIENT_FILE_SIZE / 3) * 4; // base64 chars upper bound (approx)
 
 let bucketEnsured = false;
@@ -107,7 +108,7 @@ export async function attachFileToClient(
         throw badRequest(`File too large. Max ${MAX_CLIENT_FILE_SIZE / 1024 / 1024}MB`);
       }
       const buf = Buffer.from(body.file_base64, 'base64');
-      const guarded = requireGuardedUpload({
+      const guarded = await requireGuardedUpload({
         buf,
         fileName,
         claimedMime: body.mime_type,
@@ -222,10 +223,11 @@ export async function getFileOpenUrl(
 
   const { data: fileAsset } = await supabaseAdmin
     .from('file_assets')
-    .select('id, storage_key, organization_id')
+    .select('id, storage_key, organization_id, scan_status')
     .eq('id', fileAssetId)
     .single();
   if (!fileAsset || fileAsset.organization_id !== orgId) throw forbidden('File not found');
+  assertFileAssetDownloadable((fileAsset as { scan_status?: string | null }).scan_status);
 
   await ensureBucketExists();
   const { data: signed, error } = await supabaseAdmin.storage

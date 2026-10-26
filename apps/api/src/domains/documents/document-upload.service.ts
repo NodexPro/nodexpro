@@ -7,7 +7,7 @@ import { assertCanAccessClientFromContext } from '../client-operations/organizat
 import { assertDocumentClientAccess } from './document-client-access.js';
 
 const BUCKET = 'document-files';
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
 let bucketEnsured = false;
 async function ensureBucket(): Promise<void> {
@@ -46,7 +46,7 @@ export async function uploadDocument(
 
   if (!body.file_name?.trim()) throw badRequest('file_name is required');
   const buf = Buffer.from(body.file_base64 ?? '', 'base64');
-  const guarded = requireGuardedUpload({
+  const guarded = await requireGuardedUpload({
     buf,
     fileName: body.file_name,
     claimedMime: body.mime_type,
@@ -75,6 +75,7 @@ export async function uploadDocument(
       file_size: fileSize,
       uploaded_by: ctx.user.id,
       access_level: 'organization',
+      scan_status: guarded.scanStatus,
     })
     .select('id')
     .single();
@@ -174,7 +175,7 @@ export async function uploadNewVersion(
 
   if (!body.file_name?.trim()) throw badRequest('file_name is required');
   const buf = Buffer.from(body.file_base64 ?? '', 'base64');
-  const guarded = requireGuardedUpload({
+  const guarded = await requireGuardedUpload({
     buf,
     fileName: body.file_name,
     claimedMime: body.mime_type,
@@ -203,6 +204,7 @@ export async function uploadNewVersion(
       file_size: fileSize,
       uploaded_by: ctx.user.id,
       access_level: 'organization',
+      scan_status: guarded.scanStatus,
     })
     .select('id')
     .single();

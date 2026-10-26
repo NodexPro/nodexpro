@@ -64,12 +64,46 @@ interface SecurityEventsAggregate {
   };
   phase5_status?: 'ready' | 'migration_required';
   containment_enforcement?: 'enabled' | 'disabled';
+  edge_protection?: {
+    status: 'not_configured' | 'configured_unverified' | 'verified';
+    waf_active: boolean;
+    covers_web: boolean;
+    covers_api: boolean;
+  };
+  upload_scanning?: { status: 'not_configured' | 'required' | 'optional' | 'unavailable' };
+  distributed_rate_limit?: { status: 'enabled' };
   active_incidents?: SecurityIncident[];
   incident_history?: SecurityIncident[];
   delivery_failure_count: number;
   events: SecurityEvent[];
+  journal?: {
+    groups: JournalGroup[];
+    total_groups: number;
+    page: number;
+    page_size: number;
+    filter_options: { severities: string[]; events: string[] };
+  };
+  allowed_actions?: Array<{ action_key: string; label: string }>;
   test_delivery?: { queued: boolean; status: 'accepted' | 'failed' | 'pending'; reason?: string };
   permanent_mfa: PermanentMfaPanel | null;
+}
+
+interface JournalGroup {
+  group_key: string;
+  action: string;
+  severity: string;
+  created_at: string;
+  display_ip: string;
+  country: string;
+  city: string;
+  attempted_identifier: string | null;
+  attempt_count: number;
+  detection_reason: string;
+  incident_id: string | null;
+  cooldown_status: string;
+  containment_action: string;
+  alert_status: string;
+  history: Array<{ id: string; created_at: string; attempt_count: number }>;
 }
 
 interface SecurityIncident {
@@ -113,11 +147,30 @@ export function PlatformOwnerSecurityPage() {
   const [severityFilter, setSeverityFilter] = useState('all');
   const [eventFilter, setEventFilter] = useState('all');
   const [deliveryFilter, setDeliveryFilter] = useState('all');
+  const [ipFilter, setIpFilter] = useState('');
+  const [identifierFilter, setIdentifierFilter] = useState('');
+  const [fromFilter, setFromFilter] = useState('');
+  const [toFilter, setToFilter] = useState('');
+  const [journalPage, setJournalPage] = useState(1);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const busyRef = useRef(false);
+
+  function journalQuery() {
+    const search = new URLSearchParams();
+    if (severityFilter !== 'all') search.set('severity', severityFilter);
+    if (eventFilter !== 'all') search.set('event', eventFilter);
+    if (ipFilter.trim()) search.set('ip', ipFilter.trim());
+    if (identifierFilter.trim()) search.set('identifier', identifierFilter.trim());
+    if (fromFilter) search.set('from', fromFilter);
+    if (toFilter) search.set('to', toFilter);
+    if (journalPage > 1) search.set('page', String(journalPage));
+    const suffix = search.toString();
+    return suffix ? `${OWNER.securityEvents}?${suffix}` : OWNER.securityEvents;
+  }
 
   useEffect(() => {
     let cancelled = false;
-    void apiJson<SecurityEventsAggregate>(OWNER.securityEvents)
+    void apiJson<SecurityEventsAggregate>(journalQuery())
       .then((next) => {
         if (!cancelled) setData(next);
       })
@@ -130,7 +183,7 @@ export function PlatformOwnerSecurityPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [severityFilter, eventFilter, ipFilter, identifierFilter, fromFilter, toFilter, journalPage]);
 
   function openTab(next: OwnerSecurityTab) {
     const nextParams = new URLSearchParams(params);
@@ -146,6 +199,25 @@ export function PlatformOwnerSecurityPage() {
     setError('');
     try {
       setData(await apiJson<SecurityEventsAggregate>(OWNER.deliverSecurityTestAlert, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      }));
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : copy.commandFailed);
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function clearJournal() {
+    if (busyRef.current) return;
+    if (!window.confirm(copy.clearJournalConfirm)) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError('');
+    try {
+      setData(await apiJson<SecurityEventsAggregate>(OWNER.clearSecurityJournal, {
         method: 'POST',
         body: JSON.stringify({}),
       }));
@@ -221,12 +293,8 @@ export function PlatformOwnerSecurityPage() {
   }
 
   const panel = data?.permanent_mfa;
-  const eventTypeOptions = Array.from(new Set((data?.events ?? []).map((event) => event.action)));
-  const filteredEvents = (data?.events ?? []).filter((event) => {
-    if (severityFilter !== 'all' && event.severity !== severityFilter) return false;
-    if (eventFilter !== 'all' && event.action !== eventFilter) return false;
-    return true;
-  });
+  const eventTypeOptions = data?.journal?.filter_options.events ?? [];
+  const journalGroups = data?.journal?.groups ?? [];
   const filteredDeliveries = (data?.alert_delivery_channel?.recent ?? []).filter((delivery) => {
     if (deliveryFilter !== 'all' && delivery.status !== deliveryFilter) return false;
     return true;
@@ -235,10 +303,6 @@ export function PlatformOwnerSecurityPage() {
     if (status === 'accepted') return copy.deliveryAccepted;
     if (status === 'failed') return copy.deliveryFailed;
     return copy.deliveryPending;
-  };
-  const payloadText = (event: SecurityEvent, key: string) => {
-    const value = event.payload?.[key];
-    return typeof value === 'string' && value.trim() ? value : copy.sourceUnknown;
   };
 
   return (
@@ -336,6 +400,21 @@ export function PlatformOwnerSecurityPage() {
               <p data-testid="owner-containment-enforcement">
                 {data.containment_enforcement === 'enabled' ? copy.containmentEnforcementOn : copy.containmentEnforcementOff}
               </p>
+              <p data-testid="owner-edge-protection">
+                {data.edge_protection?.status === 'verified'
+                  ? copy.edgeVerified
+                  : data.edge_protection?.status === 'configured_unverified'
+                    ? copy.edgeConfiguredUnverified
+                    : copy.edgeNotConfigured}
+              </p>
+              <p data-testid="owner-upload-scanning">
+                {data.upload_scanning?.status === 'required'
+                  ? copy.uploadScanRequired
+                  : data.upload_scanning?.status === 'optional'
+                    ? copy.uploadScanOptional
+                    : copy.uploadScanNotConfigured}
+              </p>
+              <p data-testid="owner-distributed-rate-limit">{copy.rateLimitEnabled}</p>
               {data.test_delivery ? (
                 <p data-testid="owner-alert-test">
                   {data.test_delivery.status === 'accepted'
@@ -386,10 +465,19 @@ export function PlatformOwnerSecurityPage() {
                   </article>
                 ))}
               </section>
-              <div className="nx-owner-security__filters" aria-label="Security alert filters">
+              <h2 className="nx-owner-security__subtitle">{copy.journalTitle}</h2>
+              <div className="nx-owner-security__filters" aria-label="Security journal filters">
+                <label>
+                  {copy.filterDateFrom}
+                  <input className="nx-owner-calendar__date" type="date" value={fromFilter} onChange={(event) => { setJournalPage(1); setFromFilter(event.target.value); }} />
+                </label>
+                <label>
+                  {copy.filterDateTo}
+                  <input className="nx-owner-calendar__date" type="date" value={toFilter} onChange={(event) => { setJournalPage(1); setToFilter(event.target.value); }} />
+                </label>
                 <label>
                   {copy.filterSeverity}
-                  <select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)}>
+                  <select value={severityFilter} onChange={(event) => { setJournalPage(1); setSeverityFilter(event.target.value); }}>
                     <option value="all">{copy.filterAll}</option>
                     <option value="critical">{copy.severity.critical}</option>
                     <option value="high">{copy.severity.high}</option>
@@ -399,24 +487,75 @@ export function PlatformOwnerSecurityPage() {
                 </label>
                 <label>
                   {copy.filterEventType}
-                  <select value={eventFilter} onChange={(event) => setEventFilter(event.target.value)}>
+                  <select value={eventFilter} onChange={(event) => { setJournalPage(1); setEventFilter(event.target.value); }}>
                     <option value="all">{copy.filterAll}</option>
                     {eventTypeOptions.map((action) => (
                       <option key={action} value={action}>{englishEventAction(action)}</option>
                     ))}
                   </select>
                 </label>
+                <label>
+                  {copy.filterIp}
+                  <input value={ipFilter} onChange={(event) => { setJournalPage(1); setIpFilter(event.target.value); }} />
+                </label>
+                <label>
+                  {copy.filterAttemptedEmail}
+                  <input value={identifierFilter} onChange={(event) => { setJournalPage(1); setIdentifierFilter(event.target.value); }} />
+                </label>
               </div>
-              {filteredEvents.length === 0 ? <p>{copy.noEvents}</p> : null}
+              {data.allowed_actions?.some((action) => action.action_key === 'clear_security_journal') ? (
+                <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy} onClick={() => void clearJournal()}>
+                  {copy.clearJournal}
+                </button>
+              ) : null}
+              {journalGroups.length === 0 ? <p>{copy.noEvents}</p> : null}
               <ul className="nx-owner-security__events">
-                {filteredEvents.map((event) => (
-                  <li key={event.id}>
-                    <strong>{englishSeverity(event.severity)}</strong> · {englishEventAction(event.action)} · {event.created_at}
-                    <br />
-                    Source IP: {payloadText(event, 'source_ip')} · Location: {payloadText(event, 'country')}, {payloadText(event, 'city')} · Network: {payloadText(event, 'network')}
+                {journalGroups.map((group) => (
+                  <li key={group.group_key}>
+                    <button
+                      type="button"
+                      className="nx-owner-security__journal-row"
+                      onClick={() => setExpandedGroup(expandedGroup === group.group_key ? null : group.group_key)}
+                    >
+                      <strong>{englishSeverity(group.severity)}</strong> · {englishEventAction(group.action)} · {group.created_at}
+                      <br />
+                      {group.country}, {group.city} · {group.display_ip} · {group.attempted_identifier ?? copy.sourceUnknown}
+                    </button>
+                    {expandedGroup === group.group_key ? (
+                      <div className="nx-owner-security__journal-details">
+                        <p>{copy.attempts}: {group.attempt_count}</p>
+                        <p>{copy.detectionReason}: {group.detection_reason}</p>
+                        <p>{copy.relatedIncident}: {group.incident_id ?? copy.sourceUnknown}</p>
+                        <p>{copy.cooldownStatus}: {group.cooldown_status}</p>
+                        <p>{copy.containment}: {group.containment_action}</p>
+                        <p>{copy.alertStatus}: {group.alert_status}</p>
+                        <p>{copy.eventHistory}</p>
+                        <ul>
+                          {group.history.map((item) => (
+                            <li key={item.id}>{item.created_at} · {copy.attempts}: {item.attempt_count}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                   </li>
                 ))}
               </ul>
+              {(data.journal?.total_groups ?? 0) > (data.journal?.page_size ?? 20) ? (
+                <div className="nx-owner-security__filters">
+                  <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={journalPage <= 1} onClick={() => setJournalPage((page) => Math.max(1, page - 1))}>
+                    {copy.previousPage}
+                  </button>
+                  <span>{copy.pageLabel} {data.journal?.page ?? 1}</span>
+                  <button
+                    type="button"
+                    className="nx-btn nx-btn-taxes-compact"
+                    disabled={(data.journal?.page ?? 1) * (data.journal?.page_size ?? 20) >= (data.journal?.total_groups ?? 0)}
+                    onClick={() => setJournalPage((page) => page + 1)}
+                  >
+                    {copy.nextPage}
+                  </button>
+                </div>
+              ) : null}
               {data.alert_delivery_channel?.recent?.length ? (
                 <>
                   <h2 className="nx-owner-security__subtitle">{copy.recentDeliveries}</h2>

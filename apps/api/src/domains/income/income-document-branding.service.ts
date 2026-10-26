@@ -811,7 +811,7 @@ async function uploadBrandingImage(
   if (!fileBase64) throw badRequest('file_base64 is required');
 
   const buf = Buffer.from(fileBase64, 'base64');
-  const guarded = requireGuardedUpload({
+  const guarded = await requireGuardedUpload({
     buf,
     fileName,
     claimedMime: typeof body.mime_type === 'string' ? body.mime_type : null,

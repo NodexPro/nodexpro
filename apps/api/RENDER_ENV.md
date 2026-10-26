@@ -56,6 +56,18 @@ Emergency disable (no UI required):
 3. Save and wait for the service restart.
 4. Confirm `GET /api/v1/health` is healthy. Owner Security will show containment enforcement disabled.
 
+Edge / WAF (do not set EDGE_PROTECTION_VERIFIED until DNS and live rules are confirmed):
+
+- `CLOUDFLARE_ORIGIN_PROTECTION` — exact `true` rejects requests without the origin-pull secret. Health stays open for Render.
+- `CLOUDFLARE_ORIGIN_PULL_SECRET` — shared secret added by the Cloudflare Transform Rule. Direct `nodexpro.onrender.com` bypass is then rejected.
+- `EDGE_PROTECTION_VERIFIED` — exact `true` only after Owner confirms WAF is live on both `www.nodexpro.com` and the API hostname. The API never self-claims WAF is active.
+
+Document malware scanning (fail closed only when required):
+
+- `DOCUMENT_MALWARE_SCAN_REQUIRED` — exact `true` rejects uploads when ClamAV/HTTP scanner is missing or down.
+- `CLAMD_HOST` / `CLAMD_PORT` — ClamAV daemon. Or `DOCUMENT_SCAN_URL` for an HTTP scanner that returns `{ "infected": boolean }`.
+- Unset required flag: content guard still runs; files are stored as `not_configured` and are never labeled malware-free.
+
 Re-enable only after explicit Owner approval:
 
 1. Set `SECURITY_CONTAINMENT_ENABLED=true`.

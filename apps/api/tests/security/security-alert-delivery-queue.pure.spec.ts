@@ -30,7 +30,8 @@ test('migration 204 keeps security alert queue service-role only and retry-safe'
 });
 
 test('trusted source IP resolver uses server-derived Express req.ip only', () => {
-  assert.match(apiIndex, /app\.set\('trust proxy', 1\)/);
+  assert.match(apiIndex, /app\.set\('trust proxy'/);
+  assert.match(apiIndex, /isPrivateOrReservedIp\(ip\) \|\| isCloudflareIp\(ip\)/);
   assert.equal(resolveTrustedSourceIp({ reqIp: '::ffff:203.0.113.10' }), '203.0.113.10');
   assert.equal(resolveTrustedSourceIp({ reqIp: '2001:db8::1' }), '2001:db8::1');
   assert.equal(resolveTrustedSourceIp({ reqIp: 'not-an-ip' }), null);
@@ -79,8 +80,8 @@ test('DB-IP Lite attribution and email location context are present without secr
 });
 
 test('auth and owner security event paths pass trusted req.ip into backend-owned events', () => {
-  assert.match(authRoutes, /sourceIp: typeof req\.ip === 'string' \? req\.ip : null/);
-  assert.match(ownerRoutes, /sourceIp: typeof req\.ip === 'string' \? req\.ip : null/);
+  assert.match(authRoutes, /sourceIp: req\.trustedClientIp/);
+  assert.match(ownerRoutes, /sourceIp: req\.trustedClientIp/);
   assert.match(ownerRoutes, /action: 'security\.forbidden'/);
   assert.doesNotMatch(authRoutes, /headers\[['"]x-forwarded-for['"]\]/i);
   assert.doesNotMatch(ownerRoutes, /headers\[['"]x-forwarded-for['"]\]/i);

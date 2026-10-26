@@ -1,0 +1,97 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  displaySourceIp,
+  isCloudflareIp,
+  originPullSecretMatches,
+  resolveEdgeTrustedIp,
+  resolvePublicClientIp,
+  shouldRejectUnprotectedOrigin,
+} from '../../src/shared/trusted-proxy.pure.js';
+import { edgeProtectionAggregate } from '../../src/shared/edge-protection.pure.js';
+
+test('Render private hops expose the public client and ignore spoofed leftmost XFF', () => {
+  const render = resolvePublicClientIp({
+    peerIp: '10.193.150.1',
+    reqIp: '10.193.150.1',
+    forwardedFor: '8.8.8.8, 1.2.3.4, 10.193.150.1',
+    cfConnectingIp: '9.9.9.9',
+    originPullVerified: false,
+  });
+  assert.equal(render.ip, '1.2.3.4');
+  assert.equal(render.display, '1.2.3.4');
+  assert.equal(
+    resolvePublicClientIp({
+      peerIp: '10.193.150.1',
+      reqIp: '10.193.150.1',
+      forwardedFor: null,
+    }).display,
+    'Unknown',
+  );
+  assert.equal(displaySourceIp('10.193.150.1'), 'Unknown');
+  assert.equal(
+    resolvePublicClientIp({
+      peerIp: '8.8.8.8',
+      reqIp: '8.8.8.8',
+      forwardedFor: '1.1.1.1',
+      cfConnectingIp: '9.9.9.9',
+      originPullVerified: false,
+    }).ip,
+    '8.8.8.8',
+  );
+});
+
+test('never trusts CF-Connecting-IP without a verified proxy chain', () => {
+  assert.equal(isCloudflareIp('104.16.1.1'), true);
+  assert.equal(isCloudflareIp('8.8.8.8'), false);
+  assert.equal(
+    resolveEdgeTrustedIp({
+      reqIp: '1.2.3.4',
+      cfConnectingIp: '8.8.4.4',
+      peerIp: '9.9.9.9',
+      originPullVerified: false,
+    }).source,
+    'req_ip',
+  );
+  assert.equal(
+    resolveEdgeTrustedIp({
+      reqIp: '1.2.3.4',
+      cfConnectingIp: '8.8.4.4',
+      peerIp: '104.16.1.1',
+      originPullVerified: false,
+    }).ip,
+    '8.8.4.4',
+  );
+  assert.equal(originPullSecretMatches('abc', 'abc'), true);
+  assert.equal(originPullSecretMatches('abc', 'abd'), false);
+});
+
+test('origin protection and WAF status never self-claim live protection', () => {
+  assert.equal(
+    shouldRejectUnprotectedOrigin({
+      enabled: true,
+      path: '/api/v1/auth/login',
+      originPullConfigured: true,
+      originPullVerified: false,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldRejectUnprotectedOrigin({
+      enabled: true,
+      path: '/api/v1/health',
+      originPullConfigured: true,
+      originPullVerified: false,
+    }),
+    false,
+  );
+  const unverified = edgeProtectionAggregate({
+    cloudflareOriginProtection: true,
+    originPullConfigured: true,
+    verifiedByOwner: false,
+    coversWeb: true,
+    coversApi: true,
+  });
+  assert.equal(unverified.waf_active, false);
+  assert.equal(unverified.status, 'configured_unverified');
+});

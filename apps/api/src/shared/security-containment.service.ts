@@ -14,6 +14,7 @@ import {
 } from './security-phase5.pure.js';
 import { isPrivateOrReservedIp, resolveTrustedSourceIp } from './request-source.pure.js';
 import { config } from '../config.js';
+import { revokeCompromisedUserSessions } from './session-revocation.service.js';
 
 export const SECURITY_RESTRICTED_MESSAGE = 'Suspicious activity has been detected. Your session has been restricted.';
 
@@ -134,6 +135,13 @@ async function createIncidentAndContainment(input: {
       expires_at: expiresAt,
     });
   if (containment.error && containment.error.code !== '23505') throw containment.error;
+  if (!containment.error && input.actorUserId && input.decision.containment_scope === 'user') {
+    await revokeCompromisedUserSessions({
+      actorUserId: input.actorUserId,
+      incidentId,
+      reason: input.decision.rule_id,
+    }).catch(() => undefined);
+  }
   return { incidentId, contained: !containment.error };
 }
 

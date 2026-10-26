@@ -1,6 +1,11 @@
 export type SecuritySeverity = 'critical' | 'high' | 'medium' | 'low';
 export type SecurityConfidence = 'confirmed' | 'suspicious' | 'benign';
-export type ContainmentAction = 'none' | 'temporary_source_block' | 'restrict_user_sensitive_commands' | 'owner_review';
+export type ContainmentAction =
+  | 'none'
+  | 'temporary_source_block'
+  | 'restrict_user_sensitive_commands'
+  | 'revoke_compromised_sessions'
+  | 'owner_review';
 export type ContainmentScope = 'source_ip' | 'user' | 'session';
 
 export type SecurityRuleDecision = {
@@ -41,7 +46,7 @@ const RULES: RuleDef[] = [
     event_type: 'repeated_failed_login_attempts',
     severity: 'high',
     confidence: 'suspicious',
-    threshold: 5,
+    threshold: 10,
     window_seconds: TEN_MIN,
     containment_action: 'owner_review',
     containment_scope: null,
@@ -114,6 +119,58 @@ const RULES: RuleDef[] = [
     evidence_summary: 'Repeated unauthorized API responses crossed the configured threshold.',
   },
   {
+    matches: (action) => action === 'security.credential_stuffing',
+    rule_id: 'auth_credential_stuffing_v1',
+    event_type: 'credential_stuffing_attempts',
+    severity: 'high',
+    confidence: 'suspicious',
+    threshold: 25,
+    window_seconds: TEN_MIN,
+    containment_action: 'owner_review',
+    containment_scope: null,
+    containment_ttl_seconds: 0,
+    evidence_summary: 'Repeated failed logins from one source crossed the stuffing threshold. The victim account is not locked.',
+  },
+  {
+    matches: (action) => action === 'security.token_abuse',
+    rule_id: 'auth_token_abuse_v1',
+    event_type: 'repeated_token_abuse',
+    severity: 'high',
+    confidence: 'suspicious',
+    threshold: 15,
+    window_seconds: TEN_MIN,
+    containment_action: 'owner_review',
+    containment_scope: null,
+    containment_ttl_seconds: 0,
+    evidence_summary: 'Repeated unauthorized requests presented a bearer token.',
+  },
+  {
+    matches: (action) => action === 'security.session_compromised',
+    rule_id: 'confirmed_session_compromise_v1',
+    event_type: 'confirmed_compromised_session',
+    severity: 'critical',
+    confidence: 'confirmed',
+    threshold: 1,
+    window_seconds: FIFTEEN_MIN,
+    containment_action: 'restrict_user_sensitive_commands',
+    containment_scope: 'user',
+    containment_ttl_seconds: HOUR,
+    evidence_summary: 'A confirmed compromised authenticated identity must lose sensitive-command access and have sessions revoked.',
+  },
+  {
+    matches: (action) => action === 'security.upload_rejected_malicious',
+    rule_id: 'malicious_upload_burst_v1',
+    event_type: 'malicious_upload_attempts',
+    severity: 'high',
+    confidence: 'suspicious',
+    threshold: 3,
+    window_seconds: TEN_MIN,
+    containment_action: 'owner_review',
+    containment_scope: null,
+    containment_ttl_seconds: 0,
+    evidence_summary: 'Repeated malicious or uninspectable uploads were rejected.',
+  },
+  {
     matches: (action) => action === 'security.alert_delivery_failed',
     rule_id: 'security_integration_failure_v1',
     event_type: 'security_integration_failure',
@@ -150,7 +207,11 @@ export function shouldCreateIncident(countInWindow: number, decision: SecurityRu
 }
 
 export function containmentActionIsAutomatic(action: ContainmentAction): boolean {
-  return action === 'temporary_source_block' || action === 'restrict_user_sensitive_commands';
+  return (
+    action === 'temporary_source_block' ||
+    action === 'restrict_user_sensitive_commands' ||
+    action === 'revoke_compromised_sessions'
+  );
 }
 
 /** Exact `true` only. Absent, empty, `false`, `1`, `yes` and any other value stay disabled. */

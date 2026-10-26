@@ -1,7 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../../config.js';
 import { supabaseAdmin } from '../../db/client.js';
-import { badRequest, conflict, unauthorized } from '../../shared/errors.js';
+import { badRequest, unauthorized } from '../../shared/errors.js';
+import { ENUMERATION_SAFE_REGISTER_MESSAGE } from '../../shared/api-security.pure.js';
 import { APP_USER_NOT_ACTIVE_CODE, APP_USER_NOT_ACTIVE_MESSAGE, isAppUserStatusActive } from './user-authorization.pure.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 
@@ -14,8 +15,8 @@ export async function register(params: { email: string; password: string; fullNa
     options: { data: { full_name: params.fullName ?? '' } },
   });
   if (error) {
-    if (error.message.includes('already registered')) throw conflict('Email already registered');
-    throw badRequest(error.message);
+    if (error.message.includes('already registered')) throw badRequest(ENUMERATION_SAFE_REGISTER_MESSAGE);
+    throw badRequest(ENUMERATION_SAFE_REGISTER_MESSAGE);
   }
   if (data.user) {
     const appUserId = await ensureAppUser(data.user.id, data.user.email ?? '', data.user.user_metadata?.full_name);

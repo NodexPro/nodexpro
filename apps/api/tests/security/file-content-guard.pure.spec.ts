@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import {
   detectUploadKind,
   guardUploadContent,
+  hasDangerousDoubleExtension,
   OFFICE_DOCUMENT_UPLOAD_KINDS,
   IMAGE_UPLOAD_KINDS,
+  BUSINESS_DOCUMENT_UPLOAD_KINDS,
 } from '../../src/shared/file-content-guard.pure.js';
 
 const pdf = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.from('1 0 obj')]);
@@ -82,4 +84,64 @@ test('rejects spoofed MIME, wrong extension, oversized and path-traversal names'
     allowedKinds: IMAGE_UPLOAD_KINDS.filter((k) => k !== 'gif'),
   });
   assert.equal(gifNotForBranding.ok, false);
+});
+
+function zipEntry(name: string, body: Buffer, uncompressed = body.length): Buffer {
+  const nameBuf = Buffer.from(name);
+  const header = Buffer.alloc(30);
+  header.writeUInt32LE(0x04034b50, 0);
+  header.writeUInt16LE(0, 6);
+  header.writeUInt32LE(body.length, 18);
+  header.writeUInt32LE(uncompressed, 22);
+  header.writeUInt16LE(nameBuf.length, 26);
+  return Buffer.concat([header, nameBuf, body]);
+}
+
+test('rejects double extensions, macros, scripted PDFs, zip bombs and executables', () => {
+  assert.equal(hasDangerousDoubleExtension('invoice.pdf.exe'), true);
+  assert.equal(hasDangerousDoubleExtension('report.final.pdf'), false);
+  const jsPdf = Buffer.from('%PDF-1.4\n/JavaScript /S /JavaScript');
+  assert.equal(
+    guardUploadContent({
+      buf: jsPdf,
+      fileName: 'invoice.pdf',
+      claimedMime: 'application/pdf',
+      maxBytes: 20 * 1024 * 1024,
+      allowedKinds: BUSINESS_DOCUMENT_UPLOAD_KINDS,
+    }).ok,
+    false,
+  );
+  const macro = zipEntry('word/vbaProject.bin', Buffer.from('x'));
+  assert.equal(
+    guardUploadContent({
+      buf: macro,
+      fileName: 'invoice.docx',
+      claimedMime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      maxBytes: 20 * 1024 * 1024,
+      allowedKinds: OFFICE_DOCUMENT_UPLOAD_KINDS,
+    }).ok,
+    false,
+  );
+  const bomb = zipEntry('word/document.xml', Buffer.from('x'), 90 * 1024 * 1024);
+  assert.equal(
+    guardUploadContent({
+      buf: bomb,
+      fileName: 'invoice.docx',
+      claimedMime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      maxBytes: 20 * 1024 * 1024,
+      allowedKinds: OFFICE_DOCUMENT_UPLOAD_KINDS,
+    }).ok,
+    false,
+  );
+  const exe = Buffer.concat([Buffer.from('MZ'), Buffer.alloc(32, 1)]);
+  assert.equal(detectUploadKind(exe), 'rejected');
+  const xml = Buffer.from('<?xml version="1.0"?><Invoice id="1"/>');
+  const xmlOk = guardUploadContent({
+    buf: xml,
+    fileName: 'invoice.xml',
+    claimedMime: 'application/xml',
+    maxBytes: 20 * 1024 * 1024,
+    allowedKinds: BUSINESS_DOCUMENT_UPLOAD_KINDS,
+  });
+  assert.equal(xmlOk.ok, true);
 });

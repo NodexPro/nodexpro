@@ -37,6 +37,8 @@ export interface RequestContext {
 declare global {
   namespace Express {
     interface Request {
+      trustedClientIp?: string | null;
+      trustedClientIpDisplay?: string;
       context?: RequestContext;
     }
   }

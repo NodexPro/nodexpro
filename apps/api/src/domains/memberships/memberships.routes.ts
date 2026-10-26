@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authMiddleware } from '../../middleware/auth.js';
 import { requireOrg } from '../../middleware/requireOrg.js';
 import { requirePermission } from '../../middleware/requirePermission.js';
+import { requireSensitiveStepUp } from '../../middleware/require-step-up.js';
 import { requireOfficeAdministration } from '../../middleware/requireOfficeAdministration.js';
 import { rateLimit } from '../../middleware/rate-limit.js';
 import * as membershipsRbac from './memberships-rbac.service.js';
@@ -43,6 +44,7 @@ const withChangeRole = [
     message: 'Too many requests. Please wait and try again later.',
   }),
   requirePermission('change_user_role', 'members:write'),
+  requireSensitiveStepUp(),
 ];
 
 const withSetClientAccess = [
@@ -71,6 +73,7 @@ const withRevoke = [
     message: 'Too many requests. Please wait and try again later.',
   }),
   requirePermission('revoke_user_access', 'members:revoke'),
+  requireSensitiveStepUp(),
 ];
 
 router.get('/:id/members', ...withViewUsers, async (req, res, next) => {

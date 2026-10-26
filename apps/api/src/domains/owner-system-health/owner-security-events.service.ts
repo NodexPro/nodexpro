@@ -9,6 +9,10 @@ import { securityAlertSeverity } from '../../shared/security-alert-policy.pure.j
 import { DBIP_ATTRIBUTION_TEXT, DBIP_ATTRIBUTION_URL } from '../../shared/geoip-dbip.service.js';
 import { buildPermanentMfaPanel } from '../auth/privileged-mfa.service.js';
 import { readSecurityContainmentEnabled, releaseSecurityContainment } from '../../shared/security-containment.service.js';
+import { edgeProtectionAggregate } from '../../shared/edge-protection.pure.js';
+import { documentScanAggregate } from '../../shared/document-malware-scan.service.js';
+import { createHash } from 'node:crypto';
+import { groupSecurityJournalRows } from '../../shared/failed-login-policy.pure.js';
 
 const SAFE_PAYLOAD_KEYS = new Set([
   'http_status',
@@ -33,6 +37,7 @@ const SAFE_PAYLOAD_KEYS = new Set([
   'count_in_window',
   'threshold',
   'path_kind',
+  'has_authorization',
 ]);
 
 export function securityEventSeverity(action: string): 'critical' | 'high' | 'medium' | 'low' {
@@ -49,10 +54,44 @@ function safePayload(value: unknown): Record<string, string | number | boolean |
   return out;
 }
 
-export async function buildOwnerSecurityEventsAggregate(ctx: RequestContext, accessToken?: string) {
+export type SecurityJournalQuery = {
+  from?: string | null;
+  to?: string | null;
+  severity?: string | null;
+  event?: string | null;
+  ip?: string | null;
+  identifier?: string | null;
+  page?: number | null;
+};
+
+export async function buildOwnerSecurityEventsAggregate(
+  ctx: RequestContext,
+  accessToken?: string,
+  query: SecurityJournalQuery = {},
+) {
   assertPlatformOwner(ctx);
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const [{ data, error }, incidentsRead, containmentRead] = await Promise.all([
+  const since = query.from?.trim() || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const until = query.to?.trim() || null;
+  const page = Number(query.page ?? 1);
+  let journalQuery = supabaseAdmin
+    .from('security_journal_entries')
+    .select('id,created_at,action,severity,display_ip,country,city,attempted_identifier,attempted_identifier_hash,attempt_count,detection_reason,incident_id,cooldown_status,containment_action,alert_status,group_key')
+    .is('hidden_at', null)
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (until) journalQuery = journalQuery.lte('created_at', until);
+  if (query.severity && query.severity !== 'all') journalQuery = journalQuery.eq('severity', query.severity);
+  if (query.event && query.event !== 'all') journalQuery = journalQuery.eq('action', query.event);
+  if (query.ip?.trim()) journalQuery = journalQuery.eq('display_ip', query.ip.trim());
+  if (query.identifier?.trim()) {
+    journalQuery = journalQuery.eq(
+      'attempted_identifier_hash',
+      createHash('sha256').update(query.identifier.trim().toLowerCase()).digest('hex'),
+    );
+  }
+
+  const [{ data, error }, incidentsRead, containmentRead, journalRead] = await Promise.all([
     supabaseAdmin
       .from('audit_log')
       .select('id, action, created_at, organization_id, actor_user_id, payload_json')
@@ -70,6 +109,7 @@ export async function buildOwnerSecurityEventsAggregate(ctx: RequestContext, acc
       .select('id,incident_id,scope,action,status,reason,starts_at,expires_at,released_at')
       .order('created_at', { ascending: false })
       .limit(50),
+    journalQuery,
   ]);
   if (error) throw new AppError(500, 'Security events are unavailable', 'SECURITY_EVENTS_UNAVAILABLE');
   const phase5Unavailable = (err: { code?: string; message?: string } | null | undefined) =>
@@ -142,11 +182,71 @@ export async function buildOwnerSecurityEventsAggregate(ctx: RequestContext, acc
     delivery_failure_count: events.filter((event) => event.action === 'security.alert_delivery_failed').length,
     phase5_status: incidentsRead.error || containmentRead.error ? 'migration_required' as const : 'ready' as const,
     containment_enforcement: readSecurityContainmentEnabled() ? 'enabled' as const : 'disabled' as const,
+    edge_protection: edgeProtectionAggregate({
+      cloudflareOriginProtection: config.cloudflareOriginProtection,
+      originPullConfigured: Boolean(config.cloudflareOriginPullSecret),
+      verifiedByOwner: config.edgeProtectionVerified,
+      coversWeb: true,
+      coversApi: true,
+    }),
+    upload_scanning: documentScanAggregate(),
+    distributed_rate_limit: { status: 'enabled' as const },
     active_incidents: incidents.filter((incident) => incident.status === 'active'),
     incident_history: incidents,
     events,
+    journal: journalRead.error
+      ? { groups: [], total_groups: 0, page: 1, page_size: 20, filter_options: { severities: ['critical', 'high', 'medium', 'low'], events: [] } }
+      : {
+          ...groupSecurityJournalRows(
+            ((journalRead.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+              id: String(row.id),
+              created_at: String(row.created_at),
+              action: String(row.action),
+              severity: String(row.severity),
+              display_ip: String(row.display_ip),
+              country: String(row.country ?? 'Unknown'),
+              city: String(row.city ?? 'Unknown'),
+              attempted_identifier: row.attempted_identifier ? String(row.attempted_identifier) : null,
+              attempted_identifier_hash: row.attempted_identifier_hash ? String(row.attempted_identifier_hash) : null,
+              attempt_count: Number(row.attempt_count ?? 1),
+              detection_reason: String(row.detection_reason ?? ''),
+              incident_id: row.incident_id ? String(row.incident_id) : null,
+              cooldown_status: String(row.cooldown_status ?? 'none'),
+              containment_action: String(row.containment_action ?? 'none'),
+              alert_status: String(row.alert_status ?? 'not_required'),
+              group_key: String(row.group_key),
+            })),
+            page,
+            20,
+          ),
+          filter_options: {
+            severities: ['critical', 'high', 'medium', 'low'],
+            events: [...new Set(((journalRead.data ?? []) as Array<{ action?: string }>).map((row) => String(row.action ?? '')).filter(Boolean))],
+          },
+        },
+    allowed_actions: [{ action_key: 'clear_security_journal', label: 'Clear journal view' }],
     permanent_mfa: permanentMfa,
   };
+}
+
+export async function clearOwnerSecurityJournal(ctx: RequestContext, accessToken?: string, query: SecurityJournalQuery = {}) {
+  assertPlatformOwner(ctx);
+  const now = new Date().toISOString();
+  const update = await supabaseAdmin
+    .from('security_journal_entries')
+    .update({ hidden_at: now, hidden_by_user_id: ctx.user.id })
+    .is('hidden_at', null);
+  if (update.error && update.error.code !== '42P01' && update.error.code !== 'PGRST205') {
+    throw new AppError(500, 'Security journal could not be cleared', 'SECURITY_JOURNAL_UNAVAILABLE');
+  }
+  await writeAudit({
+    organizationId: null,
+    actorUserId: ctx.user.id,
+    entityType: 'security_journal',
+    action: 'security.journal_cleared',
+    payload: { mode: 'hide_view', retained: true },
+  });
+  return buildOwnerSecurityEventsAggregate(ctx, accessToken, query);
 }
 
 export async function deliverOwnerSecurityTestAlert(ctx: RequestContext, correlationId: string, accessToken?: string) {

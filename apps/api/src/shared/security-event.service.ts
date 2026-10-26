@@ -40,26 +40,16 @@ export async function recordSecurityEvent(input: {
     bucket.count += 1;
     buckets.set(input.dedupeKey, bucket);
     const decision = decideSecurityRecord(bucket.count, input.action);
-    if (!decision.record) return { recorded: false };
-    if (decision.repeated && bucket.repeatedWritten) return { recorded: false };
-    if (decision.repeated) bucket.repeatedWritten = true;
     const sourceIp = resolveTrustedSourceIp({ reqIp: input.sourceIp });
     const geo = await enrichGeoIp(sourceIp);
     const payload = safeSecurityPayload({
       ...(input.payload ?? {}),
       correlation_id: input.correlationId ?? null,
-      repeated: decision.repeated,
+      repeated: decision.record ? decision.repeated : false,
       ...geo,
     });
-    await writeAudit({
-      organizationId: input.organizationId ?? null,
-      actorUserId: input.actorUserId ?? null,
-      entityType: 'security',
-      action: decision.action,
-      payload,
-    });
     await handleSecurityDetection({
-      action: decision.action,
+      action: input.action,
       dedupeKey: input.dedupeKey,
       actorUserId: input.actorUserId ?? null,
       actorEmail: input.actorEmail ?? null,
@@ -67,6 +57,16 @@ export async function recordSecurityEvent(input: {
       correlationId: input.correlationId ?? null,
       sourceIp,
       safeContext: payload,
+    });
+    if (!decision.record) return { recorded: false };
+    if (decision.repeated && bucket.repeatedWritten) return { recorded: false };
+    if (decision.repeated) bucket.repeatedWritten = true;
+    await writeAudit({
+      organizationId: input.organizationId ?? null,
+      actorUserId: input.actorUserId ?? null,
+      entityType: 'security',
+      action: decision.action,
+      payload,
     });
     if (shouldQueueSecurityAlert(decision.action)) {
       await enqueueSecurityAlert({

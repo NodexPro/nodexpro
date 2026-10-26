@@ -59,6 +59,11 @@ test('dedicated Security route owns MFA and Alerts', () => {
   assert.match(page, /hidden=\{tab !== 'mfa'\}/);
   assert.match(page, /busyRef/);
   assert.match(page, /sendingTestAlert/);
+  assert.match(page, /owner-edge-protection/);
+  assert.match(page, /edge_protection\?\.status === 'verified'/);
+  assert.match(page, /clear_security_journal/);
+  assert.match(page, /journal\?\.groups/);
+  assert.equal(page.includes('WAF is active'), false);
 });
 
 test('MFA buttons disable immediately and stay mounted across Security tabs', () => {

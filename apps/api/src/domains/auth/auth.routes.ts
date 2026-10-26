@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../middleware/auth.js';
-import { rateLimit, sharedLoginRateLimit } from '../../middleware/rate-limit.js';
+import { rateLimit } from '../../middleware/rate-limit.js';
 import { authService } from './auth.service.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import {
@@ -19,7 +19,6 @@ import type {
 import { supabaseAdmin } from '../../db/client.js';
 import { AppError } from '../../shared/errors.js';
 import { getRequestCorrelationId } from '../../middleware/correlation.js';
-import { recordSecurityEvent, securitySubjectKey } from '../../shared/security-event.service.js';
 import { deviceCookieHeader } from './mfa-trusted-device.pure.js';
 import {
   acknowledgeMfaPrompt,
@@ -287,41 +286,31 @@ router.post(
 
 router.post(
   '/login',
-  sharedLoginRateLimit({
-    windowMs: 10 * 60 * 1000,
-    max: 10,
-    keyGenerator: (req) => {
-      const email = typeof req.body?.email === 'string' ? req.body.email.toLowerCase().trim() : '';
-      return email || req.ip || 'unknown';
-    },
-    message: 'Too many login attempts. Please wait and try again later.',
-  }),
   async (req, res, next) => {
   try {
     const { email, password } = req.body ?? {};
     if (!email || !password) return res.status(400).json({ code: 'BAD_REQUEST', message: 'email and password required' });
     const result = await authService.login({ email, password });
-    const failureCount = Math.max(0, Number(res.locals.rateLimitCount ?? 0) - 1);
-    if (failureCount >= 5 && result.appUserId) {
-      await recordSecurityEvent({
-        action: 'security.suspicious_sign_in',
-        dedupeKey: securitySubjectKey(`suspicious-sign-in:${String(email).toLowerCase().trim()}`),
-        actorUserId: result.appUserId,
-        correlationId: getRequestCorrelationId(req),
-        sourceIp: typeof req.ip === 'string' ? req.ip : null,
-        payload: { failure_count: failureCount, signal: 'failure_burst' },
-      });
-    }
     return res.json({ session: result.session, user: result.user });
   } catch (e) {
+    const { recordFailedLoginAttempt } = await import('../../shared/failed-login.service.js');
     const identifier = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
-    await recordSecurityEvent({
-      action: 'security.login_failed',
-      dedupeKey: securitySubjectKey(`login:${identifier}`),
+    const outcome = await recordFailedLoginAttempt({
+      sourceIp: req.trustedClientIp ?? null,
+      userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+      attemptedEmail: identifier || null,
       correlationId: getRequestCorrelationId(req),
-      sourceIp: typeof req.ip === 'string' ? req.ip : null,
-      payload: { http_status: e instanceof AppError ? e.statusCode : 400 },
-    });
+      loginSucceeded: false,
+      isPlatformOwnerEmergency: false,
+    }).catch(() => ({ stage: 'journal' as const, count: 1, retryAfterSeconds: 0, cooldown: false }));
+    if (outcome.cooldown) {
+      res.setHeader('Retry-After', String(outcome.retryAfterSeconds || 180));
+      return res.status(429).json({
+        code: 'TOO_MANY_REQUESTS',
+        message: 'Too many login attempts. Please wait and try again later.',
+        retry_after: outcome.retryAfterSeconds || 180,
+      });
+    }
     next(e);
   }
   }

@@ -1026,7 +1026,7 @@ export async function uploadAnnualReportDocument(
 
   await ensureAnnualBucket();
   const buf = Buffer.from(b64, 'base64');
-  const guarded = requireGuardedUpload({
+  const guarded = await requireGuardedUpload({
     buf,
     fileName,
     claimedMime: body.mime_type,

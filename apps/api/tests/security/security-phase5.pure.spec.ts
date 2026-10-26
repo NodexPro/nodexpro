@@ -21,8 +21,8 @@ test('failed login waits for threshold and never auto-locks a victim user or off
   const rule = ruleForSecurityAction('security.login_failed');
   assert.ok(rule);
   assert.equal(rule.event_type, 'repeated_failed_login_attempts');
-  assert.equal(shouldCreateIncident(4, rule), false);
-  assert.equal(shouldCreateIncident(5, rule), true);
+  assert.equal(shouldCreateIncident(9, rule), false);
+  assert.equal(shouldCreateIncident(10, rule), true);
   assert.equal(rule.containment_action, 'owner_review');
   assert.equal(rule.containment_scope, null);
   assert.equal(containmentActionIsAutomatic(rule.containment_action), false);
@@ -37,6 +37,33 @@ test('failed login waits for threshold and never auto-locks a victim user or off
   });
   assert.equal(decision.apply, false);
   assert.equal(decision.reason, 'owner_review_only');
+});
+
+test('credential stuffing and login failures never lock the victim or office IP', () => {
+  const stuffing = ruleForSecurityAction('security.credential_stuffing');
+  assert.ok(stuffing);
+  assert.equal(shouldCreateIncident(24, stuffing), false);
+  assert.equal(shouldCreateIncident(25, stuffing), true);
+  assert.equal(stuffing.containment_action, 'owner_review');
+  assert.equal(containmentActionIsAutomatic(stuffing.containment_action), false);
+});
+
+test('confirmed compromised session restricts only the attacker user', () => {
+  const rule = ruleForSecurityAction('security.session_compromised');
+  assert.ok(rule);
+  assert.equal(rule.containment_scope, 'user');
+  assert.equal(
+    decideAutomaticContainment({
+      enabled: true,
+      action: rule.containment_action,
+      scope: rule.containment_scope,
+      sourceIp: '8.8.8.8',
+      actorUserId: 'attacker',
+      isPlatformOwnerActor: false,
+      isPrivateOrReservedSource: false,
+    }).apply,
+    true,
+  );
 });
 
 test('unauthorized bursts escalate to owner review instead of office-wide IP lockout', () => {

@@ -463,7 +463,7 @@ export async function uploadClientWorkspaceDocument(
 
   await ensureDocumentsBucket();
   const buf = Buffer.from(b64, 'base64');
-  const guarded = requireGuardedUpload({
+  const guarded = await requireGuardedUpload({
     buf,
     fileName,
     claimedMime: body.mime_type,

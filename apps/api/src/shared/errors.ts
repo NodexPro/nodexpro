@@ -34,3 +34,7 @@ export function conflict(message: string, code = 'CONFLICT', details?: Record<st
 export function tooManyRequests(message = 'Too many requests. Please try again later.', code = 'TOO_MANY_REQUESTS') {
   return new AppError(429, message, code);
 }
+
+export function serviceUnavailable(message = 'Service temporarily unavailable', code = 'SERVICE_UNAVAILABLE') {
+  return new AppError(503, message, code);
+}

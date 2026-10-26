@@ -3,6 +3,7 @@ import { forbidden, badRequest } from '../../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
 import { assertDocumentClientAccess } from './document-client-access.js';
+import { assertFileAssetDownloadable } from '../../shared/document-download-guard.js';
 
 const BUCKET = 'document-files';
 const SIGNED_URL_EXPIRES_SEC = 60;
@@ -95,10 +96,11 @@ export async function getDocumentOpenUrl(
 
   const { data: fileAsset } = await supabaseAdmin
     .from('file_assets')
-    .select('id, storage_key, organization_id')
+    .select('id, storage_key, organization_id, scan_status')
     .eq('id', versionRow.file_asset_id)
     .single();
   if (!fileAsset || fileAsset.organization_id !== orgId) throw forbidden('File not found');
+  assertFileAssetDownloadable((fileAsset as { scan_status?: string | null }).scan_status);
 
   await ensureBucket();
   const { data: signed, error } = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(fileAsset.storage_key, SIGNED_URL_EXPIRES_SEC);

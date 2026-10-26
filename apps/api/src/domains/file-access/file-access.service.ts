@@ -8,6 +8,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { forbidden, badRequest, notFound, conflict } from '../../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
+import { assertFileAssetDownloadable } from '../../shared/document-download-guard.js';
 
 const SIGNED_URL_EXPIRES_SEC = 60;
 const SETTINGS_IMAGE_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -28,6 +29,7 @@ export interface FileAssetRow {
   mime_type: string | null;
   file_size: number | null;
   archived_at: string | null;
+  scan_status?: string | null;
 }
 
 /**
@@ -43,7 +45,7 @@ export async function validateOrgFileOwnership(
 
   const { data: row, error } = await supabaseAdmin
     .from('file_assets')
-    .select('id, organization_id, storage_bucket, storage_key, file_name, mime_type, file_size, archived_at')
+    .select('id, organization_id, storage_bucket, storage_key, file_name, mime_type, file_size, archived_at, scan_status')
     .eq('id', fileAssetId)
     .single();
 
@@ -117,6 +119,7 @@ export async function getSecureOpenUrlForOrgFile(
   accessPurpose: FileAccessPurpose
 ): Promise<{ url: string; expiresIn: number }> {
   const file = await validateOrgFileOwnership(ctx, organizationId, fileAssetId);
+  assertFileAssetDownloadable(file.scan_status);
 
   if (accessPurpose === 'settings') {
     const perms = ctx.membership?.permissions ?? [];

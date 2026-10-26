@@ -24,8 +24,10 @@ import { buildOwnerEmailProviderConfigAggregate } from '../shared/owner-email-pr
 import { buildOwnerSystemHealthAggregate } from '../domains/owner-system-health/owner-system-health.service.js';
 import {
   buildOwnerSecurityEventsAggregate,
+  clearOwnerSecurityJournal,
   deliverOwnerSecurityTestAlert,
   releaseOwnerSecurityContainment,
+  type SecurityJournalQuery,
 } from '../domains/owner-system-health/owner-security-events.service.js';
 import { refreshPrivilegedMfaGate } from '../domains/auth/privileged-mfa.service.js';
 import { activatePlatformOwnerMfa, verifyPlatformOwnerMfaRecovery } from '../domains/auth/platform-owner-mfa-activation.service.js';
@@ -83,7 +85,7 @@ async function assertOwnerOrAuditFailure(ctx: RequestContext, req: Request): Pro
       actorUserId: ctx.user.id,
       actorEmail: ctx.user.email,
       correlationId: getRequestCorrelationId(req),
-      sourceIp: typeof req.ip === 'string' ? req.ip : null,
+      sourceIp: req.trustedClientIp ?? (typeof req.ip === 'string' ? req.ip : null),
       payload: {
         http_status: 403,
         code: 'PLATFORM_OWNER_REQUIRED',
@@ -248,7 +250,16 @@ router.get('/aggregates/security-events', async (req: Request, res: Response, ne
     const ctx = req.context as RequestContext;
     await assertOwnerOrAuditFailure(ctx, req);
     const token = req.headers.authorization?.slice(7) ?? '';
-    return res.json(await buildOwnerSecurityEventsAggregate(ctx, token));
+    const query: SecurityJournalQuery = {
+      from: typeof req.query.from === 'string' ? req.query.from : null,
+      to: typeof req.query.to === 'string' ? req.query.to : null,
+      severity: typeof req.query.severity === 'string' ? req.query.severity : null,
+      event: typeof req.query.event === 'string' ? req.query.event : null,
+      ip: typeof req.query.ip === 'string' ? req.query.ip : null,
+      identifier: typeof req.query.identifier === 'string' ? req.query.identifier : null,
+      page: req.query.page ? Number(req.query.page) : 1,
+    };
+    return res.json(await buildOwnerSecurityEventsAggregate(ctx, token, query));
   } catch (e) {
     next(e);
   }
@@ -296,6 +307,17 @@ router.post(
     }
   },
 );
+
+router.post('/commands/clear_security_journal', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    await assertOwnerOrAuditFailure(ctx, req);
+    const token = req.headers.authorization?.slice(7) ?? '';
+    return res.json(await clearOwnerSecurityJournal(ctx, token));
+  } catch (e) {
+    next(e);
+  }
+});
 
 router.post('/commands/release_security_containment', async (req: Request, res: Response, next: NextFunction) => {
   try {
