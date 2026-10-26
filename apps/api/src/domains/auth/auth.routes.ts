@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { authMiddleware } from '../../middleware/auth.js';
-import { rateLimit } from '../../middleware/rate-limit.js';
+import { rateLimit, sharedLoginRateLimit } from '../../middleware/rate-limit.js';
 import { authService } from './auth.service.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import {
@@ -51,7 +51,7 @@ import { isHighRiskLoginPending, markHighRiskLoginPending } from '../../shared/l
 import { readAuthenticatorAssurance } from '../../shared/privileged-mfa.pure.js';
 import { enqueueSecurityAlert, processSecurityAlertDeliveries } from '../../shared/security-alert-delivery.service.js';
 import { officeAlertDedupeKey } from '../../shared/office-login-alert.pure.js';
-import { maskAttemptedIdentifier } from '../../shared/failed-login-policy.pure.js';
+import { maskAttemptedIdentifier, publicLoginFailure, waitPublicLoginMinimum } from '../../shared/failed-login-policy.pure.js';
 import { displaySourceIp } from '../../shared/trusted-proxy.pure.js';
 
 const router = Router();
@@ -276,22 +276,18 @@ function toAuthSessionAggregate(me: MeResponse, challengeRequired = false): Auth
   };
 }
 
-const GENERIC_LOGIN_FAILURE = 'Invalid email or password';
-
-function failedLoginBody(input: { cooldown: boolean; retryAfterSeconds: number; offerRecovery: boolean }) {
-  if (input.cooldown) {
-    return {
-      code: 'TOO_MANY_REQUESTS',
-      message: 'Too many login attempts. Please wait and try again later.',
-      retry_after: input.retryAfterSeconds || 180,
-      offer_recovery: true,
-    };
+async function sendPublicLoginFailure(
+  res: import('express').Response,
+  startedAt: number,
+  input: { cooldown: boolean; retryAfterSeconds: number; offerRecovery: boolean },
+) {
+  await waitPublicLoginMinimum(startedAt);
+  const body = publicLoginFailure(input);
+  if (body.code === 'TOO_MANY_REQUESTS') {
+    res.setHeader('Retry-After', String(body.retry_after || 180));
+    return res.status(429).json(body);
   }
-  return {
-    code: 'BAD_REQUEST',
-    message: GENERIC_LOGIN_FAILURE,
-    offer_recovery: input.offerRecovery,
-  };
+  return res.status(400).json(body);
 }
 
 router.post(
@@ -319,11 +315,21 @@ router.post(
 
 router.post(
   '/login',
+  sharedLoginRateLimit({
+    windowMs: 10 * 60 * 1000,
+    max: 60,
+    code: 'TOO_MANY_REQUESTS',
+    keyGenerator: (req) => {
+      const display = displaySourceIp(req.trustedClientIp ?? null);
+      return display === 'Unknown' ? 'login-unverified' : `login-ip:${display}`;
+    },
+  }),
   async (req, res, next) => {
   try {
+    const startedAt = Date.now();
     const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
     const password = typeof req.body?.password === 'string' ? req.body.password : '';
-    if (!email || !password) return res.status(400).json({ code: 'BAD_REQUEST', message: 'email and password required' });
+    if (!email || !password) return res.status(400).json({ code: 'INVALID_CREDENTIALS', offer_recovery: false });
     const {
       isFailedLoginCooldownActive,
       listOfficeOwnersForEmail,
@@ -344,12 +350,11 @@ router.post(
         loginSucceeded: false,
         isPlatformOwnerEmergency: false,
       }).catch(() => ({ stage: 'journal' as const, count: 1, retryAfterSeconds: 180, cooldown: true, offerRecovery: true }));
-      res.setHeader('Retry-After', String(outcome.retryAfterSeconds || 180));
-      return res.status(429).json(failedLoginBody({
+      return sendPublicLoginFailure(res, startedAt, {
         cooldown: true,
         retryAfterSeconds: outcome.retryAfterSeconds || 180,
         offerRecovery: true,
-      }));
+      });
     }
     try {
       const result = await authService.login({ email, password });
@@ -401,20 +406,13 @@ router.post(
       }
       return res.json({ session: result.session, user: result.user, login_challenge });
     } catch (e) {
-      if (e instanceof AppError && e.code === 'USER_NOT_ACTIVE') {
-        next(e);
-        return;
-      }
+      void e;
       const outcome = await recordFailedLoginAttempt({
         ...attemptInput,
         loginSucceeded: false,
         isPlatformOwnerEmergency: false,
       }).catch(() => ({ stage: 'journal' as const, count: 1, retryAfterSeconds: 0, cooldown: false, offerRecovery: false }));
-      if (outcome.cooldown) {
-        res.setHeader('Retry-After', String(outcome.retryAfterSeconds || 180));
-        return res.status(429).json(failedLoginBody(outcome));
-      }
-      return res.status(400).json(failedLoginBody(outcome));
+      return sendPublicLoginFailure(res, startedAt, outcome);
     }
   } catch (e) {
     next(e);

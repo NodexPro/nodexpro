@@ -8,7 +8,7 @@ export function UiLanguageSwitch({ ariaLabel, compact }: { ariaLabel?: string; c
   const { lang, setLang, t } = useI18n();
   const [busy, setBusy] = useState(false);
 
-  const select = async (code: 'en' | 'he') => {
+  const select = async (code: 'en' | 'he' | 'ru') => {
     if (code === lang || busy) return;
     setLang(code);
     if (auth.status !== 'authenticated') return;
@@ -16,7 +16,7 @@ export function UiLanguageSwitch({ ariaLabel, compact }: { ariaLabel?: string; c
     try {
       const refreshed = await auth.setUiLanguage(code);
       const next = refreshed?.sidebar_account_block.language_selector.current_value;
-      if (next === 'en' || next === 'he') setLang(next);
+      if (next === 'en' || next === 'he' || next === 'ru') setLang(next);
     } finally {
       setBusy(false);
     }
@@ -45,6 +45,15 @@ export function UiLanguageSwitch({ ariaLabel, compact }: { ariaLabel?: string; c
         onClick={() => void select('he')}
       >
         {compact ? t('dashboard.lang.heCompact') : t('dashboard.lang.he')}
+      </button>
+      <button
+        type="button"
+        className={`nx-glass-lang__btn${lang === 'ru' ? ' is-selected' : ''}`}
+        aria-pressed={lang === 'ru'}
+        disabled={busy}
+        onClick={() => void select('ru')}
+      >
+        {compact ? t('dashboard.lang.ruCompact') : t('dashboard.lang.ru')}
       </button>
     </div>
   );

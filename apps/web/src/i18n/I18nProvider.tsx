@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import en from './en.json';
 import he from './he.json';
+import ru from './ru.json';
 
-type Lang = 'en' | 'he';
+export type Lang = 'en' | 'he' | 'ru';
 
 type Messages = typeof en;
 
@@ -12,19 +13,29 @@ interface I18nContextValue {
   t: (key: string) => string;
 }
 
-const translations: Record<Lang, Messages> = {
+function lookup(dict: unknown, key: string): string | undefined {
+  const parts = key.split('.');
+  let value: unknown = dict;
+  for (const part of parts) {
+    if (value == null || typeof value !== 'object') return undefined;
+    value = (value as Record<string, unknown>)[part];
+  }
+  return typeof value === 'string' ? value : undefined;
+}
+
+const translations: Record<Lang, Messages | Record<string, unknown>> = {
   en,
   he,
+  ru,
 };
 
 const I18nContext = createContext<I18nContextValue | undefined>(undefined);
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() => {
-    // Unauthenticated first paint only. Authenticated office language comes from the session
-    // aggregate (`users.ui_language`) via SessionLanguageSync — localStorage must not win.
     const stored = typeof window !== 'undefined' ? window.localStorage.getItem('lang') : null;
-    return stored === 'he' ? 'he' : 'en';
+    if (stored === 'he' || stored === 'ru') return stored;
+    return 'en';
   });
 
   useEffect(() => {
@@ -42,17 +53,8 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   };
 
   const t = useMemo(
-    () => (key: string): string => {
-      const dict = translations[lang] as any;
-      const parts = key.split('.');
-      let value: any = dict;
-      for (const part of parts) {
-        if (value == null) break;
-        value = value[part];
-      }
-      return typeof value === 'string' ? value : key;
-    },
-    [lang]
+    () => (key: string): string => lookup(translations[lang], key) ?? lookup(en, key) ?? key,
+    [lang],
   );
 
   const value: I18nContextValue = { lang, setLang, t };
@@ -65,4 +67,3 @@ export function useI18n(): I18nContextValue {
   if (!ctx) throw new Error('useI18n must be used within I18nProvider');
   return ctx;
 }
-

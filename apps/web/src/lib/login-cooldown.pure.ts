@@ -1,3 +1,29 @@
+import en from '../i18n/en.json';
+import he from '../i18n/he.json';
+import ru from '../i18n/ru.json';
+
+export type LoginUiLang = 'en' | 'he' | 'ru';
+
+const catalogs: Record<LoginUiLang, { auth: Record<string, string> }> = {
+  en: { auth: en.auth },
+  he: { auth: he.auth },
+  ru: { auth: ru.auth },
+};
+
+export function loginUiLang(raw: string | null | undefined): LoginUiLang {
+  if (raw === 'he' || raw === 'ru') return raw;
+  return 'en';
+}
+
+export function formatLoginSecurityTemplate(template: string, seconds: number): string {
+  return template.replaceAll('{seconds}', String(Math.max(1, seconds)));
+}
+
+export function loginSecurityText(lang: LoginUiLang, key: keyof typeof en.auth, seconds?: number): string {
+  const template = catalogs[lang].auth[key] ?? catalogs.en.auth[key] ?? key;
+  return seconds == null ? template : formatLoginSecurityTemplate(template, seconds);
+}
+
 export function retryAfterSecondsFromFailure(input: {
   status?: number;
   retryAfter?: unknown;
@@ -8,9 +34,8 @@ export function retryAfterSecondsFromFailure(input: {
   return Math.min(3600, Math.floor(value));
 }
 
-export function loginCooldownMessage(seconds: number): string {
-  const safe = Math.max(1, seconds);
-  return `Слишком много попыток входа. Подождите ${safe} сек. / Too many sign-in attempts. Please wait ${safe} seconds.`;
+export function loginCooldownMessage(seconds: number, lang: LoginUiLang = 'en'): string {
+  return loginSecurityText(lang, 'cooldown', seconds);
 }
 
 export function remainingCooldownSeconds(untilMs: number, nowMs: number): number {
@@ -21,12 +46,19 @@ export function offerRecoveryFromFailure(input: { offerRecovery?: unknown }): bo
   return input.offerRecovery === true;
 }
 
+export function loginFailureCode(input: { code?: string; status?: number }): 'TOO_MANY_REQUESTS' | 'INVALID_CREDENTIALS' | 'LOGIN_CHALLENGE_REQUIRED' | null {
+  if (input.code === 'TOO_MANY_REQUESTS' || input.status === 429) return 'TOO_MANY_REQUESTS';
+  if (input.code === 'LOGIN_CHALLENGE_REQUIRED') return 'LOGIN_CHALLENGE_REQUIRED';
+  if (input.code === 'INVALID_CREDENTIALS' || input.code === 'BAD_REQUEST') return 'INVALID_CREDENTIALS';
+  return null;
+}
+
 export function loginChallengeFromResponse(input: {
   required?: unknown;
   command?: unknown;
 }): { required: boolean; command: 'verify_mfa' | null } {
   if (input.required !== true) return { required: false, command: null };
-  return { required: true, command: input.command === 'verify_mfa' ? 'verify_mfa' : 'verify_mfa' };
+  return { required: true, command: 'verify_mfa' };
 }
 
 export function readLoginStamp(storage: Pick<Storage, 'getItem' | 'setItem'> | null): string {

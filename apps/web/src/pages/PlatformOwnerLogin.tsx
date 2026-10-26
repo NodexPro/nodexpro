@@ -5,11 +5,22 @@ import { apiJson, apiJsonPublic, ApiError } from '../api/client';
 import { AUTH, OWNER } from '../api/endpoints';
 import { useAuth } from '../contexts/AuthContext';
 import { signInWithIdentifier } from '../lib/sign-in-with-identifier';
-import { loginCooldownMessage, offerRecoveryFromFailure, remainingCooldownSeconds, retryAfterSecondsFromFailure } from '../lib/login-cooldown.pure';
+import { useI18n } from '../i18n/I18nProvider';
+import {
+  loginCooldownMessage,
+  loginFailureCode,
+  loginSecurityText,
+  loginUiLang,
+  offerRecoveryFromFailure,
+  remainingCooldownSeconds,
+  retryAfterSecondsFromFailure,
+} from '../lib/login-cooldown.pure';
 
 type RecoveryStep = 1 | 2 | 3 | 4;
 
 export function PlatformOwnerLogin() {
+  const { lang } = useI18n();
+  const uiLang = loginUiLang(lang);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -59,7 +70,7 @@ export function PlatformOwnerLogin() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (cooldownSeconds > 0) {
-      setError(loginCooldownMessage(cooldownSeconds));
+      setError(loginCooldownMessage(cooldownSeconds, uiLang));
       return;
     }
     setError('');
@@ -75,7 +86,7 @@ export function PlatformOwnerLogin() {
         const signedIn = await signInWithIdentifier(supabase, email.trim().toLowerCase(), password);
         if (signedIn.challengeRequired) {
           setChallengeRequired(true);
-          setError('Enter the authenticator code to continue.');
+          setError(loginSecurityText(uiLang, 'mfaChallenge'));
           setLoading(false);
           return;
         }
@@ -94,18 +105,23 @@ export function PlatformOwnerLogin() {
       }
       navigate(from, { replace: true });
     } catch (err) {
+      const code = err instanceof ApiError ? loginFailureCode({ code: err.code, status: err.status }) : null;
       const retryAfter = err instanceof ApiError
         ? retryAfterSecondsFromFailure({ status: err.status, retryAfter: err.details?.retry_after })
         : 0;
       setOfferRecovery(err instanceof ApiError
         ? offerRecoveryFromFailure({ offerRecovery: err.details?.offer_recovery })
         : false);
-      if (retryAfter > 0) {
-        setCooldownUntil(Date.now() + retryAfter * 1000);
+      if (code === 'TOO_MANY_REQUESTS' || retryAfter > 0) {
+        const seconds = retryAfter || 180;
+        setCooldownUntil(Date.now() + seconds * 1000);
         setNowMs(Date.now());
-        setError(loginCooldownMessage(retryAfter));
+        setError(loginCooldownMessage(seconds, uiLang));
+      } else if (code === 'LOGIN_CHALLENGE_REQUIRED') {
+        setChallengeRequired(true);
+        setError(loginSecurityText(uiLang, 'mfaChallenge'));
       } else {
-        setError(err instanceof Error ? err.message : 'Login failed');
+        setError(loginSecurityText(uiLang, 'invalidCredentials'));
       }
     } finally {
       setLoading(false);
@@ -230,7 +246,7 @@ export function PlatformOwnerLogin() {
         {error ? <p style={{ color: 'red', marginBottom: 12 }}>{error}</p> : null}
         <button type="submit" disabled={loading || cooldownSeconds > 0}>
           {cooldownSeconds > 0
-            ? loginCooldownMessage(cooldownSeconds)
+            ? loginCooldownMessage(cooldownSeconds, uiLang)
             : loading
               ? 'Signing in...'
               : challengeRequired

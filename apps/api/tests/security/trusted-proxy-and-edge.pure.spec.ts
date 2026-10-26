@@ -42,6 +42,37 @@ test('Render private hops expose the public client and ignore spoofed leftmost X
   );
 });
 
+test('Vercel rewrite through Render private hop uses the visitor, not Frankfurt egress', () => {
+  const israel = resolvePublicClientIp({
+    peerIp: '10.193.150.1',
+    reqIp: '10.193.150.1',
+    forwardedFor: '79.176.10.20, 3.64.1.20',
+    vercelForwardedFor: '79.176.10.20',
+    vercelId: 'fra1::abc',
+    realIp: '79.176.10.20',
+  });
+  assert.equal(israel.ip, '79.176.10.20');
+  assert.equal(israel.display, '79.176.10.20');
+  assert.equal(israel.source, 'vercel_forwarded_for');
+  assert.equal(
+    resolvePublicClientIp({
+      peerIp: '10.193.150.1',
+      reqIp: '10.193.150.1',
+      forwardedFor: '79.176.10.20, 3.64.1.20',
+      vercelId: 'fra1::abc',
+    }).display,
+    'Unknown',
+  );
+  assert.equal(
+    resolvePublicClientIp({
+      peerIp: '10.193.150.1',
+      reqIp: '3.64.1.20',
+      forwardedFor: '3.64.1.20',
+    }).ip,
+    '3.64.1.20',
+  );
+});
+
 test('Vercel rewrite rotating egress still exposes the visitor and ignores spoofed XFF', () => {
   assert.equal(isVercelIp('76.76.21.21'), true);
   const first = resolvePublicClientIp({

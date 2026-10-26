@@ -346,8 +346,10 @@
       "aria": "שפה",
       "en": "English",
       "he": "עברית",
+      "ru": "Русский",
       "enCompact": "EN",
-      "heCompact": "עב"
+      "heCompact": "עב",
+      "ruCompact": "RU"
     }
   },
   "billing": {
@@ -597,7 +599,13 @@
     "noSession": "אין סשן לאחר ההתחברות",
     "loadAccountFailed": "לא ניתן לטעון את החשבון. נסו שוב.",
     "loginFailed": "ההתחברות נכשלה",
-    "registerFailed": "ההרשמה נכשלה"
+    "registerFailed": "ההרשמה נכשלה",
+    "invalidCredentials": "אימייל או סיסמה שגויים",
+    "cooldown": "יותר מדי ניסיונות כניסה. המתינו {seconds} שניות.",
+    "recoveryHint": "אפשר לאפס את הסיסמה בלי לעזוב את המסך.",
+    "mfaChallenge": "הזינו את קוד המאמת כדי להמשיך.",
+    "verifyCode": "אימות קוד",
+    "recoveryPrompt": "שכחתם סיסמה?"
   }
 }
 

@@ -4,6 +4,15 @@ export const FAILED_LOGIN_RECOVERY_AT = 3;
 export const FAILED_LOGIN_SUSPICIOUS_AT = 4;
 export const FAILED_LOGIN_COOLDOWN_AT = 7;
 export const FAILED_LOGIN_INCIDENT_AT = 10;
+export const FAILED_LOGIN_IP_COOLDOWN_AT = 20;
+export const FAILED_LOGIN_IP_INCIDENT_AT = 40;
+export const FAILED_LOGIN_NETWORK_INCIDENT_AT = 80;
+export const FAILED_LOGIN_UNKNOWN_COOLDOWN_AT = 15;
+export const FAILED_LOGIN_UNKNOWN_INCIDENT_AT = 30;
+export const FAILED_LOGIN_ENDPOINT_ANOMALY_AT = 120;
+export const FAILED_LOGIN_ENDPOINT_INCIDENT_AT = 200;
+export const FAILED_LOGIN_STUFFING_DISTINCT_AT = 5;
+export const FAILED_LOGIN_PUBLIC_MIN_DELAY_MS = 180;
 
 export type FailedLoginStage = 'journal' | 'recovery' | 'suspicious' | 'cooldown' | 'incident';
 
@@ -17,6 +26,11 @@ export function failedLoginStage(countInWindow: number): FailedLoginStage {
 
 export function shouldOfferPasswordRecovery(countInWindow: number): boolean {
   return countInWindow >= FAILED_LOGIN_RECOVERY_AT;
+}
+
+/** Public recovery hint uses source signals only so a reused victim email cannot leak existence. */
+export function shouldOfferPasswordRecoveryFromSource(sourceCount: number): boolean {
+  return sourceCount >= FAILED_LOGIN_RECOVERY_AT;
 }
 
 export function shouldSkipPasswordVerification(input: {
@@ -67,6 +81,72 @@ export function shouldApplyFailedLoginCooldown(input: {
 }): boolean {
   if (input.loginSucceeded || input.isPlatformOwnerEmergency) return false;
   return input.countInWindow >= FAILED_LOGIN_COOLDOWN_AT;
+}
+
+export function loginNetworkPrefix(displayIp: string): string | null {
+  if (!displayIp || displayIp === 'Unknown') return null;
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(displayIp)) {
+    const parts = displayIp.split('.');
+    return `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+  }
+  if (displayIp.includes(':')) {
+    const groups = displayIp.toLowerCase().split(':').filter(Boolean).slice(0, 4);
+    return groups.length ? `${groups.join(':')}::/64` : null;
+  }
+  return null;
+}
+
+export function failedLoginSourceCooldown(input: {
+  stampOrPatternCount: number;
+  verifiedIpCount: number;
+  unknownSourceCount: number;
+  loginSucceeded: boolean;
+  isPlatformOwnerEmergency: boolean;
+}): boolean {
+  if (input.loginSucceeded || input.isPlatformOwnerEmergency) return false;
+  return (
+    input.stampOrPatternCount >= FAILED_LOGIN_COOLDOWN_AT
+    || input.verifiedIpCount >= FAILED_LOGIN_IP_COOLDOWN_AT
+    || input.unknownSourceCount >= FAILED_LOGIN_UNKNOWN_COOLDOWN_AT
+  );
+}
+
+export function shouldCreateDistributedLoginIncident(input: {
+  verifiedIpCount: number;
+  networkCount: number;
+  unknownSourceCount: number;
+  endpointCount: number;
+  distinctTargets: number;
+  stampOrPatternCount: number;
+}): boolean {
+  if (input.endpointCount >= FAILED_LOGIN_ENDPOINT_INCIDENT_AT) return true;
+  if (input.networkCount >= FAILED_LOGIN_NETWORK_INCIDENT_AT) return true;
+  if (input.unknownSourceCount >= FAILED_LOGIN_UNKNOWN_INCIDENT_AT) return true;
+  if (input.verifiedIpCount >= FAILED_LOGIN_IP_INCIDENT_AT) return true;
+  return (
+    input.distinctTargets >= FAILED_LOGIN_STUFFING_DISTINCT_AT
+    && input.stampOrPatternCount >= FAILED_LOGIN_COOLDOWN_AT
+  );
+}
+
+export function publicLoginFailure(input: {
+  cooldown: boolean;
+  retryAfterSeconds: number;
+  offerRecovery: boolean;
+}): { code: 'TOO_MANY_REQUESTS' | 'INVALID_CREDENTIALS'; retry_after?: number; offer_recovery: boolean } {
+  if (input.cooldown) {
+    return {
+      code: 'TOO_MANY_REQUESTS',
+      retry_after: input.retryAfterSeconds || FAILED_LOGIN_COOLDOWN_SECONDS,
+      offer_recovery: true,
+    };
+  }
+  return { code: 'INVALID_CREDENTIALS', offer_recovery: input.offerRecovery };
+}
+
+export async function waitPublicLoginMinimum(startedAt: number, now = Date.now()): Promise<void> {
+  const waitMs = FAILED_LOGIN_PUBLIC_MIN_DELAY_MS - (now - startedAt);
+  if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs));
 }
 
 /** Cooldown is an auth rate limit, not Phase 5 containment. */

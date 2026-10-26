@@ -5,8 +5,13 @@ import { signInWithIdentifier } from '../lib/sign-in-with-identifier';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson, ApiError } from '../api/client';
 import { AUTH } from '../api/endpoints';
+import { useI18n } from '../i18n/I18nProvider';
+import { UiLanguageSwitch } from '../components/glass/UiLanguageSwitch';
 import {
   loginCooldownMessage,
+  loginFailureCode,
+  loginSecurityText,
+  loginUiLang,
   offerRecoveryFromFailure,
   remainingCooldownSeconds,
   retryAfterSecondsFromFailure,
@@ -18,6 +23,9 @@ import {
 } from '../lib/invite-return-path.pure';
 
 export function Login() {
+  const { t, lang } = useI18n();
+  const uiLang = loginUiLang(lang);
+  const dir = lang === 'he' ? 'rtl' : 'ltr';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [mfaCode, setMfaCode] = useState('');
@@ -59,7 +67,7 @@ export function Login() {
     const me = await refetchMe();
     if (!me || me.session_state === 'mfa_challenge') {
       setChallengeRequired(true);
-      setError('Enter the authenticator code to continue.');
+      setError(loginSecurityText(uiLang, 'mfaChallenge'));
       return;
     }
     const inviteAfterAuth = readStoredInviteReturnPath(
@@ -76,7 +84,7 @@ export function Login() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (cooldownSeconds > 0) {
-      setError(loginCooldownMessage(cooldownSeconds));
+      setError(loginCooldownMessage(cooldownSeconds, uiLang));
       return;
     }
     setError('');
@@ -95,11 +103,12 @@ export function Login() {
       const signedIn = await signInWithIdentifier(supabase, emailNorm, password);
       if (signedIn.challengeRequired) {
         setChallengeRequired(true);
-        setError('Enter the authenticator code to continue.');
+        setError(loginSecurityText(uiLang, 'mfaChallenge'));
         return;
       }
       await finishAuthenticatedNavigation();
     } catch (err) {
+      const code = err instanceof ApiError ? loginFailureCode({ code: err.code, status: err.status }) : null;
       const retryAfter = err instanceof ApiError
         ? retryAfterSecondsFromFailure({ status: err.status, retryAfter: err.details?.retry_after })
         : 0;
@@ -107,12 +116,16 @@ export function Login() {
         ? offerRecoveryFromFailure({ offerRecovery: err.details?.offer_recovery })
         : false;
       setOfferRecovery(recovery);
-      if (retryAfter > 0) {
-        setCooldownUntil(Date.now() + retryAfter * 1000);
+      if (code === 'TOO_MANY_REQUESTS' || retryAfter > 0) {
+        const seconds = retryAfter || 180;
+        setCooldownUntil(Date.now() + seconds * 1000);
         setNowMs(Date.now());
-        setError(loginCooldownMessage(retryAfter));
+        setError(loginCooldownMessage(seconds, uiLang));
+      } else if (code === 'LOGIN_CHALLENGE_REQUIRED') {
+        setChallengeRequired(true);
+        setError(loginSecurityText(uiLang, 'mfaChallenge'));
       } else {
-        setError(err instanceof Error ? err.message : 'Login failed');
+        setError(loginSecurityText(uiLang, 'invalidCredentials'));
       }
     } finally {
       setLoading(false);
@@ -120,14 +133,15 @@ export function Login() {
   }
 
   return (
-    <div style={{ maxWidth: 400, margin: '80px auto', padding: 24 }}>
-      <h1>Sign in</h1>
+    <div dir={dir} lang={lang} style={{ maxWidth: 400, margin: '80px auto', padding: 24 }}>
+      <UiLanguageSwitch compact />
+      <h1>{t('auth.signIn')}</h1>
       {passwordResetOk && (
-        <p style={{ color: '#059669', marginBottom: 16 }}>Password updated. Sign in with your new password.</p>
+        <p style={{ color: '#059669', marginBottom: 16 }}>{t('auth.passwordResetOk')}</p>
       )}
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: 16 }}>
-          <label htmlFor="email">Email</label>
+          <label htmlFor="email">{t('auth.email')}</label>
           <input
             id="email"
             type="email"
@@ -138,7 +152,7 @@ export function Login() {
           />
         </div>
         <div style={{ marginBottom: 16 }}>
-          <label htmlFor="password">Password</label>
+          <label htmlFor="password">{t('auth.password')}</label>
           <input
             id="password"
             type="password"
@@ -150,7 +164,7 @@ export function Login() {
         </div>
         {challengeRequired ? (
           <div style={{ marginBottom: 16 }}>
-            <label htmlFor="mfa-code">Authenticator code</label>
+            <label htmlFor="mfa-code">{t('auth.mfaChallenge')}</label>
             <input
               id="mfa-code"
               inputMode="numeric"
@@ -165,10 +179,10 @@ export function Login() {
         {error && <p style={{ color: 'red', marginBottom: 16 }}>{error}</p>}
         <button type="submit" disabled={loading || cooldownSeconds > 0}>
           {cooldownSeconds > 0
-            ? loginCooldownMessage(cooldownSeconds)
+            ? loginCooldownMessage(cooldownSeconds, uiLang)
             : challengeRequired
-              ? 'Verify code'
-              : 'Sign in'}
+              ? t('auth.verifyCode')
+              : t('auth.signIn')}
         </button>
       </form>
       <p
@@ -184,10 +198,11 @@ export function Login() {
             : { marginTop: 12 }
         }
       >
-        <Link to="/forgot-password">Forgot password?</Link>
+        <Link to="/forgot-password">{t('auth.recoveryPrompt')}</Link>
+        {offerRecovery ? <span style={{ display: 'block', marginTop: 8 }}>{t('auth.recoveryHint')}</span> : null}
       </p>
       <p style={{ marginTop: 16 }}>
-        <Link to={registerTo}>Create account</Link>
+        <Link to={registerTo}>{t('auth.createAccount')}</Link>
       </p>
     </div>
   );

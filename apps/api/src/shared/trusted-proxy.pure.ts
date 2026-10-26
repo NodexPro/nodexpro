@@ -132,8 +132,9 @@ function publicNonInfraIp(ip: string | null | undefined): string | null {
 /**
  * Walk the trusted platform chain from the right (peer first).
  * Render/Cloudflare/Vercel hops are skipped. Spoofed leftmost XFF from an
- * untrusted public peer is ignored. Vercel rewrite client headers are used
- * only with a Vercel region token and a client IP that is not the TCP peer.
+ * untrusted public peer is ignored. A Vercel rewrite (region token present)
+ * uses the visitor header and never treats rewrite egress as the client.
+ * Missing visitor IP after a rewrite signal is Unknown, not the proxy hop.
  */
 export function resolvePublicClientIp(input: {
   reqIp?: string | null;
@@ -155,22 +156,26 @@ export function resolvePublicClientIp(input: {
   }
 
   const vercelClient = publicNonInfraIp(input.vercelForwardedFor) ?? publicNonInfraIp(input.realIp);
-  const vercelRewrite = isVercelRegionId(input.vercelId) && Boolean(vercelClient);
+  const vercelRewriteSignal = isVercelRegionId(input.vercelId);
+  const vercelRewrite = vercelRewriteSignal && Boolean(vercelClient);
   const peerTrusted = Boolean(peer && isTrustedPlatformHop(peer));
   if (peerTrusted) {
+    if (vercelRewrite && vercelClient) {
+      return { ip: vercelClient, display: displaySourceIp(vercelClient), source: 'vercel_forwarded_for' };
+    }
+    if (vercelRewriteSignal) {
+      return { ip: null, display: 'Unknown', source: 'unknown' };
+    }
     const hops = [...parseForwardedFor(input.forwardedFor), peer].filter((item): item is string => Boolean(item));
     for (let i = hops.length - 1; i >= 0; i -= 1) {
       if (isTrustedPlatformHop(hops[i])) continue;
-      return { ip: hops[i], display: hops[i], source: 'trusted_chain' };
-    }
-    if (vercelClient) {
-      return { ip: vercelClient, display: vercelClient, source: 'vercel_forwarded_for' };
+      return { ip: hops[i], display: displaySourceIp(hops[i]), source: 'trusted_chain' };
     }
     return { ip: null, display: 'Unknown', source: 'unknown' };
   }
 
   if (vercelRewrite && vercelClient && peer && vercelClient !== peer) {
-    return { ip: vercelClient, display: vercelClient, source: 'vercel_forwarded_for' };
+    return { ip: vercelClient, display: displaySourceIp(vercelClient), source: 'vercel_forwarded_for' };
   }
 
   const reqIp = normalizedIp(input.reqIp);

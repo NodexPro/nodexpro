@@ -346,8 +346,10 @@
       "aria": "Language",
       "en": "English",
       "he": "עברית",
+      "ru": "Русский",
       "enCompact": "EN",
-      "heCompact": "עב"
+      "heCompact": "עב",
+      "ruCompact": "RU"
     }
   },
   "billing": {
@@ -597,7 +599,13 @@
     "noSession": "No session after sign in",
     "loadAccountFailed": "Could not load your account. Please try again.",
     "loginFailed": "Login failed",
-    "registerFailed": "Registration failed"
+    "registerFailed": "Registration failed",
+    "invalidCredentials": "Invalid email or password",
+    "cooldown": "Too many sign-in attempts. Please wait {seconds} seconds.",
+    "recoveryHint": "You can reset the password without leaving this page.",
+    "mfaChallenge": "Enter the authenticator code to continue.",
+    "verifyCode": "Verify code",
+    "recoveryPrompt": "Forgot password?"
   }
 }
 

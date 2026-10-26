@@ -1,0 +1,35 @@
+{
+  "lang": "ru",
+  "dashboard": {
+    "lang": {
+      "aria": "Язык",
+      "en": "English",
+      "he": "עברית",
+      "ru": "Русский",
+      "enCompact": "EN",
+      "heCompact": "עב",
+      "ruCompact": "RU"
+    }
+  },
+  "auth": {
+    "signIn": "Войти",
+    "createAccount": "Создать аккаунт",
+    "email": "Эл. почта",
+    "password": "Пароль",
+    "fullName": "Полное имя",
+    "forgotPassword": "Забыли пароль?",
+    "signingIn": "Вход…",
+    "creatingAccount": "Создание аккаунта…",
+    "passwordResetOk": "Пароль обновлён. Войдите с новым паролем.",
+    "noSession": "Нет сессии после входа",
+    "loadAccountFailed": "Не удалось загрузить аккаунт. Попробуйте ещё раз.",
+    "loginFailed": "Вход не выполнен",
+    "registerFailed": "Регистрация не выполнена",
+    "invalidCredentials": "Неверный email или пароль",
+    "cooldown": "Слишком много попыток входа. Подождите {seconds} сек.",
+    "recoveryHint": "Можно сбросить пароль, не покидая эту страницу.",
+    "mfaChallenge": "Введите код аутентификатора, чтобы продолжить.",
+    "verifyCode": "Проверить код",
+    "recoveryPrompt": "Забыли пароль?"
+  }
+}

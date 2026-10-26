@@ -14,6 +14,7 @@ const migration = readFileSync(
 );
 const geoIpService = readFileSync(join(dir, '../../src/shared/geoip-dbip.service.ts'), 'utf8');
 const alertDeliveryService = readFileSync(join(dir, '../../src/shared/security-alert-delivery.service.ts'), 'utf8');
+const alertEmail = readFileSync(join(dir, '../../src/shared/security-alert-email.pure.ts'), 'utf8');
 const apiIndex = readFileSync(join(dir, '../../src/index.ts'), 'utf8');
 const authRoutes = readFileSync(join(dir, '../../src/domains/auth/auth.routes.ts'), 'utf8');
 const ownerRoutes = readFileSync(join(dir, '../../src/routes/owner-country-pack.routes.ts'), 'utf8');
@@ -74,8 +75,9 @@ test('DB-IP Lite provisioning uses official free monthly mmdb.gz with safe updat
 test('DB-IP Lite attribution and email location context are present without secrets', () => {
   assert.match(geoIpService, /IP geolocation data by DB-IP\.com/);
   assert.match(geoIpService, /CC BY 4\.0/);
-  assert.match(alertDeliveryService, /Approximate location:/);
-  assert.match(alertDeliveryService, /Source IP:/);
+  assert.match(alertEmail, /Approximate location:/);
+  assert.match(alertEmail, /Source IP:/);
+  assert.match(alertDeliveryService, /withSecurityAlertSender/);
   assert.doesNotMatch(alertDeliveryService, /password|token|secret/i);
 });
 

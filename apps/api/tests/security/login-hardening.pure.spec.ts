@@ -10,8 +10,13 @@ import {
   shouldApplyFailedLoginCooldown,
   shouldCreateFailedLoginIncident,
   shouldNotifyOwnerForFailedLogin,
+  shouldCreateDistributedLoginIncident,
   shouldOfferPasswordRecovery,
+  shouldOfferPasswordRecoveryFromSource,
   shouldSkipPasswordVerification,
+  failedLoginSourceCooldown,
+  loginNetworkPrefix,
+  publicLoginFailure,
 } from '../../src/shared/failed-login-policy.pure.js';
 import { decideHighRiskPasswordLogin, highRiskLoginChallenge, isHighRiskChallengePath } from '../../src/shared/login-risk.pure.js';
 import { canDiscloseOfficeIncident, officeAlertDedupeKey, officeAlertRecipients } from '../../src/shared/office-login-alert.pure.js';
@@ -72,6 +77,16 @@ test('rotating proxy IPs, shared NAT, Unknown and spoofed headers stay trustwort
   });
   assert.equal(first.ip, '5.6.7.8');
   assert.equal(second.ip, '5.6.7.8');
+  assert.equal(
+    resolvePublicClientIp({
+      peerIp: '10.193.150.1',
+      reqIp: '10.193.150.1',
+      forwardedFor: '79.176.10.20, 3.64.1.20',
+      vercelForwardedFor: '79.176.10.20',
+      vercelId: 'fra1::xyz',
+    }).ip,
+    '79.176.10.20',
+  );
   assert.equal(displaySourceIp(null), 'Unknown');
   assert.equal(
     resolvePublicClientIp({
@@ -87,14 +102,74 @@ test('rotating proxy IPs, shared NAT, Unknown and spoofed headers stay trustwort
 test('existing and nonexistent emails stay private and recovery stays available', () => {
   assert.equal(maskAttemptedIdentifier('office.user@example.com'), 'o***@example.com');
   assert.equal(maskAttemptedIdentifier('missing@example.com'), 'm***@example.com');
+  const existing = publicLoginFailure({ cooldown: false, retryAfterSeconds: 0, offerRecovery: false });
+  const missing = publicLoginFailure({ cooldown: false, retryAfterSeconds: 0, offerRecovery: false });
+  assert.deepEqual(existing, missing);
+  assert.equal(existing.code, 'INVALID_CREDENTIALS');
+  assert.equal(shouldOfferPasswordRecoveryFromSource(10), true);
+  assert.equal(shouldOfferPasswordRecoveryFromSource(2), false);
+  const victimTargetOnly = failedLoginSourceCooldown({
+    stampOrPatternCount: 1,
+    verifiedIpCount: 1,
+    unknownSourceCount: 0,
+    loginSucceeded: false,
+    isPlatformOwnerEmergency: false,
+  });
+  assert.equal(victimTargetOnly, false);
   const routes = read('../../src/domains/auth/auth.routes.ts');
-  assert.match(routes, /GENERIC_LOGIN_FAILURE/);
-  assert.match(routes, /Invalid email or password/);
-  assert.match(routes, /offer_recovery/);
-  assert.match(routes, /isFailedLoginCooldownActive/);
-  assert.equal(routes.includes('User not found'), false);
+  assert.match(routes, /INVALID_CREDENTIALS/);
+  assert.match(routes, /publicLoginFailure/);
+  assert.match(routes, /waitPublicLoginMinimum/);
+  assert.equal(routes.includes('USER_NOT_ACTIVE'), false);
+  assert.equal(routes.includes('Слишком много'), false);
   const forgot = read('../../../web/src/pages/ForgotPassword.tsx');
   assert.match(forgot, /If an account exists for that address/);
+});
+
+test('rotating browsers and emails still hit IP and endpoint counters', () => {
+  assert.equal(loginNetworkPrefix('5.6.7.8'), '5.6.7.0/24');
+  assert.equal(loginNetworkPrefix('Unknown'), null);
+  assert.equal(failedLoginSourceCooldown({
+    stampOrPatternCount: 1,
+    verifiedIpCount: 20,
+    unknownSourceCount: 0,
+    loginSucceeded: false,
+    isPlatformOwnerEmergency: false,
+  }), true);
+  assert.equal(failedLoginSourceCooldown({
+    stampOrPatternCount: 1,
+    verifiedIpCount: 0,
+    unknownSourceCount: 15,
+    loginSucceeded: false,
+    isPlatformOwnerEmergency: false,
+  }), true);
+  assert.equal(shouldCreateDistributedLoginIncident({
+    verifiedIpCount: 12,
+    networkCount: 12,
+    unknownSourceCount: 0,
+    endpointCount: 12,
+    distinctTargets: 6,
+    stampOrPatternCount: 7,
+  }), true);
+  assert.equal(shouldCreateDistributedLoginIncident({
+    verifiedIpCount: 1,
+    networkCount: 1,
+    unknownSourceCount: 0,
+    endpointCount: 1,
+    distinctTargets: 1,
+    stampOrPatternCount: 1,
+  }), false);
+  const first = `alert:login-distributed:ip-a`;
+  const second = `alert:login-distributed:ip-a`;
+  assert.equal(first, second);
+  const officeNeighbor = failedLoginSourceCooldown({
+    stampOrPatternCount: 1,
+    verifiedIpCount: 4,
+    unknownSourceCount: 0,
+    loginSucceeded: false,
+    isPlatformOwnerEmergency: false,
+  });
+  assert.equal(officeNeighbor, false);
 });
 
 test('valid password in a high-risk context requires existing MFA without forcing enrollment', () => {

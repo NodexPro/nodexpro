@@ -56,7 +56,12 @@ export function sharedLoginRateLimit(opts: RateLimitOptions) {
         const count = Number(row?.request_count ?? 0);
         res.locals.rateLimitCount = count;
         if (row?.allowed === false) {
-          return res.status(429).json({ code: opts.code ?? 'TOO_MANY_REQUESTS', message: opts.message });
+          res.setHeader('Retry-After', '180');
+          return res.status(429).json({
+            code: opts.code ?? 'TOO_MANY_REQUESTS',
+            retry_after: 180,
+            offer_recovery: true,
+          });
         }
         return next();
       }

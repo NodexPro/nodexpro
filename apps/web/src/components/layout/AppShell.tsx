@@ -16,7 +16,7 @@ function SessionLanguageSync() {
   useEffect(() => {
     if (auth.status !== 'authenticated') return;
     const next = auth.me.sidebar_account_block?.language_selector?.current_value;
-    if ((next === 'en' || next === 'he') && next !== lang) {
+    if ((next === 'en' || next === 'he' || next === 'ru') && next !== lang) {
       setLang(next);
     }
   }, [auth, lang, setLang]);
@@ -93,7 +93,7 @@ export function AppShell() {
           try {
             const refreshed = await auth.setUiLanguage(code);
             const next = refreshed?.sidebar_account_block.language_selector.current_value;
-            if (next === 'en' || next === 'he') setLang(next);
+            if (next === 'en' || next === 'he' || next === 'ru') setLang(next);
           } finally {
             setAccountBusy(false);
           }

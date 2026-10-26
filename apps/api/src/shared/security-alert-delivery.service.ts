@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../db/client.js';
 import { createEmailDeliveryAdapter } from './email-delivery.adapter.js';
 import { getOwnerEmailProviderConfigGlobal } from './owner-email-provider-config.service.js';
 import { listOfficeOwnerEmails } from './office-login-alert.service.js';
+import { buildSecurityAlertEmail, withSecurityAlertSender } from './security-alert-email.pure.js';
 import { safeSecurityPayload } from './security-event.pure.js';
 
 type Severity = 'critical' | 'high' | 'medium' | 'low';
@@ -105,9 +106,7 @@ async function resolveVerifiedOwnerDestination(): Promise<{ email: string; maske
   return { email: expected, masked: maskEmail(expected) };
 }
 
-function emailBody(row: DeliveryRow): { subject: string; text: string; html: string } {
-  const test = row.event_kind === 'test';
-  const title = test ? 'NodexPro security alert test' : `NodexPro ${row.severity} security alert`;
+function emailBody(row: DeliveryRow): { subject: string; text: string; html: string; fromName: string } {
   const context = safeSecurityPayload(row.safe_context ?? {});
   const correlation = typeof context.correlation_id === 'string' ? context.correlation_id : row.correlation_id;
   const sourceIp = typeof context.source_ip === 'string' ? context.source_ip : typeof context.display_ip === 'string' ? context.display_ip : null;
@@ -115,23 +114,18 @@ function emailBody(row: DeliveryRow): { subject: string; text: string; html: str
   const city = typeof context.city === 'string' ? context.city : null;
   const maskedTarget = typeof context.masked_target === 'string' ? context.masked_target : null;
   const eventTime = typeof row.created_at === 'string' ? row.created_at : new Date().toISOString();
-  const lines = [
-    test ? 'This is a user-requested test alert. It is not a security incident.' : 'A confirmed NodexPro security event was recorded.',
-    `Event: ${row.event_action}`,
-    `Severity: ${row.severity}`,
-    `Time: ${eventTime}`,
-    `Alert ID: ${row.id}`,
-    ...(correlation ? [`Correlation ID: ${correlation}`] : []),
-    ...(maskedTarget ? [`Attempted identity: ${maskedTarget}`] : []),
-    ...(sourceIp ? [`Source IP: ${sourceIp}`] : ['Source IP: Unknown']),
-    ...(country || city ? [`Approximate location: ${country ?? 'Unknown'}, ${city ?? 'Unknown'}`] : []),
-  ];
-  const text = lines.join('\n');
-  return {
-    subject: title,
-    text,
-    html: `<p>${lines.map((line) => line.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('<br>')}</p>`,
-  };
+  return buildSecurityAlertEmail({
+    eventKind: row.event_kind,
+    severity: row.severity,
+    eventAction: row.event_action,
+    alertId: row.id,
+    eventTime,
+    correlationId: correlation,
+    sourceIp,
+    country,
+    city,
+    maskedTarget,
+  });
 }
 
 export async function enqueueSecurityAlert(input: {
@@ -180,7 +174,7 @@ async function processRow(row: DeliveryRow): Promise<{ status: 'accepted' | 'fai
     ]);
     if (!provider?.isConfigured) throw new Error('email_provider_not_configured');
     const body = emailBody(row);
-    const adapter = createEmailDeliveryAdapter(provider);
+    const adapter = createEmailDeliveryAdapter(withSecurityAlertSender(provider));
     let sent = { providerMessageId: null as string | null };
     for (const destination of destinations) {
       sent = await adapter.sendEmail({
