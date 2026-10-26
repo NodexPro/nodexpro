@@ -28,6 +28,7 @@ export const AUTH = {
   removeAdditionalLoginEmail: '/auth/commands/remove_additional_login_email',
   verifyAdditionalLoginEmail: '/auth/commands/verify_additional_login_email',
   changePassword: '/auth/commands/change_password',
+  requestPasswordReset: '/auth/commands/request_password_reset',
   mfaAggregate: '/auth/aggregates/mfa',
   mfaCommand: (command: string) => `/auth/commands/${encodeURIComponent(command)}`,
 } as const;

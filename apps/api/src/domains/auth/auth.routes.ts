@@ -343,7 +343,16 @@ router.post(
       loginStamp: typeof req.headers['x-nodexpro-login-stamp'] === 'string' ? req.headers['x-nodexpro-login-stamp'] : null,
       correlationId: getRequestCorrelationId(req),
     };
-    const cooldownAlreadyActive = await isFailedLoginCooldownActive(attemptInput).catch(() => false);
+    let cooldownAlreadyActive = false;
+    try {
+      cooldownAlreadyActive = await isFailedLoginCooldownActive(attemptInput);
+    } catch {
+      return sendPublicLoginFailure(res, startedAt, {
+        cooldown: true,
+        retryAfterSeconds: 180,
+        offerRecovery: true,
+      });
+    }
     if (cooldownAlreadyActive) {
       const outcome = await recordFailedLoginAttempt({
         ...attemptInput,
@@ -417,6 +426,31 @@ router.post(
   } catch (e) {
     next(e);
   }
+  }
+);
+
+router.post(
+  '/commands/request_password_reset',
+  sharedLoginRateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 8,
+    code: 'TOO_MANY_REQUESTS',
+    keyGenerator: (req) => {
+      const display = displaySourceIp(req.trustedClientIp ?? null);
+      return display === 'Unknown' ? 'reset-unverified' : `reset-ip:${display}`;
+    },
+  }),
+  async (req, res, next) => {
+    try {
+      const startedAt = Date.now();
+      const email = typeof req.body?.email === 'string' ? req.body.email : '';
+      const redirectTo = typeof req.body?.redirect_to === 'string' ? req.body.redirect_to : null;
+      const result = await authService.requestPasswordReset({ email, redirectTo });
+      await waitPublicLoginMinimum(startedAt);
+      return res.json(result);
+    } catch (e) {
+      next(e);
+    }
   }
 );
 

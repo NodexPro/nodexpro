@@ -9,6 +9,7 @@ export const AUDIT_ACTIONS = {
   AUTH_UI_LANGUAGE_SET: 'auth.ui_language_set',
   AUTH_LOCALIZATION_PREFERENCES_SET: 'auth.localization_preferences_set',
   AUTH_PASSWORD_CHANGED: 'auth.password_changed',
+  AUTH_PASSWORD_RESET_REQUESTED: 'auth.password_reset_requested',
   AUTH_ADDITIONAL_EMAIL_REQUESTED: 'auth.additional_email_requested',
   AUTH_ADDITIONAL_EMAIL_REPLACED: 'auth.additional_email_replaced',
   AUTH_ADDITIONAL_EMAIL_RESENT: 'auth.additional_email_resent',

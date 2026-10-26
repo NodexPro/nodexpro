@@ -6,6 +6,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { notFound } from '../../shared/errors.js';
+import { assertFileAssetDownloadable } from '../../shared/document-download-guard.js';
 import { assertRowMatchesIssuerScope, type ActiveIncomeIssuerScope } from './income.guards.js';
 import { loadActiveIncomeIssuerScope } from './income-issuer-scope.service.js';
 import { buildUnifiedIncomeDocumentPrintHtml } from './income-document-unified-render.html.js';
@@ -316,11 +317,12 @@ export async function downloadIncomeDocumentPdfBuffer(
 
   const { data: asset, error: assetErr } = await supabaseAdmin
     .from('file_assets')
-    .select('storage_bucket, storage_key, file_name')
+    .select('storage_bucket, storage_key, file_name, scan_status')
     .eq('id', doc.pdf_asset_id)
     .eq('organization_id', doc.organization_id)
     .single();
   if (assetErr || !asset) throw notFound('PDF file asset not found');
+  assertFileAssetDownloadable((asset as { scan_status?: string | null }).scan_status);
 
   const bucket =
     (asset as { storage_bucket?: string | null }).storage_bucket ?? BUCKET_INCOME_DOCUMENTS;

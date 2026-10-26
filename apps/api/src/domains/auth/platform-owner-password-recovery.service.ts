@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { AppError, badRequest, forbidden } from '../../shared/errors.js';
 import { config } from '../../config.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
+import { hashesEqualHex, ownerRecoveryEmailAllowed } from './owner-recovery.pure.js';
 
 const OTP_LENGTH = 6;
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -87,7 +88,7 @@ export async function requestPlatformOwnerRecovery(params: {
   }
 
   const email = normalizeOwnerEmail(params.email);
-  if (email !== want) {
+  if (!ownerRecoveryEmailAllowed(email, want)) {
     await writeAudit({
       organizationId: null,
       actorUserId: null,
@@ -97,7 +98,13 @@ export async function requestPlatformOwnerRecovery(params: {
       ipAddress: params.ipAddress,
       userAgent: params.userAgent,
     });
-    throw forbidden('Platform owner recovery is not available for this email.', 'OWNER_RECOVERY_EMAIL_NOT_ALLOWED');
+    const decoyId = crypto.randomUUID();
+    await supabaseAdmin.from('platform_owner_password_recovery_challenges').insert({
+      id: decoyId,
+      otp_hash: hashOtp(decoyId, generateOtp()),
+      expires_at: new Date(Date.now() + OTP_TTL_MS).toISOString(),
+    }).then(() => undefined, () => undefined);
+    return { recovery_session_id: decoyId };
   }
 
   const phoneRaw = config.platformOwner.phone?.trim();
@@ -209,7 +216,7 @@ export async function verifyPlatformOwnerRecoveryOtp(params: {
   const expectedHash = String(row.otp_hash ?? '');
   const actualHash = hashOtp(id, params.code);
 
-  if (actualHash !== expectedHash) {
+  if (!hashesEqualHex(actualHash, expectedHash)) {
     await supabaseAdmin
       .from('platform_owner_password_recovery_challenges')
       .update({ attempt_count: attempts + 1 })

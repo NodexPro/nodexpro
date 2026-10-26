@@ -566,13 +566,6 @@ export async function executeRecordIncomeDocumentPayment(
       });
       receiptDocumentId = issueResult.issuedDocumentId;
 
-      // Ensure notes land on issued document for PDF פרטים.
-      await supabaseAdmin
-        .from('income_documents')
-        .update({ notes: detailsText })
-        .eq('organization_id', scope.org_id)
-        .eq('id', receiptDocumentId);
-
       await updateOperation(scope.org_id, operation.id, {
         receipt_document_id: receiptDocumentId,
         status: 'receipt_issued',

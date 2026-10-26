@@ -440,7 +440,7 @@ portalRouter.post('/files/upload', async (req: Request, res: Response, next: Nex
 
 portalRouter.get('/aggregates/client-portal-inbox', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const rawToken = String(req.headers['x-client-portal-session'] ?? req.query.portal_session_token ?? '').trim();
+    const rawToken = String(req.headers['x-client-portal-session'] ?? '').trim();
     if (!rawToken) throw badRequest('portal session token is required');
     const session = await resolvePortalSessionByRawToken(rawToken);
     await assertDocflowEntitled(session.orgId);
@@ -459,7 +459,7 @@ portalRouter.get('/aggregates/client-portal-inbox', async (req: Request, res: Re
 
 portalRouter.get('/files/:fileAssetId/open', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const rawToken = String(req.headers['x-client-portal-session'] ?? req.query.portal_session_token ?? '').trim();
+    const rawToken = String(req.headers['x-client-portal-session'] ?? '').trim();
     if (!rawToken) throw badRequest('portal session token is required');
     const session = await resolvePortalSessionByRawToken(rawToken);
     await assertDocflowEntitled(session.orgId);

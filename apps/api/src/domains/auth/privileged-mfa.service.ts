@@ -43,6 +43,7 @@ import {
   hashRecoveryCode,
   recoveryCodeMatches,
 } from './mfa-recovery.pure.js';
+import { refreshSessionMatchesCaller } from './session-refresh.pure.js';
 import { issueTrustedDevice, listTrustedDevices, revokeAllTrustedDevices, revokeTrustedDeviceForUser } from './mfa-trusted-device.service.js';
 
 function userClient(accessToken: string) {
@@ -756,7 +757,24 @@ export async function refreshAuthSession(ctx: RequestContext, refreshToken: stri
   }).auth.refreshSession({ refresh_token: refreshToken });
   const access = refreshed.data.session?.access_token;
   const nextRefresh = refreshed.data.session?.refresh_token;
-  if (refreshed.error || !access || !nextRefresh) throw new AppError(401, 'הסשן לא חודש', 'SESSION_REFRESH_FAILED');
+  const refreshedAuthUserId = refreshed.data.user?.id ?? refreshed.data.session?.user?.id ?? '';
+  if (refreshed.error || !access || !nextRefresh || !refreshedAuthUserId) {
+    throw new AppError(401, 'הסשן לא חודש', 'SESSION_REFRESH_FAILED');
+  }
+  const { data: appUser } = await supabaseAdmin
+    .from('users')
+    .select('status')
+    .eq('auth_user_id', refreshedAuthUserId)
+    .maybeSingle();
+  if (
+    !refreshSessionMatchesCaller({
+      refreshedAuthUserId,
+      callerAuthUserId: ctx.user.authUserId,
+      callerStatus: (appUser as { status?: string } | null)?.status ?? null,
+    })
+  ) {
+    throw new AppError(401, 'הסשן לא חודש', 'SESSION_REFRESH_FAILED');
+  }
   return {
     aggregate_key: 'auth_session_refresh' as const,
     access_token: access,

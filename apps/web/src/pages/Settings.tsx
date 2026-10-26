@@ -4,7 +4,6 @@ import { apiJson } from '../api/client';
 import { AUTH, orgSettings } from '../api/endpoints';
 import { AccountRequiredMark } from '../components/glass/AccountRequiredMark';
 import { useI18n } from '../i18n/I18nProvider';
-import { supabase } from '../lib/supabase';
 import '../styles/nx-glass-surface.css';
 import '../styles/nx-settings-deep-ocean.css';
 import '../styles/nx-office-deep-ocean.css';
@@ -267,9 +266,13 @@ export function Settings() {
         setError(t('settings.errors.saveFailed'));
         return;
       }
-      const redirectTo = `${window.location.origin}/reset-password`;
-      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
-      if (resetErr) throw new Error(resetErr.message);
+      await apiJson(AUTH.requestPasswordReset, {
+        method: 'POST',
+        body: JSON.stringify({
+          email,
+          redirect_to: `${window.location.origin}/reset-password`,
+        }),
+      });
       setPasswordResetSent(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('settings.errors.saveFailed'));

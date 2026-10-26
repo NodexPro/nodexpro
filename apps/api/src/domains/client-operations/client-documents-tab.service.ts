@@ -3,6 +3,7 @@ import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError, badRequest, conflict, forbidden } from '../../shared/errors.js';
 import { requireGuardedUpload } from '../../shared/file-content-guard.js';
+import { assertFileAssetDownloadable } from '../../shared/document-download-guard.js';
 
 const BUCKET = 'client-files';
 const MAX_B64 = 12_000_000;
@@ -414,12 +415,13 @@ export async function getClientDocumentFileOpenUrl(
   await assertClientDocumentFileOpenAllowed(orgId, clientId, fileAssetId);
   const { data: fileAsset, error } = await supabaseAdmin
     .from('file_assets')
-    .select('storage_key, organization_id')
+    .select('storage_key, organization_id, scan_status')
     .eq('id', fileAssetId)
     .single();
   if (error || !fileAsset || (fileAsset as { organization_id?: string }).organization_id !== orgId) {
     throw forbidden('File not found');
   }
+  assertFileAssetDownloadable((fileAsset as { scan_status?: string | null }).scan_status);
   const { data: signed, error: se } = await supabaseAdmin.storage
     .from(BUCKET)
     .createSignedUrl((fileAsset as { storage_key: string }).storage_key, SIGNED_URL_SEC);
@@ -487,6 +489,7 @@ export async function uploadClientWorkspaceDocument(
       file_size: buf.length,
       uploaded_by: ctx.user.id,
       access_level: 'organization',
+      scan_status: guarded.scanStatus,
     })
     .select('id, file_name')
     .single();

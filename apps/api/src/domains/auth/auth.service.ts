@@ -5,6 +5,8 @@ import { badRequest, unauthorized } from '../../shared/errors.js';
 import { ENUMERATION_SAFE_REGISTER_MESSAGE } from '../../shared/api-security.pure.js';
 import { APP_USER_NOT_ACTIVE_CODE, APP_USER_NOT_ACTIVE_MESSAGE, isAppUserStatusActive } from './user-authorization.pure.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
+import { allowedPasswordResetRedirect, normalizePasswordResetEmail, publicPasswordResetResponse } from './password-reset.pure.js';
+import { maskAttemptedIdentifier } from '../../shared/failed-login-policy.pure.js';
 
 const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey);
 
@@ -65,8 +67,39 @@ export async function ensureAppUser(authUserId: string, email: string, fullName?
   if (created) await writeAudit({ organizationId: null, actorUserId: created.id, entityType: 'user', action: AUDIT_ACTIONS.USER_CREATED, payload: { email } });
   return created?.id;
 }
+export async function requestPasswordReset(params: {
+  email: string;
+  redirectTo?: string | null;
+}): Promise<{ ok: true; requested: true }> {
+  const identifier = normalizePasswordResetEmail(params.email);
+  const allowedOrigins = [process.env.APP_URL, process.env.FRONTEND_URL, 'http://localhost:5173']
+    .filter((item): item is string => Boolean(item));
+  const redirectTo = allowedPasswordResetRedirect({
+    requested: params.redirectTo,
+    allowedOrigins,
+  });
+  if (identifier) {
+    try {
+      const { resolveLoginIdentifier } = await import('../account-security/account-security.service.js');
+      const canonicalEmail = await resolveLoginIdentifier(identifier);
+      await supabaseAuth.auth.resetPasswordForEmail(canonicalEmail, { redirectTo });
+    } catch {
+      // Public response stays identical whether the mailbox exists.
+    }
+    await writeAudit({
+      organizationId: null,
+      actorUserId: null,
+      entityType: 'security',
+      action: AUDIT_ACTIONS.AUTH_PASSWORD_RESET_REQUESTED,
+      payload: { masked_target: maskAttemptedIdentifier(identifier) },
+    }).catch(() => undefined);
+  }
+  return publicPasswordResetResponse();
+}
+
 export const authService = {
   register,
   login,
-  ensureAppUser
+  ensureAppUser,
+  requestPasswordReset,
 };

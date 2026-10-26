@@ -124,6 +124,8 @@ test('existing and nonexistent emails stay private and recovery stays available'
   assert.equal(routes.includes('Слишком много'), false);
   const forgot = read('../../../web/src/pages/ForgotPassword.tsx');
   assert.match(forgot, /If an account exists for that address/);
+  assert.match(forgot, /requestPasswordReset/);
+  assert.equal(forgot.includes('resetPasswordForEmail'), false);
 });
 
 test('rotating browsers and emails still hit IP and endpoint counters', () => {
