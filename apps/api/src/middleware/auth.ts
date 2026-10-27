@@ -2,7 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { config } from '../config.js';
 import { supabaseAdmin } from '../db/client.js';
-import { unauthorized } from '../shared/errors.js';
+import { forbidden, unauthorized } from '../shared/errors.js';
+import { explicitOrgHeaderDecision } from '../domains/auth/explicit-org-header.pure.js';
 import { timedFetch } from '../shared/request-timing.js';
 import type { AppUser, OrgMembership, RequestContext } from '../shared/context.js';
 import { ensureAppUser } from '../domains/auth/auth.service.js';
@@ -91,6 +92,14 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
 
   if (orgIdHeader) {
     membership = await loadOrgMembershipForUser(user.id, orgIdHeader);
+    const headerDecision = explicitOrgHeaderDecision({
+      headerPresent: true,
+      membershipFound: Boolean(membership),
+    });
+    if (headerDecision === 'reject_not_member') {
+      next(forbidden('Not a member of this organization'));
+      return;
+    }
     if (membership) organizationId = membership.organizationId;
   }
 

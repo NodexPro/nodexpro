@@ -138,8 +138,8 @@ export async function forCommandGetEntry(ctx: RequestContext, organizationId: st
     .select('*')
     .eq('id', entryId)
     .eq('organization_id', organizationId)
-    .single();
-  if (error) throw error;
+    .maybeSingle();
+  throwIfSupabaseError(error, 'forCommandGetEntry');
   if (!data) throw notFound('Accounting entry not found');
   return data as AccountingEntryRow;
 }

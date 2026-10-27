@@ -14,6 +14,7 @@ import {
   allowedPasswordResetRedirect,
   publicPasswordResetResponse,
 } from '../../src/domains/auth/password-reset.pure.js';
+import { explicitOrgHeaderDecision } from '../../src/domains/auth/explicit-org-header.pure.js';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(join(dir, rel), 'utf8');
@@ -138,4 +139,13 @@ test('accepted DocFlow invite is one-time and portal GETs ignore query tokens', 
   assert.equal(routes.includes("req.query.portal_session_token"), false);
   assert.match(routes, /x-client-portal-session/);
   assert.equal(payment.includes('.update({ notes: detailsText })'), false);
+});
+
+test('explicit X-Organization-Id does not fall back to another tenant', () => {
+  assert.equal(explicitOrgHeaderDecision({ headerPresent: false, membershipFound: false }), 'resolve_stored');
+  assert.equal(explicitOrgHeaderDecision({ headerPresent: true, membershipFound: true }), 'use_membership');
+  assert.equal(explicitOrgHeaderDecision({ headerPresent: true, membershipFound: false }), 'reject_not_member');
+  const auth = read('../../src/middleware/auth.ts');
+  assert.match(auth, /explicitOrgHeaderDecision/);
+  assert.match(auth, /Not a member of this organization/);
 });

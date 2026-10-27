@@ -3,3 +3,4 @@
 *.mmdb
 *.mmdb.gz
 dbip-lite/
+.stage6-isolation-fixtures.json

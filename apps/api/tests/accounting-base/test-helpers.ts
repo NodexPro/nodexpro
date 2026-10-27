@@ -32,6 +32,51 @@ export async function createTestEnv(prefix: string): Promise<TestEnv> {
   ]);
   if (orgErr) throw orgErr;
 
+  await supabaseAdmin.from('organization_settings').upsert(
+    [
+      {
+        organization_id: orgA,
+        organization_name: `${marker}-org-a`,
+        country: 'IL',
+        default_currency: 'ILS',
+        default_document_language: 'he',
+        legal_entity_type: 'registered_dealer',
+      },
+      {
+        organization_id: orgB,
+        organization_name: `${marker}-org-b`,
+        country: 'IL',
+        default_currency: 'ILS',
+        default_document_language: 'he',
+        legal_entity_type: 'registered_dealer',
+      },
+    ],
+    { onConflict: 'organization_id' },
+  );
+  await supabaseAdmin.from('income_issuer_profiles').upsert(
+    [
+      {
+        organization_id: orgA,
+        display_name: `${marker}-org-a`,
+        country_code: 'IL',
+        default_currency: 'ILS',
+        default_language: 'he',
+        normalized_income_business_type: 'osek_murshe',
+        business_type_source: 'registered_dealer',
+      },
+      {
+        organization_id: orgB,
+        display_name: `${marker}-org-b`,
+        country_code: 'IL',
+        default_currency: 'ILS',
+        default_language: 'he',
+        normalized_income_business_type: 'osek_murshe',
+        business_type_source: 'registered_dealer',
+      },
+    ],
+    { onConflict: 'organization_id' },
+  );
+
   return { marker, userId, orgA, orgB };
 }
 
@@ -129,6 +174,8 @@ export async function cleanupTestEnv(env: TestEnv): Promise<void> {
   await supabaseAdmin.from('income_user_workspace_contexts').delete().in('organization_id', orgIds);
   await supabaseAdmin.from('income_issuer_profiles').delete().in('organization_id', orgIds);
   await supabaseAdmin.from('clients').delete().in('organization_id', orgIds);
+  await supabaseAdmin.from('income_issuer_profiles').delete().in('organization_id', orgIds);
+  await supabaseAdmin.from('organization_settings').delete().in('organization_id', orgIds);
   await supabaseAdmin.from('file_assets').delete().in('organization_id', orgIds);
   await supabaseAdmin.from('audit_log').delete().in('organization_id', orgIds);
   await supabaseAdmin.from('organizations').delete().in('id', orgIds);
