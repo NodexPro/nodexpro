@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import {
   canonicalCreatedClientId,
   clientCardPath,
+  createdClientDestination,
 } from '../src/pages/client-create-navigation.pure.ts';
 
 const dir = dirname(fileURLToPath(import.meta.url));
@@ -25,6 +26,34 @@ test('create command navigates with the canonical returned client id', () => {
   assert.equal(canonicalCreatedClientId({}), null);
   assert.equal(canonicalCreatedClientId(null), null);
   assert.equal(clientCardPath('abc-123'), '/clients/abc-123');
+});
+
+test('create from /m/client-operations stays on the registry and opens the workspace modal', () => {
+  assert.deepEqual(
+    createdClientDestination({ currentPath: '/m/client-operations', clientId: 'abc-123' }),
+    { kind: 'client_operations_modal', clientId: 'abc-123' },
+  );
+  assert.deepEqual(
+    createdClientDestination({ currentPath: '/m/client-operations?q=x', clientId: 'abc-123' }),
+    { kind: 'client_operations_modal', clientId: 'abc-123' },
+  );
+  assert.deepEqual(
+    createdClientDestination({ currentPath: '/clients', clientId: 'abc-123' }),
+    { kind: 'core_card', path: '/clients/abc-123' },
+  );
+  const registrySrc = readFileSync(
+    join(dir, '../src/components/client-operations/ClientOperationsRegistryView.tsx'),
+    'utf8',
+  );
+  const pageSrc = readFileSync(join(dir, '../src/pages/ClientOperationsRegistry.tsx'), 'utf8');
+  assert.match(pageSrc, /canCreateCoreClient=\{allowedActions\.includes\('create_core_client'\)\}/);
+  assert.match(registrySrc, /orgClients\(orgId\)/);
+  assert.match(registrySrc, /buildCreateClientCommandPayload\(draft\)/);
+  assert.match(registrySrc, /setModalOpen\(true\)/);
+  assert.match(registrySrc, /moduleClientOperationsCase\(clientId\)/);
+  assert.match(registrySrc, /userFacingApiMessage/);
+  assert.doesNotMatch(registrySrc, /navigate\(/);
+  assert.doesNotMatch(registrySrc, /clientCardPath/);
 });
 
 test('ClientCard loads orgClientFull and does not map every failure to not-found', () => {

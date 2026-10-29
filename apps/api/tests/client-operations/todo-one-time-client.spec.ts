@@ -15,6 +15,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { rowMatchesPostgrestOr } from './fake-postgrest-or.pure.js';
 
 process.env.SUPABASE_URL ||= 'http://127.0.0.1:1';
 process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'test-service-role-key';
@@ -73,18 +74,7 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: null | { message:
     return this;
   }
   or(expr: string) {
-    const clauses = expr.split(',').map((c) => {
-      const first = c.indexOf('.');
-      const second = c.indexOf('.', first + 1);
-      return { col: c.slice(0, first), val: c.slice(second + 1) };
-    });
-    this.filters.push((r) =>
-      clauses.some((c) =>
-        new RegExp(`^${c.val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*')}$`, 'i').test(
-          String(r[c.col] ?? ''),
-        ),
-      ),
-    );
+    this.filters.push((r) => rowMatchesPostgrestOr(r, expr));
     return this;
   }
   order() {
@@ -598,8 +588,8 @@ test('L2 member Close Access blockers still count one-time ToDos; handler-change
 
 test('N1 null client_id audit: every ToDo path tolerates one-time rows (source guard)', () => {
   const src = repo('apps/api/src/domains/client-operations/client-operations-todo.service.ts');
-  // Reads: ACL `.in('client_id')` is paired with a separate one-time read, owner-scoped.
-  assert.match(src, /base\(\)\.is\('client_id', null\)/);
+  // Reads: owner-scoped; one-time rows stay via `OR client_id IS NULL` (never dropped by canonical ACL).
+  assert.match(src, /client_id\.is\.null,client_id\.in\./);
   assert.match(src, /\.eq\('assigned_to_user_id', params\.ownerUserId\)/);
   // Authorization: ACL applies to canonical clients only; archived-client filter keeps one-time rows.
   // (anchored at line start: a statement that is accidentally swallowed by a comment must NOT satisfy this guard)

@@ -94,8 +94,10 @@ export async function recentFailedLoginCount(input: {
   loginStamp?: string | null;
 }): Promise<number> {
   const keys = correlationKeys(input);
-  const patternCount = await peekBucket(keys.patternKey, FAILED_LOGIN_WINDOW_SECONDS);
-  const stampCount = keys.stampKey ? await peekBucket(keys.stampKey, FAILED_LOGIN_WINDOW_SECONDS) : 0;
+  const [patternCount, stampCount] = await Promise.all([
+    peekBucket(keys.patternKey, FAILED_LOGIN_WINDOW_SECONDS),
+    keys.stampKey ? peekBucket(keys.stampKey, FAILED_LOGIN_WINDOW_SECONDS) : Promise.resolve(0),
+  ]);
   return Math.max(patternCount, stampCount);
 }
 
@@ -148,20 +150,37 @@ export async function recordFailedLoginAttempt(input: {
   const identifier = maskAttemptedIdentifier(input.attemptedEmail);
   const identifierHash = keys.identifierHash;
   const targetKey = identifierHash ? hashValue(`login-target:${identifierHash}`).slice(0, 40) : null;
-  const patternCount = await consumeBucket(keys.patternKey, FAILED_LOGIN_WINDOW_SECONDS, 1000);
-  const stampCount = keys.stampKey ? await consumeBucket(keys.stampKey, FAILED_LOGIN_WINDOW_SECONDS, 1000) : 0;
-  const targetCount = targetKey ? await consumeBucket(targetKey, FAILED_LOGIN_WINDOW_SECONDS, 1000) : 0;
-  const verifiedIpCount = keys.ipKey ? await consumeBucket(keys.ipKey, FAILED_LOGIN_WINDOW_SECONDS, 1000) : 0;
-  const networkCount = keys.networkKey ? await consumeBucket(keys.networkKey, FAILED_LOGIN_WINDOW_SECONDS, 1000) : 0;
-  const unknownSourceCount = keys.unknownKey ? await consumeBucket(keys.unknownKey, FAILED_LOGIN_WINDOW_SECONDS, 1000) : 0;
-  const endpointCount = await consumeBucket(keys.endpointKey, FAILED_LOGIN_WINDOW_SECONDS, 10000);
+  // Independent rate-bucket keys — consume in one wave. Cooldown buckets stay AFTER the
+  // cooldown decision (they are a side effect of that decision, not an input to it).
+  const geoPromise =
+    displayIp === 'Unknown' ? Promise.resolve(geoIpUnavailable(null)) : enrichGeoIp(input.sourceIp);
+  const [
+    patternCount,
+    stampCount,
+    targetCount,
+    verifiedIpCount,
+    networkCount,
+    unknownSourceCount,
+    endpointCount,
+    distinctTargets,
+    geo,
+  ] = await Promise.all([
+    consumeBucket(keys.patternKey, FAILED_LOGIN_WINDOW_SECONDS, 1000),
+    keys.stampKey ? consumeBucket(keys.stampKey, FAILED_LOGIN_WINDOW_SECONDS, 1000) : Promise.resolve(0),
+    targetKey ? consumeBucket(targetKey, FAILED_LOGIN_WINDOW_SECONDS, 1000) : Promise.resolve(0),
+    keys.ipKey ? consumeBucket(keys.ipKey, FAILED_LOGIN_WINDOW_SECONDS, 1000) : Promise.resolve(0),
+    keys.networkKey ? consumeBucket(keys.networkKey, FAILED_LOGIN_WINDOW_SECONDS, 1000) : Promise.resolve(0),
+    keys.unknownKey ? consumeBucket(keys.unknownKey, FAILED_LOGIN_WINDOW_SECONDS, 1000) : Promise.resolve(0),
+    consumeBucket(keys.endpointKey, FAILED_LOGIN_WINDOW_SECONDS, 10000),
+    consumeBucket(
+      hashValue(`login-targets:${keys.ipKey ?? keys.stampKey ?? displayIp}`).slice(0, 40),
+      FAILED_LOGIN_WINDOW_SECONDS,
+      1000,
+    ),
+    geoPromise,
+  ]);
   const counts = failedLoginCorrelationCounts({ patternCount, stampCount, targetCount });
   const count = counts.detectionCount;
-  const distinctTargets = await consumeBucket(
-    hashValue(`login-targets:${keys.ipKey ?? keys.stampKey ?? displayIp}`).slice(0, 40),
-    FAILED_LOGIN_WINDOW_SECONDS,
-    1000,
-  );
   const stage = failedLoginStage(Math.max(count, verifiedIpCount, unknownSourceCount));
   const cooldown = failedLoginSourceCooldown({
     stampOrPatternCount: counts.cooldownCount,
@@ -172,12 +191,17 @@ export async function recordFailedLoginAttempt(input: {
   });
   let retryAfterSeconds = 0;
   if (cooldown) {
-    await consumeBucket(keys.cooldownKey, FAILED_LOGIN_COOLDOWN_SECONDS, 1000);
-    if (keys.ipCooldownKey) await consumeBucket(keys.ipCooldownKey, FAILED_LOGIN_COOLDOWN_SECONDS, 1000);
-    if (keys.unknownCooldownKey) await consumeBucket(keys.unknownCooldownKey, FAILED_LOGIN_COOLDOWN_SECONDS, 1000);
+    await Promise.all([
+      consumeBucket(keys.cooldownKey, FAILED_LOGIN_COOLDOWN_SECONDS, 1000),
+      keys.ipCooldownKey
+        ? consumeBucket(keys.ipCooldownKey, FAILED_LOGIN_COOLDOWN_SECONDS, 1000)
+        : Promise.resolve(0),
+      keys.unknownCooldownKey
+        ? consumeBucket(keys.unknownCooldownKey, FAILED_LOGIN_COOLDOWN_SECONDS, 1000)
+        : Promise.resolve(0),
+    ]);
     retryAfterSeconds = FAILED_LOGIN_COOLDOWN_SECONDS;
   }
-  const geo = displayIp === 'Unknown' ? geoIpUnavailable(null) : await enrichGeoIp(input.sourceIp);
   const detectionReason = failedLoginDetectionReason(stage, distinctTargets);
   const groupKey = failedLoginGroupKey({
     displayIp,
@@ -220,43 +244,45 @@ export async function recordFailedLoginAttempt(input: {
     correlation_id: input.correlationId ?? null,
     masked_target: identifier,
   });
-  await writeAudit({
-    organizationId: null,
-    actorUserId: null,
-    entityType: 'security',
-    action: 'security.login_failed',
-    payload,
-  });
-  await supabaseAdmin.from('security_journal_entries').insert({
-    action: 'security.login_failed',
-    severity: failedLoginSeverity(stage),
-    event_type: stage === 'incident' ? 'repeated_failed_login_attempts' : 'failed_login',
-    source_ip: displayIp === 'Unknown' ? null : displayIp,
-    display_ip: displayIp,
-    country: geo.country,
-    city: geo.city,
-    attempted_identifier: identifier,
-    attempted_identifier_hash: identifierHash,
-    attempt_count: count,
-    detection_reason: detectionReason,
-    incident_id: incident.incidentId,
-    cooldown_status: cooldown ? 'active' : 'none',
-    containment_action: 'none',
-    alert_status: notify ? 'queued' : 'not_required',
-    group_key: groupKey,
-    correlation_id: input.correlationId ?? null,
-  }).then(({ error }) => {
-    if (error && error.code !== '42P01' && error.code !== 'PGRST205') {
-      return writeAudit({
-        organizationId: null,
-        actorUserId: null,
-        entityType: 'security',
-        action: 'security.journal_write_failed',
-        payload: { code: error.code ?? 'unknown' },
-      }).catch(() => undefined);
-    }
-    return undefined;
-  });
+  await Promise.all([
+    writeAudit({
+      organizationId: null,
+      actorUserId: null,
+      entityType: 'security',
+      action: 'security.login_failed',
+      payload,
+    }),
+    supabaseAdmin.from('security_journal_entries').insert({
+      action: 'security.login_failed',
+      severity: failedLoginSeverity(stage),
+      event_type: stage === 'incident' ? 'repeated_failed_login_attempts' : 'failed_login',
+      source_ip: displayIp === 'Unknown' ? null : displayIp,
+      display_ip: displayIp,
+      country: geo.country,
+      city: geo.city,
+      attempted_identifier: identifier,
+      attempted_identifier_hash: identifierHash,
+      attempt_count: count,
+      detection_reason: detectionReason,
+      incident_id: incident.incidentId,
+      cooldown_status: cooldown ? 'active' : 'none',
+      containment_action: 'none',
+      alert_status: notify ? 'queued' : 'not_required',
+      group_key: groupKey,
+      correlation_id: input.correlationId ?? null,
+    }).then(({ error }) => {
+      if (error && error.code !== '42P01' && error.code !== 'PGRST205') {
+        return writeAudit({
+          organizationId: null,
+          actorUserId: null,
+          entityType: 'security',
+          action: 'security.journal_write_failed',
+          payload: { code: error.code ?? 'unknown' },
+        }).catch(() => undefined);
+      }
+      return undefined;
+    }),
+  ]);
   if (notify) {
     await enqueueSecurityAlert({
       eventAction: distributed ? 'security.login_distributed' : 'security.login_failed',

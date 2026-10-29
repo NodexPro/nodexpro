@@ -367,11 +367,13 @@ router.post(
     }
     try {
       const result = await authService.login({ email, password });
-      const recentFailCount = await recentFailedLoginCount(attemptInput).catch(() => 0);
       const authUserId = typeof result.user?.id === 'string' ? result.user.id : '';
-      const factors = authUserId
-        ? await supabaseAdmin.auth.admin.mfa.listFactors({ userId: authUserId }).catch(() => null)
-        : null;
+      const [recentFailCount, factors] = await Promise.all([
+        recentFailedLoginCount(attemptInput).catch(() => 0),
+        authUserId
+          ? supabaseAdmin.auth.admin.mfa.listFactors({ userId: authUserId }).catch(() => null)
+          : Promise.resolve(null),
+      ]);
       const mfaEnrolled = (factors?.data?.factors ?? []).some((factor) => factor.status === 'verified');
       const assurance = readAuthenticatorAssurance(result.session?.access_token ?? '');
       const decision = decideHighRiskPasswordLogin({ recentFailCount, mfaEnrolled, assurance });
@@ -379,35 +381,42 @@ router.post(
       if (decision !== 'allow') {
         const displayIp = displaySourceIp(req.trustedClientIp ?? null);
         const actorKey = authUserId || email;
-        await enqueueSecurityAlert({
-          eventAction: 'security.high_risk_login',
-          severity: 'high',
-          eventKind: 'security',
-          dedupeKey: `alert:login-actor:${actorKey}:high-risk`,
-          correlationId: attemptInput.correlationId,
-          safeContext: {
-            display_ip: displayIp,
-            source_ip: displayIp === 'Unknown' ? null : displayIp,
-            masked_target: maskAttemptedIdentifier(email),
-          },
-        }).catch(() => undefined);
-        const offices = await listOfficeOwnersForEmail(email).catch(() => []);
-        for (const office of offices) {
-          await enqueueSecurityAlert({
+        await Promise.all([
+          enqueueSecurityAlert({
             eventAction: 'security.high_risk_login',
             severity: 'high',
             eventKind: 'security',
-            dedupeKey: officeAlertDedupeKey(office.organizationId, `${actorKey}:high-risk`),
+            dedupeKey: `alert:login-actor:${actorKey}:high-risk`,
             correlationId: attemptInput.correlationId,
             safeContext: {
-              audience: 'office',
-              organization_id: office.organizationId,
               display_ip: displayIp,
               source_ip: displayIp === 'Unknown' ? null : displayIp,
               masked_target: maskAttemptedIdentifier(email),
             },
-          }).catch(() => undefined);
-        }
+          }).catch(() => undefined),
+          listOfficeOwnersForEmail(email)
+            .catch(() => [])
+            .then((offices) =>
+              Promise.all(
+                offices.map((office) =>
+                  enqueueSecurityAlert({
+                    eventAction: 'security.high_risk_login',
+                    severity: 'high',
+                    eventKind: 'security',
+                    dedupeKey: officeAlertDedupeKey(office.organizationId, `${actorKey}:high-risk`),
+                    correlationId: attemptInput.correlationId,
+                    safeContext: {
+                      audience: 'office',
+                      organization_id: office.organizationId,
+                      display_ip: displayIp,
+                      source_ip: displayIp === 'Unknown' ? null : displayIp,
+                      masked_target: maskAttemptedIdentifier(email),
+                    },
+                  }).catch(() => undefined),
+                ),
+              ),
+            ),
+        ]);
         await processSecurityAlertDeliveries(5).catch(() => undefined);
       }
       if (decision === 'require_aal2' && authUserId) {

@@ -60,6 +60,8 @@ class FakeQuery implements PromiseLike<Res> {
   private payload: Row = {};
   private wantCount = false;
   private max: number | null = null;
+  private fromIdx: number | null = null;
+  private toIdx: number | null = null;
   private single_ = false;
   private embedUsers = false;
   constructor(private readonly table: string) {}
@@ -99,17 +101,41 @@ class FakeQuery implements PromiseLike<Res> {
     return this;
   }
   or(expr: string) {
-    const clauses = expr.split(',').map((c) => {
-      const first = c.indexOf('.');
-      const second = c.indexOf('.', first + 1);
-      return { col: c.slice(0, first), val: c.slice(second + 1) };
-    });
+    const parts: string[] = [];
+    let depth = 0;
+    let buf = '';
+    for (const ch of expr) {
+      if (ch === '(') depth += 1;
+      if (ch === ')') depth -= 1;
+      if (ch === ',' && depth === 0) {
+        parts.push(buf);
+        buf = '';
+      } else buf += ch;
+    }
+    if (buf) parts.push(buf);
     this.filters.push((r) =>
-      clauses.some((c) =>
-        new RegExp(`^${c.val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*')}$`, 'i').test(
-          String(r[c.col] ?? ''),
-        ),
-      ),
+      parts.some((part) => {
+        const p = part.trim();
+        const isNull = p.match(/^(\w+)\.is\.null$/);
+        if (isNull) return r[isNull[1]] == null;
+        const inList = p.match(/^(\w+)\.in\.\(([^)]*)\)$/);
+        if (inList) {
+          const ids = inList[2]
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+          return ids.includes(String(r[inList[1]] ?? ''));
+        }
+        const first = p.indexOf('.');
+        const second = p.indexOf('.', first + 1);
+        if (first < 0 || second < 0) return false;
+        const col = p.slice(0, first);
+        const val = p.slice(second + 1);
+        return new RegExp(
+          `^${val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*')}$`,
+          'i',
+        ).test(String(r[col] ?? ''));
+      }),
     );
     return this;
   }
@@ -117,7 +143,8 @@ class FakeQuery implements PromiseLike<Res> {
     return this;
   }
   range(from: number, to: number) {
-    this.max = to - from + 1;
+    this.fromIdx = from;
+    this.toIdx = to;
     return this;
   }
   limit(n: number) {
@@ -155,8 +182,9 @@ class FakeQuery implements PromiseLike<Res> {
     if (this.embedUsers) {
       out = out.map((r) => ({ ...r, users: (tables.users ?? []).find((u) => u.id === r.user_id) ?? null }));
     }
-    if (this.max != null) out = out.slice(0, this.max);
     const count = this.wantCount ? matched.length : undefined;
+    if (this.fromIdx != null && this.toIdx != null) out = out.slice(this.fromIdx, this.toIdx + 1);
+    else if (this.max != null) out = out.slice(0, this.max);
     if (this.single_) return { data: out[0] ?? null, error: null, count };
     return { data: out, error: null, count };
   }

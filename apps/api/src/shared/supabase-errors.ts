@@ -11,6 +11,50 @@ export function supabaseErrorMessage(error: SupabaseErrorLike | null | undefined
   return String(error?.message ?? 'Database error');
 }
 
+export const PG_UNIQUE_VIOLATION = '23505';
+
+export const PUBLIC_DATABASE_ERROR_MESSAGE =
+  'לא ניתן להשלים את הפעולה כרגע. נסו שוב. אם הבעיה חוזרת — פנו לתמיכה.';
+
+/** Postgres / PostgREST diagnostics that must never reach the browser. */
+export function looksLikePostgresErrorMessage(message: string): boolean {
+  const m = String(message ?? '');
+  if (!m) return false;
+  return /duplicate key|violates unique constraint|violates check constraint|violates foreign key|null value in column|does not exist|undefined_column|undefined_table|relation |column |syntax error at|PGRST\d+|postgres|supabase/i.test(
+    m,
+  );
+}
+
+export function publicSafeErrorMessage(
+  message: string | null | undefined,
+  fallback = PUBLIC_DATABASE_ERROR_MESSAGE,
+): string {
+  const m = String(message ?? '').trim();
+  if (!m) return fallback;
+  if (looksLikePostgresErrorMessage(m)) return fallback;
+  return m;
+}
+
+export function isSupabaseUniqueViolation(error: SupabaseErrorLike | null | undefined): boolean {
+  if (!error) return false;
+  const code = String(error.code ?? '');
+  if (code === PG_UNIQUE_VIOLATION) return true;
+  return /duplicate key value violates unique constraint/i.test(supabaseErrorMessage(error));
+}
+
+/** Strip Postgres diagnostics from AppError.details before the HTTP body. */
+export function publicErrorDetails(
+  details: Record<string, unknown> | undefined | null,
+): Record<string, unknown> | undefined {
+  if (!details) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(details)) {
+    if (key.startsWith('pg_') || key === 'migration_hint') continue;
+    out[key] = value;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 /** PostgREST: column not in schema cache. Postgres: undefined_column. */
 export function isSupabaseMissingColumnError(
   error: SupabaseErrorLike | null | undefined,

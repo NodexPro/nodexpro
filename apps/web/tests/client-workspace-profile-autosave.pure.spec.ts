@@ -161,6 +161,27 @@ test('payload matches the existing update_profile body and round-trips from the 
   assert.ok(clientProfileDraftsEqual(fromCase, { ...draft, ended_at: '2026-04-01' }));
 });
 
+test('empty primary contact phone/email fall through to canonical clients fields', () => {
+  const fromCase = draftFromClientOperationsCase({
+    client: {
+      client_name: 'חברה',
+      tax_id: '1',
+      status: 'active',
+      phone: '0509999999',
+      email: 'saved@office.example',
+    },
+    profile: { business_type: 'עוסק מורשה', assigned_handler_user_id: null },
+    primary_contact: { full_name: 'ישראל', phone: '', email: '' },
+  });
+  assert.equal(fromCase.phone, '0509999999');
+  assert.equal(fromCase.email, 'saved@office.example');
+  assert.match(panelSrc, /primaryContact\?\.phone \|\| localWorkspace\.client\.phone/);
+  assert.match(panelSrc, /primaryContact\?\.email \|\| localWorkspace\.client\.email/);
+  assert.match(panelSrc, /clientFieldsLocked = Boolean\(caseHydrating\) \|\| Boolean\(hydrationError\)/);
+  assert.match(panelSrc, /email: row\.email \?\? null/);
+  assert.match(panelSrc, /phone: row\.phone \?\? null/);
+});
+
 test('serialized pump sends the latest draft after overlapping edits and never confirms a stale snapshot', async () => {
   const sent: string[] = [];
   const confirmed: string[] = [];

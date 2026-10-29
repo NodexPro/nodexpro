@@ -88,6 +88,8 @@ test('auth and owner security event paths pass trusted req.ip into backend-owned
   const containment = readFileSync(join(dir, '../../src/shared/security-containment.service.ts'), 'utf8');
   assert.match(failedLogin, /incidentReady: true/);
   assert.match(failedLogin, /processSecurityAlertDeliveries/);
+  assert.match(failedLogin, /await Promise\.all\(\[/);
+  assert.match(failedLogin, /consumeBucket\(keys\.patternKey/);
   assert.match(containment, /incidentReady/);
   assert.match(ownerRoutes, /sourceIp: req\.trustedClientIp/);
   assert.match(ownerRoutes, /action: 'security\.forbidden'/);

@@ -16,6 +16,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { rowMatchesPostgrestOr } from './fake-postgrest-or.pure.js';
 
 process.env.SUPABASE_URL ||= 'http://127.0.0.1:1';
 process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'test-service-role-key';
@@ -37,18 +38,22 @@ let maxInFlight = 0;
 const ilikeToRegExp = (pattern: string): RegExp =>
   new RegExp(`^${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*')}$`, 'i');
 
-class FakeQuery implements PromiseLike<{ data: unknown; error: null | { message: string } }> {
+class FakeQuery implements PromiseLike<{ data: unknown; error: null | { message: string }; count?: number }> {
   private filters: Array<(r: Row) => boolean> = [];
   private mode: 'select' | 'insert' | 'update' = 'select';
   private payload: Row = {};
   private embedUsers = false;
   private max: number | null = null;
+  private fromIdx: number | null = null;
+  private toIdx: number | null = null;
+  private wantCount = false;
   private orderBy: Array<{ col: string; asc: boolean }> = [];
   private single_ = false;
   constructor(private readonly table: string) {}
 
-  select(cols?: string) {
+  select(cols?: string, opts?: { count?: string }) {
     if (cols && cols.includes('users!')) this.embedUsers = true;
+    if (opts?.count) this.wantCount = true;
     return this;
   }
   insert(row: Row) {
@@ -78,8 +83,12 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: null | { message:
     this.filters.push((r) => (val === null ? r[col] != null : r[col] !== val));
     return this;
   }
-  /** PostgREST `or=(a.ilike.%x%,b.ilike.%x%)` — repeated `.or()` calls are ANDed, like PostgREST. */
+  /** PostgREST `or=` — ACL (`client_id.is.null,client_id.in.(…)`) or search `ilike`. */
   or(expr: string) {
+    if (expr.includes('client_id.is.null') || expr.includes('client_id.in.(')) {
+      this.filters.push((r) => rowMatchesPostgrestOr(r, expr));
+      return this;
+    }
     const clauses = expr.split(',').map((c) => {
       const first = c.indexOf('.');
       const second = c.indexOf('.', first + 1);
@@ -97,6 +106,11 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: null | { message:
     this.orderBy.push({ col, asc: opts?.ascending !== false });
     return this;
   }
+  range(from: number, to: number) {
+    this.fromIdx = from;
+    this.toIdx = to;
+    return this;
+  }
   limit(n: number) {
     this.max = n;
     return this;
@@ -109,7 +123,7 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: null | { message:
     this.single_ = true;
     return this;
   }
-  private run(): { data: unknown; error: null | { message: string } } {
+  private run(): { data: unknown; error: null | { message: string }; count?: number } {
     const rows = (tables[this.table] ??= []);
     if (this.mode === 'insert') {
       const row: Row = { id: `gen-${++idSeq}`, ...this.payload };
@@ -135,9 +149,11 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: null | { message:
         users: (tables.users ?? []).find((u) => u.id === r.user_id) ?? null,
       }));
     }
-    if (this.max != null) out = out.slice(0, this.max);
-    if (this.single_) return { data: out[0] ?? null, error: null };
-    return { data: out, error: null };
+    const count = this.wantCount ? matched.length : undefined;
+    if (this.fromIdx != null && this.toIdx != null) out = out.slice(this.fromIdx, this.toIdx + 1);
+    else if (this.max != null) out = out.slice(0, this.max);
+    if (this.single_) return { data: out[0] ?? null, error: null, count };
+    return { data: out, error: null, count };
   }
   then<T1, T2>(
     ok?: ((v: { data: unknown; error: null | { message: string } }) => T1 | PromiseLike<T1>) | null,

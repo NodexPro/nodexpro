@@ -60,7 +60,9 @@ export async function buildWorkEngineClientsTabAggregate(params: {
   }
   await assertStaffViewerMayUseEntitledModuleCode(params.ctx, 'client-operations');
 
-  const registry = await listClientOperationsRegistry(params.ctx);
+  // GET aggregate (same pre-search truth as GET /registry): reuse the org-scoped
+  // materialization cache. Auth / workspace / RBAC still run before lookup; commands never read it.
+  const registry = await listClientOperationsRegistry(params.ctx, {}, { materializationCache: true });
 
   return {
     aggregate_key: 'work_engine_clients_tab_aggregate',

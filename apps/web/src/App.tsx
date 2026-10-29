@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { RequireAuth } from './components/guards/RequireAuth';
@@ -16,8 +16,6 @@ import { UsersRoles } from './pages/UsersRoles';
 import { Modules } from './pages/Modules';
 import { Billing } from './pages/Billing';
 import { ExampleModulePage } from './pages/ExampleModulePage';
-import { ClientOperationsRegistry } from './pages/ClientOperationsRegistry';
-import { ClientOperationsClientCase } from './pages/ClientOperationsClientCase';
 import { Clients } from './pages/Clients';
 import { ClientCard } from './pages/ClientCard';
 import { Documents } from './pages/Documents';
@@ -34,13 +32,36 @@ import { PlatformOwnerSecurityPage } from './pages/PlatformOwnerSecurityPage';
 import { VerifyAdditionalEmail } from './pages/VerifyAdditionalEmail';
 import { PlatformOwnerModulesPage } from './pages/owner-modules/PlatformOwnerModulesPage';
 import { PlatformOwnerModuleDetailPage } from './pages/owner-modules/PlatformOwnerModuleDetailPage';
-import { DocflowCommunicationReviewPage } from './pages/DocflowCommunicationReviewPage';
-import { DocflowInvitesManagementPage } from './pages/DocflowInvitesManagementPage';
-import { DocflowMessengerPage } from './pages/DocflowMessengerPage';
-import { WorkEngineQueue } from './pages/WorkEngineQueue';
-import { IncomeWorkspacePage } from './pages/IncomeWorkspacePage';
 import { LandingPage } from './pages/LandingPage';
 import { I18nProvider } from './i18n/I18nProvider';
+
+const ClientOperationsRegistry = lazy(() =>
+  import('./pages/ClientOperationsRegistry').then((m) => ({ default: m.ClientOperationsRegistry })),
+);
+const ClientOperationsClientCase = lazy(() =>
+  import('./pages/ClientOperationsClientCase').then((m) => ({ default: m.ClientOperationsClientCase })),
+);
+const WorkEngineQueue = lazy(() =>
+  import('./pages/WorkEngineQueue').then((m) => ({ default: m.WorkEngineQueue })),
+);
+const IncomeWorkspacePage = lazy(() =>
+  import('./pages/IncomeWorkspacePage').then((m) => ({ default: m.IncomeWorkspacePage })),
+);
+const DocflowCommunicationReviewPage = lazy(() =>
+  import('./pages/DocflowCommunicationReviewPage').then((m) => ({
+    default: m.DocflowCommunicationReviewPage,
+  })),
+);
+const DocflowInvitesManagementPage = lazy(() =>
+  import('./pages/DocflowInvitesManagementPage').then((m) => ({ default: m.DocflowInvitesManagementPage })),
+);
+const DocflowMessengerPage = lazy(() =>
+  import('./pages/DocflowMessengerPage').then((m) => ({ default: m.DocflowMessengerPage })),
+);
+
+function RouteChunkFallback() {
+  return <p className="nx-we-queue__subtitle">טוען…</p>;
+}
 
 function PwaUpdatePrompt() {
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(null);
@@ -157,13 +178,62 @@ function AppRoutes() {
         <Route path="modules" element={<Modules />} />
         <Route path="billing" element={<Billing />} />
         <Route path="m/example" element={<ExampleModulePage />} />
-        <Route path="m/docflow/invites" element={<DocflowInvitesManagementPage />} />
-        <Route path="m/docflow/review" element={<DocflowCommunicationReviewPage />} />
-        <Route path="m/docflow/messenger" element={<DocflowMessengerPage />} />
-        <Route path="m/income" element={<IncomeWorkspacePage />} />
-        <Route path="m/client-operations" element={<ClientOperationsRegistry />} />
-        <Route path="m/client-operations/clients/:clientId" element={<ClientOperationsClientCase />} />
-        <Route path="work-engine/queue" element={<WorkEngineQueue />} />
+        <Route
+          path="m/docflow/invites"
+          element={
+            <Suspense fallback={<RouteChunkFallback />}>
+              <DocflowInvitesManagementPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="m/docflow/review"
+          element={
+            <Suspense fallback={<RouteChunkFallback />}>
+              <DocflowCommunicationReviewPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="m/docflow/messenger"
+          element={
+            <Suspense fallback={<RouteChunkFallback />}>
+              <DocflowMessengerPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="m/income"
+          element={
+            <Suspense fallback={<RouteChunkFallback />}>
+              <IncomeWorkspacePage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="m/client-operations"
+          element={
+            <Suspense fallback={<RouteChunkFallback />}>
+              <ClientOperationsRegistry />
+            </Suspense>
+          }
+        />
+        <Route
+          path="m/client-operations/clients/:clientId"
+          element={
+            <Suspense fallback={<RouteChunkFallback />}>
+              <ClientOperationsClientCase />
+            </Suspense>
+          }
+        />
+        <Route
+          path="work-engine/queue"
+          element={
+            <Suspense fallback={<RouteChunkFallback />}>
+              <WorkEngineQueue />
+            </Suspense>
+          }
+        />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

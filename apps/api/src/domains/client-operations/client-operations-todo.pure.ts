@@ -179,6 +179,32 @@ export function todoPrioritySortRank(priority: number | null | undefined): numbe
   return n;
 }
 
+/**
+ * Postgres ORDER BY that must stay equivalent to `compareTodosForBoardOrder`:
+ *   priority ASC NULLS LAST, created_at ASC, id ASC
+ * (CHECK constraint keeps priority in 1..4 or NULL, so invalid ranks cannot exist.)
+ */
+export const TODO_BOARD_SQL_ORDER = [
+  { column: 'priority', ascending: true as const, nullsFirst: false as const },
+  { column: 'created_at', ascending: true as const },
+  { column: 'id', ascending: true as const },
+];
+
+export const TODO_ARCHIVE_SQL_ORDER = [
+  { column: 'completed_at', ascending: false as const },
+  { column: 'id', ascending: true as const },
+];
+
+/** Search or MEMBER_ALL (unlimited non-OFFICE ACL) need the full owner set; otherwise SQL can page. */
+export function todoAggregateNeedsFullOwnerScan(params: {
+  searchQ: string;
+  accessKind: string;
+  authorizedClientIds: string[] | null;
+}): boolean {
+  if (params.searchQ) return true;
+  return params.accessKind !== 'OFFICE' && params.authorizedClientIds === null;
+}
+
 export function compareTodosForBoardOrder(
   a: { priority: number | null; created_at: string; id: string },
   b: { priority: number | null; created_at: string; id: string },

@@ -35,6 +35,9 @@ import {
   CLIENT_OPERATIONS_TODO_PAGE_SIZE,
   CLIENT_OPERATIONS_TODO_PROGRESS_NOTE_MAX,
   compareTodosForBoardOrder,
+  TODO_ARCHIVE_SQL_ORDER,
+  TODO_BOARD_SQL_ORDER,
+  todoAggregateNeedsFullOwnerScan,
   normalizeTodoClientOptionsLimit,
   normalizeTodoClientSearchTokens,
   normalizeTodoExternalClientName,
@@ -407,12 +410,50 @@ ows (avoids a second read of the same clients). */
 const TODO_ROW_COLUMNS =
   'id, organization_id, client_id, external_client_name, external_client_tax_id, assigned_to_user_id, task_text, priority, progress_note, completion_reason, created_at, created_by_user_id, updated_at, updated_by_user_id, completed_at, completed_by_user_id';
 
+function todoOwnerBaseQuery(params: {
+  orgId: string;
+  active: boolean;
+  ownerUserId: string;
+  withCount: boolean;
+}) {
+  let q = supabaseAdmin
+    .from('client_operations_todos')
+    .select(TODO_ROW_COLUMNS, params.withCount ? { count: 'exact' } : undefined)
+    .eq('organization_id', params.orgId)
+    .eq('assigned_to_user_id', params.ownerUserId);
+  if (params.active) q = q.is('completed_at', null);
+  else q = q.not('completed_at', 'is', null);
+  return q;
+}
+
+/**
+ * Canonical-client ToDos are limited by the workspace client ACL. One-time ToDos (`client_id IS NULL`)
+ * have no client to authorize: the owner filter is their authorization boundary, so they stay in the
+ * same query via `OR client_id IS NULL` and are never dropped by `.in('client_id', …)`.
+ */
+function applyTodoClientAcl(q: any, authorizedClientIds: string[] | null): any {
+  if (authorizedClientIds === null) return q;
+  if (authorizedClientIds.length === 0) return q.is('client_id', null);
+  return q.or(`client_id.is.null,client_id.in.(${authorizedClientIds.join(',')})`);
+}
+
+function applyTodoSqlOrder(
+  q: any,
+  spec: ReadonlyArray<{ column: string; ascending: boolean; nullsFirst?: boolean }>,
+): any {
+  let next = q;
+  for (const step of spec) {
+    next = next.order(step.column, {
+      ascending: step.ascending,
+      ...(step.nullsFirst === undefined ? {} : { nullsFirst: step.nullsFirst }),
+    });
+  }
+  return next;
+}
+
 /**
  * Org ToDos for one board owner (`ownerUserId` = workspace subject, see `todoBoardSubjectUserId`).
- *
- * Canonical-client ToDos are limited by the workspace client ACL (`authorizedClientIds`). One-time ToDos
- * (`client_id IS NULL`) have no client to authorize: the owner filter is their authorization boundary, so
- * they are read by their own query and are never dropped by the ACL `.in('client_id', …)` filter.
+ * Full-set read — used when search or MEMBER_ALL archived-client exclusion needs every owner row.
  */
 async function loadOrgTodos(params: {
   orgId: string;
@@ -420,31 +461,38 @@ async function loadOrgTodos(params: {
   authorizedClientIds: string[] | null;
   ownerUserId: string;
 }): Promise<TodoRow[]> {
-  const base = () => {
-    let q = supabaseAdmin
-      .from('client_operations_todos')
-      .select(TODO_ROW_COLUMNS)
-      .eq('organization_id', params.orgId)
-      .eq('assigned_to_user_id', params.ownerUserId);
-    if (params.active) q = q.is('completed_at', null);
-    else q = q.not('completed_at', 'is', null);
-    return q;
-  };
+  const { data, error } = await applyTodoClientAcl(
+    todoOwnerBaseQuery({ ...params, withCount: false }),
+    params.authorizedClientIds,
+  );
+  if (error) throw new Error(error.message ?? 'Failed to load todos');
+  return (data ?? []) as TodoRow[];
+}
 
-  const reads: Array<PromiseLike<{ data: unknown; error: { message?: string } | null }>> = [];
-  if (params.authorizedClientIds === null) {
-    reads.push(base());
-  } else {
-    if (params.authorizedClientIds.length > 0) reads.push(base().in('client_id', params.authorizedClientIds));
-    reads.push(base().is('client_id', null));
-  }
-  const results = await Promise.all(reads);
-  const rows: TodoRow[] = [];
-  for (const { data, error } of results) {
-    if (error) throw new Error(error.message ?? 'Failed to load todos');
-    rows.push(...((data ?? []) as TodoRow[]));
-  }
-  return rows;
+async function loadOrgTodosPage(params: {
+  orgId: string;
+  active: boolean;
+  authorizedClientIds: string[] | null;
+  ownerUserId: string;
+  page: number;
+  pageSize: number;
+  order: 'board' | 'archive';
+  filterPriority?: number | null | 'none';
+}): Promise<{ rows: TodoRow[]; total: number }> {
+  let q = applyTodoClientAcl(
+    todoOwnerBaseQuery({ ...params, withCount: true }),
+    params.authorizedClientIds,
+  );
+  if (params.filterPriority === 'none') q = q.is('priority', null);
+  else if (typeof params.filterPriority === 'number') q = q.eq('priority', params.filterPriority);
+  q = applyTodoSqlOrder(q, params.order === 'board' ? TODO_BOARD_SQL_ORDER : TODO_ARCHIVE_SQL_ORDER);
+  const page = Math.max(1, params.page);
+  const from = (page - 1) * params.pageSize;
+  const to = from + params.pageSize - 1;
+  const { data, error, count } = await q.range(from, to);
+  if (error) throw new Error(error.message ?? 'Failed to load todos');
+  const rows = (data ?? []) as TodoRow[];
+  return { rows, total: count ?? rows.length };
 }
 
 /**
@@ -529,6 +577,32 @@ async function loadScopedTodos(params: {
   return { rows, clientMap };
 }
 
+async function loadSqlPagedTodos(params: {
+  resolved: ResolvedTodoWorkspace;
+  active: boolean;
+  page: number;
+  order: 'board' | 'archive';
+  filterPriority?: number | null | 'none';
+}): Promise<{ rows: TodoRow[]; total: number; page: number }> {
+  const { orgId, workspace, materializationAccess } = params.resolved;
+  const shared = {
+    orgId,
+    active: params.active,
+    authorizedClientIds: materializationAccess.authorized_client_ids,
+    ownerUserId: todoBoardSubjectUserId(workspace),
+    pageSize: CLIENT_OPERATIONS_TODO_PAGE_SIZE,
+    order: params.order,
+    filterPriority: params.filterPriority,
+  };
+  let loaded = await loadOrgTodosPage({ ...shared, page: params.page });
+  const pagination = buildTodoPagination({ total: loaded.total, page: params.page });
+  if (pagination.page !== params.page && loaded.total > 0) {
+    loaded = await loadOrgTodosPage({ ...shared, page: pagination.page });
+  }
+  const rows = filterTodosForWorkspace(loaded.rows, workspace, materializationAccess);
+  return { rows, total: loaded.total, page: pagination.page };
+}
+
 async function buildTodoBoardAggregate(
   ctx: RequestContext,
   resolved: ResolvedTodoWorkspace,
@@ -537,24 +611,44 @@ async function buildTodoBoardAggregate(
   const { orgId, workspace, materializationAccess } = resolved;
   const pageReq = normalizeTodoPage(query.page);
   const q = String(query.q ?? '').trim().toLowerCase();
-  const loaded = await loadScopedTodos({ resolved, active: true, q });
-  const scoped = loaded.rows.sort(compareTodosForBoardOrder);
-  const pagination = buildTodoPagination({ total: scoped.length, page: pageReq });
-  const pageRows = sliceTodoPage(scoped, pagination.page);
+  const needsFullScan = todoAggregateNeedsFullOwnerScan({
+    searchQ: q,
+    accessKind: materializationAccess.kind,
+    authorizedClientIds: materializationAccess.authorized_client_ids,
+  });
+  let pageRows: TodoRow[];
+  let pagination: ReturnType<typeof buildTodoPagination>;
+  let clientMap: ClientIdentityMap | null = null;
+  if (needsFullScan) {
+    const loaded = await loadScopedTodos({ resolved, active: true, q });
+    const scoped = loaded.rows.sort(compareTodosForBoardOrder);
+    pagination = buildTodoPagination({ total: scoped.length, page: pageReq });
+    pageRows = sliceTodoPage(scoped, pagination.page);
+    clientMap = loaded.clientMap;
+  } else {
+    const paged = await loadSqlPagedTodos({
+      resolved,
+      active: true,
+      page: pageReq,
+      order: 'board',
+    });
+    pageRows = [...paged.rows].sort(compareTodosForBoardOrder);
+    pagination = buildTodoPagination({ total: paged.total, page: paged.page });
+  }
   const tasks = await hydrateTodoCards({
     ctx,
     orgId,
     rows: pageRows,
     workspace,
     materializationAccess,
-    clientMap: loaded.clientMap,
+    clientMap,
   });
 
   return {
     title_he: 'ToDo List',
     workspace: workspaceAggregateContract(workspace),
     summary: {
-      active_total: scoped.length,
+      active_total: pagination.total,
       page_size: CLIENT_OPERATIONS_TODO_PAGE_SIZE,
     },
     pagination,
@@ -615,39 +709,62 @@ async function buildTodoArchiveAggregate(
   else filterPriority = safeNormalizePriority(filterPriorityRaw);
 
   // The whole archive is never hydrated just to render one page: client identities are loaded for the full
-  // set only when a text search needs them, otherwise for the 25 visible rows.
-  const loaded = await loadScopedTodos({ resolved, active: false, q });
-  let scoped = loaded.rows;
-
-  if (filterPriority === 'none') {
-    scoped = scoped.filter((r) => r.priority == null);
-  } else if (typeof filterPriority === 'number') {
-    scoped = scoped.filter((r) => r.priority === filterPriority);
-  }
-
-  scoped = scoped.sort((a, b) => {
-    const ca = String(a.completed_at ?? '');
-    const cb = String(b.completed_at ?? '');
-    if (ca !== cb) return ca > cb ? -1 : 1;
-    return String(a.id) < String(b.id) ? -1 : 1;
+  // set only when a text search / MEMBER_ALL archive rule needs them; otherwise SQL pages 25 rows.
+  const needsFullScan = todoAggregateNeedsFullOwnerScan({
+    searchQ: q,
+    accessKind: materializationAccess.kind,
+    authorizedClientIds: materializationAccess.authorized_client_ids,
   });
-
-  const pagination = buildTodoPagination({ total: scoped.length, page: pageReq });
-  const pageRows = sliceTodoPage(scoped, pagination.page);
+  let pageRows: TodoRow[];
+  let pagination: ReturnType<typeof buildTodoPagination>;
+  let clientMap: ClientIdentityMap | null = null;
+  if (needsFullScan) {
+    const loaded = await loadScopedTodos({ resolved, active: false, q });
+    let scoped = loaded.rows;
+    if (filterPriority === 'none') {
+      scoped = scoped.filter((r) => r.priority == null);
+    } else if (typeof filterPriority === 'number') {
+      scoped = scoped.filter((r) => r.priority === filterPriority);
+    }
+    scoped = scoped.sort((a, b) => {
+      const ca = String(a.completed_at ?? '');
+      const cb = String(b.completed_at ?? '');
+      if (ca !== cb) return ca > cb ? -1 : 1;
+      return String(a.id) < String(b.id) ? -1 : 1;
+    });
+    pagination = buildTodoPagination({ total: scoped.length, page: pageReq });
+    pageRows = sliceTodoPage(scoped, pagination.page);
+    clientMap = loaded.clientMap;
+  } else {
+    const paged = await loadSqlPagedTodos({
+      resolved,
+      active: false,
+      page: pageReq,
+      order: 'archive',
+      filterPriority,
+    });
+    pageRows = [...paged.rows].sort((a, b) => {
+      const ca = String(a.completed_at ?? '');
+      const cb = String(b.completed_at ?? '');
+      if (ca !== cb) return ca > cb ? -1 : 1;
+      return String(a.id) < String(b.id) ? -1 : 1;
+    });
+    pagination = buildTodoPagination({ total: paged.total, page: paged.page });
+  }
   const tasks = await hydrateTodoCards({
     ctx,
     orgId,
     rows: pageRows,
     workspace,
     materializationAccess,
-    clientMap: loaded.clientMap,
+    clientMap,
   });
 
   return {
     title_he: 'ארכיון ToDo',
     workspace: workspaceAggregateContract(workspace),
     summary: {
-      archive_total: scoped.length,
+      archive_total: pagination.total,
       page_size: CLIENT_OPERATIONS_TODO_PAGE_SIZE,
     },
     pagination,

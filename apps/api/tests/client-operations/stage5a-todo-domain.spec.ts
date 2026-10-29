@@ -11,6 +11,8 @@ import {
   buildTodoPagination,
   CLIENT_OPERATIONS_TODO_PAGE_SIZE,
   compareTodosForBoardOrder,
+  TODO_BOARD_SQL_ORDER,
+  todoAggregateNeedsFullOwnerScan,
   normalizeTodoPriority,
   normalizeTodoTaskText,
   presentationPriorityToken,
@@ -67,6 +69,43 @@ test('Z/AA/AB — pagination stable page size 25; overflow to next page; not a p
   assert.equal(pag.has_next, true);
   // Five visual cards is layout only — creation is never blocked by priority row fullness.
   assert.equal(normalizeTodoTaskText('x'.repeat(10)).length, 10);
+});
+
+test('SQL board order spec matches compareTodosForBoardOrder (priority ASC NULLS LAST, created_at, id)', () => {
+  assert.deepEqual(
+    TODO_BOARD_SQL_ORDER.map((s) => s.column),
+    ['priority', 'created_at', 'id'],
+  );
+  assert.equal(TODO_BOARD_SQL_ORDER[0]?.nullsFirst, false);
+  assert.equal(TODO_BOARD_SQL_ORDER[0]?.ascending, true);
+  const service = readSrc('domains/client-operations/client-operations-todo.service.ts');
+  assert.match(service, /TODO_BOARD_SQL_ORDER/);
+  assert.match(service, /loadOrgTodosPage/);
+  assert.match(service, /todoAggregateNeedsFullOwnerScan/);
+  assert.equal(
+    todoAggregateNeedsFullOwnerScan({ searchQ: '', accessKind: 'OFFICE', authorizedClientIds: null }),
+    false,
+  );
+  assert.equal(
+    todoAggregateNeedsFullOwnerScan({ searchQ: 'tax', accessKind: 'OFFICE', authorizedClientIds: null }),
+    true,
+  );
+  assert.equal(
+    todoAggregateNeedsFullOwnerScan({
+      searchQ: '',
+      accessKind: 'MEMBER_ALL',
+      authorizedClientIds: null,
+    }),
+    true,
+  );
+  assert.equal(
+    todoAggregateNeedsFullOwnerScan({
+      searchQ: '',
+      accessKind: 'ASSIGNED_TO_SELF',
+      authorizedClientIds: ['c-1'],
+    }),
+    false,
+  );
 });
 
 test('task text validation rejects empty / overlong', () => {

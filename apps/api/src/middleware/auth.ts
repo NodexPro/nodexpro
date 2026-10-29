@@ -87,33 +87,51 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
 
   const rawOrgHeader = req.headers['x-organization-id'];
   const orgIdHeader = typeof rawOrgHeader === 'string' && rawOrgHeader.trim() ? rawOrgHeader.trim() : undefined;
-  let membership: OrgMembership | null = null;
-  let organizationId: string | null = null;
-
-  if (orgIdHeader) {
-    membership = await loadOrgMembershipForUser(user.id, orgIdHeader);
-    const headerDecision = explicitOrgHeaderDecision({
-      headerPresent: true,
-      membershipFound: Boolean(membership),
-    });
-    if (headerDecision === 'reject_not_member') {
-      next(forbidden('Not a member of this organization'));
-      return;
-    }
-    if (membership) organizationId = membership.organizationId;
-  }
-
-  if (!organizationId) {
-    const resolved = await resolveStoredOrSingleAutoOrgContext(user.id);
-    organizationId = resolved.organizationId;
-    membership = resolved.membership;
-  }
-
+  const authenticatorAssurance = readAuthenticatorAssurance(token);
+  const path = String(req.originalUrl ?? req.path ?? '').split('?')[0] ?? '';
   const deviceCredential = deviceCredentialFromCookie(typeof req.headers.cookie === 'string' ? req.headers.cookie : undefined);
-  let trustedDevice = false;
-  if (deviceCredential && getPrivilegedMfaGate().trustedDevicesReady) {
-    trustedDevice = await recognizeTrustedDevice(user.id, deviceCredential).catch(() => false);
+
+  const orgPromise = (async (): Promise<
+    | { ok: true; membership: OrgMembership | null; organizationId: string | null }
+    | { ok: false }
+  > => {
+    let membership: OrgMembership | null = null;
+    let organizationId: string | null = null;
+    if (orgIdHeader) {
+      membership = await loadOrgMembershipForUser(user.id, orgIdHeader);
+      const headerDecision = explicitOrgHeaderDecision({
+        headerPresent: true,
+        membershipFound: Boolean(membership),
+      });
+      if (headerDecision === 'reject_not_member') {
+        return { ok: false };
+      }
+      if (membership) organizationId = membership.organizationId;
+    }
+    if (!organizationId) {
+      const resolved = await resolveStoredOrSingleAutoOrgContext(user.id);
+      organizationId = resolved.organizationId;
+      membership = resolved.membership;
+    }
+    return { ok: true, membership, organizationId };
+  })();
+
+  const trustedDevicePromise =
+    deviceCredential && getPrivilegedMfaGate().trustedDevicesReady
+      ? recognizeTrustedDevice(user.id, deviceCredential).catch(() => false)
+      : Promise.resolve(false);
+
+  const highRiskPromise =
+    authenticatorAssurance !== 'aal2' && !isHighRiskChallengePath(path)
+      ? isHighRiskLoginPending(user.authUserId)
+      : Promise.resolve(false);
+
+  const [orgResult, trustedDevice] = await Promise.all([orgPromise, trustedDevicePromise]);
+  if (!orgResult.ok) {
+    next(forbidden('Not a member of this organization'));
+    return;
   }
+  const { membership, organizationId } = orgResult;
 
   let suspiciousSignIn = false;
   const ownerEmail = config.platformOwner.email?.trim().toLowerCase() ?? '';
@@ -133,7 +151,7 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
     membership,
     organizationId,
     correlationId: req.correlationId,
-    authenticatorAssurance: readAuthenticatorAssurance(token),
+    authenticatorAssurance,
     trustedDevice,
     suspiciousSignIn,
   } as RequestContext;
@@ -149,12 +167,7 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
     next(error);
     return;
   }
-  const path = String(req.originalUrl ?? req.path ?? '').split('?')[0] ?? '';
-  if (
-    (req.context.authenticatorAssurance ?? 'aal1') !== 'aal2'
-    && !isHighRiskChallengePath(path)
-    && await isHighRiskLoginPending(user.authUserId)
-  ) {
+  if (await highRiskPromise) {
     next(unauthorized('Additional authentication is required', 'LOGIN_CHALLENGE_REQUIRED'));
     return;
   }

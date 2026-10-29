@@ -99,6 +99,9 @@ export function userFacingApiMessage(e: unknown): string {
     if (/failed to fetch|network|load failed/i.test(m)) {
       return 'בעיית תקשורת. בדוק חיבור לאינטרנט ונסה שוב.';
     }
+    if (/duplicate key|violates unique|violates check|violates foreign|null value in column|does not exist|relation |column |syntax error at|PGRST\d+|postgres|supabase/i.test(m)) {
+      return 'שגיאת שרת זמנית. נסה שוב בעוד רגע; אם זה חוזר — פנה לתמיכה.';
+    }
     return m || 'שגיאה';
   }
   return 'שגיאה';

@@ -238,6 +238,8 @@ export type RegistryRowForPlaceholderCase = {
   client_id: string;
   client_name: string | null;
   tax_id: string | null;
+  email?: string | null;
+  phone?: string | null;
   business_type: string | null;
   payroll_flag: boolean | null;
   material_brought_flag: boolean | null;
@@ -321,8 +323,8 @@ export function buildPlaceholderClientCaseFromRegistryRow(row: RegistryRowForPla
       status: 'active',
       started_at: null,
       ended_at: null,
-      email: null,
-      phone: null,
+      email: row.email ?? null,
+      phone: row.phone ?? null,
       address: null,
       city: null,
       notes: null,
@@ -408,7 +410,7 @@ export function ClientWorkspacePanel({
   const onClientProfileSavedRef = useRef(onClientProfileSaved);
   const autosaverRef = useRef<ReturnType<typeof createClientProfileAutosaver> | null>(null);
   const pendingConfirmedCaseRef = useRef<ClientOperationsCaseResponse | null>(null);
-  const clientFieldsLocked = Boolean(caseHydrating);
+  const clientFieldsLocked = Boolean(caseHydrating) || Boolean(hydrationError);
   clientIdRef.current = workspace.client.id;
   lockedRef.current = clientFieldsLocked;
   onClientProfileSavedRef.current = onClientProfileSaved;
@@ -600,8 +602,8 @@ export function ClientWorkspacePanel({
 
   const isClientTab = activeTab === 'client';
   const primaryContact = localWorkspace.primary_contact;
-  const displayPhone = primaryContact?.phone ?? localWorkspace.client.phone;
-  const displayEmail = primaryContact?.email ?? localWorkspace.client.email;
+  const displayPhone = primaryContact?.phone || localWorkspace.client.phone;
+  const displayEmail = primaryContact?.email || localWorkspace.client.email;
   const displayAddress = [localWorkspace.client.address, localWorkspace.client.city].filter(Boolean).join(' · ');
   const handlerValue = localWorkspace.profile.assigned_handler_user_full_name ?? localWorkspace.profile.assigned_handler_user_id;
 

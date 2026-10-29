@@ -123,6 +123,12 @@ test('8 — frontend receives ready-to-render truth; no FE count/catalog inferen
   assert.match(feQueueSource, /summary_cards/);
 });
 
+test('10 — independent queue counts overlap; page ACL reuses the request allow-list', () => {
+  assert.match(readModelSource, /bucketCountsPromise/);
+  assert.match(readModelSource, /const allowedClientIds = viewer\?\.userId \? scopeAllow : \[\]/);
+  assert.doesNotMatch(readModelSource, /authorizedClientIdsForViewer/);
+});
+
 test('9 — reminder review summary counts no longer silently truncate at 5000', () => {
   const fnStart = reminderSource.indexOf('export async function loadReminderReviewCounts');
   const fnEnd = reminderSource.indexOf('export async function editReminderCandidate', fnStart);

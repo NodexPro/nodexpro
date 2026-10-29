@@ -20,7 +20,7 @@ const registryPageSource = readFileSync(
 
 test('clients tab aggregate reuses Client Operations registry read model', () => {
   assert.match(clientsTabSource, /listClientOperationsRegistry/);
-  assert.match(clientsTabSource, /listOperationalNoteTypes/);
+  assert.match(clientsTabSource, /materializationCache:\s*true/);
   assert.equal(clientsTabSource.includes('work_engine_clients_tab_aggregate'), true);
   assert.doesNotMatch(clientsTabSource, /\.from\(['"]clients['"]\).*insert/i);
 });

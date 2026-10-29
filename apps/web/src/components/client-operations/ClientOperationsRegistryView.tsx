@@ -1,9 +1,23 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { apiFetch, apiJson } from '../../api/client';
+import { apiFetch, apiJson, userFacingApiMessage } from '../../api/client';
+import { useAuth } from '../../contexts/AuthContext';
+import { useI18n } from '../../i18n/I18nProvider';
+import {
+  beginExclusiveSubmit,
+  buildCreateClientCommandPayload,
+  endExclusiveSubmit,
+  firstInvalidCreateClientFocusField,
+  mapCreateClientCommandError,
+  validateCreateClientDraft,
+  type CreateClientField,
+} from '../../pages/client-create-form.pure';
+import { canonicalCreatedClientId } from '../../pages/client-create-navigation.pure';
+import { AccountRequiredMark } from '../glass/AccountRequiredMark';
 import { useClientOperationsHeaderSearchSlot, useClientOperationsHeaderWorkspaceSlot } from './ClientOperationsHeaderSearchSlot';
 import { encodeClientOperationsWorkspaceOptionValue } from '../../lib/client-operations-workspace-url.pure';
 import {
+  orgClients,
   moduleClientOperationsCase,
   moduleClientOperationsClientQuickProfile,
   moduleClientOperationsOperationalNotes,
@@ -116,6 +130,9 @@ import {
 import '../../styles/nx-modal.css';
 import '../../styles/nx-client-operations-spreadsheet.css';
 import '../../styles/nx-client-operations-todo.css';
+import '../../styles/nx-glass-surface.css';
+import '../../styles/nx-clients.css';
+import '../../styles/nx-client-create-deep-ocean-glass.css';
 import { ClientOperationsPeriodSheetTabs } from './ClientOperationsPeriodSheetTabs';
 import { ClientOperationsTodoBoardModal } from './ClientOperationsTodoBoardModal';
 
@@ -436,6 +453,8 @@ export type ClientOperationsRegistryViewProps = {
   onReloadRegistry?: () => void;
   /** Spreadsheet chrome only on /m/client-operations; embedded keeps prior Work Engine look. */
   variant?: 'spreadsheet' | 'embedded';
+  /** Backend `create_core_client` — Core POST /clients, then this page's workspace modal. */
+  canCreateCoreClient?: boolean;
   /**
    * Aggregate title (contract kept). The inner sheet title is no longer rendered —
    * the module title lives in the route header (ClientOperationsAppHeader).
@@ -564,6 +583,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     searchPending = false,
     error,
     canEdit,
+    canCreateCoreClient = false,
     showPageHeader = true,
     onReloadRegistry,
     variant = 'embedded',
@@ -604,6 +624,29 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [modalLoading, setModalLoading] = useState(false);
   const [modalError, setModalError] = useState('');
   const [modalData, setModalData] = useState<ClientOperationsCaseResponse | null>(null);
+  const auth = useAuth();
+  const { t, lang } = useI18n();
+  const orgId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
+  const [showCreateClient, setShowCreateClient] = useState(false);
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [createInvalidField, setCreateInvalidField] = useState<CreateClientField | null>(null);
+  const [createTaxId, setCreateTaxId] = useState('');
+  const [createName, setCreateName] = useState('');
+  const [createType, setCreateType] = useState('business_customer');
+  const [createPhone, setCreatePhone] = useState('');
+  const [createEmail, setCreateEmail] = useState('');
+  const [createWebsite, setCreateWebsite] = useState('');
+  const [createCountry, setCreateCountry] = useState('');
+  const [createCity, setCreateCity] = useState('');
+  const [createStreet, setCreateStreet] = useState('');
+  const [createPostalCode, setCreatePostalCode] = useState('');
+  const createInFlightRef = useRef(false);
+  const createTaxIdRef = useRef<HTMLInputElement>(null);
+  const createNameRef = useRef<HTMLInputElement>(null);
+  const createTypeRef = useRef<HTMLSelectElement>(null);
+  const createPhoneRef = useRef<HTMLInputElement>(null);
+  const createEmailRef = useRef<HTMLInputElement>(null);
   const [quickProfile, setQuickProfile] = useState<ClientOperationsClientQuickProfileAggregate | null>(
     null
   );
@@ -954,8 +997,117 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     setModalData(buildPlaceholderClientCaseFromRegistryRow(r));
     apiJson<ClientOperationsCaseResponse>(moduleClientOperationsCase(r.client_id))
       .then((res) => setModalData(res))
-      .catch((e) => setModalError(e instanceof Error ? e.message : 'Failed to load'))
+      .catch((e) => setModalError(userFacingApiMessage(e)))
       .finally(() => setModalLoading(false));
+  };
+
+  const resetCreateClientForm = () => {
+    setCreateError('');
+    setCreateInvalidField(null);
+    setCreateTaxId('');
+    setCreateName('');
+    setCreateType('business_customer');
+    setCreatePhone('');
+    setCreateEmail('');
+    setCreateWebsite('');
+    setCreateCountry('');
+    setCreateCity('');
+    setCreateStreet('');
+    setCreatePostalCode('');
+  };
+
+  const focusCreateField = (field: CreateClientField | null) => {
+    const target = firstInvalidCreateClientFocusField(field);
+    const node =
+      target === 'tax_id' ? createTaxIdRef.current
+      : target === 'display_name' ? createNameRef.current
+      : target === 'client_type' ? createTypeRef.current
+      : target === 'phone' ? createPhoneRef.current
+      : null;
+    node?.focus();
+  };
+
+  const submitCreateCoreClient = async (e: { preventDefault: () => void }) => {
+    e.preventDefault();
+    if (!orgId || !canCreateCoreClient) return;
+    if (!beginExclusiveSubmit(createInFlightRef)) return;
+    setCreateSubmitting(true);
+    setCreateError('');
+    setCreateInvalidField(null);
+    const draft = {
+      tax_id: createTaxId,
+      display_name: createName,
+      client_type: createType,
+      phone: createPhone,
+      email: createEmail,
+      website: createWebsite,
+      country_code: createCountry,
+      city: createCity,
+      street: createStreet,
+      postal_code: createPostalCode,
+    };
+    const validation = validateCreateClientDraft(draft);
+    if (!validation.ok) {
+      setCreateInvalidField(validation.field);
+      setCreateError(t(validation.messageKey));
+      focusCreateField(validation.field);
+      endExclusiveSubmit(createInFlightRef);
+      setCreateSubmitting(false);
+      return;
+    }
+    try {
+      const created = await apiJson<{ id: string }>(orgClients(orgId), {
+        method: 'POST',
+        body: JSON.stringify(buildCreateClientCommandPayload(draft)),
+      });
+      const clientId = canonicalCreatedClientId(created);
+      if (!clientId) {
+        setCreateError(t('clients.errors.retryable'));
+        return;
+      }
+      const savedPhone = createPhone.trim() || null;
+      const savedEmail = createEmail.trim() || null;
+      const savedName = createName.trim();
+      const savedTaxId = createTaxId.trim();
+      setShowCreateClient(false);
+      resetCreateClientForm();
+      onReloadRegistry?.();
+      closeQuickProfile();
+      setModalOpen(true);
+      setModalLoading(true);
+      setModalError('');
+      setModalData(
+        buildPlaceholderClientCaseFromRegistryRow({
+          client_id: clientId,
+          client_name: savedName,
+          tax_id: savedTaxId,
+          email: savedEmail,
+          phone: savedPhone,
+          business_type: null,
+          payroll_flag: null,
+          material_brought_flag: null,
+          vat_status: null,
+          income_tax_advance_status: null,
+          national_insurance_status: null,
+          national_insurance_deductions_status: null,
+          income_tax_deductions_status: null,
+          assigned_handler_user_id: null,
+          vat_due_registry_display_he: null,
+        }),
+      );
+      apiJson<ClientOperationsCaseResponse>(moduleClientOperationsCase(clientId))
+        .then((res) => setModalData(res))
+        .catch((err) => setModalError(userFacingApiMessage(err)))
+        .finally(() => setModalLoading(false));
+    } catch (err) {
+      const mapped = mapCreateClientCommandError(err);
+      setCreateInvalidField(mapped.field);
+      setCreateError(t(mapped.messageKey));
+      focusCreateField(mapped.field);
+    } finally {
+      endExclusiveSubmit(createInFlightRef);
+      setCreateSubmitting(false);
+    }
   };
 
   const openNotesModal = (r: ClientOperationsRegistryRow) => {
@@ -2874,6 +3026,22 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             {fullscreenOpen ? 'יציאה ממסך מלא' : '⊞ מסך מלא'}
           </button>
 
+          {canCreateCoreClient ? (
+            <button
+              type="button"
+              data-testid="co-create-core-client"
+              className="nx-co-sheet__btn"
+              title={t('clients.newClient')}
+              aria-label={t('clients.newClient')}
+              onClick={() => {
+                resetCreateClientForm();
+                setShowCreateClient(true);
+              }}
+            >
+              {t('clients.newClient')}
+            </button>
+          ) : null}
+
           {/* ── Print ── */}
           <button
             type="button"
@@ -3833,6 +4001,163 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
   const modals = (
     <>
+      {showCreateClient && canCreateCoreClient ? (
+        <div className="nx-clients-overlay nx-client-create nx-client-create--deep-ocean-glass">
+          <div
+            className="nx-glass-card nx-clients-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="nx-co-create-title"
+            dir={lang === 'he' ? 'rtl' : 'ltr'}
+          >
+            <div className="nx-clients-modal__head">
+              <h3 id="nx-co-create-title">{t('clients.create.title')}</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCreateClient(false);
+                  resetCreateClientForm();
+                }}
+                className="nx-clients-modal__close"
+                aria-label={t('common.cancel')}
+              >
+                ×
+              </button>
+            </div>
+            <form onSubmit={submitCreateCoreClient} className="nx-clients-form" noValidate>
+              <div className="nx-clients-form__body">
+                {createError ? (
+                  <div className="nx-client-create__span nx-glass-alert nx-glass-alert--error" role="alert">
+                    {createError}
+                  </div>
+                ) : null}
+                <label>
+                  <span className="nx-clients-form__label-line">
+                    {t('clients.create.taxId')} <AccountRequiredMark />
+                  </span>
+                  <input
+                    ref={createTaxIdRef}
+                    type="text"
+                    value={createTaxId}
+                    onChange={(ev) => {
+                      setCreateTaxId(ev.target.value);
+                      if (createInvalidField === 'tax_id') setCreateInvalidField(null);
+                    }}
+                    required
+                    aria-invalid={createInvalidField === 'tax_id'}
+                    className={`nx-glass-input nx-ltr${createInvalidField === 'tax_id' ? ' is-invalid' : ''}`}
+                  />
+                </label>
+                <label>
+                  <span className="nx-clients-form__label-line">
+                    {t('clients.create.displayName')} <AccountRequiredMark />
+                  </span>
+                  <input
+                    ref={createNameRef}
+                    type="text"
+                    value={createName}
+                    onChange={(ev) => {
+                      setCreateName(ev.target.value);
+                      if (createInvalidField === 'display_name') setCreateInvalidField(null);
+                    }}
+                    required
+                    aria-invalid={createInvalidField === 'display_name'}
+                    className={`nx-glass-input${createInvalidField === 'display_name' ? ' is-invalid' : ''}`}
+                  />
+                </label>
+                <label>
+                  {t('clients.create.type')}
+                  <select
+                    ref={createTypeRef}
+                    value={createType}
+                    onChange={(ev) => setCreateType(ev.target.value)}
+                    aria-invalid={createInvalidField === 'client_type'}
+                    className={`nx-glass-input${createInvalidField === 'client_type' ? ' is-invalid' : ''}`}
+                  >
+                    <option value="business_customer">{t('clients.type.business_customer')}</option>
+                    <option value="individual_customer">{t('clients.type.individual_customer')}</option>
+                    <option value="supplier">{t('clients.type.supplier')}</option>
+                    <option value="partner">{t('clients.type.partner')}</option>
+                    <option value="other">{t('clients.type.other')}</option>
+                  </select>
+                </label>
+                <label>
+                  {t('clients.contact.website')}
+                  <input type="url" value={createWebsite} onChange={(ev) => setCreateWebsite(ev.target.value)} placeholder="https://" className="nx-glass-input nx-ltr" />
+                </label>
+                <h4 className="nx-client-create__span">
+                  {t('clients.contact.section')}{' '}
+                  <AccountRequiredMark />
+                  <span className="nx-clients-required-caption"> {t('clients.contact.orRequired')}</span>
+                </h4>
+                <label>
+                  {t('clients.details.phone')}
+                  <input
+                    ref={createPhoneRef}
+                    type="text"
+                    value={createPhone}
+                    onChange={(ev) => {
+                      setCreatePhone(ev.target.value);
+                      if (createInvalidField === 'contact') setCreateInvalidField(null);
+                    }}
+                    placeholder={t('clients.contact.phonePlaceholder')}
+                    aria-invalid={createInvalidField === 'contact'}
+                    className={`nx-glass-input nx-ltr${createInvalidField === 'contact' ? ' is-invalid' : ''}`}
+                  />
+                </label>
+                <label>
+                  {t('clients.details.email')}
+                  <input
+                    ref={createEmailRef}
+                    type="email"
+                    value={createEmail}
+                    onChange={(ev) => {
+                      setCreateEmail(ev.target.value);
+                      if (createInvalidField === 'contact') setCreateInvalidField(null);
+                    }}
+                    placeholder={t('clients.contact.emailPlaceholder')}
+                    aria-invalid={createInvalidField === 'contact'}
+                    className={`nx-glass-input nx-ltr${createInvalidField === 'contact' ? ' is-invalid' : ''}`}
+                  />
+                </label>
+                <h4 className="nx-client-create__span">{t('clients.address.section')}</h4>
+                <label>
+                  {t('clients.address.country')}
+                  <input type="text" value={createCountry} onChange={(ev) => setCreateCountry(ev.target.value)} placeholder="IL" maxLength={2} className="nx-glass-input nx-ltr" />
+                </label>
+                <label>
+                  {t('clients.address.city')}
+                  <input type="text" value={createCity} onChange={(ev) => setCreateCity(ev.target.value)} className="nx-glass-input" />
+                </label>
+                <label>
+                  {t('clients.address.street')}
+                  <input type="text" value={createStreet} onChange={(ev) => setCreateStreet(ev.target.value)} className="nx-glass-input" />
+                </label>
+                <label>
+                  {t('clients.address.postalCode')}
+                  <input type="text" value={createPostalCode} onChange={(ev) => setCreatePostalCode(ev.target.value)} className="nx-glass-input" />
+                </label>
+              </div>
+              <div className="nx-clients-form__footer">
+                <button type="submit" disabled={createSubmitting} className="nx-glass-btn nx-glass-btn--purple">
+                  {createSubmitting ? t('common.loading') : t('common.create')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateClient(false);
+                    resetCreateClientForm();
+                  }}
+                  className="nx-glass-btn nx-glass-btn--secondary"
+                >
+                  {t('common.cancel')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
       {modalOpen && (
         <ClientWorkspaceModal
           open={modalOpen}

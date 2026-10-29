@@ -89,7 +89,9 @@ async function ensurePayrollProfile(orgId: string, clientId: string): Promise<vo
     organization_id: orgId,
     client_id: clientId,
   });
-  if (error) throw new AppError(500, error.message ?? 'payroll profile insert failed', 'SUPABASE_ERROR');
+  if (error && String((error as { code?: string }).code ?? '') === '23505') return;
+  if (error && /duplicate key/i.test(String(error.message ?? ''))) return;
+  if (error) throw new AppError(500, 'לא ניתן להשלים את הפעולה כרגע. נסו שוב.', 'SUPABASE_ERROR');
 }
 
 function boolHe(v: boolean | null | undefined): string {

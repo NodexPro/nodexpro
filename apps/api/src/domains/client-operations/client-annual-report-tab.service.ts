@@ -2,6 +2,11 @@ import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError, badRequest, conflict, forbidden } from '../../shared/errors.js';
+import {
+  isSupabaseMissingColumnError,
+  isSupabaseUniqueViolation,
+  PUBLIC_DATABASE_ERROR_MESSAGE,
+} from '../../shared/supabase-errors.js';
 import { requireGuardedUpload } from '../../shared/file-content-guard.js';
 import { assertFileAssetDownloadable } from '../../shared/document-download-guard.js';
 import { syncAnnualScopeMaterialWorkEvent } from './client-operations-work-engine-bridge.js';
@@ -343,26 +348,25 @@ function attachLegacyScopeMarker(note: string | null, scope: AnnualTabScope, sco
 }
 
 let annualScopeSupportCache: boolean | null = null;
+/**
+ * Probe the real table (not information_schema — PostgREST does not expose it).
+ * A false-negative here used to omit `tab_scope` on INSERT; both annual + capital
+ * GETs then collided on uq_client_annual_report_profiles_org_client_scope.
+ */
 async function supportsAnnualScopeColumns(): Promise<boolean> {
   if (annualScopeSupportCache != null) return annualScopeSupportCache;
-  try {
-    const { data, error } = await supabaseAdmin
-      .from('information_schema.columns')
-      .select('column_name')
-      .eq('table_schema', 'public')
-      .eq('table_name', 'client_annual_report_profiles')
-      .eq('column_name', 'tab_scope')
-      .maybeSingle();
-    if (error) {
-      annualScopeSupportCache = false;
-      return false;
-    }
-    annualScopeSupportCache = Boolean(data);
-    return annualScopeSupportCache;
-  } catch {
+  const { error } = await supabaseAdmin.from('client_annual_report_profiles').select('tab_scope').limit(0);
+  if (isSupabaseMissingColumnError(error, 'tab_scope')) {
     annualScopeSupportCache = false;
     return false;
   }
+  annualScopeSupportCache = true;
+  return true;
+}
+
+function annualDbError(context: string, error: { message?: string } | null | undefined): AppError {
+  console.error('[annual-report]', context, error?.message ?? 'unknown');
+  return new AppError(500, PUBLIC_DATABASE_ERROR_MESSAGE, 'SUPABASE_ERROR');
 }
 
 function systemTemplatesForScope(
@@ -600,18 +604,35 @@ async function ensureAnnualBucket(): Promise<void> {
   annualBucketEnsured = true;
 }
 
-async function ensureProfile(orgId: string, clientId: string, scope: AnnualTabScope): Promise<{ id: string; read_model_version: number }> {
-  const scoped = await supportsAnnualScopeColumns();
+async function loadAnnualProfile(
+  orgId: string,
+  clientId: string,
+  scope: AnnualTabScope,
+  scoped: boolean,
+): Promise<{ id: string; read_model_version: number } | null> {
   let existingQuery = supabaseAdmin
     .from('client_annual_report_profiles')
     .select('id, read_model_version')
     .eq('organization_id', orgId)
     .eq('client_id', clientId);
   if (scoped) existingQuery = existingQuery.eq('tab_scope', scope);
-  const { data: existing } = await existingQuery.maybeSingle();
-  if (existing) {
-    return { id: String((existing as { id: string }).id), read_model_version: Number((existing as { read_model_version: number }).read_model_version ?? 1) };
-  }
+  const { data: existing, error } = await existingQuery.maybeSingle();
+  if (error) throw annualDbError('annual profile read failed', error);
+  if (!existing) return null;
+  return {
+    id: String((existing as { id: string }).id),
+    read_model_version: Number((existing as { read_model_version: number }).read_model_version ?? 1),
+  };
+}
+
+/**
+ * Idempotent create-or-get. Case GET loads annual_report + capital_declaration in parallel;
+ * both must include tab_scope and treat 23505 as "already created".
+ */
+async function ensureProfile(orgId: string, clientId: string, scope: AnnualTabScope): Promise<{ id: string; read_model_version: number }> {
+  const scoped = await supportsAnnualScopeColumns();
+  const existing = await loadAnnualProfile(orgId, clientId, scope, scoped);
+  if (existing) return existing;
   const { data: ins, error } = await supabaseAdmin
     .from('client_annual_report_profiles')
     .insert({
@@ -622,9 +643,16 @@ async function ensureProfile(orgId: string, clientId: string, scope: AnnualTabSc
       read_model_version: 1,
     })
     .select('id, read_model_version')
-    .single();
-  if (error || !ins) throw new AppError(500, error?.message ?? 'annual profile insert failed', 'SUPABASE_ERROR');
-  return { id: String((ins as { id: string }).id), read_model_version: Number((ins as { read_model_version: number }).read_model_version ?? 1) };
+    .maybeSingle();
+  if (error && isSupabaseUniqueViolation(error)) {
+    const raced = await loadAnnualProfile(orgId, clientId, scope, scoped);
+    if (raced) return raced;
+  }
+  if (error || !ins) throw annualDbError('annual profile insert failed', error);
+  return {
+    id: String((ins as { id: string }).id),
+    read_model_version: Number((ins as { read_model_version: number }).read_model_version ?? 1),
+  };
 }
 
 async function ensureSystemDocumentRows(orgId: string, clientId: string, scope: AnnualTabScope): Promise<void> {
@@ -638,7 +666,7 @@ async function ensureSystemDocumentRows(orgId: string, clientId: string, scope: 
     .eq('source_type', 'system');
   if (scoped) existingQ = existingQ.eq('tab_scope', scope);
   const { data: existingRows, error: readErr } = await existingQ;
-  if (readErr) throw new AppError(500, readErr.message ?? 'annual system rows read failed', 'SUPABASE_ERROR');
+  if (readErr) throw annualDbError('annual system rows read failed', readErr);
   const existingKeys = new Set(
     ((existingRows ?? []) as Array<{ system_key: string | null }>)
       .map((r) => (r.system_key ? String(r.system_key) : ''))
@@ -660,7 +688,8 @@ async function ensureSystemDocumentRows(orgId: string, clientId: string, scope: 
     file_asset_id: null,
   }));
   const { error: insertErr } = await supabaseAdmin.from('client_annual_document_rows').insert(rows);
-  if (insertErr) throw new AppError(500, insertErr.message ?? 'annual system rows insert failed', 'SUPABASE_ERROR');
+  if (insertErr && isSupabaseUniqueViolation(insertErr)) return;
+  if (insertErr) throw annualDbError('annual system rows insert failed', insertErr);
 }
 
 async function assertExpectedVersion(orgId: string, clientId: string, expected: number, scope: AnnualTabScope): Promise<void> {
@@ -692,7 +721,7 @@ async function bumpReadModelVersion(orgId: string, clientId: string, expected: n
     .eq('read_model_version', expected);
   if (scoped) q = q.eq('tab_scope', scope);
   const { data: updated, error } = await q.select('id');
-  if (error) throw new AppError(500, error.message ?? 'version bump failed', 'SUPABASE_ERROR');
+  if (error) throw annualDbError('version bump failed', error);
   if (!updated?.length) throw conflict('הנתונים עודכנו; רענן ונסה שוב');
 }
 
@@ -1039,7 +1068,7 @@ export async function uploadAnnualReportDocument(
     contentType: guarded.mime,
     upsert: false,
   });
-  if (upErr) throw new AppError(500, upErr.message ?? 'upload failed', 'SUPABASE_ERROR');
+  if (upErr) throw annualDbError('upload failed', upErr);
 
   const { data: asset, error: faErr } = await supabaseAdmin
     .from('file_assets')
@@ -1056,7 +1085,7 @@ export async function uploadAnnualReportDocument(
     })
     .select('id, file_name')
     .single();
-  if (faErr || !asset) throw new AppError(500, faErr?.message ?? 'file_assets insert failed', 'SUPABASE_ERROR');
+  if (faErr || !asset) throw annualDbError('file_assets insert failed', faErr);
 
   await writeAudit({
     organizationId: orgId,
@@ -1094,7 +1123,7 @@ export async function getAnnualReportDocumentFileOpenUrl(
   const { data: signed, error: se } = await supabaseAdmin.storage
     .from(BUCKET)
     .createSignedUrl((fileAsset as { storage_key: string }).storage_key, SIGNED_URL_SEC);
-  if (se || !signed?.signedUrl) throw new AppError(500, se?.message ?? 'signed url failed', 'SUPABASE_ERROR');
+  if (se || !signed?.signedUrl) throw annualDbError('signed url failed', se);
   await writeAudit({
     organizationId: orgId,
     actorUserId: ctx.user.id,
@@ -1141,7 +1170,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         row_note: null,
         file_asset_id: null,
       });
-      if (error) throw new AppError(500, error.message ?? 'insert failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('insert failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { document_name_he: name });
       break;
     }
@@ -1172,7 +1201,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'update failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('update failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { row_id: rowId, keys: Object.keys(patch) });
       break;
     }
@@ -1189,7 +1218,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'delete failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('delete failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { row_id: rowId });
       break;
     }
@@ -1204,7 +1233,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'update failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('update failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { row_id: rowId, received });
       break;
     }
@@ -1220,7 +1249,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'attach failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('attach failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { row_id: rowId, file_asset_id: fileAssetId });
       break;
     }
@@ -1234,7 +1263,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'remove file failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('remove file failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { row_id: rowId });
       break;
     }
@@ -1256,7 +1285,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         note,
         sort_order: 0,
       });
-      if (error) throw new AppError(500, error.message ?? 'insert submission failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('insert submission failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { tax_year: taxYear, submitted_on: submittedOn });
       break;
     }
@@ -1287,7 +1316,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'update submission failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('update submission failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { submission_id: submissionId, keys: Object.keys(patch) });
       break;
     }
@@ -1301,7 +1330,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'delete submission failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('delete submission failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { submission_id: submissionId });
       break;
     }
@@ -1319,7 +1348,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'attach submission file failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('attach submission file failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { submission_id: submissionId, file_asset_id: fileAssetId });
       break;
     }
@@ -1331,7 +1360,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'notes update failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('notes update failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { notes_len: notes?.length ?? 0 });
       break;
     }
@@ -1346,7 +1375,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
       if (scoped) prevQ = prevQ.eq('tab_scope', scope);
       if (!scoped) prevQ = prevQ.like('note', `${LEGACY_SCOPE_MARKER.capital_declaration}%`);
       const { data: prevRows, error: prevErr } = await prevQ.order('tax_year', { ascending: false }).order('submitted_on', { ascending: false }).limit(1);
-      if (prevErr) throw new AppError(500, prevErr.message ?? 'previous declaration read failed', 'SUPABASE_ERROR');
+      if (prevErr) throw annualDbError('previous declaration read failed', prevErr);
       const prev = (prevRows?.[0] ?? null) as { id: string; file_asset_id: string | null; tax_year: number; submitted_on: string } | null;
       if (!prev?.file_asset_id) throw badRequest('לא נמצאה הצהרת הון קודמת עם מסמך');
 
@@ -1359,7 +1388,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('system_key', 'initial_declaration_copy')
         .match(scoped ? { tab_scope: scope } : {})
         .limit(1);
-      if (targetErr) throw new AppError(500, targetErr.message ?? 'target document row read failed', 'SUPABASE_ERROR');
+      if (targetErr) throw annualDbError('target document row read failed', targetErr);
       const targetRowId = String((targetRows?.[0] as { id?: string } | undefined)?.id ?? '');
       if (!targetRowId) throw badRequest('שורת יעד לא נמצאה');
 
@@ -1374,7 +1403,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (updateErr) throw new AppError(500, updateErr.message ?? 'copy previous declaration failed', 'SUPABASE_ERROR');
+      if (updateErr) throw annualDbError('copy previous declaration failed', updateErr);
       await auditAnnual(ctx, orgId, clientId, cmd, { from_submission_id: prev.id, target_row_id: targetRowId });
       break;
     }

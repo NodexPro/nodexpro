@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { apiJson } from '../api/client';
+import { apiJson, userFacingApiMessage } from '../api/client';
 import { moduleClientOperationsCase } from '../api/endpoints';
 import { ClientWorkspacePage } from '../components/ClientWorkspacePanel';
 import type { ClientTaxSettingsBundle } from '../components/ClientTaxesTab';
@@ -91,7 +91,7 @@ export function ClientOperationsClientCase() {
         if (!cancelled) setData(res);
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load');
+        if (!cancelled) setError(userFacingApiMessage(e));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

@@ -19,6 +19,11 @@ import { documentsRoutes } from './domains/documents/documents.routes.js';
 import { dashboardRoutes } from './domains/dashboard/dashboard.routes.js';
 import { config } from './config.js';
 import { AppError } from './shared/errors.js';
+import {
+  looksLikePostgresErrorMessage,
+  publicErrorDetails,
+  publicSafeErrorMessage,
+} from './shared/supabase-errors.js';
 import { refreshPrivilegedMfaGate } from './domains/auth/privileged-mfa.service.js';
 import {
   ENCRYPTION_NOT_CONFIGURED_CODE,
@@ -252,18 +257,36 @@ app.use(async (err: unknown, req: express.Request, res: express.Response, _next:
         { correlation_id },
       );
     }
+    const publicMessage = publicSafeErrorMessage(err.message);
+    if (publicMessage !== err.message) {
+      console.error('[api][DB_ERROR_SANITIZED]', {
+        correlation_id,
+        code: err.code ?? null,
+        message: err.message,
+        details: err.details ?? null,
+        path: req.path,
+      });
+    }
     return res.status(err.statusCode).json({
       code: err.code ?? 'ERROR',
-      message: err.message,
+      message: publicMessage,
       correlation_id,
-      ...(err.details ?? {}),
+      ...(publicErrorDetails(err.details) ?? {}),
     });
   }
   console.error('[api][INTERNAL_ERROR]', { correlation_id, error: err });
+  const raw = err instanceof Error && err.message ? err.message : 'Internal server error';
+  if (looksLikePostgresErrorMessage(raw)) {
+    console.error('[api][DB_ERROR_SANITIZED]', { correlation_id, message: raw, path: req.path });
+    return res.status(500).json({
+      code: 'INTERNAL_ERROR',
+      message: publicSafeErrorMessage(raw),
+      correlation_id,
+    });
+  }
   // In development, surface Error.message so local debugging is not blind to non-AppError throws.
   const exposeDetails = config.nodeEnv !== 'production';
-  const message =
-    exposeDetails && err instanceof Error && err.message ? err.message : 'Internal server error';
+  const message = exposeDetails ? raw : 'Internal server error';
   return res.status(500).json({ code: 'INTERNAL_ERROR', message, correlation_id });
 });
 

@@ -488,8 +488,8 @@ test('commands: never read the cache, invalidate, and return a freshly built ful
   assert.match(notesSource, /invalidateClientOperationsRegistryMaterializationCache\(ctx\.organizationId\)/);
   assert.match(notesSource, /listClientOperationsRegistry\(ctx, \{\}\)/);
   assert.doesNotMatch(notesSource, /materializationCache: true/);
-  // Other read models keep building fresh truth (no opt-in outside GET /registry).
-  assert.doesNotMatch(workEngineClientsTabSource, /materializationCache/);
+  // Work Engine clients-tab is a GET aggregate of the same registry — same org-keyed cache.
+  assert.match(workEngineClientsTabSource, /materializationCache:\s*true/);
 });
 
 test('no second source of truth: no separate search endpoint, no FE business filtering', () => {

@@ -7,7 +7,6 @@
  */
 
 import { supabaseAdmin } from '../../db/client.js';
-import { authorizedClientIdsForViewer } from '../client-operations/organization-client-access.js';
 import { hasPermission } from '../rbac/rbac.service.js';
 import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-metrics.js';
 import type {
@@ -2087,85 +2086,98 @@ export async function buildWorkEngineQueueAggregate(params: {
   const scopeAllow = await workEngineAllowedClientIds(orgId, viewer);
   const clientRestricted = scopeAllow !== null;
 
-  const reminderReviewSummary = await loadReminderReviewCounts(orgId, scopeAllow);
-  const reminderBanner = buildReminderReviewBanner(reminderReviewSummary);
+  const emptyFailedOperations = () =>
+    buildFailedOperationsSummary({
+      deliveryFailedCount: 0,
+      incomePdfFailedCount: 0,
+      workEventFailedCount: 0,
+      retainerFailedCount: 0,
+      accountingPostingFailedCount: 0,
+      rows: [],
+      notes: [],
+    });
 
-  // ---- 1. Counts for summary cards (P4.3: exact DB counts, not capped sample).
-  const stateCounts = await loadWorkItemCountsByStateExact(orgId, scopeAllow);
+  const bucketCountsPromise = viewerId
+    ? Promise.all([
+        scopeQueryToAllowedClients(
+          supabaseAdmin
+            .from('work_items')
+            .select('id', { count: 'exact', head: true })
+            .eq('org_id', orgId)
+            .eq('assigned_user_id', viewerId)
+            .not('work_state', 'eq', 'done')
+            .not('work_state', 'eq', 'archived'),
+          scopeAllow,
+        ),
+        scopeQueryToAllowedClients(
+          supabaseAdmin
+            .from('work_items')
+            .select('id', { count: 'exact', head: true })
+            .eq('org_id', orgId)
+            .is('assigned_user_id', null)
+            .not('work_state', 'eq', 'done')
+            .not('work_state', 'eq', 'archived'),
+          scopeAllow,
+        ),
+        scopeQueryToAllowedClients(
+          supabaseAdmin
+            .from('work_items')
+            .select('id', { count: 'exact', head: true })
+            .eq('org_id', orgId)
+            .eq('claimed_by_user_id', viewerId),
+          scopeAllow,
+        ),
+        scopeQueryToAllowedClients(
+          supabaseAdmin
+            .from('work_items')
+            .select('id', { count: 'exact', head: true })
+            .eq('org_id', orgId)
+            .eq('work_state', 'review_pending')
+            .eq('reviewer_user_id', viewerId),
+          scopeAllow,
+        ),
+      ])
+    : Promise.resolve(null);
+
+  // Independent summary / catalog reads — same filters and allow-list, no data dependency between them.
+  const [
+    reminderReviewSummary,
+    stateCounts,
+    pendingCountResp,
+    invoiceAttentionCounts,
+    failedOperationsSummary,
+    bucketCountResults,
+    catalog,
+  ] = await Promise.all([
+    loadReminderReviewCounts(orgId, scopeAllow),
+    loadWorkItemCountsByStateExact(orgId, scopeAllow),
+    scopeQueryToAllowedClients(
+      supabaseAdmin
+        .from('work_events')
+        .select('id', { count: 'exact', head: true })
+        .eq('org_id', orgId)
+        .is('work_item_id', null)
+        .in('processing_outcome', PENDING_MAPPING_OUTCOMES as unknown as string[]),
+      scopeAllow,
+    ),
+    loadInvoiceAttentionCounts(orgId, scopeAllow),
+    clientRestricted ? Promise.resolve(emptyFailedOperations()) : loadFailedOperationsSummary(orgId),
+    bucketCountsPromise,
+    loadWorkItemFilterCatalogDimensionsExact(orgId, scopeAllow),
+  ]);
+  const reminderBanner = buildReminderReviewBanner(reminderReviewSummary);
   const counts: Record<string, number> = { ...stateCounts.by_state };
   const totalActive = stateCounts.total_active;
-
-  // Pending-mapping counts (work_events with no work_item_id) — client-scoped (class A).
-  const pendingCountResp = await scopeQueryToAllowedClients(
-    supabaseAdmin
-      .from('work_events')
-      .select('id', { count: 'exact', head: true })
-      .eq('org_id', orgId)
-      .is('work_item_id', null)
-      .in('processing_outcome', PENDING_MAPPING_OUTCOMES as unknown as string[]),
-    scopeAllow,
-  );
   if (pendingCountResp.error) throw pendingCountResp.error;
   const pendingMappingCount = pendingCountResp.count ?? 0;
-
-  const invoiceAttentionCounts = await loadInvoiceAttentionCounts(orgId, scopeAllow);
   const invoiceAttentionCard = buildInvoiceAttentionCard(invoiceAttentionCounts);
-  // Failed operations (delivery / PDF / posting failures with client labels) are office
-  // administration data (class C): never served to a client-restricted caller.
-  const failedOperationsSummary = clientRestricted
-    ? buildFailedOperationsSummary({
-        deliveryFailedCount: 0,
-        incomePdfFailedCount: 0,
-        workEventFailedCount: 0,
-        retainerFailedCount: 0,
-        accountingPostingFailedCount: 0,
-        rows: [],
-        notes: [],
-      })
-    : await loadFailedOperationsSummary(orgId);
 
   let bucketAssignedToMe = 0;
   let bucketUnassigned = 0;
   let bucketClaimedByMe = 0;
   let bucketReviewForMe = 0;
-  if (viewerId) {
-    const a = await scopeQueryToAllowedClients(
-      supabaseAdmin
-        .from('work_items')
-        .select('id', { count: 'exact', head: true })
-        .eq('org_id', orgId)
-        .eq('assigned_user_id', viewerId)
-        .not('work_state', 'eq', 'done')
-        .not('work_state', 'eq', 'archived'),
-      scopeAllow,
-    );
-    const u = await scopeQueryToAllowedClients(
-      supabaseAdmin
-        .from('work_items')
-        .select('id', { count: 'exact', head: true })
-        .eq('org_id', orgId)
-        .is('assigned_user_id', null)
-        .not('work_state', 'eq', 'done')
-        .not('work_state', 'eq', 'archived'),
-      scopeAllow,
-    );
-    const c = await scopeQueryToAllowedClients(
-      supabaseAdmin
-        .from('work_items')
-        .select('id', { count: 'exact', head: true })
-        .eq('org_id', orgId)
-        .eq('claimed_by_user_id', viewerId),
-      scopeAllow,
-    );
-    const rfm = await scopeQueryToAllowedClients(
-      supabaseAdmin
-        .from('work_items')
-        .select('id', { count: 'exact', head: true })
-        .eq('org_id', orgId)
-        .eq('work_state', 'review_pending')
-        .eq('reviewer_user_id', viewerId),
-      scopeAllow,
-    );
+  if (bucketCountResults) {
+    const [a, u, c, rfm] = bucketCountResults;
     if (a.error) throw a.error;
     if (u.error) throw u.error;
     if (c.error) throw c.error;
@@ -2175,12 +2187,6 @@ export async function buildWorkEngineQueueAggregate(params: {
     bucketClaimedByMe = c.count ?? 0;
     bucketReviewForMe = rfm.count ?? 0;
   }
-
-  // ---- 2. Filter option catalogs (backend-owned, P4.3 uncapped thin scan).
-  // Distinct values for module / assignee / reviewer / period_key come from
-  // the work_items table for this org — they reflect actual data so the UI
-  // never invents filter options. Not derived from a silent 5000-row sample.
-  const catalog = await loadWorkItemFilterCatalogDimensionsExact(orgId, scopeAllow);
   const distinctModules = new Set(catalog.modules);
   const distinctAssignees = new Set(catalog.assignees);
   const distinctReviewers = new Set(catalog.reviewers);
@@ -2229,13 +2235,8 @@ export async function buildWorkEngineQueueAggregate(params: {
   if (f.reviewer_user_id) q = q.eq('reviewer_user_id', f.reviewer_user_id);
   if (f.client_id) q = q.eq('client_id', f.client_id);
   if (f.period_key) q = q.eq('period_key', f.period_key);
-  const allowedClientIds = viewer?.userId
-    ? await authorizedClientIdsForViewer({
-        organizationId: orgId,
-        userId: viewer.userId,
-        roleCode: viewer.roleCode,
-      })
-    : [];
+  // Same allow-list as counts/catalog (null = unrestricted). Do not re-resolve ACL.
+  const allowedClientIds = viewer?.userId ? scopeAllow : [];
   if (allowedClientIds) {
     if (f.client_id && !allowedClientIds.includes(f.client_id)) {
       q = q.in('client_id', ['00000000-0000-0000-0000-000000000000']);
@@ -2245,25 +2246,65 @@ export async function buildWorkEngineQueueAggregate(params: {
       q = q.or(`client_id.is.null,client_id.in.(${allowedClientIds.join(',')})`);
     }
   }
-  const pageResp = await q
-    .order('updated_at', { ascending: false })
-    .range(f.offset, f.offset + f.limit - 1);
+  type PendingRow = {
+    id: string;
+    event_id: string;
+    event_type: string;
+    source_module: string;
+    source_entity_type: string;
+    source_entity_id: string;
+    client_id: string | null;
+    period_key: string | null;
+    processing_outcome: string;
+    received_at: string;
+    occurred_at: string;
+  };
+
+  // Page, pending-mapping rows, reminder page and escalation owners have no data
+  // dependency on each other — one overlapping round-trip instead of four sequential.
+  const [
+    pageResp,
+    pendingRecentResp,
+    reminderReviewPage,
+    escalationOwnerOptions,
+  ] = await Promise.all([
+    q.order('updated_at', { ascending: false }).range(f.offset, f.offset + f.limit - 1),
+    scopeQueryToAllowedClients(
+      supabaseAdmin
+        .from('work_events')
+        .select(
+          'id, event_id, event_type, source_module, source_entity_type, source_entity_id, client_id, period_key, processing_outcome, received_at, occurred_at',
+        )
+        .eq('org_id', orgId)
+        .is('work_item_id', null)
+        .in('processing_outcome', PENDING_MAPPING_OUTCOMES as unknown as string[]),
+      scopeAllow,
+    )
+      .order('received_at', { ascending: false })
+      .limit(25),
+    reminderReviewSummary.pending_count > 0
+      ? loadReminderReviewPage({
+          orgId,
+          offset: 0,
+          limit: Math.min(reminderReviewSummary.pending_count, QUEUE_MAX_LIMIT),
+          viewer,
+        })
+      : Promise.resolve({ rows: [], total: 0 }),
+    loadEscalationOwnerOptions(orgId),
+  ]);
   if (pageResp.error) throw pageResp.error;
+  if (pendingRecentResp.error) throw pendingRecentResp.error;
   const rowsRaw = (pageResp.data ?? []) as QueueWorkItemRow[];
   const totalMatching = pageResp.count ?? rowsRaw.length;
+  const pendingRecentRows = (pendingRecentResp.data ?? []) as PendingRow[];
 
-  const policyByType = await resolveWorkTypePoliciesBatch(
-    orgId,
-    rowsRaw.map((r) => r.work_type),
-  );
-  const obligationsByItem = await loadActiveSlaObligationsForItems(
-    orgId,
-    rowsRaw.map((r) => r.id),
-  );
-
-  // ---- 4. Batch-fetch display names for client + users referenced by the page.
+  // ---- 4. Page-dependent hydrations (policies, names, DocFlow) in one wave.
   const clientIds = Array.from(
-    new Set(rowsRaw.map((r) => r.client_id).filter((v): v is string => !!v)),
+    new Set(
+      [...rowsRaw.map((r) => r.client_id), ...pendingRecentRows.map((p) => p.client_id)].filter(
+        (v): v is string => !!v,
+      ),
+    ),
   );
   const userIdsSet = new Set<string>();
   for (const r of rowsRaw) {
@@ -2278,38 +2319,6 @@ export async function buildWorkEngineQueueAggregate(params: {
   for (const id of distinctReviewers) userIdsSet.add(id);
   const userIds = Array.from(userIdsSet);
 
-  const clientNameById = new Map<string, string>();
-  if (clientIds.length > 0) {
-    const cResp = await supabaseAdmin
-      .from('clients')
-      .select('id, display_name')
-      .eq('organization_id', orgId)
-      .in('id', clientIds);
-    if (cResp.error) throw cResp.error;
-    for (const c of (cResp.data ?? []) as Array<{
-      id: string;
-      display_name: string | null;
-    }>) {
-      clientNameById.set(c.id, c.display_name ?? c.id);
-    }
-  }
-  const userNameById = new Map<string, string>();
-  if (userIds.length > 0) {
-    const uResp = await supabaseAdmin
-      .from('users')
-      .select('id, full_name, email')
-      .in('id', userIds);
-    if (uResp.error) throw uResp.error;
-    for (const u of (uResp.data ?? []) as Array<{
-      id: string;
-      full_name: string | null;
-      email: string | null;
-    }>) {
-      userNameById.set(u.id, u.full_name?.trim() || u.email?.trim() || u.id);
-    }
-  }
-
-  // ---- 4b. DocFlow thread activity + office-unread (queue read-model projection only).
   const docflowUnreadPairs: Array<{ clientId: string; threadId: string }> = [];
   const docflowThreadIdsForActivity = new Set<string>();
   for (const r of rowsRaw) {
@@ -2318,77 +2327,69 @@ export async function buildWorkEngineQueueAggregate(params: {
       docflowThreadIdsForActivity.add(r.source_entity_id);
     }
   }
-  const officeUnreadByThread =
-    docflowUnreadPairs.length > 0
-      ? await batchOfficeUnreadForThreads(orgId, docflowUnreadPairs)
-      : new Map<string, number>();
+
+  const clientNameById = new Map<string, string>();
+  const userNameById = new Map<string, string>();
   const threadUpdatedAtById = new Map<string, string>();
-  if (docflowThreadIdsForActivity.size > 0) {
-    const tIds = Array.from(docflowThreadIdsForActivity);
-    const thrResp = await supabaseAdmin
-      .from('client_message_threads')
-      .select('id, updated_at')
-      .eq('org_id', orgId)
-      .in('id', tIds);
-    if (thrResp.error) throw thrResp.error;
-    for (const t of thrResp.data ?? []) {
-      const id = String((t as { id?: string }).id ?? '');
-      if (id) threadUpdatedAtById.set(id, String((t as { updated_at?: string }).updated_at ?? ''));
-    }
-  }
-
-  // ---- 5. Recent pending-mapping rows for the pending section.
-  const pendingRecentResp = await scopeQueryToAllowedClients(
-    supabaseAdmin
-      .from('work_events')
-      .select(
-        'id, event_id, event_type, source_module, source_entity_type, source_entity_id, client_id, period_key, processing_outcome, received_at, occurred_at',
-      )
-      .eq('org_id', orgId)
-      .is('work_item_id', null)
-      .in('processing_outcome', PENDING_MAPPING_OUTCOMES as unknown as string[]),
-    scopeAllow,
-  )
-    .order('received_at', { ascending: false })
-    .limit(25);
-  if (pendingRecentResp.error) throw pendingRecentResp.error;
-  type PendingRow = {
-    id: string;
-    event_id: string;
-    event_type: string;
-    source_module: string;
-    source_entity_type: string;
-    source_entity_id: string;
-    client_id: string | null;
-    period_key: string | null;
-    processing_outcome: string;
-    received_at: string;
-    occurred_at: string;
-  };
-  const pendingRecentRows = (pendingRecentResp.data ?? []) as PendingRow[];
-
-  // Hydrate client names for pending rows too (may include clients not in
-  // the page set).
-  const pendingClientIds = Array.from(
-    new Set(
-      pendingRecentRows
-        .map((p) => p.client_id)
-        .filter((v): v is string => !!v),
+  const [
+    policyByType,
+    obligationsByItem,
+    cResp,
+    uResp,
+    officeUnreadByThread,
+    thrResp,
+  ] = await Promise.all([
+    resolveWorkTypePoliciesBatch(
+      orgId,
+      rowsRaw.map((r) => r.work_type),
     ),
-  ).filter((id) => !clientNameById.has(id));
-  if (pendingClientIds.length > 0) {
-    const cResp = await supabaseAdmin
-      .from('clients')
-      .select('id, display_name')
-      .eq('organization_id', orgId)
-      .in('id', pendingClientIds);
-    if (cResp.error) throw cResp.error;
-    for (const c of (cResp.data ?? []) as Array<{
-      id: string;
-      display_name: string | null;
-    }>) {
-      clientNameById.set(c.id, c.display_name ?? c.id);
-    }
+    loadActiveSlaObligationsForItems(
+      orgId,
+      rowsRaw.map((r) => r.id),
+    ),
+    clientIds.length > 0
+      ? supabaseAdmin
+          .from('clients')
+          .select('id, display_name')
+          .eq('organization_id', orgId)
+          .in('id', clientIds)
+      : Promise.resolve({ data: [] as Array<{ id: string; display_name: string | null }>, error: null }),
+    userIds.length > 0
+      ? supabaseAdmin.from('users').select('id, full_name, email').in('id', userIds)
+      : Promise.resolve({
+          data: [] as Array<{ id: string; full_name: string | null; email: string | null }>,
+          error: null,
+        }),
+    docflowUnreadPairs.length > 0
+      ? batchOfficeUnreadForThreads(orgId, docflowUnreadPairs)
+      : Promise.resolve(new Map<string, number>()),
+    docflowThreadIdsForActivity.size > 0
+      ? supabaseAdmin
+          .from('client_message_threads')
+          .select('id, updated_at')
+          .eq('org_id', orgId)
+          .in('id', Array.from(docflowThreadIdsForActivity))
+      : Promise.resolve({ data: [] as Array<{ id: string; updated_at?: string }>, error: null }),
+  ]);
+  if (cResp.error) throw cResp.error;
+  for (const c of (cResp.data ?? []) as Array<{
+    id: string;
+    display_name: string | null;
+  }>) {
+    clientNameById.set(c.id, c.display_name ?? c.id);
+  }
+  if (uResp.error) throw uResp.error;
+  for (const u of (uResp.data ?? []) as Array<{
+    id: string;
+    full_name: string | null;
+    email: string | null;
+  }>) {
+    userNameById.set(u.id, u.full_name?.trim() || u.email?.trim() || u.id);
+  }
+  if (thrResp.error) throw thrResp.error;
+  for (const t of thrResp.data ?? []) {
+    const id = String((t as { id?: string }).id ?? '');
+    if (id) threadUpdatedAtById.set(id, String((t as { updated_at?: string }).updated_at ?? ''));
   }
 
   // ---- 6. Compose row models (ready-to-render; includes queue_table drivers).
@@ -2620,18 +2621,6 @@ export async function buildWorkEngineQueueAggregate(params: {
   });
 
   const queue_table = computeQueueTableModel(rows);
-
-  const reminderReviewPage =
-    reminderReviewSummary.pending_count > 0
-      ? await loadReminderReviewPage({
-          orgId,
-          offset: 0,
-          limit: Math.min(reminderReviewSummary.pending_count, QUEUE_MAX_LIMIT),
-          viewer,
-        })
-      : { rows: [], total: 0 };
-
-  const escalationOwnerOptions = await loadEscalationOwnerOptions(orgId);
   const escalation_workspace = buildEscalationWorkspace(escalationOwnerOptions);
 
   // ---- 7. Compose response.

@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { rowMatchesPostgrestOr } from './fake-postgrest-or.pure.js';
 
 process.env.SUPABASE_URL ||= 'http://127.0.0.1:1';
 process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'test-service-role-key';
@@ -67,7 +68,15 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: null | { message:
     this.filters.push((r) => (val === null ? r[col] != null : r[col] !== val));
     return this;
   }
+  or(expr: string) {
+    this.filters.push((r) => rowMatchesPostgrestOr(r, expr));
+    return this;
+  }
   order() {
+    return this;
+  }
+  range(from: number, to: number) {
+    this.max = to - from + 1;
     return this;
   }
   limit(n: number) {

@@ -44,14 +44,16 @@ export async function login(params: { email: string; password: string }) {
     throw unauthorized(APP_USER_NOT_ACTIVE_MESSAGE, APP_USER_NOT_ACTIVE_CODE);
   }
   if (appUser.data) {
-    await supabaseAdmin.from('users').update({ last_login_at: new Date().toISOString() }).eq('id', appUser.data.id);
-    await writeAudit({
-      organizationId: null,
-      actorUserId: appUser.data.id,
-      entityType: 'user',
-      action: AUDIT_ACTIONS.USER_LOGGED_IN,
-      payload: { identifier_kind: canonicalEmail === params.email.trim().toLowerCase() ? 'primary' : 'additional' },
-    });
+    await Promise.all([
+      supabaseAdmin.from('users').update({ last_login_at: new Date().toISOString() }).eq('id', appUser.data.id),
+      writeAudit({
+        organizationId: null,
+        actorUserId: appUser.data.id,
+        entityType: 'user',
+        action: AUDIT_ACTIONS.USER_LOGGED_IN,
+        payload: { identifier_kind: canonicalEmail === params.email.trim().toLowerCase() ? 'primary' : 'additional' },
+      }),
+    ]);
   }
   return { session: data.session, user: data.user, appUserId: appUser.data?.id ?? null };
 }

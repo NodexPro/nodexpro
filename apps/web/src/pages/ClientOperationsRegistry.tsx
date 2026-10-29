@@ -798,6 +798,7 @@ export function ClientOperationsRegistry() {
       renderedAggregatePeriodKey={renderedAggregatePeriodKey}
       error={error}
       canEdit={canEdit}
+      canCreateCoreClient={allowedActions.includes('create_core_client')}
       showPageHeader={false}
       onReloadRegistry={() => void reloadRegistry()}
       variant="spreadsheet"

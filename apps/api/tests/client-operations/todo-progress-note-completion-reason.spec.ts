@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { rowMatchesPostgrestOr } from './fake-postgrest-or.pure.js';
 
 process.env.SUPABASE_URL ||= 'http://127.0.0.1:1';
 process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'test-service-role-key';
@@ -71,18 +72,7 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: null | { message:
     return this;
   }
   or(expr: string) {
-    const clauses = expr.split(',').map((c) => {
-      const first = c.indexOf('.');
-      const second = c.indexOf('.', first + 1);
-      return { col: c.slice(0, first), val: c.slice(second + 1) };
-    });
-    this.filters.push((r) =>
-      clauses.some((c) =>
-        new RegExp(`^${c.val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*')}$`, 'i').test(
-          String(r[c.col] ?? ''),
-        ),
-      ),
-    );
+    this.filters.push((r) => rowMatchesPostgrestOr(r, expr));
     return this;
   }
   order() {

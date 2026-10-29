@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { AppError, badRequest, conflict, forbidden } from '../../shared/errors.js';
+import { PUBLIC_DATABASE_ERROR_MESSAGE } from '../../shared/supabase-errors.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
 import { buildNotesCellDisplayHe, listOperationalNoteTypes, loadNotesAggregatesByClient } from './client-operations-notes.service.js';
@@ -141,6 +142,7 @@ import {
   canManageClientHandlerAssignment,
   filterAuthorizedClientIds,
   resolveOrganizationClientAccessScopeFromContext,
+  roleHasOfficeClientAccess,
   type OrganizationClientAccessScope,
 } from './organization-client-access.js';
 import {
@@ -412,6 +414,11 @@ function buildRegistryAllowedActions(ctx: RequestContext): string[] {
   if (permissions.includes('client_operations.edit')) {
     actions.push('client_operations.edit');
   }
+  // Core create_client — same gate as POST /organizations/:id/clients. CO UI opens the
+  // existing workspace modal; it does not invent a second create command.
+  if (roleHasOfficeClientAccess(ctx.membership?.roleCode) && permissions.includes('clients:write')) {
+    actions.push('create_core_client');
+  }
   return actions;
 }
 
@@ -486,9 +493,9 @@ export type ClientOperationsRegistryPreSearchMaterialization = {
 
 export type ClientOperationsRegistryReadOptions = {
   /**
-   * GET /registry only: reuse the pre-search materialization within its short TTL
-   * (same org + period + filters + capability; `q` / sort are applied per request).
-   * Commands / other read models never set this — they always rebuild fresh truth.
+   * GET /registry and Work Engine clients-tab GET: reuse the pre-search materialization
+   * within its short TTL (same org + period + filters + capability; `q` / sort are applied
+   * per request). Commands never set this — they always rebuild fresh truth.
    */
   materializationCache?: boolean;
 };
@@ -559,6 +566,7 @@ export async function listClientOperationsRegistry(
   const anyBusinessFilter = isAnyClientOperationsBusinessFilterActive(filterActive);
 
   // PRE-SEARCH materialization: expensive; keyed by every dimension that changes base rows (never q/sort).
+  // GET /registry and Work Engine clients-tab pass materializationCache: true.
   // accessScopeKey = workspace projection (OFFICE / ASSIGNED:<subject>). canEditRegistry separates
   // viewer action capability so Owner editability cannot leak into Staff view-only caches.
   const buildMaterialization = () =>
@@ -1679,6 +1687,14 @@ function normalizeOptionalString(v: unknown): string | null {
   return s === '' ? null : s;
 }
 
+/** Empty incoming contact must not wipe a stored clients.email / clients.phone value. */
+function coalesceContactField(incoming: unknown, existing: string | null | undefined): string | null {
+  if (incoming === undefined) return existing ?? null;
+  const n = normalizeOptionalString(incoming);
+  if (!n) return existing ?? null;
+  return n;
+}
+
 function parseAddressCombined(addressText: string): { street: string | null; city: string | null } {
   const trimmed = addressText.trim();
   if (!trimmed) return { street: null, city: null };
@@ -1763,8 +1779,8 @@ export async function updateClientOperationsClientProfile(
     if (dup) throw conflict('A client with this tax ID (HP) already exists');
   }
 
-  const phone = body.phone !== undefined ? normalizeOptionalString(body.phone) : existingClient.phone ?? null;
-  const email = body.email !== undefined ? normalizeOptionalString(body.email) : existingClient.email ?? null;
+  const phone = coalesceContactField(body.phone, existingClient.phone);
+  const email = coalesceContactField(body.email, existingClient.email);
 
   const newPhone = phone?.trim() ?? null;
   const newEmail = email?.trim() ?? null;
@@ -1826,11 +1842,8 @@ export async function updateClientOperationsClientProfile(
     .maybeSingle();
 
   if (updateClientError || !updatedClient) {
-    throw new AppError(
-      500,
-      updateClientError?.message ?? 'Failed to update client profile',
-      'CLIENT_PROFILE_UPDATE_FAILED'
-    );
+    console.error('[client-operations] profile update failed', updateClientError?.message ?? 'unknown');
+    throw new AppError(500, PUBLIC_DATABASE_ERROR_MESSAGE, 'CLIENT_PROFILE_UPDATE_FAILED');
   }
 
   // 2) Update module profile: business type + assigned handler.
