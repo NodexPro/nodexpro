@@ -1,9 +1,11 @@
 /* Client Operations — compact client-name Quick Profile (Excel-style). */
 
-.nx-co-client-quick-profile {
+.nx-client-quick-card.nx-co-client-quick-profile {
   width: min(360px, calc(100vw - 16px));
-  max-height: min(72vh, 480px);
-  padding: 10px 12px 12px;
+  max-height: calc(100vh - 16px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 8px 10px 8px;
 }
 
 .nx-co-client-quick-profile__header {
@@ -11,7 +13,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .nx-co-client-quick-profile__header .nx-client-quick-card__title {
@@ -42,12 +44,18 @@
 
 .nx-co-client-quick-profile .nx-client-quick-card__row {
   grid-template-columns: 118px minmax(0, 1fr);
-  padding: 6px 0;
+  padding: 3px 0;
+}
+
+.nx-co-client-quick-profile .nx-client-quick-card__value {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
 }
 
 .nx-co-client-quick-profile__expenses {
-  margin-top: 8px;
-  padding-top: 8px;
+  margin-top: 4px;
+  padding-top: 4px;
   border-top: 1px solid #e2e8f0;
 }
 
@@ -105,8 +113,8 @@
 }
 
 .nx-co-client-quick-profile__section + .nx-co-client-quick-profile__section {
-  margin-top: 6px;
-  padding-top: 6px;
+  margin-top: 4px;
+  padding-top: 4px;
   border-top: 1px solid #e2e8f0;
 }
 

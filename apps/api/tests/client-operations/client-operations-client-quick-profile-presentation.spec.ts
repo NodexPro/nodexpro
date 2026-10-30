@@ -46,18 +46,54 @@ test('PCN remains backend vat_due_type selection — not frequency', () => {
   assert.match(resolver, /resolveVatObligationKeyFromClientTaxSettings/);
 });
 
-test('advances disabled / enabled + percent', () => {
+test('advances periodicity matches tax-card frequency / exemption — never כן/לא', () => {
   assert.equal(
-    formatQuickProfileIncomeTaxAdvancesDisplayHe({ enabled: false, percent: 5 }),
-    'לא'
+    formatQuickProfileIncomeTaxAdvancesDisplayHe({
+      enabled: true,
+      frequency: 'monthly',
+      profile_advance_status: null,
+    }),
+    'חודשי'
   );
   assert.equal(
-    formatQuickProfileIncomeTaxAdvancesDisplayHe({ enabled: true, percent: 5 }),
-    'כן · 5%'
+    formatQuickProfileIncomeTaxAdvancesDisplayHe({
+      enabled: true,
+      frequency: 'bi_monthly',
+      profile_advance_status: null,
+    }),
+    'דו-חודשי'
   );
   assert.equal(
-    formatQuickProfileIncomeTaxAdvancesDisplayHe({ enabled: true, percent: null }),
-    'כן'
+    formatQuickProfileIncomeTaxAdvancesDisplayHe({
+      enabled: false,
+      frequency: null,
+      profile_advance_status: 'לא',
+    }),
+    'פטור'
+  );
+  assert.equal(
+    formatQuickProfileIncomeTaxAdvancesDisplayHe({
+      enabled: false,
+      frequency: 'monthly',
+      profile_advance_status: null,
+    }),
+    'לא הוגדר'
+  );
+  assert.equal(
+    formatQuickProfileIncomeTaxAdvancesDisplayHe({
+      enabled: true,
+      frequency: null,
+      profile_advance_status: null,
+    }),
+    'לא הוגדר'
+  );
+  assert.equal(
+    formatQuickProfileIncomeTaxAdvancesDisplayHe({
+      enabled: true,
+      frequency: 'monthly',
+      profile_advance_status: 'לא',
+    }),
+    'חודשי'
   );
 });
 

@@ -44,6 +44,17 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.14),
     inset 0 -28px 36px rgba(2, 10, 28, 0.28) !important;
   overflow: hidden;
+  font-family: Arial, sans-serif !important;
+}
+
+.nx-modal.nx-workspace-modal *,
+.nx-modal.nx-workspace-modal input,
+.nx-modal.nx-workspace-modal select,
+.nx-modal.nx-workspace-modal textarea,
+.nx-modal.nx-workspace-modal button,
+.nx-modal.nx-workspace-modal option,
+.nx-modal.nx-workspace-modal ::placeholder {
+  font-family: Arial, sans-serif !important;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-header {

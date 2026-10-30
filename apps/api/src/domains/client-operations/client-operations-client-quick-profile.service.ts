@@ -220,7 +220,7 @@ export async function getClientOperationsClientQuickProfile(
         .maybeSingle(),
       supabaseAdmin
         .from('client_operational_profiles')
-        .select('business_type, payroll_flag')
+        .select('business_type, payroll_flag, income_tax_advance_status')
         .eq('organization_id', orgId)
         .eq('client_id', id)
         .maybeSingle(),
@@ -239,7 +239,7 @@ export async function getClientOperationsClientQuickProfile(
       supabaseAdmin
         .from('client_tax_settings')
         .select(
-          'vat_type, vat_frequency, vat_due_type, income_tax_advance_enabled, income_tax_advance_percent, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency, national_insurance_deductions_file_number'
+          'vat_type, vat_frequency, vat_due_type, income_tax_advance_enabled, income_tax_advance_percent, income_tax_advance_frequency, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency, national_insurance_deductions_file_number'
         )
         .eq('organization_id', orgId)
         .eq('client_id', id)
@@ -263,6 +263,7 @@ export async function getClientOperationsClientQuickProfile(
     vat_due_type: null,
     income_tax_advance_enabled: false,
     income_tax_advance_percent: null,
+    income_tax_advance_frequency: null,
     income_tax_deductions_enabled: false,
     income_tax_deductions_file_number: null,
     income_tax_deductions_frequency: null,
@@ -273,6 +274,7 @@ export async function getClientOperationsClientQuickProfile(
     vat_due_type: string | null;
     income_tax_advance_enabled: boolean;
     income_tax_advance_percent: number | null;
+    income_tax_advance_frequency: string | null;
     income_tax_deductions_enabled: boolean;
     income_tax_deductions_file_number: string | null;
     income_tax_deductions_frequency: string | null;
@@ -297,6 +299,9 @@ export async function getClientOperationsClientQuickProfile(
   const taxId = (client as { tax_id?: string | null }).tax_id ?? null;
   const businessType =
     (profile as { business_type?: string | null } | null)?.business_type ?? null;
+  const profileAdvanceStatus =
+    (profile as { income_tax_advance_status?: string | null } | null)?.income_tax_advance_status ??
+    null;
   const payrollHas =
     resolvePayrollApplicabilityFromDeductionsFiles({
       income_tax_deductions_file_number: settings.income_tax_deductions_file_number,
@@ -368,7 +373,8 @@ export async function getClientOperationsClientQuickProfile(
       label_he: 'מקדמות מס הכנסה',
       display_value: formatQuickProfileIncomeTaxAdvancesDisplayHe({
         enabled: settings.income_tax_advance_enabled,
-        percent: settings.income_tax_advance_percent,
+        frequency: settings.income_tax_advance_frequency,
+        profile_advance_status: profileAdvanceStatus,
       }),
       visible: true,
     }),

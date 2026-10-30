@@ -22,6 +22,16 @@ test('DocFlow tab visibility comes from the case aggregate, not a hidden client-
   assert.doesNotMatch(panelSrc, /probeDocflowEntitlement/);
 });
 
+test('folder-icon modal hides DocFlow from top nav without deleting the module', () => {
+  assert.match(panelSrc, /key:\s*'docflow',\s*label:\s*'DocFlow'/);
+  assert.match(panelSrc, /FOLDER_MODAL_HIDDEN_NAV_TAB_KEYS/);
+  assert.match(panelSrc, /new Set<WorkspaceTabKey>\(\['docflow'\]\)/);
+  assert.match(panelSrc, /folderModal/);
+  assert.match(panelSrc, /activeTab === 'docflow'/);
+  assert.match(panelSrc, /ClientDocflowTab/);
+  assert.match(panelSrc, /<ClientWorkspacePanel[\s\S]*folderModal/);
+});
+
 test('התחייבויות is defined in TAB_ORDER but hidden from modal top nav', () => {
   assert.match(panelSrc, /key:\s*'obligations',\s*label:\s*'התחייבויות'/);
   assert.match(panelSrc, /HIDDEN_WORKSPACE_NAV_TAB_KEYS/);
@@ -98,6 +108,7 @@ test('premium modal skin is scoped and keeps a 3-column client-profile grid on d
   const premium = readFileSync(join(dir, '../src/styles/nx-workspace-modal-premium.css'), 'utf8');
   assert.match(premium, /\.nx-modal-overlay:has\(>\s*\.nx-modal\.nx-workspace-modal\)/);
   assert.match(premium, /\.nx-modal\.nx-workspace-modal/);
+  assert.match(premium, /font-family:\s*Arial, sans-serif !important;/);
   assert.match(premium, /height:\s*auto\s*!important/);
   assert.match(premium, /max-height:\s*100%\s*!important/);
   assert.doesNotMatch(premium, /height:\s*100dvh/);

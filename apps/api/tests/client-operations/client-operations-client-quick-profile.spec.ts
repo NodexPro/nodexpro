@@ -73,12 +73,23 @@ test('VAT due-type resolution is backend-owned; frontend has no applicability br
   assert.doesNotMatch(registryView, /vat_due_type\s*===|income_tax_advance_enabled/);
 });
 
+test('advances display uses tax-card frequency + profile exemption from the same aggregate', () => {
+  assert.match(service, /income_tax_advance_frequency/);
+  assert.match(service, /income_tax_advance_status/);
+  assert.match(service, /profile_advance_status:/);
+  assert.doesNotMatch(popover, /חודשי|דו-חודשי|פטור|לא הוגדר/);
+  assert.doesNotMatch(popover, /income_tax_advance_frequency|income_tax_advance_enabled/);
+});
+
 test('frontend: name opens quick profile; folder still opens full case; single GET', () => {
   assert.match(registryView, /openQuickProfile/);
   assert.match(registryView, /moduleClientOperationsClientQuickProfile/);
   assert.match(registryView, /setQuickProfileAnchor\(anchorEl\)/);
   assert.match(registryView, /setQuickProfileLoading\(true\)/);
   assert.match(popover, /nx-co-client-quick-profile__skeleton/);
+  assert.doesNotMatch(popover, /מועדי דיווח/);
+  assert.match(popover, /placeClientOperationsQuickProfilePopover/);
+  assert.match(popover, /reporting\.map/);
   assert.match(registryView, /col\.key === 'client_name'/);
   assert.match(registryView, /openClientModal/);
   assert.match(registryView, /📁/);

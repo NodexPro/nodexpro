@@ -3,6 +3,8 @@
  * Domain decisions live here / in the aggregate service — not in React.
  */
 
+import { formatIncomeTaxAdvanceRegistryFrequencyDisplayHe } from './client-operations-registry-presentation.pure.js';
+
 export const CLIENT_OPERATIONS_CLIENT_QUICK_PROFILE_AGGREGATE_KEY =
   'client_operations_client_quick_profile_aggregate' as const;
 
@@ -389,18 +391,24 @@ export function formatQuickProfilePayrollDisplayHe(
 }
 
 /**
- * Income-tax advances configuration display.
- * Registry stores כן/לא only; compose enabled + percent when present.
+ * Income-tax advances periodicity — same canonical tax-card fields as the registry.
+ * Never כן/לא. Never inferred from business type or percent on this surface.
  */
 export function formatQuickProfileIncomeTaxAdvancesDisplayHe(input: {
   enabled: boolean | null | undefined;
-  percent: number | null | undefined;
+  frequency: string | null | undefined;
+  profile_advance_status: string | null | undefined;
 }): string {
-  if (!input.enabled) return 'לא';
-  if (input.percent != null && Number.isFinite(Number(input.percent))) {
-    return `כן · ${Number(input.percent)}%`;
-  }
-  return 'כן';
+  const frequencyLabel = formatIncomeTaxAdvanceRegistryFrequencyDisplayHe({
+    enabled: input.enabled,
+    frequency: input.frequency,
+  });
+  if (frequencyLabel) return frequencyLabel;
+  const profileStatus = String(input.profile_advance_status ?? '')
+    .replace(/\u00a0/g, ' ')
+    .trim();
+  if (profileStatus === 'לא') return 'פטור';
+  return 'לא הוגדר';
 }
 
 /** Income-tax deductions applicability display (legacy כן/לא). */

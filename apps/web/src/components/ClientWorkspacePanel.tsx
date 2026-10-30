@@ -228,9 +228,16 @@ const TAB_ORDER: Array<{ key: WorkspaceTabKey; label: string }> = [
 
 /** Hide from client-folder modal top nav only — obligations domain/tab content retained. */
 const HIDDEN_WORKSPACE_NAV_TAB_KEYS = new Set<WorkspaceTabKey>(['obligations']);
+/** Folder-icon modal only. DocFlow module, routes, and the case-page tab stay intact. */
+const FOLDER_MODAL_HIDDEN_NAV_TAB_KEYS = new Set<WorkspaceTabKey>(['docflow']);
 
-function isWorkspaceNavTabVisible(key: WorkspaceTabKey, docflowVisible: boolean): boolean {
+function isWorkspaceNavTabVisible(
+  key: WorkspaceTabKey,
+  docflowVisible: boolean,
+  folderModal = false
+): boolean {
   if (HIDDEN_WORKSPACE_NAV_TAB_KEYS.has(key)) return false;
+  if (folderModal && FOLDER_MODAL_HIDDEN_NAV_TAB_KEYS.has(key)) return false;
   if (key === 'docflow') return docflowVisible;
   return true;
 }
@@ -376,6 +383,7 @@ function formatDateHe(iso: string | null | undefined): string {
 export function ClientWorkspacePanel({
   workspace,
   showClose,
+  folderModal,
   onClose,
   onClientProfileSaved,
   onTaxSettingsSaved,
@@ -386,6 +394,8 @@ export function ClientWorkspacePanel({
 }: {
   workspace: ClientOperationsCaseResponse;
   showClose?: boolean;
+  /** Folder-icon overlay: hide DocFlow from this modal's top nav only. */
+  folderModal?: boolean;
   onClose?: () => void;
   initialTab?: string;
   /** After a confirmed update_profile command — refresh registry without closing the workspace. */
@@ -573,13 +583,13 @@ export function ClientWorkspacePanel({
   };
 
   const tabs = useMemo(
-    () => TAB_ORDER.filter((t) => isWorkspaceNavTabVisible(t.key, docflowTabVisible)),
-    [docflowTabVisible]
+    () => TAB_ORDER.filter((t) => isWorkspaceNavTabVisible(t.key, docflowTabVisible, folderModal)),
+    [docflowTabVisible, folderModal]
   );
   const activeTabLabel = tabs.find((t) => t.key === activeTab)?.label ?? '';
   useEffect(() => {
-    if (!isWorkspaceNavTabVisible(activeTab, docflowTabVisible)) setActiveTab('client');
-  }, [activeTab, docflowTabVisible]);
+    if (!isWorkspaceNavTabVisible(activeTab, docflowTabVisible, folderModal)) setActiveTab('client');
+  }, [activeTab, docflowTabVisible, folderModal]);
 
   const isClientTab = activeTab === 'client';
   const primaryContact = localWorkspace.primary_contact;
@@ -1181,7 +1191,7 @@ function WorkspaceModalShell({
       </div>
       <div className="nx-workspace-header-divider" />
       <div className="nx-workspace-tabs-bar" role="tablist" aria-label="Workspace tabs" aria-busy={busy}>
-        {TAB_ORDER.filter((t) => isWorkspaceNavTabVisible(t.key, false)).map((t) => (
+        {TAB_ORDER.filter((t) => isWorkspaceNavTabVisible(t.key, false, true)).map((t) => (
           <button
             key={t.key}
             type="button"
@@ -1250,6 +1260,7 @@ export function ClientWorkspaceModal({
           <ClientWorkspacePanel
             workspace={workspace!}
             showClose
+            folderModal
             onClose={onClose}
             onClientProfileSaved={onClientProfileSaved}
             onTaxSettingsSaved={onTaxSettingsSaved}

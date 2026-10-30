@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { placeClientOperationsQuickProfilePopover } from '../../lib/client-operations-quick-profile-placement.pure';
 import '../../styles/nx-client-quick-card.css';
 import '../../styles/nx-co-client-quick-profile.css';
 
@@ -104,17 +105,13 @@ export function ClientOperationsClientQuickProfilePopover({ profile, anchorEl, l
       const cardEl = cardRef.current;
       const width = cardEl?.offsetWidth ?? 360;
       const height = cardEl?.offsetHeight ?? 280;
-      const margin = 8;
-      let left = rect.left;
-      let top = rect.bottom + margin;
-      if (left + width > window.innerWidth - margin) {
-        left = Math.max(margin, window.innerWidth - width - margin);
-      }
-      if (left < margin) left = margin;
-      if (top + height > window.innerHeight - margin) {
-        top = Math.max(margin, rect.top - height - margin);
-      }
-      setPos({ top, left });
+      setPos(
+        placeClientOperationsQuickProfilePopover({
+          anchor: { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom },
+          popover: { width, height },
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+        })
+      );
     };
     place();
     window.addEventListener('resize', place);
@@ -199,7 +196,6 @@ export function ClientOperationsClientQuickProfilePopover({ profile, anchorEl, l
             ) : null}
             {reporting.length > 0 ? (
             <div className="nx-co-client-quick-profile__section">
-              <div className="nx-co-client-quick-profile__section-title">מועדי דיווח</div>
               {reporting.map((row) => (
                 <ProfileRow key={row.key} row={row} />
               ))}
