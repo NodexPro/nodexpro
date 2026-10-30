@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
-import { OWNER_SECURITY_COPY as en } from '../pages/owner-security-copy.pure';
+import { useI18n } from '../i18n/I18nProvider';
+import { englishSecurityText } from './security-copy';
 
 /** Renders the backend MFA aggregate. It does not decide who must enroll or which tenant a decision belongs to. */
 
@@ -17,6 +18,11 @@ export interface MfaPromptFields {
   decline_label_he: string;
   decline_allowed: boolean;
   liability_waiver: false;
+}
+
+export interface MfaPolicyFields {
+  requirement: 'mandatory' | 'optional';
+  enforcement_active: boolean;
 }
 
 export interface AccountSecurityFields {
@@ -65,47 +71,63 @@ export interface MfaEnrollment {
   otpauthUri: string;
 }
 
+function useSecurityText(localeOverride?: 'en') {
+  const { t } = useI18n();
+  return (key: string) => (localeOverride === 'en' ? englishSecurityText(key) : t(key));
+}
+
+function primaryBtn(embedded: boolean): string {
+  return embedded ? 'nx-glass-btn nx-glass-btn--purple' : 'nx-btn nx-btn-taxes-compact';
+}
+
+function secondaryBtn(embedded: boolean): string {
+  return embedded ? 'nx-glass-btn nx-glass-btn--secondary' : 'nx-btn nx-btn-taxes-compact';
+}
+
 export function MfaOnboardingPrompt(props: {
   prompt: MfaPromptFields;
   locale?: 'en';
   busy?: boolean;
   onCommand: (command: string, body: { decision: 'accept' | 'decline'; warning_version: string }) => void;
 }) {
+  const tx = useSecurityText(props.locale);
   if (!props.prompt.show) return null;
-  const english = props.locale === 'en';
   return (
     <section aria-labelledby="mfa-prompt-title" data-testid="mfa-onboarding-prompt">
-      <h2 id="mfa-prompt-title">{english ? en.promptTitle : props.prompt.title_he}</h2>
-      <p>{english ? en.promptBody : props.prompt.body_he}</p>
-      <button
-        type="button"
-        data-testid="mfa-prompt-accept"
-        disabled={props.busy}
-        onClick={() =>
-          props.onCommand(props.prompt.accept_command, {
-            decision: props.prompt.accept_decision,
-            warning_version: props.prompt.warning_version,
-          })
-        }
-      >
-        {english ? en.promptAccept : props.prompt.accept_label_he}
-      </button>
-      {props.prompt.decline_allowed ? (
+      <h2 id="mfa-prompt-title">{tx('settings.accountSecurity.mfaPromptTitle')}</h2>
+      <p>{tx('settings.accountSecurity.mfaPromptBody')}</p>
+      <div className="nx-mfa-prompt-overlay__actions">
         <button
           type="button"
-          className="secondary"
-          data-testid="mfa-prompt-decline"
+          className="nx-glass-btn nx-glass-btn--purple"
+          data-testid="mfa-prompt-accept"
           disabled={props.busy}
           onClick={() =>
-            props.onCommand(props.prompt.decline_command, {
-              decision: props.prompt.decline_decision,
+            props.onCommand(props.prompt.accept_command, {
+              decision: props.prompt.accept_decision,
               warning_version: props.prompt.warning_version,
             })
           }
         >
-          {english ? en.promptDecline : props.prompt.decline_label_he}
+          {tx('settings.accountSecurity.mfaPromptAccept')}
         </button>
-      ) : null}
+        {props.prompt.decline_allowed ? (
+          <button
+            type="button"
+            className="nx-glass-btn nx-glass-btn--secondary"
+            data-testid="mfa-prompt-decline"
+            disabled={props.busy}
+            onClick={() =>
+              props.onCommand(props.prompt.decline_command, {
+                decision: props.prompt.decline_decision,
+                warning_version: props.prompt.warning_version,
+              })
+            }
+          >
+            {tx('settings.accountSecurity.mfaPromptDecline')}
+          </button>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -133,7 +155,9 @@ function RecoveryCodeForm(props: {
   testId?: string;
   locale?: 'en';
   busy?: boolean;
+  embedded?: boolean;
 }) {
+  const tx = useSecurityText(props.locale);
   const [code, setCode] = useState('');
   const fieldId = props.fieldId ?? 'mfa-recovery-code';
   return (
@@ -143,17 +167,50 @@ function RecoveryCodeForm(props: {
         props.onCommand(props.command, { recovery_code: code });
       }}
     >
-      <label htmlFor={fieldId}>{props.locale === 'en' ? en.recoveryCodeLabel : 'קוד שחזור'}</label>
+      <label htmlFor={fieldId}>{tx('settings.accountSecurity.mfaRecoveryCodeLabel')}</label>
       <input
         id={fieldId}
+        className={props.embedded ? 'nx-glass-input' : undefined}
         data-testid={props.testId ?? 'mfa-recovery-code'}
         autoComplete="off"
         value={code}
         onChange={(event) => setCode(event.target.value)}
       />
-      <button type="submit" className="nx-btn nx-btn-taxes-compact" disabled={props.busy} data-testid={props.testId ? `${props.testId}-submit` : 'mfa-recover'}>{props.label}</button>
+      <button
+        type="submit"
+        className={primaryBtn(Boolean(props.embedded))}
+        disabled={props.busy}
+        data-testid={props.testId ? `${props.testId}-submit` : 'mfa-recover'}
+      >
+        {props.label}
+      </button>
     </form>
   );
+}
+
+function policyText(
+  tx: (key: string) => string,
+  policy: MfaPolicyFields | undefined,
+): string {
+  if (policy?.requirement === 'mandatory') {
+    return tx(
+      policy.enforcement_active
+        ? 'settings.accountSecurity.mfaMandatoryActive'
+        : 'settings.accountSecurity.mfaMandatoryInactive',
+    );
+  }
+  return tx('settings.accountSecurity.mfaOptional');
+}
+
+function deviceText(
+  tx: (key: string) => string,
+  thisDevice: 'trusted' | 'untrusted' | 'unavailable' | undefined,
+  trustedCount: number,
+  trustEnabled: boolean,
+): string {
+  if (thisDevice === 'trusted' || trustedCount > 0) return tx('settings.accountSecurity.mfaDeviceTrusted');
+  if (thisDevice === 'untrusted' || trustEnabled) return tx('settings.accountSecurity.mfaDeviceUntrusted');
+  return tx('settings.accountSecurity.mfaDeviceUnavailable');
 }
 
 export function AccountSecuritySection(props: {
@@ -161,36 +218,49 @@ export function AccountSecuritySection(props: {
   enrollment: MfaEnrollment | null;
   locale?: 'en';
   busy?: boolean;
+  embedded?: boolean;
+  policy?: MfaPolicyFields;
+  thisDevice?: 'trusted' | 'untrusted' | 'unavailable';
   onCommand: (command: string, body?: Record<string, string>) => void;
 }) {
+  const tx = useSecurityText(props.locale);
   const [code, setCode] = useState('');
-  const english = props.locale === 'en';
   const trustedDevices = props.security.devices.filter((device) => !device.revoked);
   const recoveryReady = Boolean(props.security.recovery_issue_enabled || props.security.recover_enabled);
+  const embedded = Boolean(props.embedded);
   return (
-    <section aria-labelledby="account-security-title" data-testid="account-security-section">
-      <h2 id="account-security-title">{english ? en.sectionTitle : props.security.section_he}</h2>
+    <section
+      aria-labelledby={embedded ? 'nx-settings-mfa-label' : 'account-security-title'}
+      data-testid="account-security-section"
+      className={embedded ? 'nx-settings-mfa' : undefined}
+    >
+      {embedded ? null : <h2 id="account-security-title">{tx('settings.accountSecurity.mfaSection')}</h2>}
       <p data-testid="account-security-status">
-        {english
-          ? (props.security.enroll_enabled ? en.statusNotEnrolled : en.statusEnrolled)
-          : props.security.status_he}
+        {tx(props.security.enroll_enabled ? 'settings.accountSecurity.mfaStatusOff' : 'settings.accountSecurity.mfaStatusOn')}
       </p>
-      {english ? null : <p>{props.security.policy_he}</p>}
+      <p>{policyText(tx, props.policy)}</p>
       {props.security.pending_he ? (
-        <p data-testid="mfa-pending">{english ? en.pendingEnrollment : props.security.pending_he}</p>
+        <p data-testid="mfa-pending">{tx('settings.accountSecurity.mfaPending')}</p>
       ) : null}
       {props.security.enroll_enabled ? (
-        <button type="button" data-testid="account-security-enroll" disabled={props.busy} onClick={() => props.onCommand(props.security.enroll_command)}>
-          {english ? en.enroll : props.security.enroll_label_he}
+        <button
+          type="button"
+          className={primaryBtn(embedded)}
+          data-testid="account-security-enroll"
+          disabled={props.busy}
+          onClick={() => props.onCommand(props.security.enroll_command)}
+        >
+          {tx('settings.accountSecurity.mfaEnroll')}
         </button>
       ) : null}
       {props.enrollment ? (
         <div data-testid="mfa-enrollment">
-          <h3>{english ? en.qrTitle : props.security.qr_title_he}</h3>
+          <h3>{tx('settings.accountSecurity.mfaQrTitle')}</h3>
           <EnrollmentQr uri={props.enrollment.otpauthUri} />
-          <label htmlFor="mfa-code">{english ? en.codeLabel : props.security.code_label_he}</label>
+          <label htmlFor="mfa-code">{tx('settings.accountSecurity.mfaCodeLabel')}</label>
           <input
             id="mfa-code"
+            className={embedded ? 'nx-glass-input' : undefined}
             data-testid="mfa-code"
             inputMode="numeric"
             autoComplete="one-time-code"
@@ -199,42 +269,66 @@ export function AccountSecuritySection(props: {
           />
           <button
             type="button"
+            className={primaryBtn(embedded)}
             data-testid="mfa-verify"
             disabled={props.busy}
             onClick={() => props.onCommand(props.security.verify_command, { factor_id: props.enrollment!.factorId, code })}
           >
-            {english ? en.verify : props.security.verify_label_he}
+            {tx('settings.accountSecurity.mfaVerify')}
           </button>
-          <button type="button" className="secondary" data-testid="mfa-cancel" disabled={props.busy} onClick={() => props.onCommand(props.security.cancel_command)}>
-            {english ? en.cancel : props.security.cancel_label_he}
+          <button
+            type="button"
+            className={secondaryBtn(embedded)}
+            data-testid="mfa-cancel"
+            disabled={props.busy}
+            onClick={() => props.onCommand(props.security.cancel_command)}
+          >
+            {tx('settings.accountSecurity.mfaCancel')}
           </button>
         </div>
       ) : null}
       {props.security.remove_enabled ? (
-        <button type="button" className="secondary" data-testid="mfa-remove" disabled={props.busy} onClick={() => props.onCommand(props.security.remove_command)}>
-          {english ? en.remove : props.security.remove_label_he}
+        <button
+          type="button"
+          className={secondaryBtn(embedded)}
+          data-testid="mfa-remove"
+          disabled={props.busy}
+          onClick={() => props.onCommand(props.security.remove_command)}
+        >
+          {tx('settings.accountSecurity.mfaRemove')}
         </button>
       ) : null}
       {props.security.replace_enabled ? (
-        <button type="button" data-testid="mfa-replace" disabled={props.busy} onClick={() => props.onCommand(props.security.replace_command)}>
-          {english ? en.replace : props.security.replace_label_he}
+        <button
+          type="button"
+          className={primaryBtn(embedded)}
+          data-testid="mfa-replace"
+          disabled={props.busy}
+          onClick={() => props.onCommand(props.security.replace_command)}
+        >
+          {tx('settings.accountSecurity.mfaReplace')}
         </button>
       ) : null}
       <p data-testid="mfa-recovery-status">
-        {english
-          ? (recoveryReady ? en.recoveryAvailable : en.recoveryUnavailable)
-          : props.security.recovery_unavailable_he}
+        {tx(recoveryReady ? 'settings.accountSecurity.mfaRecoveryAvailable' : 'settings.accountSecurity.mfaRecoveryUnavailable')}
       </p>
       {props.security.recovery_issue_enabled && props.security.recovery_issue_command ? (
-        <button type="button" data-testid="mfa-issue-recovery" disabled={props.busy} onClick={() => props.onCommand(props.security.recovery_issue_command!)}>
-          {english ? en.issueRecovery : props.security.recovery_issue_label_he}
+        <button
+          type="button"
+          className={primaryBtn(embedded)}
+          data-testid="mfa-issue-recovery"
+          disabled={props.busy}
+          onClick={() => props.onCommand(props.security.recovery_issue_command!)}
+        >
+          {tx('settings.accountSecurity.mfaIssueRecovery')}
         </button>
       ) : null}
       {props.security.recover_enabled && props.security.recover_command ? (
         <RecoveryCodeForm
           locale={props.locale}
           busy={props.busy}
-          label={english ? en.recover : (props.security.recover_label_he ?? '')}
+          embedded={embedded}
+          label={tx('settings.accountSecurity.mfaRecover')}
           command={props.security.recover_command}
           onCommand={props.onCommand}
         />
@@ -243,7 +337,8 @@ export function AccountSecuritySection(props: {
         <RecoveryCodeForm
           locale={props.locale}
           busy={props.busy}
-          label={english ? en.verifyRecovery : (props.security.recovery_verify_label_he ?? '')}
+          embedded={embedded}
+          label={tx('settings.accountSecurity.mfaVerifyRecovery')}
           command={props.security.recovery_verify_command}
           onCommand={props.onCommand}
           fieldId="mfa-recovery-verify-code"
@@ -251,34 +346,32 @@ export function AccountSecuritySection(props: {
         />
       ) : null}
       <p data-testid="mfa-trusted-status">
-        {english
-          ? (trustedDevices.length > 0
-            ? en.deviceTrusted
-            : props.security.trust_enabled
-              ? en.deviceUntrusted
-              : en.deviceUnavailable)
-          : props.security.device_status_he}
+        {deviceText(tx, props.thisDevice, trustedDevices.length, props.security.trust_enabled)}
       </p>
       {props.security.trust_enabled ? (
-        <button type="button" data-testid="mfa-trust-device" disabled={props.busy} onClick={() => props.onCommand(props.security.trust_command)}>
-          {english ? en.trustDevice : props.security.trust_label_he}
+        <button
+          type="button"
+          className={primaryBtn(embedded)}
+          data-testid="mfa-trust-device"
+          disabled={props.busy}
+          onClick={() => props.onCommand(props.security.trust_command)}
+        >
+          {tx('settings.accountSecurity.mfaTrustDevice')}
         </button>
       ) : null}
       {trustedDevices.map((device) => (
         <button
           key={device.id}
           type="button"
-          className="secondary"
+          className={secondaryBtn(embedded)}
           data-testid="mfa-revoke-device"
           disabled={props.busy}
           onClick={() => props.onCommand(device.revoke_command, { device_id: device.id })}
         >
-          {english ? en.revokeDevice : device.revoke_label_he}
+          {tx('settings.accountSecurity.mfaRevokeDevice')}
         </button>
       ))}
-      <p data-testid="mfa-suspicious-status">
-        {english ? en.suspiciousUnavailable : props.security.suspicious_unavailable_he}
-      </p>
+      <p data-testid="mfa-suspicious-status">{tx('settings.accountSecurity.mfaSuspicious')}</p>
     </section>
   );
 }

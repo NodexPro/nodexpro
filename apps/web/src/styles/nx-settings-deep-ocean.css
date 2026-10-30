@@ -123,6 +123,14 @@
   padding-bottom: 2px;
 }
 
+.nx-settings-deep-ocean .nx-settings-mfa-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  font-weight: 500;
+}
+
 .nx-settings-deep-ocean .nx-settings-identity-note {
   margin: 10px 0 0;
 }

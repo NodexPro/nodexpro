@@ -18,7 +18,7 @@ test('Settings uses Dashboard glass cards and does not reveal the current passwo
   assert.doesNotMatch(settings, /auth\.getUser\(\)[\s\S]*password/);
   assert.doesNotMatch(settings, /current_password/);
   assert.doesNotMatch(settings, /AUTH\.changePassword/);
-  assert.match(settings, /resetPasswordForEmail/);
+  assert.match(settings, /AUTH\.requestPasswordReset|resetPasswordForEmail/);
   assert.match(css, /#8edfff/i);
   assert.match(css, /#00d9ff/i);
   assert.match(css, /#ffffff/i);
@@ -98,6 +98,18 @@ test('Account & Security matches Company Identity rows and profile fields follow
   assert.match(securityBlock, /settings\.accountSecurity\.addEmail/);
   assert.match(securityBlock, /settings\.changePasswordAction/);
   assert.match(securityBlock, /settings\.accountSecurity\.sendResetLink/);
+  assert.match(securityBlock, /settings\.accountSecurity\.mfa/);
+  assert.match(securityBlock, /nx-settings-mfa-row/);
+  assert.match(securityBlock, /<AccountSecurityPanel mode="section" embedded \/>/);
+  const securityOrder = [
+    securityBlock.indexOf('settings.accountSecurity.additionalEmail'),
+    securityBlock.indexOf('settings.changePasswordAction'),
+    securityBlock.indexOf('AccountSecurityPanel'),
+  ];
+  assert.ok(securityOrder.every((index) => index >= 0));
+  assert.deepEqual(securityOrder, [...securityOrder].sort((a, b) => a - b));
+  const beforePair = settings.slice(settings.indexOf('<h1'), settings.indexOf('nx-settings-pair-card'));
+  assert.doesNotMatch(beforePair, /<AccountSecurityPanel/);
   assert.match(securityBlock, /AUTH\.requestAdditionalLoginEmail/);
   assert.match(securityBlock, /AUTH\.replaceAdditionalLoginEmail/);
   assert.match(securityBlock, /AUTH\.resendAdditionalLoginEmail/);

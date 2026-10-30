@@ -360,7 +360,6 @@ export function Settings() {
     <div className="nx-glass-page nx-glass-page--wide nx-settings nx-settings-deep-ocean nx-office-ocean" data-testid="nx-settings">
       <h1 className="nx-glass-title">{t('settings.title')}</h1>
       <p className="nx-glass-subtitle">{t('settings.subtitle')}</p>
-      <AccountSecurityPanel mode="section" />
 
       {error && (
         <div className="nx-glass-alert nx-glass-alert--error" role="alert">
@@ -549,6 +548,12 @@ export function Settings() {
                   ) : null}
                 </dd>
               </div>
+              <div className="nx-settings-identity-table__row" data-testid="nx-settings-mfa-row">
+                <dt id="nx-settings-mfa-label">{t('settings.accountSecurity.mfa')}</dt>
+                <dd className="nx-settings-mfa-cell">
+                  <AccountSecurityPanel mode="section" embedded />
+                </dd>
+              </div>
             </dl>
           </div>
         </div>
@@ -619,7 +624,7 @@ export function Settings() {
                   className="nx-glass-input"
                   disabled={!capabilities.canEditSettings}
                 >
-                  <option value="">Select country</option>
+                  <option value="">{t('settings.profile.selectCountry')}</option>
                   {countryOptions.map((opt) => (
                     <option key={opt.code} value={opt.code}>
                       {opt.label}

@@ -1,19 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { apiJson, ApiError } from '../api/client';
 import { AUTH } from '../api/endpoints';
+import { useI18n } from '../i18n/I18nProvider';
 import { supabase } from '../lib/supabase';
 import {
   AccountSecuritySection,
   MfaOnboardingPrompt,
   type AccountSecurityFields,
   type MfaEnrollment,
+  type MfaPolicyFields,
   type MfaPromptFields,
 } from './MfaOnboardingPrompt';
-import { OWNER_SECURITY_COPY } from '../pages/owner-security-copy.pure';
+import { englishSecurityText } from './security-copy';
+import './account-security-panel.css';
 
 interface MfaAggregate {
   prompt: MfaPromptFields;
   account_security: AccountSecurityFields;
+  policy?: MfaPolicyFields;
+  this_device?: 'trusted' | 'untrusted' | 'unavailable';
 }
 
 interface CommandResult {
@@ -28,7 +34,18 @@ interface CommandResult {
   aggregate?: MfaAggregate;
 }
 
-export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both'; locale?: 'en' }) {
+function isHebrew(value: string): boolean {
+  return /[\u0590-\u05FF]/.test(value);
+}
+
+export function AccountSecurityPanel(props: {
+  mode: 'prompt' | 'section' | 'both';
+  locale?: 'en';
+  embedded?: boolean;
+}) {
+  const location = useLocation();
+  const { lang, t } = useI18n();
+  const tx = (key: string) => (props.locale === 'en' ? englishSecurityText(key) : t(key));
   const [aggregate, setAggregate] = useState<MfaAggregate | null>(null);
   const [enrollment, setEnrollment] = useState<MfaEnrollment | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
@@ -36,6 +53,8 @@ export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const copyLang = props.locale === 'en' ? 'en' : lang;
+  const hideGlobalPrompt = props.mode === 'prompt' && location.pathname === '/settings';
 
   const load = useCallback(async () => {
     const next = await apiJson<MfaAggregate>(AUTH.mfaAggregate, { credentials: 'include' });
@@ -49,7 +68,7 @@ export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both
         if (!cancelled) setAggregate(next);
       })
       .catch(() => {
-        if (!cancelled) setError(props.locale === 'en' ? OWNER_SECURITY_COPY.enrollLoadFailed : 'לא ניתן לטעון את מצב האימות');
+        if (!cancelled) setError(tx('settings.accountSecurity.mfaLoadFailed'));
       });
     return () => {
       cancelled = true;
@@ -77,7 +96,7 @@ export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both
           refresh_token: result.refresh_token,
         });
         if (saved.error) {
-          setError(props.locale === 'en' ? OWNER_SECURITY_COPY.sessionUpdateFailed : 'האימות הצליח, אבל הסשן לא עודכן. התנתקו ונכנסו שוב לפני פעולה רגישה.');
+          setError(tx('settings.accountSecurity.mfaSessionUpdateFailed'));
         }
       }
       if (result.aggregate) setAggregate(result.aggregate);
@@ -108,7 +127,7 @@ export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both
             setEnrollment({ factorId: enrolled.factor_id, otpauthUri: enrolled.otpauth_uri });
           }
         }).catch(() => {
-          setError(props.locale === 'en' ? OWNER_SECURITY_COPY.recoveryReenrollFailed : 'השחזור הצליח, אבל הרישום מחדש לא התחיל. נסו הפעלה ידנית.');
+          setError(tx('settings.accountSecurity.mfaRecoveryReenrollFailed'));
         });
       }
       if (command === 'trust_mfa_device' || command === 'revoke_trusted_device') {
@@ -117,9 +136,10 @@ export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both
       return result;
     } catch (e) {
       const backendMessage = e instanceof ApiError ? e.message : '';
-      const message = props.locale === 'en'
-        ? (backendMessage && !/[\u0590-\u05FF]/.test(backendMessage) ? backendMessage : OWNER_SECURITY_COPY.commandFailed)
-        : (backendMessage && /[\u0590-\u05FF]/.test(backendMessage) ? backendMessage : 'הפעולה נכשלה');
+      const preferEnglish = copyLang !== 'he';
+      const message = preferEnglish
+        ? (backendMessage && !isHebrew(backendMessage) ? backendMessage : tx('settings.accountSecurity.mfaCommandFailed'))
+        : (backendMessage && isHebrew(backendMessage) ? backendMessage : tx('settings.accountSecurity.mfaCommandFailed'));
       setError(message);
       return null;
     } finally {
@@ -135,41 +155,72 @@ export function AccountSecurityPanel(props: { mode: 'prompt' | 'section' | 'both
     }
   }
 
-  if (!aggregate) {
-    if (error) return <p role="alert">{error}</p>;
-    return <p data-testid="account-security-loading">{props.locale === 'en' ? OWNER_SECURITY_COPY.enrollLoading : 'טוען…'}</p>;
-  }
-  const showPrompt = props.mode !== 'section';
+  const showPrompt = props.mode !== 'section' && !hideGlobalPrompt;
   const showSection = props.mode !== 'prompt';
-  if (props.mode === 'prompt' && !aggregate.prompt.show) return null;
+
+  if (!aggregate) {
+    if (props.mode === 'prompt') return null;
+    if (error) return <p role="alert">{error}</p>;
+    return <p data-testid="account-security-loading">{tx('settings.accountSecurity.mfaLoading')}</p>;
+  }
+
+  if (props.mode === 'prompt' && (!aggregate.prompt.show || hideGlobalPrompt)) return null;
+
+  const section = showSection ? (
+    <>
+      <AccountSecuritySection
+        locale={props.locale}
+        busy={busy}
+        embedded={props.embedded}
+        security={aggregate.account_security}
+        enrollment={enrollment}
+        policy={aggregate.policy}
+        thisDevice={aggregate.this_device}
+        onCommand={(command, body) => void runCommand(command, body)}
+      />
+      {recoveryCodes ? (
+        <div data-testid="mfa-recovery-codes">
+          <p>{tx('settings.accountSecurity.mfaRecoveryCodesOnce')}</p>
+          <ul>
+            {recoveryCodes.map((code) => (
+              <li key={code}>{code}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </>
+  ) : null;
+
+  if (props.mode === 'prompt') {
+    return (
+      <div className="nx-mfa-prompt-overlay" data-testid="account-security-panel">
+        <div className="nx-mfa-prompt-overlay__card">
+          {error ? <p role="alert">{error}</p> : null}
+          {busy ? <p data-testid="account-security-busy">{tx('settings.accountSecurity.mfaWorking')}</p> : null}
+          <MfaOnboardingPrompt
+            locale={props.locale}
+            busy={busy}
+            prompt={aggregate.prompt}
+            onCommand={(command, body) => void onPrompt(command, body)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div data-testid="account-security-panel">
       {error ? <p role="alert">{error}</p> : null}
-      {busy ? <p data-testid="account-security-busy">{props.locale === 'en' ? OWNER_SECURITY_COPY.working : 'מבצע…'}</p> : null}
-      {showPrompt ? <MfaOnboardingPrompt locale={props.locale} busy={busy} prompt={aggregate.prompt} onCommand={(command, body) => void onPrompt(command, body)} /> : null}
-      {showSection ? (
-        <>
-          {props.locale === 'en' ? null : <h2>{aggregate.account_security.settings_title_he}</h2>}
-          <AccountSecuritySection
-            locale={props.locale}
-            busy={busy}
-            security={aggregate.account_security}
-            enrollment={enrollment}
-            onCommand={(command, body) => void runCommand(command, body)}
-          />
-          {recoveryCodes ? (
-            <div data-testid="mfa-recovery-codes">
-              <p>{props.locale === 'en' ? OWNER_SECURITY_COPY.recoveryCodesOnce : 'הקודים מוצגים פעם אחת. שמרו אותם מחוץ לדפדפן. כל קוד פועל פעם אחת בלבד.'}</p>
-              <ul>
-                {recoveryCodes.map((code) => (
-                  <li key={code}>{code}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </>
+      {busy ? <p data-testid="account-security-busy">{tx('settings.accountSecurity.mfaWorking')}</p> : null}
+      {showPrompt ? (
+        <MfaOnboardingPrompt
+          locale={props.locale}
+          busy={busy}
+          prompt={aggregate.prompt}
+          onCommand={(command, body) => void onPrompt(command, body)}
+        />
       ) : null}
+      {section}
     </div>
   );
 }

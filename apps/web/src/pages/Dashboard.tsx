@@ -404,7 +404,9 @@ export function Dashboard() {
         if (!cancelled) setOverview(data);
       })
       .catch((e) => {
-        if (!cancelled && (e as Error)?.name !== 'AbortError') setError(e instanceof Error ? e.message : 'Failed to load');
+        if (!cancelled && (e as Error)?.name !== 'AbortError') {
+          setError(e instanceof Error ? e.message : t('dashboard.loadFailed'));
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
