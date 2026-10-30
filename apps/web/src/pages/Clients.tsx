@@ -16,7 +16,6 @@ import {
 import { useI18n } from '../i18n/I18nProvider';
 import {
   canonicalCreatedClientId,
-  clientCardPath,
   createdClientDestination,
   createdClientOpenLocationState,
 } from './client-create-navigation.pure';
@@ -115,6 +114,7 @@ interface ClientRow {
   is_archived: boolean;
   created_at: string;
   updated_at?: string;
+  business_type_display_he: string;
 }
 
 export function Clients() {
@@ -451,55 +451,50 @@ export function Clients() {
 
       <section className="nx-glass-card">
         <div className="nx-clients-toolbar">
-        <div className="nx-clients-toolbar__row nx-clients-toolbar__row--split">
-          <div className="nx-clients-toolbar__row">
-            <span className="nx-clients-label">{t('clients.views.label')}</span>
-            <select
-              value={view}
-              onChange={(e) => { setView(e.target.value); setOffset(0); }}
-              className="nx-glass-input nx-glass-input--inline"
-            >
-              {VIEW_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
-              ))}
-            </select>
-            <input
-              type="text"
-              placeholder={t('clients.searchPlaceholder')}
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && applySearch()}
-              className="nx-glass-input nx-glass-input--inline"
-              style={{ width: 220 }}
-            />
-            <button type="button" onClick={applySearch} className="nx-glass-btn nx-glass-btn--secondary">
-              {t('clients.search')}
-            </button>
-            {(view !== 'all' && view !== 'archived') && (
-              <label className="nx-clients-toolbar__row" style={{ fontSize: 14 }}>
-                <input type="checkbox" checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} />
-                {t('clients.includeArchived')}
-              </label>
-            )}
-          </div>
+        <div className="nx-clients-toolbar__row">
           {canWrite && (
-            <div className="nx-clients-toolbar__row" style={{ gap: 8 }}>
-              <button type="button" onClick={() => { setShowCreate(true); setCreateError(''); setCreateInvalidField(null); }} className="nx-glass-btn nx-glass-btn--purple">
-                {t('clients.newClient')}
-              </button>
-              {canImport && (
-              <button type="button" onClick={() => setShowImport(true)} className="nx-glass-btn nx-glass-btn--secondary">
-                {t('clients.importCsv')}
-              </button>
-              )}
-              <button type="button" onClick={downloadExport} disabled={exportLoading} className="nx-glass-btn nx-glass-btn--secondary">
-                {exportLoading ? t('common.loading') : t('clients.exportCsv')}
-              </button>
-            </div>
+            <button type="button" onClick={() => { setShowCreate(true); setCreateError(''); setCreateInvalidField(null); }} className="nx-glass-btn nx-glass-btn--purple">
+              {t('clients.newClient')}
+            </button>
           )}
-        </div>
-        <div className="nx-clients-toolbar__row nx-clients-toolbar__meta">
-          <span>{t('clients.sort.label')}</span>
+          {canWrite && canImport && (
+            <button type="button" onClick={() => setShowImport(true)} className="nx-glass-btn nx-glass-btn--secondary">
+              {t('clients.importCsv')}
+            </button>
+          )}
+          {canWrite && (
+            <button type="button" onClick={downloadExport} disabled={exportLoading} className="nx-glass-btn nx-glass-btn--secondary">
+              {exportLoading ? t('common.loading') : t('clients.exportCsv')}
+            </button>
+          )}
+          <input
+            type="text"
+            placeholder={t('clients.searchPlaceholder')}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && applySearch()}
+            className="nx-glass-input nx-glass-input--inline nx-clients-toolbar__search"
+          />
+          <button type="button" onClick={applySearch} className="nx-glass-btn nx-glass-btn--secondary">
+            {t('clients.search')}
+          </button>
+          <span className="nx-clients-label">{t('clients.views.label')}</span>
+          <select
+            value={view}
+            onChange={(e) => { setView(e.target.value); setOffset(0); }}
+            className="nx-glass-input nx-glass-input--inline"
+          >
+            {VIEW_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
+            ))}
+          </select>
+          {(view !== 'all' && view !== 'archived') && (
+            <label className="nx-clients-toolbar__archived">
+              <input type="checkbox" checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} />
+              {t('clients.includeArchived')}
+            </label>
+          )}
+          <span className="nx-clients-label">{t('clients.sort.label')}</span>
           <select
             value={sortOption}
             onChange={(e) => { setSortOption(e.target.value); setOffset(0); }}
@@ -509,12 +504,11 @@ export function Clients() {
               <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
             ))}
           </select>
-          <span>{t('clients.perPage')}</span>
+          <span className="nx-clients-label">{t('clients.perPage')}</span>
           <select
             value={limit}
             onChange={(e) => { setLimit(Number(e.target.value)); setOffset(0); }}
-            className="nx-glass-input nx-glass-input--inline"
-            style={{ minWidth: 80 }}
+            className="nx-glass-input nx-glass-input--inline nx-clients-toolbar__limit"
           >
             <option value={10}>10</option>
             <option value={20}>20</option>
@@ -523,9 +517,6 @@ export function Clients() {
           </select>
           {total > 0 && (
             <>
-              <span>
-                {t('clients.showing')} {offset + 1}–{Math.min(offset + limit, total)} {t('clients.of')} {total}
-              </span>
               <button
                 type="button"
                 disabled={offset === 0 || loading}
@@ -542,6 +533,9 @@ export function Clients() {
               >
                 {t('clients.next')}
               </button>
+              <span className="nx-clients-toolbar__meta">
+                {t('clients.showing')} {offset + 1}–{Math.min(offset + limit, total)} {t('clients.of')} {total}
+              </span>
             </>
           )}
         </div>
@@ -832,10 +826,9 @@ export function Clients() {
                   />
                 </th>
                 <th>{t('clients.table.name')}</th>
-                <th>{t('clients.table.taxId')}</th>
+                <th className="nx-clients-table__tax">{t('clients.table.taxId')}</th>
                 <th>{t('clients.table.type')}</th>
                 <th>{t('clients.table.status')}</th>
-                <th>{t('clients.table.lifecycle')}</th>
                 <th>{t('clients.updated')}</th>
                 <th></th>
               </tr>
@@ -851,19 +844,12 @@ export function Clients() {
                       aria-label={t('clients.selectRow').replace('{{name}}', c.display_name)}
                     />
                   </td>
-                  <td>
-                    <button
-                      type="button"
-                      onClick={() => navigate(clientCardPath(c.id))}
-                      className="nx-clients-table__name"
-                    >
-                      {c.display_name}
-                    </button>
+                  <td>{c.display_name}</td>
+                  <td className="nx-clients-table__tax nx-clients-table__mono">
+                    <span className="nx-ltr">{c.tax_id ?? '—'}</span>
                   </td>
-                  <td className="nx-clients-table__mono nx-ltr">{c.tax_id ?? '—'}</td>
-                  <td>{t(`clients.type.${c.client_type}`)}</td>
+                  <td>{c.business_type_display_he}</td>
                   <td>{lookupLabel(t, `clients.statusValue.${c.status}`, c.status)}</td>
-                  <td>{lookupLabel(t, `clients.lifecycleValue.${c.lifecycle_state}`, c.lifecycle_state)}</td>
                   <td className="nx-clients-table__muted">
                     {c.updated_at ? new Date(c.updated_at).toLocaleDateString() : '—'}
                   </td>

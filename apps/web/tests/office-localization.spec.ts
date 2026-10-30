@@ -70,7 +70,8 @@ test('11. email, phone, URL, and identifiers stay LTR', () => {
   const users = read('../src/pages/UsersRoles.tsx');
   assert.match(clients, /className=\{`nx-glass-input nx-ltr\$\{createInvalidField === 'tax_id'/);
   assert.match(clients, /className="nx-glass-input nx-ltr"/);
-  assert.match(clients, /className="nx-clients-table__mono nx-ltr"/);
+  assert.match(clients, /nx-clients-table__tax nx-clients-table__mono/);
+  assert.match(clients, /className="nx-ltr"/);
   assert.match(clients, /<td className="nx-ltr">\{r\.email\}<\/td>/);
   assert.match(users, /type="email"[\s\S]*dir="ltr"/);
 });

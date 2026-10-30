@@ -11,6 +11,7 @@ import {
 } from '../client-operations/organization-client-access.js';
 import { assertOfficeAdministration } from '../../shared/office-administration.js';
 import { invalidateClientOperationsRegistryMaterializationCache } from '../client-operations/client-operations-registry-materialization-cache.js';
+import { formatCoreClientsListBusinessTypeDisplayHe } from './clients-list-presentation.pure.js';
 
 const ENTITY_TYPE_CLIENT = 'client';
 const ALLOWED_CLIENT_TYPES = new Set([
@@ -98,6 +99,8 @@ export interface ListClientsResult {
     is_archived: boolean;
     created_at: string;
     updated_at?: string;
+    /** Ready-to-render legal business type from client_operational_profiles. */
+    business_type_display_he: string;
   }[];
   total: number;
   limit: number;
@@ -250,7 +253,7 @@ export async function listClients(
   }
 
   const { data } = await q;
-  const items = (Array.isArray(data) ? data : []) as {
+  const rows = (Array.isArray(data) ? data : []) as {
     id: string;
     tax_id?: string;
     client_type: string;
@@ -262,6 +265,27 @@ export async function listClients(
     created_at: string;
     updated_at?: string;
   }[];
+
+  const typeByClientId = new Map<string, string | null>();
+  if (rows.length > 0) {
+    const { data: profiles, error: profileErr } = await supabaseAdmin
+      .from('client_operational_profiles')
+      .select('client_id, business_type')
+      .eq('organization_id', orgId)
+      .in(
+        'client_id',
+        rows.map((r) => r.id)
+      );
+    if (profileErr) throw profileErr;
+    for (const p of (profiles ?? []) as Array<{ client_id: string; business_type: string | null }>) {
+      typeByClientId.set(p.client_id, p.business_type);
+    }
+  }
+
+  const items = rows.map((row) => ({
+    ...row,
+    business_type_display_he: formatCoreClientsListBusinessTypeDisplayHe(typeByClientId.get(row.id)),
+  }));
 
   return {
     items,
