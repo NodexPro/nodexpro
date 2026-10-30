@@ -36,17 +36,18 @@ test('EN and HE keep the same backend-owned Modules nesting; labels follow I18nP
   assert.doesNotMatch(shell, /label === ['"]Modules['"]/);
   assert.doesNotMatch(shell, /label === ['"]מודולים['"]/);
   assert.equal(en.nav.clientOperations, 'Client Operations');
-  assert.equal(he.nav.clientOperations, 'תפעול לקוחות');
+  assert.equal(he.nav.clientOperations, 'ניהול לקוחות');
   assert.equal(sidebarNavLabel('/m/client-operations', 'Nodex לקוחות', tFor(en)), 'Client Operations');
-  assert.equal(sidebarNavLabel('/m/client-operations', 'Nodex לקוחות', tFor(he)), 'תפעול לקוחות');
+  assert.equal(sidebarNavLabel('/m/client-operations', 'Nodex לקוחות', tFor(he)), 'ניהול לקוחות');
   assert.equal(sidebarNavLabel('/modules', 'Modules', tFor(en)), 'Modules');
   assert.equal(sidebarNavLabel('/modules', 'Modules', tFor(he)), 'מודולים');
 });
 
-test('ניהול לקוחות stays the Client Operations header, not the sidebar item', () => {
+test('ניהול לקוחות is the Client Operations header and sidebar item; EN stays Client Operations', () => {
   const header = read('../src/templates/template-1/components/ClientOperationsAppHeader.tsx');
   assert.match(header, /CLIENT_OPERATIONS_HEADER_TITLE_HE = 'ניהול לקוחות'/);
-  assert.notEqual(he.nav.clientOperations, 'ניהול לקוחות');
+  assert.equal(he.nav.clientOperations, 'ניהול לקוחות');
+  assert.equal(en.nav.clientOperations, 'Client Operations');
   assert.equal(he.nav.clients, 'לקוחות');
 });
 

@@ -30,7 +30,7 @@ test('Hebrew nav keys cover every core sidebar path', () => {
   assert.equal(he.nav.billing, 'חיובים');
   assert.equal(sidebarNavLabel('/dashboard', 'Dashboard', heT), 'לוח בקרה');
   assert.equal(sidebarNavLabel('/users-roles', 'Users & Roles', heT), 'משתמשים ותפקידים');
-  assert.equal(sidebarNavLabel('/m/client-operations', 'Nodex לקוחות', heT), 'תפעול לקוחות');
+  assert.equal(sidebarNavLabel('/m/client-operations', 'Nodex לקוחות', heT), 'ניהול לקוחות');
   assert.equal(sidebarNavLabel('/m/income', 'Income', heT), 'הכנסות');
   assert.equal(sidebarNavI18nKey('/m/docflow/review'), 'nav.docflowReview');
   assert.equal(sidebarNavLabel('/unknown-module', 'Custom', heT), 'Custom');

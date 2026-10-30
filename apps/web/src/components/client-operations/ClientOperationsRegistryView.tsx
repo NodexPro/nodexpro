@@ -2346,7 +2346,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 <html dir="rtl" lang="he">
 <head>
 <meta charset="UTF-8">
-<title>תפעול לקוחות — ${periodHeading}</title>
+<title>ניהול לקוחות — ${periodHeading}</title>
 <style>
   @page { size: landscape; margin: 1cm; }
   body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; direction: rtl; margin: 0; }
@@ -2361,7 +2361,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 </style>
 </head>
 <body>
-<h1>תפעול לקוחות — ${periodHeading}</h1>
+<h1>ניהול לקוחות — ${periodHeading}</h1>
 <table>
 <thead><tr>${tableHeaders}</tr></thead>
 <tbody>${tableRows}</tbody>
@@ -3203,7 +3203,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       <div
         className="nx-co-sheet__filter-bar"
         role="toolbar"
-        aria-label="סינון תפעול לקוחות"
+        aria-label="סינון ניהול לקוחות"
         data-testid="client-operations-filter-bar"
       >
         <div className="nx-co-sheet__filter-bar-scroll">

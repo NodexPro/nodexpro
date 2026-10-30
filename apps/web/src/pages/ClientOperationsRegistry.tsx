@@ -148,7 +148,7 @@ export function ClientOperationsRegistry() {
   const [toolbarCapabilities, setToolbarCapabilities] = useState<ClientOperationsToolbarCapability[]>(
     [],
   );
-  const [titleHe, setTitleHe] = useState('תפעול לקוחות');
+  const [titleHe, setTitleHe] = useState('ניהול לקוחות');
   const [customColumnsCapability, setCustomColumnsCapability] = useState({
     max: 0,
     current: 0,

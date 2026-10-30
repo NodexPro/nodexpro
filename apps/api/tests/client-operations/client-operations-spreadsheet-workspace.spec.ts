@@ -164,7 +164,7 @@ test('9 — canonical system keys cannot be treated as non-system', () => {
 
 test('10 — folder behavior unchanged; spreadsheet title not skeleton', () => {
   assert.match(viewSource, /variant === 'spreadsheet'/);
-  assert.match(viewSource, /תפעול לקוחות/);
+  assert.match(viewSource, /ניהול לקוחות/);
   assert.doesNotMatch(pageSource, /module v1 skeleton/);
   assert.match(viewSource, /ClientWorkspaceModal/);
   const cells = buildRegistryRowCells({

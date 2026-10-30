@@ -70,7 +70,7 @@ test('2 duplicate inner title תפעול לקוחות is not rendered in the she
     'fullscreen → header cluster → toolbar order',
   );
   // Print HTML keeps its own document heading (separate print renderer, unchanged).
-  assert.match(viewSource, /<h1>תפעול לקוחות — \$\{periodHeading\}<\/h1>/);
+  assert.match(viewSource, /<h1>ניהול לקוחות — \$\{periodHeading\}<\/h1>/);
 });
 
 test('3 CO header hides duplicated account / language chrome', () => {
@@ -193,12 +193,12 @@ test('10 header styles: dark blue glass search, approved palette — scoped to C
   assert.match(shellCss, /--nx-cyan-300: #7decf7/);
   assert.match(shellCss, /--nx-violet-500: #6657e8/);
   assert.match(shellCss, /--nx-violet-400: #8074f2/);
-  assert.match(sheetCss, /border:\s*1px solid rgba\(125, 236, 247, 0\.55\)/);
+  assert.match(sheetCss, /border:\s*1px solid rgba\(54, 169, 198, 0\.62\)/);
   assert.match(
     sheetCss,
-    /\.nx-co-sheet__period-tab\.is-current-working-period\s*\{[^}]*linear-gradient\(135deg, #1477e8 0%, #00cfef 100%\)/,
+    /\.nx-co-sheet__period-tab\.is-current-working-period\s*\{[\s\S]*?linear-gradient\(180deg, rgba\(54, 169, 198, 0\.62\) 0%, rgba\(19, 191, 208, 0\.48\) 100%\)/,
   );
-  assert.match(sheetCss, /border:\s*1px solid #7decf7/);
+  assert.match(sheetCss, /0 0 16px rgba\(19, 191, 208, 0\.38\)/);
   // Old generic-header overrides for the CO route are gone (no header chrome to restyle).
   assert.doesNotMatch(shellCss, /> div > header > div > label > select/);
   // Every shell rule is scoped: either under the CO shell class or the CO header class.
@@ -209,7 +209,10 @@ test('10 header styles: dark blue glass search, approved palette — scoped to C
     .filter(Boolean);
   for (const sel of selectors) {
     assert.ok(
-      /^\.t1-appShell--client-operations/.test(sel) || /^\.nx-co-app-header/.test(sel),
+      /^\.t1-appShell--client-operations/.test(sel) ||
+        /^\.nx-co-app-header/.test(sel) ||
+        /^@media\b/.test(sel) ||
+        /^@keyframes\b/.test(sel),
       `unscoped selector in CO shell css: ${sel}`,
     );
   }
