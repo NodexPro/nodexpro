@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../api/client';
 import { moduleClientOperationsRegistry, moduleClientOperationsRegistryCommands } from '../api/endpoints';
@@ -125,6 +126,12 @@ type RegistryAggregate = {
 
 export function ClientOperationsRegistry() {
   const auth = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const pendingOpenClientId =
+    typeof (location.state as { openClientId?: unknown } | null)?.openClientId === 'string'
+      ? String((location.state as { openClientId: string }).openClientId).trim() || null
+      : null;
 
   const [rows, setRows] = useState<ClientOperationsRegistryRow[]>([]);
   const [manualRows, setManualRows] = useState<ClientOperationsManualRegistryRow[]>([]);
@@ -608,9 +615,13 @@ export function ClientOperationsRegistry() {
     [applyAggregate, clearPeriodBoundPresentation, prefetchPeriods, registryUrl, toCacheQuery],
   );
 
-  const reloadRegistry = useCallback(() => {
-    return loadRegistry(query, { quiet: true });
-  }, [loadRegistry, query]);
+  const reloadRegistry = useCallback(
+    (options?: { bypassCache?: boolean }) => {
+      if (options?.bypassCache) periodCacheRef.current.clear();
+      return loadRegistry(query, { quiet: true, preferCache: options?.bypassCache ? false : undefined });
+    },
+    [loadRegistry, query],
+  );
 
   useEffect(() => {
     if (auth.status !== 'authenticated') return;
@@ -799,8 +810,10 @@ export function ClientOperationsRegistry() {
       error={error}
       canEdit={canEdit}
       canCreateCoreClient={allowedActions.includes('create_core_client')}
+      pendingOpenClientId={pendingOpenClientId}
+      onPendingOpenConsumed={() => navigate('.', { replace: true, state: {} })}
       showPageHeader={false}
-      onReloadRegistry={() => void reloadRegistry()}
+      onReloadRegistry={(options) => void reloadRegistry(options)}
       variant="spreadsheet"
       titleHe={titleHe}
       columns={columns}

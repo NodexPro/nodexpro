@@ -450,11 +450,14 @@ export type ClientOperationsRegistryViewProps = {
   error: string;
   canEdit: boolean;
   showPageHeader?: boolean;
-  onReloadRegistry?: () => void;
+  onReloadRegistry?: (options?: { bypassCache?: boolean }) => void;
   /** Spreadsheet chrome only on /m/client-operations; embedded keeps prior Work Engine look. */
   variant?: 'spreadsheet' | 'embedded';
   /** Backend `create_core_client` — Core POST /clients, then this page's workspace modal. */
   canCreateCoreClient?: boolean;
+  /** Open the existing folder modal after a create that arrived via registry navigation state. */
+  pendingOpenClientId?: string | null;
+  onPendingOpenConsumed?: () => void;
   /**
    * Aggregate title (contract kept). The inner sheet title is no longer rendered —
    * the module title lives in the route header (ClientOperationsAppHeader).
@@ -584,6 +587,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     error,
     canEdit,
     canCreateCoreClient = false,
+    pendingOpenClientId = null,
+    onPendingOpenConsumed,
     showPageHeader = true,
     onReloadRegistry,
     variant = 'embedded',
@@ -1001,6 +1006,34 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       .finally(() => setModalLoading(false));
   };
 
+  useEffect(() => {
+    const clientId = String(pendingOpenClientId ?? '').trim();
+    if (!clientId) return;
+    const row = rows.find((r) => r.client_id === clientId);
+    openClientModal(
+      row ?? {
+        client_id: clientId,
+        client_name: null,
+        tax_id: null,
+        business_type: null,
+        payroll_flag: null,
+        material_brought_flag: null,
+        vat_status: null,
+        income_tax_advance_status: null,
+        national_insurance_status: null,
+        national_insurance_deductions_status: null,
+        income_tax_deductions_status: null,
+        assigned_handler_user_id: null,
+        vat_due_registry_display_he: null,
+        notes_cell_text_he: null,
+        operational_notes_count: 0,
+      },
+    );
+    onPendingOpenConsumed?.();
+    // Open once per pending id. rows listed only to prefer a registry placeholder.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- consume navigation state once
+  }, [pendingOpenClientId]);
+
   const resetCreateClientForm = () => {
     setCreateError('');
     setCreateInvalidField(null);
@@ -1071,7 +1104,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       const savedTaxId = createTaxId.trim();
       setShowCreateClient(false);
       resetCreateClientForm();
-      onReloadRegistry?.();
+      onReloadRegistry?.({ bypassCache: true });
       closeQuickProfile();
       setModalOpen(true);
       setModalLoading(true);

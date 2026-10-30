@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiError, apiJson } from '../api/client';
-import { docflowClientTabAggregate, moduleClientOperationsUpdateClientProfile } from '../api/endpoints';
+import { moduleClientOperationsUpdateClientProfile } from '../api/endpoints';
 import logoSrc from '../templates/template-1/assets/nodexpro-logo.png';
 import { ClientTaxesTab, type ClientTaxSettingsBundle } from './ClientTaxesTab';
 import type { TaxTabWorkspaceResponse } from './tax-tab-types';
@@ -195,6 +195,8 @@ export type ClientOperationsCaseResponse = {
   client_history_tab?: ClientHistoryTabModel | null;
   /** התחייבויות — read model מהאגרגט; null בלי הרשאה. */
   client_obligations_tab?: ClientObligationsTabModel | null;
+  /** Backend-owned DocFlow tab visibility. Missing/false hides the tab — no hidden GET. */
+  docflow_tab?: { visible?: boolean } | null;
 };
 
 type WorkspaceTabKey =
@@ -354,6 +356,7 @@ export function buildPlaceholderClientCaseFromRegistryRow(row: RegistryRowForPla
     client_documents_tab: undefined,
     client_history_tab: undefined,
     client_obligations_tab: undefined,
+    docflow_tab: { visible: false },
   };
 }
 
@@ -400,7 +403,7 @@ export function ClientWorkspacePanel({
     TAB_ORDER.some((t) => t.key === initialTab) ? (initialTab as WorkspaceTabKey) : 'client',
   );
   const [localWorkspace, setLocalWorkspace] = useState(workspace);
-  const [docflowTabVisible, setDocflowTabVisible] = useState(false);
+  const docflowTabVisible = workspace.docflow_tab?.visible === true;
 
   const [draft, setDraft] = useState<ClientProfileDraft>(() => draftFromClientOperationsCase(workspace));
   const [profileSaveState, setProfileSaveState] = useState<ClientProfileSaveState>({ status: 'idle', error: null });
@@ -465,28 +468,6 @@ export function ClientWorkspacePanel({
       }
     }
   }, [workspace]);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function probeDocflowEntitlement(): Promise<void> {
-      try {
-        const out = (await apiJson(docflowClientTabAggregate(workspace.client.id))) as { entitlement_status?: { active?: boolean } };
-        if (!cancelled) setDocflowTabVisible(out?.entitlement_status?.active === true);
-      } catch (e) {
-        if (!cancelled) {
-          if (e instanceof ApiError && (e.status === 403 || e.status === 404)) {
-            setDocflowTabVisible(false);
-          } else {
-            setDocflowTabVisible(false);
-          }
-        }
-      }
-    }
-    void probeDocflowEntitlement();
-    return () => {
-      cancelled = true;
-    };
-  }, [workspace.client.id]);
 
   useEffect(() => {
     const previous = autosaverRef.current;

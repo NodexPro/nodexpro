@@ -3,6 +3,8 @@
  * System columns plus organization-owned custom column presentation helpers.
  */
 
+import { businessMonthKey } from '../../shared/business-time.js';
+
 export type RegistryColumnCellKind = 'folder' | 'text' | 'notes' | 'custom' | 'checkbox' | 'operational_date';
 export type ClientOperationsCustomColumnDataType = 'text' | 'number' | 'date' | 'boolean';
 
@@ -609,8 +611,47 @@ export type RegistryQueryInput = {
   workspace_subject_user_id?: string | null;
 };
 
+/** Canonical created month from `clients.created_at` (Asia/Jerusalem). */
+export function clientCreatedOperationalPeriodKey(
+  createdAt: string | Date | null | undefined,
+): string | null {
+  if (!createdAt) return null;
+  const created = createdAt instanceof Date ? createdAt : new Date(createdAt);
+  if (Number.isNaN(created.getTime())) return null;
+  return businessMonthKey(created);
+}
+
+/**
+ * Default CO registry order for a selected period:
+ * - clients created in this period go last (created_at ASC, then client_id)
+ * - everyone else is alphabetical (he), then client_id
+ * From the next month the created-this-period bucket is empty, so they join A–Z.
+ */
+export function compareRegistryRowsForOperationalPeriod<
+  T extends { client_id: string; client_name: string | null; created_at?: string | null },
+>(a: T, b: T, operationalPeriodKey: string): number {
+  const aNew = clientCreatedOperationalPeriodKey(a.created_at) === operationalPeriodKey;
+  const bNew = clientCreatedOperationalPeriodKey(b.created_at) === operationalPeriodKey;
+  if (aNew !== bNew) return aNew ? 1 : -1;
+  if (aNew && bNew) {
+    const at = String(a.created_at ?? '');
+    const bt = String(b.created_at ?? '');
+    const byCreated = at.localeCompare(bt);
+    if (byCreated !== 0) return byCreated;
+    return a.client_id.localeCompare(b.client_id);
+  }
+  const byName = String(a.client_name ?? '').localeCompare(String(b.client_name ?? ''), 'he');
+  if (byName !== 0) return byName;
+  return a.client_id.localeCompare(b.client_id);
+}
+
 export function applyRegistryQueryToRows<
-  T extends { client_id: string; cells: Record<string, string>; client_name: string | null },
+  T extends {
+    client_id: string;
+    cells: Record<string, string>;
+    client_name: string | null;
+    created_at?: string | null;
+  },
 >(rows: T[], query: RegistryQueryInput): T[] {
   let out = rows;
   const q = (query.q ?? '').trim().toLowerCase();
@@ -625,8 +666,14 @@ export function applyRegistryQueryToRows<
     const dir = query.sort_dir === 'desc' ? -1 : 1;
     out = [...out].sort((a, b) => {
       const av = (a.cells[sortBy] ?? '').localeCompare(b.cells[sortBy] ?? '', 'he');
-      return av * dir;
+      if (av !== 0) return av * dir;
+      return a.client_id.localeCompare(b.client_id) * dir;
     });
+    return out;
+  }
+  const periodKey = query.operational_period_key?.trim() || null;
+  if (periodKey) {
+    out = [...out].sort((a, b) => compareRegistryRowsForOperationalPeriod(a, b, periodKey));
   }
   return out;
 }

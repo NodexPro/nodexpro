@@ -429,7 +429,7 @@ test('service: tenant + RBAC + period + filters resolved BEFORE cache lookup; q 
   const rbac = idx(/client_operations\.edit/);
   const filters = idx(/normalizeClientOperationsRegistryBusinessFilterQuery\(query\)/);
   const cacheLookup = idx(/clientOperationsRegistryMaterializationCache\.getOrBuild\(/);
-  const search = idx(/applyRegistryQueryToRows\(materialization\.built_rows, \{ q, sort_by, sort_dir \}\)/);
+  const search = idx(/applyRegistryQueryToRows\(materialization\.built_rows,/);
   const manual = idx(/materializeClientOperationsManualRows\(\{[\s\S]*?searchQ: q/);
   assert.ok(
     org < cacheLookup &&

@@ -16,6 +16,12 @@ const periodTabsSrc = readFileSync(
   'utf8',
 );
 
+test('DocFlow tab visibility comes from the case aggregate, not a hidden client-tab GET', () => {
+  assert.match(panelSrc, /docflow_tab\?\.visible === true/);
+  assert.doesNotMatch(panelSrc, /docflowClientTabAggregate/);
+  assert.doesNotMatch(panelSrc, /probeDocflowEntitlement/);
+});
+
 test('התחייבויות is defined in TAB_ORDER but hidden from modal top nav', () => {
   assert.match(panelSrc, /key:\s*'obligations',\s*label:\s*'התחייבויות'/);
   assert.match(panelSrc, /HIDDEN_WORKSPACE_NAV_TAB_KEYS/);

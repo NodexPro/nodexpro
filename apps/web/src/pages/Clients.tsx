@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson, apiFetch } from '../api/client';
 import {
@@ -14,7 +14,7 @@ import {
   orgClientsBulkExport,
 } from '../api/endpoints';
 import { useI18n } from '../i18n/I18nProvider';
-import { canonicalCreatedClientId, clientCardPath } from './client-create-navigation.pure';
+import { canonicalCreatedClientId, clientCardPath, createdClientDestination } from './client-create-navigation.pure';
 import {
   beginExclusiveSubmit,
   buildCreateClientCommandPayload,
@@ -115,6 +115,7 @@ interface ClientRow {
 export function Clients() {
   const auth = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { t, lang } = useI18n();
   const [list, setList] = useState<ClientRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -347,7 +348,12 @@ export function Clients() {
       setCreateCity('');
       setCreateStreet('');
       setCreatePostalCode('');
-      navigate(clientCardPath(clientId));
+      const dest = createdClientDestination({ currentPath: location.pathname, clientId });
+      if (dest.kind === 'client_operations_modal') {
+        navigate('/m/client-operations', { state: { openClientId: dest.clientId } });
+      } else {
+        navigate(dest.path);
+      }
     } catch (err) {
       const mapped = mapCreateClientCommandError(err);
       setCreateInvalidField(mapped.field);

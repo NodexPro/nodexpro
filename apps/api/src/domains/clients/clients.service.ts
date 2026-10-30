@@ -10,6 +10,7 @@ import {
   resolveOrganizationClientAccessScopeFromContext,
 } from '../client-operations/organization-client-access.js';
 import { assertOfficeAdministration } from '../../shared/office-administration.js';
+import { invalidateClientOperationsRegistryMaterializationCache } from '../client-operations/client-operations-registry-materialization-cache.js';
 
 const ENTITY_TYPE_CLIENT = 'client';
 const ALLOWED_CLIENT_TYPES = new Set([
@@ -403,6 +404,7 @@ export async function createClient(
     action: AUDIT_ACTIONS.CLIENT_CREATED,
     payload: { display_name: created.display_name, tax_id_masked: '***' },
   });
+  invalidateClientOperationsRegistryMaterializationCache(orgId);
 
   return created;
 }

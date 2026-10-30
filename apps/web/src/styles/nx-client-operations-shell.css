@@ -112,6 +112,16 @@
   overflow-x: hidden;
 }
 
+.t1-appShell--client-operations:has(.nx-clients) .t1-pageMain,
+.t1-appShell--client-operations:has(.nx-clients-card) .t1-pageMain {
+  padding: 0 26px 18px;
+}
+
+.t1-appShell--client-operations:has(.nx-clients) .nx-glass-page,
+.t1-appShell--client-operations:has(.nx-clients-card) .nx-glass-page {
+  padding-top: 0;
+}
+
 /*
  * General destinations (everything else opened from the canonical sidebar): same navy backdrop,
  * same glass AppSidebar and the same outer shell spacing as Users & Roles. The page's own light content
@@ -559,10 +569,13 @@
     padding: 12px 12px 18px;
   }
 
-  .t1-appShell--client-operations:has(.nx-co-sheet) .t1-pageMain,
+  .t1-appShell--client-operations:has(.nx-co-sheet) .t1-pageMain {
+    padding-top: 0;
+  }
+
   .t1-appShell--client-operations:has(.nx-clients) .t1-pageMain,
   .t1-appShell--client-operations:has(.nx-clients-card) .t1-pageMain {
-    padding-top: 0;
+    padding: 0 12px 18px;
   }
 
   .t1-appShell--client-operations.t1-appShell--general .t1-shellColumn {
@@ -579,9 +592,12 @@
     padding: 10px 8px 16px;
   }
 
-  .t1-appShell--client-operations:has(.nx-co-sheet) .t1-pageMain,
+  .t1-appShell--client-operations:has(.nx-co-sheet) .t1-pageMain {
+    padding-top: 0;
+  }
+
   .t1-appShell--client-operations:has(.nx-clients) .t1-pageMain,
   .t1-appShell--client-operations:has(.nx-clients-card) .t1-pageMain {
-    padding-top: 0;
+    padding: 0 8px 16px;
   }
 }

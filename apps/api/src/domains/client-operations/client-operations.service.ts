@@ -161,6 +161,8 @@ import {
 export type ClientOperationsRegistryRow = {
   client_id: string;
   client_name: string | null;
+  /** Canonical `clients.created_at` — used only for period-aware registry order. */
+  created_at?: string | null;
   tax_id: string | null;
   business_type: string | null;
   payroll_flag: boolean | null;
@@ -381,6 +383,8 @@ export type ClientOperationsCaseResponse = {
   client_obligations_tab: Awaited<ReturnType<typeof getClientObligationsTabReadModel>> | null;
   /** משימות — read model backend-only; null בלי הרשאה. */
   client_tasks_tab: Awaited<ReturnType<typeof getClientTasksTabReadModel>> | null;
+  /** DocFlow tab visibility from org module activation — not a hidden frontend GET. */
+  docflow_tab: { visible: boolean };
 };
 
 const PROFILE_SELECT = [
@@ -609,7 +613,12 @@ export async function listClientOperationsRegistry(
   const sort_by = query.sort_by?.trim() || null;
   const sort_dir = query.sort_dir === 'desc' || query.sort_dir === 'asc' ? query.sort_dir : null;
   // Business filters already applied via early facet matching; search/sort still apply.
-  const rows = applyRegistryQueryToRows(materialization.built_rows, { q, sort_by, sort_dir });
+  const rows = applyRegistryQueryToRows(materialization.built_rows, {
+    q,
+    sort_by,
+    sort_dir,
+    operational_period_key: selectedPeriodKey,
+  });
   // Manual rows: same pipeline as buildManualRowsForRegistryAggregate — values loaded pre-search,
   // `materializeClientOperationsManualRows` applies searchQ per request.
   const manual_rows = anyBusinessFilter
@@ -1449,6 +1458,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     const base = {
       client_id: c.id,
       client_name: c.display_name,
+      created_at: c.created_at ?? null,
       tax_id: c.tax_id,
       business_type: bt,
       payroll_flag,
@@ -1564,35 +1574,45 @@ export async function getClientOperationsCase(
   );
   const chartView: FeesPriceChartViewMode = options?.feesPriceChartView ?? 'last_15';
   const historyOpen = options?.historyOpenSection ?? null;
-  await recomputeClientObligationsAndTasks(ctx, clientId, new Date());
+  // Recompute overlaps independent tab reads. Obligations/tasks wait for it so they
+  // do not read a stale post-recompute snapshot. DocFlow visibility is a cheap
+  // org-module check — the modal must not probe `/docflow/aggregates/client-tab`.
+  const recomputeP = recomputeClientObligationsAndTasks(ctx, clientId, new Date());
+  const independentP = Promise.all([
+    getClientTaxSettings(ctx, clientId),
+    getClientBusinessProfileSection(ctx, clientId),
+    getAccountingSettingsTabReadModel(ctx, clientId),
+    getFeesTabReadModel(ctx, clientId, chartView),
+    getPayrollTabReadModel(ctx, clientId),
+    getAnnualTabReadModel(ctx, clientId),
+    getAnnualTabReadModel(ctx, clientId, 'capital_declaration'),
+    getClientDocumentsTabReadModel(ctx, clientId, {
+      skipEnsureDefaultFolders: options?.skipEnsureClientDocumentFolders === true,
+    }),
+    getClientHistoryTabReadModel(ctx, clientId, historyOpen),
+    orgHasActiveModule(orgId, 'docflow'),
+  ]);
+  await recomputeP;
   const [
-    tax_settings,
-    accounting,
-    accounting_settings_tab,
-    fees_tab,
-    payroll_tab,
-    annual_tab,
-    capital_declaration_tab,
-    client_documents_tab,
-    client_history_tab,
+    [
+      tax_settings,
+      accounting,
+      accounting_settings_tab,
+      fees_tab,
+      payroll_tab,
+      annual_tab,
+      capital_declaration_tab,
+      client_documents_tab,
+      client_history_tab,
+      docflowVisible,
+    ],
     client_obligations_tab,
     client_tasks_tab,
-  ] =
-    await Promise.all([
-      getClientTaxSettings(ctx, clientId),
-      getClientBusinessProfileSection(ctx, clientId),
-      getAccountingSettingsTabReadModel(ctx, clientId),
-      getFeesTabReadModel(ctx, clientId, chartView),
-      getPayrollTabReadModel(ctx, clientId),
-      getAnnualTabReadModel(ctx, clientId),
-      getAnnualTabReadModel(ctx, clientId, 'capital_declaration'),
-      getClientDocumentsTabReadModel(ctx, clientId, {
-        skipEnsureDefaultFolders: options?.skipEnsureClientDocumentFolders === true,
-      }),
-      getClientHistoryTabReadModel(ctx, clientId, historyOpen),
-      getClientObligationsTabReadModel(ctx, clientId),
-      getClientTasksTabReadModel(ctx, clientId),
-    ]);
+  ] = await Promise.all([
+    independentP,
+    getClientObligationsTabReadModel(ctx, clientId),
+    getClientTasksTabReadModel(ctx, clientId),
+  ]);
 
   return {
     client: {
@@ -1660,7 +1680,26 @@ export async function getClientOperationsCase(
     client_history_tab,
     client_obligations_tab,
     client_tasks_tab,
+    docflow_tab: { visible: docflowVisible },
   };
+}
+
+async function orgHasActiveModule(orgId: string, moduleCode: string): Promise<boolean> {
+  const { data: mod } = await supabaseAdmin
+    .from('modules')
+    .select('id')
+    .eq('code', moduleCode)
+    .maybeSingle();
+  const moduleId = typeof (mod as { id?: unknown } | null)?.id === 'string' ? (mod as { id: string }).id : '';
+  if (!moduleId) return false;
+  const { data: row } = await supabaseAdmin
+    .from('organization_modules')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('module_id', moduleId)
+    .eq('status', 'active')
+    .maybeSingle();
+  return Boolean(row);
 }
 
 type UpdateClientOperationsClientProfileRequest = {

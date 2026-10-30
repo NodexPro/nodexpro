@@ -17,7 +17,8 @@ const dir = dirname(fileURLToPath(import.meta.url));
 test('create command navigates with the canonical returned client id', () => {
   const clientsSrc = readFileSync(join(dir, '../src/pages/Clients.tsx'), 'utf8');
   assert.match(clientsSrc, /canonicalCreatedClientId/);
-  assert.match(clientsSrc, /clientCardPath\(clientId\)/);
+  assert.match(clientsSrc, /createdClientDestination/);
+  assert.match(clientsSrc, /openClientId/);
   assert.match(clientsSrc, /orgClients\(orgId\)/);
   assert.match(clientsSrc, /method:\s*'POST'/);
   assert.doesNotMatch(clientsSrc, /setTimeout|sleep\(/);
@@ -47,13 +48,18 @@ test('create from /m/client-operations stays on the registry and opens the works
   );
   const pageSrc = readFileSync(join(dir, '../src/pages/ClientOperationsRegistry.tsx'), 'utf8');
   assert.match(pageSrc, /canCreateCoreClient=\{allowedActions\.includes\('create_core_client'\)\}/);
+  assert.match(pageSrc, /pendingOpenClientId/);
+  assert.match(pageSrc, /bypassCache/);
   assert.match(registrySrc, /orgClients\(orgId\)/);
   assert.match(registrySrc, /buildCreateClientCommandPayload\(draft\)/);
   assert.match(registrySrc, /setModalOpen\(true\)/);
   assert.match(registrySrc, /moduleClientOperationsCase\(clientId\)/);
   assert.match(registrySrc, /userFacingApiMessage/);
+  assert.match(registrySrc, /pendingOpenClientId/);
+  assert.match(registrySrc, /bypassCache/);
   assert.doesNotMatch(registrySrc, /navigate\(/);
   assert.doesNotMatch(registrySrc, /clientCardPath/);
+  assert.doesNotMatch(registrySrc, /docflowClientTabAggregate/);
 });
 
 test('ClientCard loads orgClientFull and does not map every failure to not-found', () => {
