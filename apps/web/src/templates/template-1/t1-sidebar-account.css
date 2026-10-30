@@ -52,6 +52,17 @@
   background: transparent;
 }
 
+/* Nested module rows: indent from the start edge so LTR pads left and RTL pads right. */
+.t1-sidebar__link-child {
+  padding-inline-start: 36px;
+  padding-inline-end: 12px;
+  box-sizing: border-box;
+}
+
+.t1-sidebar__icon + span {
+  margin-inline-start: 8px;
+}
+
 .t1-sidebar-account {
   flex-shrink: 0;
   margin-top: auto;

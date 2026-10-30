@@ -287,12 +287,12 @@ export function AppSidebar({
             >
               <span
                 aria-hidden="true"
-                className={coGlass ? 't1-sidebar__icon' : undefined}
+                className="t1-sidebar__icon"
                 style={{ width: 22, display: 'inline-flex', justifyContent: 'center' }}
               >
                 {coGlass ? <CoNavGlyph icon={item.icon} /> : item.icon}
               </span>
-              {showExpanded && <span style={{ marginLeft: 8 }}>{item.label}</span>}
+              {showExpanded && <span>{item.label}</span>}
             </NavLink>
             {showExpanded &&
               item.children?.map((child) => (
@@ -302,16 +302,15 @@ export function AppSidebar({
                   className={({ isActive }) =>
                     coGlass
                       ? `t1-sidebar__link t1-sidebar__link-child${isActive ? ' is-active' : ''}`
-                      : undefined
+                      : `t1-sidebar__link-child${isActive ? ' is-active' : ''}`
                   }
                   style={({ isActive }) =>
                     coGlass
-                      ? { padding: '0 12px 0 36px' }
+                      ? undefined
                       : {
                           height: 36,
                           display: 'flex',
                           alignItems: 'center',
-                          padding: '0 12px 0 36px',
                           borderRadius: 10,
                           textDecoration: 'none',
                           color: '#374151',
@@ -324,7 +323,7 @@ export function AppSidebar({
                 >
                   <span
                     aria-hidden="true"
-                    className={coGlass ? 't1-sidebar__icon' : undefined}
+                    className="t1-sidebar__icon"
                     style={{ width: 22, display: 'inline-flex', justifyContent: 'center' }}
                   >
                     {coGlass ? <CoNavGlyph icon={iconForNavItem(child.to, child.label)} /> : iconForNavItem(child.to, child.label)}
@@ -332,7 +331,6 @@ export function AppSidebar({
                   <span
                     className={coGlass ? 't1-sidebar__label' : undefined}
                     data-nav-path={coGlass ? child.to : undefined}
-                    style={{ marginLeft: 8 }}
                   >
                     {child.label}
                   </span>

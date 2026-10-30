@@ -504,6 +504,8 @@
   min-height: 36px;
   font-size: 14px;
   color: var(--nx-text-on-navy-muted);
+  padding-inline-start: 36px;
+  padding-inline-end: 12px;
 }
 
 .t1-appShell--client-operations .t1-sidebar__link-child.is-active,

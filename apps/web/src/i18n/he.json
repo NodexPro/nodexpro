@@ -12,7 +12,7 @@
     "clients": "לקוחות",
     "documents": "מסמכים",
     "modules": "מודולים",
-    "billing": "חיוב",
+    "billing": "חיובים",
     "clientOperations": "תפעול לקוחות",
     "income": "הכנסות",
     "docflow": "דוקפלואו",
@@ -409,7 +409,7 @@
     }
   },
   "billing": {
-    "title": "חיוב",
+    "title": "חיובים",
     "subtitle": "ניהול מנויים ותשלומים לארגון זה.",
     "summary": "סיכום מנוי",
     "subscriptions": "מודולים פעילים",
