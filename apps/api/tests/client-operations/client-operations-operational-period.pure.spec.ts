@@ -411,7 +411,7 @@ test('16 — advances bi-monthly uses odd operational months (same CO filing voc
   assert.equal(biEven.income_tax_advance_applicable, false);
 });
 
-test('17 — archived client: current/default excludes; historical frozen membership includes', () => {
+test('17 — archived client never enters the active registry (current, default, previous, frozen)', () => {
   assert.equal(
     shouldIncludeArchivedClientInOperationalPeriodRegistry({
       is_current_or_default_period: true,
@@ -426,7 +426,7 @@ test('17 — archived client: current/default excludes; historical frozen member
       is_archived: true,
       has_frozen_period_membership: true,
     }),
-    true,
+    false,
   );
   assert.equal(
     shouldIncludeArchivedClientInOperationalPeriodRegistry({
@@ -446,16 +446,16 @@ test('17 — archived client: current/default excludes; historical frozen member
   );
 });
 
-test('18 — historical archived membership wiring (Aug snapshot → archive → Aug still visible)', () => {
+test('18 — registry builder never re-attaches archived clients via frozen period membership', () => {
   const service = readFileSync(
     join(dir, '../../src/domains/client-operations/client-operations.service.ts'),
     'utf8',
   );
-  assert.match(service, /loadPeriodMembershipClientIds/);
+  assert.doesNotMatch(service, /loadPeriodMembershipClientIds/);
   assert.match(service, /shouldIncludeArchivedClientInOperationalPeriodRegistry/);
   assert.match(service, /Never invent historical applicability for archived clients/);
+  assert.match(service, /does not re-attach archived clients/);
   assert.match(service, /clientExistsInOperationalPeriod/);
-  // Live/default path still scopes to non-archived.
   assert.match(service, /\.eq\('is_archived',\s*false\)/);
 });
 
@@ -612,7 +612,7 @@ test('M3 — active client with zero applicable streams still emits registry row
   );
 });
 
-test('M4 — created-after-period excluded; archived needs frozen evidence', () => {
+test('M4 — created-after-period excluded; archived never emits even with frozen evidence', () => {
   assert.equal(
     clientExistsInOperationalPeriod({
       client_created_at: '2026-10-01T00:00:00.000Z',
@@ -627,7 +627,7 @@ test('M4 — created-after-period excluded; archived needs frozen evidence', () 
       has_material_fact: false,
       snapshot_row_visible: false,
     }),
-    true,
+    false,
   );
   assert.equal(
     shouldEmitOperationalPeriodRegistryRow({
@@ -636,7 +636,7 @@ test('M4 — created-after-period excluded; archived needs frozen evidence', () 
       has_material_fact: true,
       snapshot_row_visible: null,
     }),
-    true,
+    false,
   );
   assert.equal(
     shouldEmitOperationalPeriodRegistryRow({
@@ -646,6 +646,15 @@ test('M4 — created-after-period excluded; archived needs frozen evidence', () 
       snapshot_row_visible: null,
     }),
     false,
+  );
+  assert.equal(
+    shouldEmitOperationalPeriodRegistryRow({
+      is_archived: false,
+      has_applicability_snapshot: false,
+      has_material_fact: false,
+      snapshot_row_visible: null,
+    }),
+    true,
   );
 });
 
@@ -697,13 +706,13 @@ test('M6 — service no longer gates membership on snapshot.row_visible (source)
   assert.match(service, /Registry membership != cell applicability/);
 });
 
-test('M7 — default vs explicit same period: resolver does not branch membership (source)', () => {
+test('M7 — default vs explicit period: archived membership is never re-attached (source)', () => {
   const service = readFileSync(
     join(dir, '../../src/domains/client-operations/client-operations.service.ts'),
     'utf8',
   );
-  // Default only chooses selected period; membership path must not special-case default.
-  assert.match(service, /isCurrentOrDefaultPeriod/);
+  assert.doesNotMatch(service, /historicalExtras/);
+  assert.doesNotMatch(service, /loadPeriodMembershipClientIds/);
   assert.doesNotMatch(
     service,
     /isCurrentOrDefaultPeriod[\s\S]{0,200}row_visible/,

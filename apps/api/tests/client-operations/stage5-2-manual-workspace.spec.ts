@@ -202,7 +202,10 @@ test('16 ALL ACL keeps future live clients by leaving the id list unrestricted',
 
 test('17 archived client rules stay on the employee scope kind', () => {
   const aggregate = readRepo('apps/api/src/domains/client-operations/client-operations.service.ts');
-  assert.match(aggregate, /accessScope\.kind !== 'MEMBER_ALL'/);
+  // Live `clients.is_archived` is the membership gate for every scope; frozen extras are gone.
+  assert.match(aggregate, /\.eq\('is_archived',\s*false\)/);
+  assert.match(aggregate, /shouldIncludeArchivedClientInOperationalPeriodRegistry/);
+  assert.doesNotMatch(aggregate, /loadPeriodMembershipClientIds/);
   const workspace = readRepo('apps/api/src/domains/client-operations/client-operations-workspace.service.ts');
   assert.match(workspace, /materializationKind = employeeScope\.kind/);
 });

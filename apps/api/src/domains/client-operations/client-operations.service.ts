@@ -70,7 +70,6 @@ import {
   listKnownOperationalPeriodKeys,
   loadPeriodApplicabilitySnapshots,
   loadPeriodMaterialFacts,
-  loadPeriodMembershipClientIds,
   loadIncomeTaxDeductionsPeriodReported,
   loadPayrollPeriodSalaryDataReceived,
   resolveRegistryOperationalPeriodKey,
@@ -140,7 +139,6 @@ import {
 import {
   assertCanAccessClientFromContext,
   canManageClientHandlerAssignment,
-  filterAuthorizedClientIds,
   resolveOrganizationClientAccessScopeFromContext,
   roleHasOfficeClientAccess,
   type OrganizationClientAccessScope,
@@ -900,42 +898,18 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
   const activeClientsResult = await timed('active_clients', setupMs, activeClientsQuery);
   const { data: activeClients } = activeClientsResult;
 
-  const isCurrentOrDefaultPeriod = selectedPeriodKey === defaultPeriodKey;
-  const activeSafe = (activeClients ?? []) as RegistryClientRow[];
+  const activeSafe = ((activeClients ?? []) as RegistryClientRow[]).filter((c) =>
+    shouldIncludeArchivedClientInOperationalPeriodRegistry({
+      is_current_or_default_period: selectedPeriodKey === defaultPeriodKey,
+      is_archived: Boolean(c.is_archived),
+      has_frozen_period_membership: false,
+    }),
+  );
+  // Active registry is live non-archived clients only. Frozen period membership stays in the
+  // database for history and does not re-attach archived clients to current or previous months.
   let safeClients: RegistryClientRow[] = activeSafe;
 
-  if (!isCurrentOrDefaultPeriod && accessScope.kind !== 'MEMBER_ALL') {
-    // Historical period: keep live active clients, and re-include archived clients
-    // that already have frozen membership (snapshot and/or material fact) for this period.
-    const membershipIds = filterAuthorizedClientIds(
-      accessScope,
-      await loadPeriodMembershipClientIds({
-        organizationId: orgId,
-        operationalPeriodKey: selectedPeriodKey,
-      }),
-    );
-    const activeIdSet = new Set(activeSafe.map((c) => c.id));
-    const archivedMembershipIds = membershipIds.filter((id) => !activeIdSet.has(id));
-    if (archivedMembershipIds.length) {
-      const { data: membershipClients } = await supabaseAdmin
-        .from('clients')
-        .select('id, display_name, tax_id, created_at, is_archived')
-        .eq('organization_id', orgId)
-        .in('id', archivedMembershipIds);
-      const historicalExtras = ((membershipClients ?? []) as RegistryClientRow[]).filter((c) =>
-        shouldIncludeArchivedClientInOperationalPeriodRegistry({
-          is_current_or_default_period: false,
-          is_archived: Boolean(c.is_archived),
-          has_frozen_period_membership: true,
-        }),
-      );
-      safeClients = [...activeSafe, ...historicalExtras].sort((a, b) =>
-        String(a.display_name ?? '').localeCompare(String(b.display_name ?? ''), 'he'),
-      );
-    }
-  }
-
-  // Created-after-period protection (active + historical membership alike).
+  // Created-after-period protection.
   safeClients = safeClients.filter((c) =>
     clientExistsInOperationalPeriod({
       client_created_at: c.created_at,

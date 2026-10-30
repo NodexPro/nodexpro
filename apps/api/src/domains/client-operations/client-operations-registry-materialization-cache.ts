@@ -53,8 +53,8 @@ export function clientOperationsRegistryMaterializationCacheOrgPrefix(organizati
  * Member module grants are enforced by requireModuleActive before this cache is read,
  * so a removed grant cannot reuse an entry on the next request.
  * Derived from `listClientOperationsRegistry` inputs: org scoping, access scope, selected +
- * default period (current-vs-historical branch), `client_operations.edit` (editable cells /
- * setup blocks), and the six business filters (early facet filtering).
+ * default period, `client_operations.edit` (editable cells / setup blocks), and the six
+ * business filters (early facet filtering). Archived clients are never in the active list.
  */
 export function buildClientOperationsRegistryMaterializationCacheKey(
   input: ClientOperationsRegistryMaterializationCacheKeyInput,
@@ -62,7 +62,7 @@ export function buildClientOperationsRegistryMaterializationCacheKey(
   const f = input.filters;
   return [
     input.organizationId,
-    'v2',
+    'v3',
     input.accessScopeKey,
     input.manualWorkspaceKey ?? '',
     input.selectedPeriodKey,

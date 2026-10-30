@@ -145,7 +145,7 @@ test('Stage3 source contracts — ACL before cache; Staff cannot change handler;
 
   const cache = readSrc('domains/client-operations/client-operations-registry-materialization-cache.ts');
   assert.match(cache, /accessScopeKey/);
-  assert.match(cache, /'v2'/);
+  assert.match(cache, /'v3'/);
   assert.match(cache, /BEFORE/);
 
   const service = readSrc('domains/client-operations/client-operations.service.ts');

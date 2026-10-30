@@ -806,33 +806,31 @@ export function buildMaterialCells(input: {
 }
 
 /**
- * Historical period registry membership for archived clients.
- * Live/current period: archived clients stay excluded.
- * Historical period: include only when a frozen snapshot/fact membership exists.
- * Does not invent engagement history.
+ * Active Client Operations registry membership for archived clients.
+ * Archived clients never appear in the live registry for any operational period
+ * (current, default, or previous). Frozen snapshots and material facts stay in the
+ * database for history; they do not keep the client in the active list.
  */
 export function shouldIncludeArchivedClientInOperationalPeriodRegistry(input: {
   is_current_or_default_period: boolean;
   is_archived: boolean;
   has_frozen_period_membership: boolean;
 }): boolean {
-  if (!input.is_archived) return true;
-  if (input.is_current_or_default_period) return false;
-  return input.has_frozen_period_membership;
+  void input.is_current_or_default_period;
+  void input.has_frozen_period_membership;
+  return !input.is_archived;
 }
-
-/** Client created after period end must not appear in earlier periods. */
 
 /**
  * Registry ROW membership for an already candidate client (passed created_at +
- * active/archived historical gates).
+ * live non-archived gates).
  *
  * CLIENT MEMBERSHIP != WORK/CELL APPLICABILITY.
  * snapshot.row_visible may be false when no stream is applicable — that must NOT
  * remove an otherwise valid registry row. Cells still render N/A from applicability.
  *
  * - Active clients: always emit a row.
- * - Archived clients: emit only with frozen snapshot and/or material fact evidence.
+ * - Archived clients: never emit in the active registry. Period snapshots/facts remain stored.
  */
 export function shouldEmitOperationalPeriodRegistryRow(input: {
   is_archived: boolean;
@@ -842,10 +840,12 @@ export function shouldEmitOperationalPeriodRegistryRow(input: {
   snapshot_row_visible?: boolean | null;
 }): boolean {
   void input.snapshot_row_visible;
-  if (!input.is_archived) return true;
-  return input.has_applicability_snapshot || input.has_material_fact;
+  void input.has_applicability_snapshot;
+  void input.has_material_fact;
+  return !input.is_archived;
 }
 
+/** Client created after period end must not appear in earlier periods. */
 export function clientExistsInOperationalPeriod(input: {
   client_created_at: string | Date | null | undefined;
   operational_period_key: string;
