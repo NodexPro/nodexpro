@@ -10,6 +10,8 @@ import {
   canonicalCreatedClientId,
   clientCardPath,
   createdClientDestination,
+  createdClientOpenLocationState,
+  parseCreatedClientOpenLocationState,
 } from '../src/pages/client-create-navigation.pure.ts';
 
 const dir = dirname(fileURLToPath(import.meta.url));
@@ -18,7 +20,7 @@ test('create command navigates with the canonical returned client id', () => {
   const clientsSrc = readFileSync(join(dir, '../src/pages/Clients.tsx'), 'utf8');
   assert.match(clientsSrc, /canonicalCreatedClientId/);
   assert.match(clientsSrc, /createdClientDestination/);
-  assert.match(clientsSrc, /openClientId/);
+  assert.match(clientsSrc, /createdClientOpenLocationState/);
   assert.match(clientsSrc, /orgClients\(orgId\)/);
   assert.match(clientsSrc, /method:\s*'POST'/);
   assert.doesNotMatch(clientsSrc, /setTimeout|sleep\(/);
@@ -29,7 +31,7 @@ test('create command navigates with the canonical returned client id', () => {
   assert.equal(clientCardPath('abc-123'), '/clients/abc-123');
 });
 
-test('create from /m/client-operations stays on the registry and opens the workspace modal', () => {
+test('create from any route stays on Client Operations and opens the workspace modal', () => {
   assert.deepEqual(
     createdClientDestination({ currentPath: '/m/client-operations', clientId: 'abc-123' }),
     { kind: 'client_operations_modal', clientId: 'abc-123' },
@@ -40,8 +42,37 @@ test('create from /m/client-operations stays on the registry and opens the works
   );
   assert.deepEqual(
     createdClientDestination({ currentPath: '/clients', clientId: 'abc-123' }),
-    { kind: 'core_card', path: '/clients/abc-123' },
+    { kind: 'client_operations_modal', clientId: 'abc-123' },
   );
+  assert.deepEqual(
+    createdClientDestination({ currentPath: '/clients/abc-123', clientId: 'abc-123' }),
+    { kind: 'client_operations_modal', clientId: 'abc-123' },
+  );
+  const clientsSrc = readFileSync(join(dir, '../src/pages/Clients.tsx'), 'utf8');
+  assert.match(clientsSrc, /navigate\('\/m\/client-operations'/);
+  assert.match(clientsSrc, /createdClientOpenLocationState/);
+  assert.doesNotMatch(clientsSrc, /navigate\(dest\.path\)/);
+  assert.deepEqual(
+    createdClientOpenLocationState({
+      clientId: 'abc-123',
+      displayName: 'Acme',
+      taxId: '514',
+      email: 'a@b.com',
+      phone: '050',
+    }),
+    {
+      openClientId: 'abc-123',
+      openClientName: 'Acme',
+      openClientTaxId: '514',
+      openClientEmail: 'a@b.com',
+      openClientPhone: '050',
+    },
+  );
+  assert.equal(
+    parseCreatedClientOpenLocationState({ openClientId: 'abc-123', openClientEmail: 'a@b.com' })?.openClientEmail,
+    'a@b.com',
+  );
+  assert.equal(parseCreatedClientOpenLocationState({}), null);
   const registrySrc = readFileSync(
     join(dir, '../src/components/client-operations/ClientOperationsRegistryView.tsx'),
     'utf8',
@@ -56,7 +87,9 @@ test('create from /m/client-operations stays on the registry and opens the works
   assert.match(registrySrc, /moduleClientOperationsCase\(clientId\)/);
   assert.match(registrySrc, /userFacingApiMessage/);
   assert.match(registrySrc, /pendingOpenClientId/);
+  assert.match(registrySrc, /pendingOpenClientSnapshot/);
   assert.match(registrySrc, /bypassCache/);
+  assert.match(pageSrc, /parseCreatedClientOpenLocationState/);
   assert.doesNotMatch(registrySrc, /navigate\(/);
   assert.doesNotMatch(registrySrc, /clientCardPath/);
   assert.doesNotMatch(registrySrc, /docflowClientTabAggregate/);

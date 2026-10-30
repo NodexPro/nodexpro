@@ -557,6 +557,7 @@ export async function archiveClient(ctx: RequestContext, orgId: string, clientId
     action: AUDIT_ACTIONS.CLIENT_ARCHIVED,
     payload: {},
   });
+  invalidateClientOperationsRegistryMaterializationCache(orgId);
 
   return client;
 }
@@ -599,6 +600,7 @@ export async function restoreClient(ctx: RequestContext, orgId: string, clientId
     action: AUDIT_ACTIONS.CLIENT_RESTORED,
     payload: {},
   });
+  invalidateClientOperationsRegistryMaterializationCache(orgId);
 
   return client;
 }
@@ -724,6 +726,7 @@ export async function bulkArchive(ctx: RequestContext, orgId: string, body: unkn
     action: AUDIT_ACTIONS.CLIENT_ARCHIVED,
     payload: { bulk: true, count: updated, client_ids: inOrg },
   });
+  invalidateClientOperationsRegistryMaterializationCache(orgId);
   return { updated, clientIds: inOrg };
 }
 
@@ -765,6 +768,7 @@ export async function bulkRestore(ctx: RequestContext, orgId: string, body: unkn
     action: AUDIT_ACTIONS.CLIENT_RESTORED,
     payload: { bulk: true, count: updated, client_ids: inOrg },
   });
+  invalidateClientOperationsRegistryMaterializationCache(orgId);
   return { updated, clientIds: inOrg };
 }
 

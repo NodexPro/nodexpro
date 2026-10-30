@@ -8,7 +8,7 @@
   color: #eef6ff;
   background: transparent;
   min-height: 100%;
-  padding: 8px 4px 24px;
+  padding: 0 4px 24px;
   box-sizing: border-box;
   overflow-x: hidden;
 }
@@ -599,7 +599,7 @@ button.nx-dashboard-card--kpi:hover,
 }
 
 .t1-pageMain--dashboard {
-  padding-top: 18px;
+  padding-top: 0;
 }
 
 @media (max-width: 1100px) {
@@ -638,7 +638,7 @@ button.nx-dashboard-card--kpi:hover,
 
 @media (max-width: 430px) {
   .nx-dashboard {
-    padding: 4px 0 20px;
+    padding: 0 0 20px;
   }
 
   .nx-dashboard__header-tools,

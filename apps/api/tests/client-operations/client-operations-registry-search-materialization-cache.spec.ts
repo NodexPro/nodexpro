@@ -481,6 +481,29 @@ test('route: GET /registry opts into the materialization cache; write requests i
   assert.match(routesSource, /router\.get\('\/registry', \.\.\.withView/);
 });
 
+test('core archive/restore/bulk invalidate the CO registry materialization cache', () => {
+  const clientsService = read('../../src/domains/clients/clients.service.ts');
+  const archiveFn = clientsService.slice(
+    clientsService.indexOf('export async function archiveClient'),
+    clientsService.indexOf('export async function restoreClient'),
+  );
+  const restoreFn = clientsService.slice(
+    clientsService.indexOf('export async function restoreClient'),
+    clientsService.indexOf('export async function bulkMarkActive'),
+  );
+  const bulkArchiveFn = clientsService.slice(
+    clientsService.indexOf('export async function bulkArchive'),
+    clientsService.indexOf('export async function bulkRestore'),
+  );
+  const bulkRestoreFn = clientsService.slice(clientsService.indexOf('export async function bulkRestore'));
+  assert.match(archiveFn, /invalidateClientOperationsRegistryMaterializationCache\(orgId\)/);
+  assert.match(restoreFn, /invalidateClientOperationsRegistryMaterializationCache\(orgId\)/);
+  assert.match(bulkArchiveFn, /invalidateClientOperationsRegistryMaterializationCache\(orgId\)/);
+  assert.match(bulkRestoreFn, /invalidateClientOperationsRegistryMaterializationCache\(orgId\)/);
+  assert.match(archiveFn, /is_archived:\s*true/);
+  assert.match(restoreFn, /is_archived:\s*false/);
+});
+
 test('commands: never read the cache, invalidate, and return a freshly built full aggregate', () => {
   assert.match(customColumnsSource, /invalidateClientOperationsRegistryMaterializationCache\(orgId\)/);
   assert.match(customColumnsSource, /return listClientOperationsRegistry\(ctx, responseQuery\);/);

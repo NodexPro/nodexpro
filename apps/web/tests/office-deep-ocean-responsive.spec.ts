@@ -95,10 +95,29 @@ test('responsive office shell keeps tables scrollable and avoids page overflow',
   assert.match(dashboardCss, /@media \(max-width: 430px\)/);
   assert.match(shellCss, /height:\s*100dvh/);
   assert.match(shellCss, /overflow-x:\s*hidden/);
-  assert.match(shellCss, /@media \(max-width: 768px\)[\s\S]*padding:\s*12px 12px 18px/);
+  assert.match(shellCss, /@media \(max-width: 768px\)[\s\S]*padding:\s*0 12px 18px/);
   assert.match(sidebarCss, /height:\s*100dvh/);
   assert.match(sidebarSrc, /coarsePointer/);
   assert.match(sidebarSrc, /t1-sidebar__brand-toggle/);
   assert.match(usersRolesCss, /\.nx-ur-page__head \{[\s\S]*flex-wrap:\s*wrap/);
   assert.match(usersRolesCss, /\.nx-ur-table-scroll/);
+});
+
+test('working shell does not reserve a header-sized top gutter on navy or general pages', () => {
+  assert.match(
+    shellCss,
+    /\.t1-appShell--client-operations:not\(\.t1-appShell--general\) \.t1-pageMain \{[\s\S]*?padding:\s*0 26px 18px/,
+  );
+  assert.match(
+    shellCss,
+    /\.t1-appShell--client-operations\.t1-appShell--general \.t1-shellColumn \{[\s\S]*?margin:\s*0 26px 18px/,
+  );
+  assert.doesNotMatch(shellCss, /margin:\s*-\d/);
+  assert.doesNotMatch(shellCss, /padding-top:\s*-\d/);
+  assert.doesNotMatch(shellCss, /:has\(\.nx-settings\)[\s\S]{0,80}padding-top/);
+  assert.doesNotMatch(shellCss, /:has\(\.nx-dashboard\)[\s\S]{0,80}padding-top/);
+  assert.match(dashboardCss, /\.t1-pageMain--dashboard \{[\s\S]*?padding-top:\s*0/);
+  assert.match(dashboardCss, /\.nx-dashboard \{[\s\S]*?padding:\s*0 4px 24px/);
+  const glassCss = read('../src/styles/nx-glass-surface.css');
+  assert.match(glassCss, /\.nx-glass-page \{[\s\S]*?padding:\s*0 4px 24px/);
 });

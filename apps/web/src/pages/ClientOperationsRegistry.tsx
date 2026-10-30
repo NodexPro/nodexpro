@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { parseCreatedClientOpenLocationState } from './client-create-navigation.pure';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../api/client';
 import { moduleClientOperationsRegistry, moduleClientOperationsRegistryCommands } from '../api/endpoints';
@@ -128,10 +129,8 @@ export function ClientOperationsRegistry() {
   const auth = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const pendingOpenClientId =
-    typeof (location.state as { openClientId?: unknown } | null)?.openClientId === 'string'
-      ? String((location.state as { openClientId: string }).openClientId).trim() || null
-      : null;
+  const pendingOpen = parseCreatedClientOpenLocationState(location.state);
+  const pendingOpenClientId = pendingOpen?.openClientId ?? null;
 
   const [rows, setRows] = useState<ClientOperationsRegistryRow[]>([]);
   const [manualRows, setManualRows] = useState<ClientOperationsManualRegistryRow[]>([]);
@@ -811,6 +810,16 @@ export function ClientOperationsRegistry() {
       canEdit={canEdit}
       canCreateCoreClient={allowedActions.includes('create_core_client')}
       pendingOpenClientId={pendingOpenClientId}
+      pendingOpenClientSnapshot={
+        pendingOpen
+          ? {
+              client_name: pendingOpen.openClientName ?? null,
+              tax_id: pendingOpen.openClientTaxId ?? null,
+              email: pendingOpen.openClientEmail ?? null,
+              phone: pendingOpen.openClientPhone ?? null,
+            }
+          : null
+      }
       onPendingOpenConsumed={() => navigate('.', { replace: true, state: {} })}
       showPageHeader={false}
       onReloadRegistry={(options) => void reloadRegistry(options)}

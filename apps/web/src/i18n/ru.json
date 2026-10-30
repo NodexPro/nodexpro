@@ -1,5 +1,21 @@
 {
   "lang": "ru",
+  "nav": {
+    "dashboard": "Панель",
+    "settings": "Настройки",
+    "usersRoles": "Пользователи и роли",
+    "clients": "Клиенты",
+    "documents": "Документы",
+    "modules": "Модули",
+    "billing": "Биллинг",
+    "clientOperations": "Операции клиентов",
+    "income": "Доходы",
+    "docflow": "DocFlow",
+    "docflowInvites": "Приглашения",
+    "docflowReview": "Проверка",
+    "docflowMessenger": "Сообщения",
+    "workEngine": "Work Engine"
+  },
   "dashboard": {
     "lang": {
       "aria": "Язык",

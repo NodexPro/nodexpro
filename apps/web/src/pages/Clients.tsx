@@ -14,7 +14,12 @@ import {
   orgClientsBulkExport,
 } from '../api/endpoints';
 import { useI18n } from '../i18n/I18nProvider';
-import { canonicalCreatedClientId, clientCardPath, createdClientDestination } from './client-create-navigation.pure';
+import {
+  canonicalCreatedClientId,
+  clientCardPath,
+  createdClientDestination,
+  createdClientOpenLocationState,
+} from './client-create-navigation.pure';
 import {
   beginExclusiveSubmit,
   buildCreateClientCommandPayload,
@@ -349,11 +354,15 @@ export function Clients() {
       setCreateStreet('');
       setCreatePostalCode('');
       const dest = createdClientDestination({ currentPath: location.pathname, clientId });
-      if (dest.kind === 'client_operations_modal') {
-        navigate('/m/client-operations', { state: { openClientId: dest.clientId } });
-      } else {
-        navigate(dest.path);
-      }
+      navigate('/m/client-operations', {
+        state: createdClientOpenLocationState({
+          clientId: dest.clientId,
+          displayName: createName,
+          taxId: createTaxId,
+          email: createEmail,
+          phone: createPhone,
+        }),
+      });
     } catch (err) {
       const mapped = mapCreateClientCommandError(err);
       setCreateInvalidField(mapped.field);

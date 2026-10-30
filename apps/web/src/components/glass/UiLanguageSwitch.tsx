@@ -46,15 +46,6 @@ export function UiLanguageSwitch({ ariaLabel, compact }: { ariaLabel?: string; c
       >
         {compact ? t('dashboard.lang.heCompact') : t('dashboard.lang.he')}
       </button>
-      <button
-        type="button"
-        className={`nx-glass-lang__btn${lang === 'ru' ? ' is-selected' : ''}`}
-        aria-pressed={lang === 'ru'}
-        disabled={busy}
-        onClick={() => void select('ru')}
-      >
-        {compact ? t('dashboard.lang.ruCompact') : t('dashboard.lang.ru')}
-      </button>
     </div>
   );
 }

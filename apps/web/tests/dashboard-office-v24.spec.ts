@@ -41,6 +41,8 @@ test('Dashboard header is one horizontal toolbar with period then compact EN/ע�
   assert.doesNotMatch(dashCss, /\.nx-dashboard__header-tools \{[^}]*flex-direction: column/);
   assert.match(langSwitchSrc, /compact \? t\('dashboard\.lang\.enCompact'\)/);
   assert.match(langSwitchSrc, /auth\.setUiLanguage\(code\)/);
+  assert.doesNotMatch(langSwitchSrc, /dashboard\.lang\.ruCompact/);
+  assert.doesNotMatch(langSwitchSrc, /select\('ru'\)/);
   assert.match(enI18n, /"enCompact": "EN"/);
   assert.match(heI18n, /"heCompact": "עב"/);
   assert.match(glassCss, /\.nx-glass-lang__btn\.is-selected \{[\s\S]*rgba\(128, 116, 242/);

@@ -457,6 +457,12 @@ export type ClientOperationsRegistryViewProps = {
   canCreateCoreClient?: boolean;
   /** Open the existing folder modal after a create that arrived via registry navigation state. */
   pendingOpenClientId?: string | null;
+  pendingOpenClientSnapshot?: {
+    client_name: string | null;
+    tax_id: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null;
   onPendingOpenConsumed?: () => void;
   /**
    * Aggregate title (contract kept). The inner sheet title is no longer rendered —
@@ -588,6 +594,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     canEdit,
     canCreateCoreClient = false,
     pendingOpenClientId = null,
+    pendingOpenClientSnapshot = null,
     onPendingOpenConsumed,
     showPageHeader = true,
     onReloadRegistry,
@@ -994,7 +1001,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       });
   };
 
-  const openClientModal = (r: ClientOperationsRegistryRow) => {
+  const openClientModal = (r: ClientOperationsRegistryRow & { email?: string | null; phone?: string | null }) => {
     closeQuickProfile();
     setModalOpen(true);
     setModalLoading(true);
@@ -1013,8 +1020,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     openClientModal(
       row ?? {
         client_id: clientId,
-        client_name: null,
-        tax_id: null,
+        client_name: pendingOpenClientSnapshot?.client_name ?? null,
+        tax_id: pendingOpenClientSnapshot?.tax_id ?? null,
+        email: pendingOpenClientSnapshot?.email ?? null,
+        phone: pendingOpenClientSnapshot?.phone ?? null,
         business_type: null,
         payroll_flag: null,
         material_brought_flag: null,

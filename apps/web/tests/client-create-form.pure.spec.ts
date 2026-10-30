@@ -143,7 +143,9 @@ test('double-click Create is rejected while a request is pending', () => {
 
 test('successful create still navigates with the canonical returned client id', () => {
   assert.match(clientsSrc, /canonicalCreatedClientId/);
-  assert.match(clientsSrc, /clientCardPath\(clientId\)/);
+  assert.match(clientsSrc, /createdClientDestination/);
+  assert.match(clientsSrc, /createdClientOpenLocationState/);
+  assert.match(clientsSrc, /navigate\('\/m\/client-operations'/);
   assert.equal(canonicalCreatedClientId({ id: '  abc-123  ' }), 'abc-123');
   assert.equal(clientCardPath('abc-123'), '/clients/abc-123');
   assert.doesNotMatch(clientsSrc, /setTimeout|sleep\(/);

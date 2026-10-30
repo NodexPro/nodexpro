@@ -10,7 +10,18 @@ type SidebarMode = 'default' | 'collapsedHover';
 type SidebarAppearance = 'default' | 'co-navy-glass';
 
 function iconForNavItem(to: string, label: string): string {
-  if (to.includes('/work-engine')) return '📋';
+  const p = String(to ?? '').split('?')[0] ?? '';
+  if (p.includes('/work-engine')) return '📋';
+  if (p === '/dashboard') return '📊';
+  if (p === '/settings') return '⚙️';
+  if (p === '/users-roles') return '👥';
+  if (p === '/clients' || p.startsWith('/clients/')) return '🗂️';
+  if (p === '/documents' || p.startsWith('/documents/')) return '📄';
+  if (p.startsWith('/m/client-operations')) return '🧾';
+  if (p.startsWith('/m/docflow')) return '💬';
+  if (p.startsWith('/m/income')) return '🧾';
+  if (p === '/modules') return '🧩';
+  if (p === '/billing') return '💳';
   return iconForLabel(label);
 }
 
@@ -316,7 +327,7 @@ export function AppSidebar({
                     className={coGlass ? 't1-sidebar__icon' : undefined}
                     style={{ width: 22, display: 'inline-flex', justifyContent: 'center' }}
                   >
-                    {coGlass ? <CoNavGlyph icon={iconForLabel(child.label)} /> : iconForLabel(child.label)}
+                    {coGlass ? <CoNavGlyph icon={iconForNavItem(child.to, child.label)} /> : iconForNavItem(child.to, child.label)}
                   </span>
                   <span
                     className={coGlass ? 't1-sidebar__label' : undefined}

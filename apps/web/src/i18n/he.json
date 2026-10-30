@@ -5,6 +5,22 @@
     "signOut": "התנתק",
     "language": "שפה"
   },
+  "nav": {
+    "dashboard": "לוח בקרה",
+    "settings": "הגדרות",
+    "usersRoles": "משתמשים ותפקידים",
+    "clients": "לקוחות",
+    "documents": "מסמכים",
+    "modules": "מודולים",
+    "billing": "חיוב",
+    "clientOperations": "תפעול לקוחות",
+    "income": "הכנסות",
+    "docflow": "דוקפלואו",
+    "docflowInvites": "הזמנות",
+    "docflowReview": "בקרה",
+    "docflowMessenger": "הודעות",
+    "workEngine": "מנוע עבודה"
+  },
   "clients": {
     "title": "לקוחות",
     "subtitle": "רשומת מאסטר משותפת. זיהוי לפי ח.פ / מספר עוסק.",

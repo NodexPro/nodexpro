@@ -8,6 +8,7 @@ import { DocflowFloatingWidget } from '../DocflowFloatingWidget';
 import { isClientOperationsReminderToastsEnabled } from '../../lib/client-operations-reminder-toasts-access.pure';
 import { RequireWorkerRoute } from '../guards/RequireWorkerRoute';
 import { AccountSecurityPanel } from '../../security/AccountSecurityPanel';
+import { sidebarNavLabel } from '../../lib/sidebar-nav-label.pure';
 
 function SessionLanguageSync() {
   const auth = useAuth();
@@ -26,7 +27,7 @@ function SessionLanguageSync() {
 
 export function AppShell() {
   const auth = useAuth();
-  const { setLang } = useI18n();
+  const { setLang, t } = useI18n();
   const [accountBusy, setAccountBusy] = useState(false);
 
   if (auth.status !== 'authenticated') return null;
@@ -37,7 +38,11 @@ export function AppShell() {
     : Array.isArray(me.visible_nav_items)
       ? me.visible_nav_items
       : [];
-  const navItems = navigation.map((n) => ({ path: n.path, label: n.label, order: n.order }));
+  const navItems = navigation.map((n) => ({
+    path: n.path,
+    label: sidebarNavLabel(n.path, n.label, t),
+    order: n.order,
+  }));
 
   const moduleSource = Array.isArray(me.available_modules)
     ? me.available_modules
@@ -53,7 +58,7 @@ export function AppShell() {
       moduleCode: inferModuleCodeFromPath(n.path),
     }))
     .filter((item) => !isHiddenModuleItem(item) && isEnabledModuleItem(item, enabledModulesSet))
-    .map((c) => ({ to: c.path, label: c.label }));
+    .map((c) => ({ to: c.path, label: sidebarNavLabel(c.path, c.label, t) }));
 
   const sidebarItems = navItems
     .filter((n) => !n.path.startsWith('/m/'))

@@ -5,6 +5,22 @@
     "signOut": "Sign out",
     "language": "Language"
   },
+  "nav": {
+    "dashboard": "Dashboard",
+    "settings": "Settings",
+    "usersRoles": "Users & Roles",
+    "clients": "Clients",
+    "documents": "Documents",
+    "modules": "Modules",
+    "billing": "Billing",
+    "clientOperations": "Client Operations",
+    "income": "Income",
+    "docflow": "DocFlow",
+    "docflowInvites": "Invites",
+    "docflowReview": "Review",
+    "docflowMessenger": "Messenger",
+    "workEngine": "Work Engine"
+  },
   "clients": {
     "title": "Clients",
     "subtitle": "Shared master records. Identity by tax ID (HP).",

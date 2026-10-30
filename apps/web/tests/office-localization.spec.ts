@@ -30,6 +30,8 @@ test('5-6. one shared switcher writes the language command and applies the retur
   const header = read('../src/templates/template-1/components/AppHeader.tsx');
   assert.match(switcher, /auth\.setUiLanguage\(code\)/);
   assert.match(switcher, /refreshed\?\.sidebar_account_block\.language_selector\.current_value/);
+  assert.doesNotMatch(switcher, /select\('ru'\)/);
+  assert.doesNotMatch(switcher, /dashboard\.lang\.ruCompact/);
   assert.match(auth, /AUTH\.setUiLanguageCommand/);
   assert.doesNotMatch(auth.slice(auth.indexOf('const setUiLanguage'), auth.indexOf('const signOut')), /refetchMe|AUTH\.session|\/auth\/session/);
   assert.match(i18n, /document\.documentElement\.lang = lang/);
@@ -71,6 +73,16 @@ test('11. email, phone, URL, and identifiers stay LTR', () => {
   assert.match(clients, /className="nx-clients-table__mono nx-ltr"/);
   assert.match(clients, /<td className="nx-ltr">\{r\.email\}<\/td>/);
   assert.match(users, /type="email"[\s\S]*dir="ltr"/);
+});
+
+test('14b. EN/HE sidebar nav keys match and Hebrew is not English', () => {
+  const enNav = flatten(en.nav).sort();
+  const heNav = flatten(he.nav).sort();
+  assert.deepEqual(heNav, enNav);
+  const heDict = he.nav as Record<string, string>;
+  assert.equal(heDict.dashboard, 'לוח בקרה');
+  assert.notEqual(heDict.settings, 'Settings');
+  assert.notEqual(heDict.usersRoles, 'Users & Roles');
 });
 
 test('14. EN/HE translation keys match for office Clients chrome', () => {
