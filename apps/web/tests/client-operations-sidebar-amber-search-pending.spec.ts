@@ -65,7 +65,7 @@ test('unified amber tokens cover search X, folders, and מוכן paint indicator
   assert.match(sheetCss, /\.nx-co-sheet__folder-icon \.nx-co-sheet__folder-back/);
   assert.match(
     sheetCss,
-    /\.nx-co-sheet__status-mode--ready \.nx-co-sheet__status-mode-swatch\s*\{[^}]*--nx-amber-500/,
+    /\.nx-co-sheet__status-mode--ready \.nx-co-sheet__status-mode-swatch\s*\{[^}]*#ffd43b/,
   );
   // Painted cell tones remain separate from the toolbar indicator.
   assert.match(sheetCss, /\.nx-co-sheet__table td\.is-manual-status-ready/);

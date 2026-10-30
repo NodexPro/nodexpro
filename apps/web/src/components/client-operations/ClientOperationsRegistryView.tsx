@@ -2354,9 +2354,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   table { width: 100%; border-collapse: collapse; table-layout: auto; }
   th, td { border: 1px solid #ccc; padding: 3px 6px; text-align: right; white-space: nowrap; font-size: 11px; vertical-align: middle; }
   th { background: #f4f6f8; font-weight: 700; color: #123756; }
-  .is-manual-status-ready { background: #fbf4d4; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .is-manual-status-sent_for_approval { background: #e8f1fa; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .is-manual-status-completed { background: #e5f4e5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .is-manual-status-ready { background: #ffd43b; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .is-manual-status-sent_for_approval { background: #3478e8; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .is-manual-status-completed { background: #35d77a; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   @media print { @page { size: landscape; } }
 </style>
 </head>
@@ -3068,21 +3068,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             {fullscreenOpen ? 'יציאה ממסך מלא' : '⊞ מסך מלא'}
           </button>
 
-          {canCreateCoreClient ? (
-            <button
-              type="button"
-              data-testid="co-create-core-client"
-              className="nx-co-sheet__btn"
-              title={t('clients.newClient')}
-              aria-label={t('clients.newClient')}
-              onClick={() => {
-                resetCreateClientForm();
-                setShowCreateClient(true);
-              }}
-            >
-              {t('clients.newClient')}
-            </button>
-          ) : null}
+          {/* Create-client lives on /clients — keep Core command + modal, hide this toolbar button. */}
 
           {/* ── Print ── */}
           <button

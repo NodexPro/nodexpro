@@ -69,6 +69,9 @@
 }
 
 .nx-co-sheet__toolbar {
+  position: relative;
+  z-index: 12;
+  overflow: visible;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -88,6 +91,8 @@
 
 /* Separate horizontal filter strip — below formatting toolbar, above spreadsheet. */
 .nx-co-sheet__filter-bar {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   padding: 6px 10px;
@@ -224,6 +229,7 @@
 .nx-co-sheet__toolbar-group {
   display: inline-flex;
   align-items: center;
+  overflow: visible;
   gap: 4px;
   padding-inline-end: 8px;
   margin-inline-end: 4px;
@@ -896,13 +902,31 @@
   opacity: 1;
 }
 
-/* Native checkboxes restyled by nx-premium-check.css (shared navy/cyan control). */
+/* Native checkboxes restyled by nx-premium-check.css (shared navy/cyan control).
+ * CO sheet only: 30% larger than the 16px premium-check default (16 → 21). */
+.nx-co-sheet input[type='checkbox'],
 .nx-co-sheet__checkbox {
-  width: 16px;
-  height: 16px;
+  width: 21px;
+  height: 21px;
+  flex: 0 0 21px;
   margin: 0;
   vertical-align: middle;
   cursor: pointer;
+}
+
+.nx-co-sheet input[type='checkbox']:checked::after {
+  width: 12px;
+  height: 6.5px;
+}
+
+.nx-co-sheet input[type='checkbox']:indeterminate::after {
+  width: 10px;
+}
+
+.nx-co-sheet__table td input[type='checkbox'],
+.nx-co-sheet__table td .nx-co-sheet__checkbox {
+  display: block;
+  margin-inline: auto;
 }
 
 .nx-co-sheet__material-header {
@@ -942,7 +966,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 18px;
+  min-height: 22px;
   margin: 0;
 }
 
@@ -1681,29 +1705,28 @@
 }
 
 .nx-co-sheet__status-mode-swatch {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   border-radius: 3px;
   border: 1px solid rgba(18, 55, 86, 0.25);
-  flex: 0 0 auto;
+  flex: 0 0 16px;
 }
 
-/* Toolbar indicator only (unified amber). Painted cells keep their persisted status tone. */
 .nx-co-sheet__status-mode--ready .nx-co-sheet__status-mode-swatch {
-  background: linear-gradient(135deg, var(--nx-amber-300, #ffd67a), var(--nx-amber-500, #ffbf47));
-  border-color: var(--nx-amber-700, #c98216);
+  background: #ffd43b;
+  border-color: #c9a116;
 }
 
 .nx-co-sheet__status-mode--ready:hover:not(:disabled) .nx-co-sheet__status-mode-swatch {
-  background: linear-gradient(135deg, var(--nx-amber-200, #ffe29a), var(--nx-amber-300, #ffd67a));
+  background: #ffe066;
 }
 
 .nx-co-sheet__status-mode--sent_for_approval .nx-co-sheet__status-mode-swatch {
-  background: #c9def2;
+  background: #3478e8;
 }
 
 .nx-co-sheet__status-mode--completed .nx-co-sheet__status-mode-swatch {
-  background: #c9e6c9;
+  background: #35d77a;
 }
 
 .nx-co-sheet__status-mode--clear .nx-co-sheet__status-mode-swatch {
@@ -1716,29 +1739,29 @@
 }
 
 .nx-co-sheet__status-mode--ready.is-active {
-  background: rgba(255, 226, 154, 0.4);
-  border-color: var(--nx-amber-700, #c98216);
-  box-shadow: 0 0 0 1px rgba(201, 130, 22, 0.28);
+  background: rgba(255, 212, 59, 0.35);
+  border-color: #c9a116;
+  box-shadow: 0 0 0 1px rgba(201, 161, 22, 0.28);
 }
 
 .nx-co-sheet__status-mode--sent_for_approval.is-active {
-  background: #e8f1fa;
+  background: rgba(52, 120, 232, 0.22);
 }
 
 .nx-co-sheet__status-mode--completed.is-active {
-  background: #e5f4e5;
+  background: rgba(53, 215, 122, 0.22);
 }
 
 .nx-co-sheet__table td.is-manual-status-ready {
-  background: #fbf4d4 !important;
+  background: #ffd43b !important;
 }
 
 .nx-co-sheet__table td.is-manual-status-sent_for_approval {
-  background: #e8f1fa !important;
+  background: #3478e8 !important;
 }
 
 .nx-co-sheet__table td.is-manual-status-completed {
-  background: #e5f4e5 !important;
+  background: #35d77a !important;
 }
 
 /* Child chrome must not cover the status fill with opaque white. */
@@ -1797,8 +1820,10 @@
 /* ── Text-color A button + palette popover ── */
 .nx-co-sheet__color-picker-wrap {
   position: relative;
+  z-index: 14;
   display: inline-flex;
   align-items: center;
+  overflow: visible;
 }
 
 .nx-co-sheet__color-a-btn {
@@ -1822,7 +1847,7 @@
   position: absolute;
   top: calc(100% + 4px);
   inset-inline-start: 0;
-  z-index: 30;
+  z-index: 80;
   background: #fff;
   border: 1px solid var(--nx-co-grid);
   border-radius: 8px;
@@ -1841,8 +1866,8 @@
 }
 
 .nx-co-sheet__color-swatch {
-  width: 22px;
-  height: 22px;
+  width: 29px;
+  height: 29px;
   border-radius: 4px;
   border: 1.5px solid rgba(0, 0, 0, 0.12);
   cursor: pointer;
@@ -1868,7 +1893,7 @@
   position: absolute;
   top: calc(100% + 4px);
   inset-inline-start: 0;
-  z-index: 30;
+  z-index: 80;
   background: #fff;
   border: 1px solid var(--nx-co-grid);
   border-radius: 8px;
@@ -1949,19 +1974,19 @@
   }
 
   .nx-co-sheet__table td.is-manual-status-ready {
-    background: #fbf4d4 !important;
+    background: #ffd43b !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
   .nx-co-sheet__table td.is-manual-status-sent_for_approval {
-    background: #e8f1fa !important;
+    background: #3478e8 !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
   .nx-co-sheet__table td.is-manual-status-completed {
-    background: #e5f4e5 !important;
+    background: #35d77a !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
