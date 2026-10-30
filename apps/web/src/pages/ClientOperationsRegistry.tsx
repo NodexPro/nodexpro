@@ -110,6 +110,7 @@ type RegistryAggregate = {
       id: string;
       label_he: string;
       width_hint?: 'default' | 'wide' | 'handler';
+      selection_mode?: 'single' | 'multi';
       options: Array<{ id: string; label_he: string; enabled: boolean }>;
     }>;
     active: {

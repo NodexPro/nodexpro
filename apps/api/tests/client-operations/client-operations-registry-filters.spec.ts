@@ -13,7 +13,9 @@ import {
   CLIENT_OPERATIONS_OPERATIONAL_REPORTING_FILTER_COLUMN_KEYS,
   isAnyClientOperationsBusinessFilterActive,
   isExplicitIncomeTaxAdvanceExemptProfileStatus,
+  normalizeClientOperationsMultiFilterActive,
   normalizeClientOperationsRegistryBusinessFilterQuery,
+  parseClientOperationsMultiFilterTokens,
   resolveMaterialFilterFacet,
   resolveOperationalReportingFilterFacet,
   resolvePayrollFilterFacet,
@@ -547,4 +549,92 @@ test('buildClientOperationsRegistryRowFilterFacets wires fields', () => {
   assert.equal(built.handler_user_id, 'h1');
   assert.ok(built.reporting_types.includes('income_tax_advance_exempt'));
   assert.ok(built.reporting_types.includes('vat_monthly'));
+});
+
+test('31 reporting_type and business_type are backend multi-select with OR within the facet', () => {
+  const contract = buildClientOperationsRegistryFiltersContract({
+    active: allActive(),
+    handlerOptions: [],
+  });
+  assert.equal(contract.definitions.find((d) => d.id === 'reporting_type')?.selection_mode, 'multi');
+  assert.equal(contract.definitions.find((d) => d.id === 'business_type')?.selection_mode, 'multi');
+  assert.equal(contract.definitions.find((d) => d.id === 'material')?.selection_mode, 'single');
+  const row = facets({
+    reporting_types: ['vat_monthly', 'income_tax_advance_bimonthly'],
+    business_type: 'company',
+  });
+  assert.equal(
+    rowMatchesClientOperationsBusinessFilters(row, {
+      ...allActive(),
+      reporting_type: 'vat_bimonthly,vat_monthly',
+    }),
+    true,
+  );
+  assert.equal(
+    rowMatchesClientOperationsBusinessFilters(row, {
+      ...allActive(),
+      reporting_type: 'vat_bimonthly,income_tax_advance_monthly',
+    }),
+    false,
+  );
+  assert.equal(
+    rowMatchesClientOperationsBusinessFilters(row, {
+      ...allActive(),
+      business_type: 'osek_murshe,company',
+    }),
+    true,
+  );
+  assert.equal(
+    rowMatchesClientOperationsBusinessFilters(row, {
+      ...allActive(),
+      business_type: 'osek_murshe,osek_patur',
+    }),
+    false,
+  );
+});
+
+test('32 multi-select filters AND across facets; all/empty show every row', () => {
+  const vatCompany = facets({ reporting_types: ['vat_monthly'], business_type: 'company' });
+  const vatOsek = facets({ reporting_types: ['vat_monthly'], business_type: 'osek_murshe' });
+  const biCompany = facets({ reporting_types: ['vat_bimonthly'], business_type: 'company' });
+  const active = {
+    ...allActive(),
+    reporting_type: 'vat_monthly',
+    business_type: 'company,osek_patur',
+  };
+  assert.equal(rowMatchesClientOperationsBusinessFilters(vatCompany, active), true);
+  assert.equal(rowMatchesClientOperationsBusinessFilters(vatOsek, active), false);
+  assert.equal(rowMatchesClientOperationsBusinessFilters(biCompany, active), false);
+  assert.equal(rowMatchesClientOperationsBusinessFilters(vatCompany, allActive()), true);
+  assert.equal(
+    rowMatchesClientOperationsBusinessFilters(vatCompany, { ...allActive(), reporting_type: '' }),
+    true,
+  );
+  const normalized = normalizeClientOperationsRegistryBusinessFilterQuery({
+    filter_reporting_type: 'vat_bimonthly,vat_monthly,all',
+    filter_business_type: 'company,osek_murshe',
+  });
+  assert.equal(normalized.reporting_type, 'all');
+  assert.equal(normalized.business_type, 'company,osek_murshe');
+  assert.equal(normalizeClientOperationsMultiFilterActive('', ['company']), 'all');
+  assert.deepEqual(parseClientOperationsMultiFilterTokens('company,osek_murshe'), [
+    'company',
+    'osek_murshe',
+  ]);
+});
+
+test('33 comma-separated query remains compatible with a single token', () => {
+  const normalized = normalizeClientOperationsRegistryBusinessFilterQuery({
+    filter_reporting_type: 'vat_monthly',
+    filter_business_type: 'company',
+  });
+  assert.equal(normalized.reporting_type, 'vat_monthly');
+  assert.equal(normalized.business_type, 'company');
+  assert.equal(
+    isAnyClientOperationsBusinessFilterActive({
+      ...allActive(),
+      reporting_type: 'vat_monthly,vat_bimonthly',
+    }),
+    true,
+  );
 });

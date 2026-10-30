@@ -17,7 +17,7 @@ const premium = read('../src/styles/nx-premium-check.css');
 
 test('color palette stacks above the filter bar (z-index / overflow)', () => {
   assert.match(css, /\.nx-co-sheet__toolbar \{[\s\S]*?z-index:\s*12[\s\S]*?overflow:\s*visible/);
-  assert.match(css, /\.nx-co-sheet__filter-bar \{[\s\S]*?z-index:\s*1/);
+  assert.match(css, /\.nx-co-sheet__filter-bar \{[\s\S]*?z-index:\s*8/);
   assert.match(css, /\.nx-co-sheet__color-palette \{[\s\S]*?z-index:\s*80/);
   assert.match(css, /\.nx-co-sheet__color-picker-wrap \{[\s\S]*?overflow:\s*visible/);
 });

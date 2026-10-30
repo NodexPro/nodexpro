@@ -16,6 +16,7 @@ import { canonicalCreatedClientId } from '../../pages/client-create-navigation.p
 import { AccountRequiredMark } from '../glass/AccountRequiredMark';
 import { useClientOperationsHeaderSearchSlot, useClientOperationsHeaderWorkspaceSlot } from './ClientOperationsHeaderSearchSlot';
 import { encodeClientOperationsWorkspaceOptionValue } from '../../lib/client-operations-workspace-url.pure';
+import { ClientOperationsMultiSelectFilter } from './ClientOperationsMultiSelectFilter';
 import {
   orgClients,
   moduleClientOperationsCase,
@@ -494,6 +495,7 @@ export type ClientOperationsRegistryViewProps = {
       id: string;
       label_he: string;
       width_hint?: 'default' | 'wide' | 'handler';
+      selection_mode?: 'single' | 'multi';
       options: Array<{ id: string; label_he: string; enabled: boolean }>;
     }>;
     active: {
@@ -819,7 +821,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       if (!onQueryChange) return;
       const key = FILTER_ID_TO_QUERY_KEY[filterId];
       if (!key) return;
-      const value = optionId === 'all' ? null : optionId;
+      const value = !optionId || optionId === 'all' ? null : optionId;
       onQueryChange(
         {
           q: query?.q ?? null,
@@ -3203,10 +3205,27 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   ? ' nx-co-sheet__filter-control--handler'
                   : '';
             const selected = selectedById[def.id] ?? 'all';
+            const isMulti = def.selection_mode === 'multi';
+            const controlClass = `nx-co-sheet__filter-control${widthClass}`;
+            if (isMulti) {
+              return (
+                <div key={def.id} className={controlClass} data-filter-id={def.id}>
+                  <span className="nx-co-sheet__filter-label">{def.label_he}</span>
+                  <ClientOperationsMultiSelectFilter
+                    filterId={def.id}
+                    labelHe={def.label_he}
+                    options={def.options}
+                    value={selected}
+                    disabled={!onQueryChange}
+                    onChange={(nextCsv) => applyBusinessFilterChange(def.id, nextCsv)}
+                  />
+                </div>
+              );
+            }
             return (
               <label
                 key={def.id}
-                className={`nx-co-sheet__filter-control${widthClass}`}
+                className={controlClass}
                 data-filter-id={def.id}
               >
                 <span className="nx-co-sheet__filter-label">{def.label_he}</span>

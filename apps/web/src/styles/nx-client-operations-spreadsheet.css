@@ -75,7 +75,10 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 8px 12px;
+  width: 100%;
+  box-sizing: border-box;
   padding: 8px 10px;
   background:
     radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.16), transparent 52%),
@@ -92,9 +95,12 @@
 /* Separate horizontal filter strip — below formatting toolbar, above spreadsheet. */
 .nx-co-sheet__filter-bar {
   position: relative;
-  z-index: 1;
+  z-index: 8;
   display: flex;
   align-items: center;
+  overflow: visible;
+  width: 100%;
+  box-sizing: border-box;
   padding: 6px 10px;
   background:
     radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.16), transparent 52%),
@@ -104,19 +110,17 @@
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
     0 0 0 1px rgba(19, 191, 208, 0.04);
-  overflow-x: auto;
-  overflow-y: hidden;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 
 .nx-co-sheet__filter-bar-scroll {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: flex-end;
-  gap: 8px;
-  min-width: max-content;
+  gap: 8px 10px;
   width: 100%;
+  min-width: 0;
 }
 
 .nx-co-sheet__filter-control {
@@ -124,15 +128,13 @@
   flex-direction: column;
   gap: 2px;
   min-width: 112px;
-  flex: 0 0 auto;
+  flex: 1 1 0;
 }
 
-.nx-co-sheet__filter-control--wide {
-  min-width: 168px;
-}
-
+.nx-co-sheet__filter-control--wide,
 .nx-co-sheet__filter-control--handler {
-  min-width: 148px;
+  flex: 1 1 0;
+  min-width: 128px;
 }
 
 .nx-co-sheet__filter-label {
@@ -226,20 +228,95 @@
   cursor: not-allowed;
 }
 
+.nx-co-sheet__filter-multi {
+  position: relative;
+  z-index: 14;
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+.nx-co-sheet__filter-multi-trigger {
+  position: relative;
+  display: block;
+  text-align: start;
+  padding-inline: 8px 28px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background-image:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
+}
+
+.nx-co-sheet__filter-multi-trigger::after {
+  content: '';
+  position: absolute;
+  inset-inline-end: 10px;
+  top: calc(50% - 3px);
+  width: 6px;
+  height: 6px;
+  border-inline-end: 1.5px solid #ffffff;
+  border-bottom: 1.5px solid #ffffff;
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+.nx-co-sheet__filter-multi-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline-start: 0;
+  inset-inline-end: 0;
+  z-index: 80;
+  min-width: 100%;
+  max-height: min(280px, 50vh);
+  overflow: auto;
+  padding: 6px;
+  background: #123756;
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(18, 55, 86, 0.28);
+}
+
+.nx-co-sheet__filter-multi-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: start;
+  cursor: pointer;
+}
+
+.nx-co-sheet__filter-multi-option.is-highlight,
+.nx-co-sheet__filter-multi-option:hover:not(:disabled) {
+  background: rgba(54, 169, 198, 0.28);
+}
+
+.nx-co-sheet__filter-multi-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.nx-co-sheet__filter-multi-option .nx-co-sheet__checkbox {
+  flex: 0 0 auto;
+}
+
 .nx-co-sheet__toolbar-group {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   overflow: visible;
   gap: 4px;
-  padding-inline-end: 8px;
-  margin-inline-end: 4px;
-  border-inline-end: 1px solid rgba(54, 169, 198, 0.28);
-}
-
-.nx-co-sheet__toolbar-group:last-child {
-  border-inline-end: none;
-  margin-inline-end: 0;
-  padding-inline-end: 0;
+  flex: 0 1 auto;
 }
 
 .nx-co-sheet__btn {

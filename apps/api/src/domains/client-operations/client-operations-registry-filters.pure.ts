@@ -99,11 +99,15 @@ export type ClientOperationsRegistryFilterOption = {
   enabled: boolean;
 };
 
+export type ClientOperationsRegistryFilterSelectionMode = 'single' | 'multi';
+
 export type ClientOperationsRegistryFilterDefinition = {
   id: ClientOperationsRegistryFilterId;
   label_he: string;
   /** Layout hint for FE strip (backend-owned presentation). */
   width_hint: 'default' | 'wide' | 'handler';
+  /** `multi` = OR within the facet; `single` = one token. */
+  selection_mode: ClientOperationsRegistryFilterSelectionMode;
   options: ClientOperationsRegistryFilterOption[];
 };
 
@@ -149,6 +153,51 @@ function normalizeActive(value: string | null | undefined): string {
   const raw = String(value ?? '').trim();
   if (!raw || raw === ALL) return ALL;
   return raw;
+}
+
+const REPORTING_TYPE_OPTION_IDS = [
+  'income_tax_advance_monthly',
+  'income_tax_advance_bimonthly',
+  'income_tax_advance_exempt',
+  'vat_monthly',
+  'vat_bimonthly',
+  'income_tax_deductions_monthly',
+  'income_tax_deductions_bimonthly',
+  'income_tax_deductions_semiannual',
+] as const satisfies readonly ClientOperationsReportingTypeFacet[];
+
+const BUSINESS_TYPE_OPTION_IDS = [
+  'osek_murshe',
+  'osek_patur',
+  'company',
+  'undefined',
+] as const satisfies readonly ClientOperationsBusinessTypeFilterFacet[];
+
+/**
+ * Compatible multi-select query token: comma-separated canonical ids.
+ * Empty / `all` / unknown-only → `all` (no restriction). Sorted for stable echo + cache keys.
+ */
+export function normalizeClientOperationsMultiFilterActive(
+  value: string | null | undefined,
+  allowedIds: readonly string[],
+): string {
+  const parts = String(value ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (parts.length === 0 || parts.includes(ALL)) return ALL;
+  const allowed = new Set(allowedIds);
+  const unique = [...new Set(parts.filter((id) => allowed.has(id)))].sort();
+  return unique.length === 0 ? ALL : unique.join(',');
+}
+
+export function parseClientOperationsMultiFilterTokens(active: string): 'all' | string[] {
+  if (!active || active === ALL) return ALL;
+  const ids = active
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s && s !== ALL);
+  return ids.length === 0 ? ALL : ids;
 }
 
 /** Profile `income_tax_advance_status === 'לא'` is explicit no/exemption (synced from tax UI selection `no`). */
@@ -322,8 +371,14 @@ export function normalizeClientOperationsRegistryBusinessFilterQuery(
     operational_reporting: normalizeActive(query?.filter_operational_reporting),
     material: normalizeActive(query?.filter_material),
     payroll: normalizeActive(query?.filter_payroll),
-    reporting_type: normalizeActive(query?.filter_reporting_type),
-    business_type: normalizeActive(query?.filter_business_type),
+    reporting_type: normalizeClientOperationsMultiFilterActive(
+      query?.filter_reporting_type,
+      REPORTING_TYPE_OPTION_IDS,
+    ),
+    business_type: normalizeClientOperationsMultiFilterActive(
+      query?.filter_business_type,
+      BUSINESS_TYPE_OPTION_IDS,
+    ),
     handler: normalizeActive(query?.filter_handler),
   };
 }
@@ -363,13 +418,17 @@ export function rowMatchesClientOperationsBusinessFilters(
   if (active.payroll !== ALL) {
     if (facets.payroll !== active.payroll) return false;
   }
-  if (active.reporting_type !== ALL) {
-    if (!facets.reporting_types.includes(active.reporting_type as ClientOperationsReportingTypeFacet)) {
-      return false;
-    }
+  const reportingSelected = parseClientOperationsMultiFilterTokens(active.reporting_type);
+  if (reportingSelected !== ALL) {
+    const hit = reportingSelected.some((id) =>
+      facets.reporting_types.includes(id as ClientOperationsReportingTypeFacet),
+    );
+    if (!hit) return false;
   }
-  if (active.business_type !== ALL) {
-    if (!rowMatchesBusinessType(facets.business_type, active.business_type)) return false;
+  const businessSelected = parseClientOperationsMultiFilterTokens(active.business_type);
+  if (businessSelected !== ALL) {
+    const hit = businessSelected.some((id) => rowMatchesBusinessType(facets.business_type, id));
+    if (!hit) return false;
   }
   if (active.handler !== ALL) {
     if (active.handler === 'unassigned') {
@@ -430,6 +489,7 @@ export function buildClientOperationsRegistryFiltersContract(input: {
       id: 'operational_reporting',
       label_he: 'דיווח',
       width_hint: 'default',
+      selection_mode: 'single',
       options: [
         { id: ALL, label_he: 'הכל', enabled: true },
         { id: 'reported', label_he: 'דווח', enabled: true },
@@ -440,6 +500,7 @@ export function buildClientOperationsRegistryFiltersContract(input: {
       id: 'material',
       label_he: 'חומר',
       width_hint: 'default',
+      selection_mode: 'single',
       options: [
         { id: ALL, label_he: 'הכל', enabled: true },
         { id: 'received', label_he: 'התקבל', enabled: true },
@@ -450,6 +511,7 @@ export function buildClientOperationsRegistryFiltersContract(input: {
       id: 'payroll',
       label_he: 'שכר',
       width_hint: 'default',
+      selection_mode: 'single',
       options: [
         { id: ALL, label_he: 'הכל', enabled: true },
         { id: 'has_payroll', label_he: 'יש שכר', enabled: true },
@@ -460,12 +522,14 @@ export function buildClientOperationsRegistryFiltersContract(input: {
       id: 'reporting_type',
       label_he: 'סוג דיווח',
       width_hint: 'wide',
+      selection_mode: 'multi',
       options: REPORTING_TYPE_OPTIONS,
     },
     {
       id: 'business_type',
       label_he: 'סוג עסק',
       width_hint: 'default',
+      selection_mode: 'multi',
       options: [
         { id: ALL, label_he: 'הכל', enabled: true },
         { id: 'osek_murshe', label_he: 'עוסק מורשה', enabled: true },
@@ -478,6 +542,7 @@ export function buildClientOperationsRegistryFiltersContract(input: {
       id: 'handler',
       label_he: 'מטפל בתיק',
       width_hint: 'handler',
+      selection_mode: 'single',
       options: handlerOptions,
     },
   ];
