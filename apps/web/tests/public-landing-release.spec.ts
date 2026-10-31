@@ -105,6 +105,24 @@ test('hero is a full-bleed composition, not a contained art card', () => {
   assert.match(shell, /rgba\(19, 191, 208, 0\.92\)/);
 });
 
+test('phone hero only: hologram in the upper band, copy+CTA as one lower block', () => {
+  const css = read('src/styles/nx-landing.css');
+  const page = read('src/pages/LandingPage.tsx');
+  assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*flex-direction:\s*column/);
+  assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*justify-content:\s*flex-end/);
+  assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*background-size:\s*auto 80%/);
+  assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*background-position:\s*100% 0/);
+  assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*flex-wrap:\s*nowrap/);
+  assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*min-height: 44px/);
+  assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*background: #13bfd0/);
+  assert.match(css, /@media \(max-width: 767px\) \{[\s\S]*background: #123756/);
+  assert.match(page, /to="\/register"/);
+  assert.match(page, /to="\/login"/);
+  assert.doesNotMatch(page, /nx-landing__hero-art/);
+  assert.doesNotMatch(css, /\.nx-landing__hero-art/);
+  assert.doesNotMatch(css, /background-size:\s*contain/);
+});
+
 test('public language switch uses local flag marks, not remote images', () => {
   const sw = read('src/components/landing/PublicLanguageSwitch.tsx');
   const flags = read('src/components/public/PublicLanguageFlags.tsx');

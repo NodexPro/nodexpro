@@ -761,6 +761,133 @@
   }
 }
 
+/*
+ * Phone hero only. 768px+ keeps the tablet/desktop composition.
+ * Art is scaled to its own height in the upper band (not a framed card);
+ * copy + CTAs sit as one block at the bottom on a dark readability veil.
+ */
+@media (max-width: 767px) {
+  .nx-landing__hero {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-end;
+    min-height: 100dvh;
+    padding: 0 clamp(20px, 5.4vw, 24px) 28px;
+    background-size: auto 80%;
+    background-position: 100% 0;
+  }
+
+  .nx-landing__hero::before {
+    background: linear-gradient(
+      180deg,
+      rgba(2, 6, 23, 0.06) 0%,
+      rgba(2, 6, 23, 0.1) 36%,
+      rgba(2, 6, 23, 0.48) 58%,
+      rgba(2, 6, 23, 0.86) 78%,
+      #020617 100%
+    );
+  }
+
+  .nx-landing__hero-content {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: none;
+    margin-inline: 0;
+    justify-items: center;
+    text-align: center;
+    background: linear-gradient(
+      180deg,
+      rgba(2, 6, 23, 0) 0%,
+      rgba(2, 6, 23, 0.5) 18%,
+      rgba(2, 6, 23, 0.88) 100%
+    );
+    padding-block-start: 28px;
+    padding-block-end: 4px;
+  }
+
+  .nx-landing__hero-title,
+  .nx-landing__hero-lead {
+    text-align: center;
+    text-shadow: 0 2px 16px rgba(2, 6, 23, 0.9);
+  }
+
+  .nx-landing__hero-title {
+    font-size: clamp(1.7rem, 7vw, 2.35rem);
+  }
+
+  .nx-landing__hero-title-text {
+    white-space: normal;
+  }
+
+  .nx-landing__hero-lead {
+    margin-inline: auto;
+    margin-block-end: 20px;
+    max-width: 22rem;
+  }
+
+  .nx-landing__hero-actions {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    justify-content: stretch;
+    width: 100%;
+    gap: 12px;
+  }
+
+  .nx-landing__hero-actions .nx-landing__btn {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    height: 44px;
+    min-height: 44px;
+    box-sizing: border-box;
+    padding-inline: 10px;
+  }
+
+  .nx-landing__hero-actions .nx-landing__btn--primary {
+    color: #04212a;
+    border: 1px solid #13bfd0;
+    background: #13bfd0;
+    box-shadow: 0 0 14px rgba(19, 191, 208, 0.35);
+  }
+
+  .nx-landing__hero-actions .nx-landing__btn--ghost {
+    color: #f8fafc;
+    border: 1.5px solid #13bfd0;
+    background: #123756;
+    box-shadow: none;
+  }
+}
+
+@media (max-width: 767px) and (max-height: 700px) {
+  .nx-landing__hero {
+    background-size: auto 50%;
+    padding-block-end: 20px;
+  }
+
+  .nx-landing__hero-title {
+    font-size: clamp(1.45rem, 6.2vw, 1.95rem);
+    margin-block-end: 10px;
+  }
+
+  .nx-landing__hero-lead {
+    margin-block-end: 14px;
+    font-size: 0.9rem;
+  }
+
+  .nx-landing__hero-content {
+    padding-block-start: 18px;
+  }
+}
+
+@media (max-width: 767px) and (max-height: 600px) {
+  .nx-landing__hero {
+    background-size: auto 44%;
+  }
+}
+
 @media (max-width: 430px) {
   .nx-landing__header-inner {
     padding-inline: 16px;
