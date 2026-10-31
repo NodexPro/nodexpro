@@ -8,6 +8,8 @@ import {
   syncPayrollMaterialWorkEvent,
   syncVatMaterialWorkEvent,
 } from './client-operations-work-engine-bridge.js';
+import { resolveOfficialFilingDueDateIso } from './client-operations-reporting-due.service.js';
+import { resolveIncomeTaxDeductionsOperationalReportingPeriodKey } from './client-operations-client-quick-profile.pure.js';
 
 /**
  * שכר column — unified payroll process status (Asia/Jerusalem payroll_period_key = previous month).
@@ -2389,21 +2391,17 @@ type RelevantObligationInput = {
   computed_status: ObligationStatus;
 };
 
-function vatDueDateFromPeriod(
-  reportingEndYear: number,
-  reportingEndMonth: number,
-  vatDueType: string | null
-): string {
-  const dueDay = vatDueType === 'pcn' ? 23 : 19;
-  const due = shiftUtcMonth(reportingEndYear, reportingEndMonth, 1);
-  const dueMonth = due.month;
-  const dueYear = due.year;
-  return `${dueYear}-${String(dueMonth).padStart(2, '0')}-${String(dueDay).padStart(2, '0')}`;
-}
-
-function annualDueDate(now: Date): string {
-  const y = Number(businessYmd(now).slice(0, 4));
-  return `${y}-05-31`;
+function vatObligationIdentityPeriodKey(
+  isBiMonthlyVat: boolean,
+  vatPeriod: { period_key: string; reporting_end_year: number; reporting_end_month: number },
+): string | null {
+  if (!isBiMonthlyVat) return vatPeriod.period_key;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(vatPeriod.period_key);
+  if (m) return `${m[1]}-${m[2]}`;
+  const endMonth = vatPeriod.reporting_end_month;
+  const startMonth = endMonth === 1 ? 12 : endMonth - 1;
+  const startYear = endMonth === 1 ? vatPeriod.reporting_end_year - 1 : vatPeriod.reporting_end_year;
+  return `${startYear}-${String(startMonth).padStart(2, '0')}`;
 }
 
 async function buildRelevantObligations(orgId: string, clientId: string, now: Date): Promise<RelevantObligationInput[]> {
@@ -2440,17 +2438,30 @@ async function buildRelevantObligations(orgId: string, clientId: string, now: Da
     const vatFrequency = String(t.vat_frequency ?? '');
     const isBiMonthlyVat = vatFrequency === 'bi_monthly' || vatFrequency === 'דו חודשי';
     const vatPeriod = isBiMonthlyVat ? vatReportingPeriodBiMonthly(now) : vatReportingPeriodMonthly(now);
-    const due = vatDueDateFromPeriod(vatPeriod.reporting_end_year, vatPeriod.reporting_end_month, (t.vat_due_type as string | null) ?? null);
-    const periodKey = vatPeriod.period_key;
-    const missingMaterialState: ObligationStatus = day > 6 ? 'missing_data' : 'waiting_for_material';
-    const status: ObligationStatus = materialBrought ? 'ready_to_report' : missingMaterialState;
-    out.push({
-      obligation_type: 'vat_report',
-      period_key: periodKey,
-      due_date: due,
-      related_module: 'vat',
-      computed_status: status,
-    });
+    const vatIdentity = vatObligationIdentityPeriodKey(isBiMonthlyVat, vatPeriod);
+    const due = vatIdentity
+      ? await resolveOfficialFilingDueDateIso({
+          organizationId: orgId,
+          kind: 'vat',
+          reportingPeriodKey: vatIdentity,
+          vat_type: String(t.vat_type ?? ''),
+          vat_due_type: (t.vat_due_type as string | null) ?? null,
+          vat_frequency: vatFrequency,
+          asOfDate: businessYmd(now),
+        })
+      : null;
+    if (due) {
+      const periodKey = vatPeriod.period_key;
+      const missingMaterialState: ObligationStatus = day > 6 ? 'missing_data' : 'waiting_for_material';
+      const status: ObligationStatus = materialBrought ? 'ready_to_report' : missingMaterialState;
+      out.push({
+        obligation_type: 'vat_report',
+        period_key: periodKey,
+        due_date: due,
+        related_module: 'vat',
+        computed_status: status,
+      });
+    }
   }
 
   if (businessType === 'עוסק פטור') {
@@ -2478,15 +2489,23 @@ async function buildRelevantObligations(orgId: string, clientId: string, now: Da
   }
 
   if (Boolean(t.income_tax_advance_enabled)) {
-    const due = `${mm}-10`;
-    const status: ObligationStatus = incomeReceived ? 'ready_to_report' : day >= 10 ? 'missing_data' : 'waiting_for_income_data';
-    out.push({
-      obligation_type: 'income_tax_advance',
-      period_key: mm,
-      due_date: due,
-      related_module: 'tax',
-      computed_status: status,
+    const due = await resolveOfficialFilingDueDateIso({
+      organizationId: orgId,
+      kind: 'income_tax_advance',
+      reportingPeriodKey: mm,
+      income_tax_advance_enabled: true,
+      asOfDate: businessYmd(now),
     });
+    if (due) {
+      const status: ObligationStatus = incomeReceived ? 'ready_to_report' : day >= 10 ? 'missing_data' : 'waiting_for_income_data';
+      out.push({
+        obligation_type: 'income_tax_advance',
+        period_key: mm,
+        due_date: due,
+        related_module: 'tax',
+        computed_status: status,
+      });
+    }
   }
 
   {
@@ -2496,13 +2515,28 @@ async function buildRelevantObligations(orgId: string, clientId: string, now: Da
       if (freq) {
         const req = resolveIncomeTaxDeductionsRequirement(now, freq);
         if (req.is_required) {
-          out.push({
-            obligation_type: 'income_tax_deductions',
-            period_key: req.period_key,
-            due_date: req.due_date,
-            related_module: 'tax',
-            computed_status: 'ready_to_process',
+          const calendarPeriod = resolveIncomeTaxDeductionsOperationalReportingPeriodKey({
+            frequency: freq,
+            now,
           });
+          const due =
+            calendarPeriod.applicable && calendarPeriod.reporting_period_key
+              ? await resolveOfficialFilingDueDateIso({
+                  organizationId: orgId,
+                  kind: 'income_tax_deductions',
+                  reportingPeriodKey: calendarPeriod.reporting_period_key,
+                  asOfDate: businessYmd(now),
+                })
+              : null;
+          if (due) {
+            out.push({
+              obligation_type: 'income_tax_deductions',
+              period_key: req.period_key,
+              due_date: due,
+              related_module: 'tax',
+              computed_status: 'ready_to_process',
+            });
+          }
         }
       }
     }
@@ -2524,16 +2558,8 @@ async function buildRelevantObligations(orgId: string, clientId: string, now: Da
     });
   }
 
-  {
-    const due = annualDueDate(now);
-    out.push({
-      obligation_type: 'annual_report',
-      period_key: yyyy,
-      due_date: due,
-      related_module: 'annual',
-      computed_status: 'ready_to_report',
-    });
-  }
+  // annual_report: Owner Reporting Calendar has no annual obligation key.
+  // Do not invent May 31. Gap is explicit not_configured on the annual tab.
 
   return out;
 }

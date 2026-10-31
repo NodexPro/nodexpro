@@ -967,6 +967,25 @@ router.get('/clients/:clientId/operational-notes', ...withView, async (req, res,
   }
 });
 
+router.post('/clients/:clientId/operational-notes/commands/create_note', ...withEdit, async (req, res, next) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const clientId = String(req.params.clientId ?? '');
+    if (!clientId) return res.status(400).json({ code: 'BAD_REQUEST', message: 'clientId required' });
+    const out = await createOperationalNote(ctx, clientId, req.body ?? {});
+    if ('conflict' in out && out.conflict) {
+      return res.status(409).json({
+        code: 'REMINDER_CONFLICT',
+        ui: out.ui,
+        conflicts: out.conflicts,
+      });
+    }
+    return res.status(201).json(out);
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.post('/clients/:clientId/operational-notes', ...withEdit, async (req, res, next) => {
   try {
     const ctx = req.context as RequestContext;
@@ -1006,13 +1025,26 @@ router.post('/clients/:clientId/operational-notes/:noteId/commands/update_note',
   }
 });
 
+router.post('/clients/:clientId/operational-notes/:noteId/commands/delete_note', ...withEdit, async (req, res, next) => {
+  try {
+    const ctx = req.context as RequestContext;
+    const clientId = String(req.params.clientId ?? '');
+    const noteId = String(req.params.noteId ?? '');
+    if (!clientId || !noteId) return res.status(400).json({ code: 'BAD_REQUEST', message: 'clientId and noteId required' });
+    const out = await deleteOperationalNote(ctx, clientId, noteId, req.body ?? {});
+    return res.status(200).json(out);
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.delete('/clients/:clientId/operational-notes/:noteId', ...withEdit, async (req, res, next) => {
   try {
     const ctx = req.context as RequestContext;
     const clientId = String(req.params.clientId ?? '');
     const noteId = String(req.params.noteId ?? '');
     if (!clientId || !noteId) return res.status(400).json({ code: 'BAD_REQUEST', message: 'clientId and noteId required' });
-    const out = await deleteOperationalNote(ctx, clientId, noteId);
+    const out = await deleteOperationalNote(ctx, clientId, noteId, req.body ?? {});
     return res.status(200).json(out);
   } catch (e) {
     next(e);

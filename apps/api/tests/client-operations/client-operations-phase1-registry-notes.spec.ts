@@ -39,10 +39,6 @@ const weHost = readFileSync(
   join(dir, '../../../web/src/components/work-engine/WorkEngineTabHost.tsx'),
   'utf8',
 );
-const vatDivuach = readFileSync(
-  join(dir, '../../src/domains/client-operations/vat-divuach.ts'),
-  'utf8',
-);
 
 test('1-3 create/update/delete note return refreshed registry aggregate', () => {
   assert.match(notesService, /buildOperationalNoteMutationResult/);
@@ -50,11 +46,8 @@ test('1-3 create/update/delete note return refreshed registry aggregate', () => 
   assert.match(notesService, /listOperationalNotes\(ctx, clientId\)/);
   assert.match(notesService, /OperationalNoteMutationResult/);
   assert.doesNotMatch(notesService, /registryPreview/);
-  assert.equal(
-    (notesService.match(/return buildOperationalNoteMutationResult\(ctx, clientId, note\)/g) ?? []).length,
-    2,
-  );
-  assert.match(notesService, /return buildOperationalNoteMutationResult\(ctx, clientId\);/);
+  assert.match(notesService, /return buildOperationalNoteMutationResult\(ctx, clientId, note, parseRegistryQueryInput/);
+  assert.match(notesService, /return buildOperationalNoteMutationResult\(ctx, clientId, undefined, parseRegistryQueryInput/);
   assert.match(routes, /const out = await deleteOperationalNote/);
   assert.match(routes, /res\.status\(200\)\.json\(out\)/);
 });
@@ -62,11 +55,12 @@ test('1-3 create/update/delete note return refreshed registry aggregate', () => 
 test('4-6 no registryPreview patch / no hidden GET after note mutation', () => {
   assert.doesNotMatch(view, /registryPreview/);
   assert.match(view, /onApplyAggregate\(mutation\.registry\)/);
-  const deleteIdx = view.indexOf("method: 'DELETE'");
+  const deleteIdx = view.lastIndexOf('moduleClientOperationsDeleteNote');
   assert.ok(deleteIdx > 0);
   const deleteWindow = view.slice(deleteIdx, deleteIdx + 900);
   assert.doesNotMatch(deleteWindow, /moduleClientOperationsOperationalNotes\(/);
   assert.doesNotMatch(deleteWindow, /reloadRegistry\(\)/);
+  assert.match(deleteWindow, /method: 'POST'/);
 });
 
 test('7 frontend replaces aggregate after note command', () => {
@@ -165,8 +159,8 @@ test('17-18 tenant isolation + RBAC unchanged for notes', () => {
   assert.match(routes, /client_operations\.edit/);
 });
 
-test('VAT legal deadline ownership — STOPPED (no Country Pack wire in Phase 1)', () => {
-  assert.match(vatDivuach, /19/);
-  assert.match(vatDivuach, /23/);
-  assert.doesNotMatch(service, /countryPack.*vat.*due|ownerLegal.*vatDue/i);
+test('VAT legal deadline ownership — Owner Reporting Calendar resolver', () => {
+  assert.match(service, /resolveVatDueDisplayByClientForRegistry/);
+  assert.doesNotMatch(service, /computeVatDueRegistryDisplayHe/);
+  assert.doesNotMatch(service, /recomputeClientObligationsAndTasks/);
 });

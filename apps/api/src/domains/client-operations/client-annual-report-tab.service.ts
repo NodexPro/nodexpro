@@ -441,22 +441,18 @@ function submissionStatusLabelHe(code: string): string {
   return c || '—';
 }
 
-/** הפרש ימים בלוח שנה (UTC, YYYY-MM-DD) — toYmd מינוס fromYmd */
-function calendarDaysDiffUtc(fromYmd: string, toYmd: string): number {
-  const a = new Date(`${fromYmd}T12:00:00.000Z`).getTime();
-  const b = new Date(`${toYmd}T12:00:00.000Z`).getTime();
-  return Math.round((b - a) / 86_400_000);
-}
-
-/** Default deadline: May 31 UTC (year from server clock). */
-function buildAnnualDeadlineInfo(serverNow: Date): AnnualDeadlineInfoDto {
-  const year = serverNow.getUTCFullYear();
-  const due_date = `${year}-05-31`;
-  const today = serverNow.toISOString().slice(0, 10);
-  const days_left = calendarDaysDiffUtc(today, due_date);
-  const is_overdue = today > due_date;
-  const label_he = is_overdue ? 'באיחור' : `נותרו ${days_left} ימים להגשה`;
-  return { due_date, days_left, is_overdue, label_he };
+/**
+ * Annual filing deadline is not in Owner Reporting Calendar vocabulary
+ * (`vat_regular_income_tax_advances` / `vat_detailed` / `income_tax_deductions`).
+ * Do not invent May 31 — return not_configured.
+ */
+function buildAnnualDeadlineInfo(_serverNow: Date): AnnualDeadlineInfoDto {
+  return {
+    due_date: '',
+    days_left: 0,
+    is_overdue: false,
+    label_he: 'לא הוגדר',
+  };
 }
 
 function buildAnnualControlState(
@@ -485,7 +481,7 @@ function buildAnnualControlState(
   if (!has_missing) {
     status = { code: 'ready', label_he: 'מוכן להגשה', color: 'green' };
     risk_label_he = 'ללא סיכון';
-  } else if (deadline_info.is_overdue || deadline_info.days_left <= 7) {
+  } else if (deadline_info.due_date && (deadline_info.is_overdue || deadline_info.days_left <= 7)) {
     status = { code: 'attention', label_he: 'נדרש טיפול דחוף', color: 'red' };
     risk_label_he = 'סיכון גבוה';
   } else {
@@ -746,15 +742,33 @@ async function auditAnnual(ctx: RequestContext, orgId: string, clientId: string,
 export async function getAnnualTabReadModel(
   ctx: RequestContext,
   clientId: string,
-  scopeInput?: AnnualTabScope
+  scopeInput?: AnnualTabScope,
+  options?: { readOnly?: boolean }
 ): Promise<AnnualTabResponse | null> {
   const orgId = assertOrg(ctx);
   const scope = parseAnnualTabScope(scopeInput);
   const scoped = await supportsAnnualScopeColumns();
   if (!canViewAnnualTab(ctx)) return null;
   await ensureClientInOrg(orgId, clientId);
-  const prof = await ensureProfile(orgId, clientId, scope);
-  await ensureSystemDocumentRows(orgId, clientId, scope);
+  const canEditEarly = canEditAnnualTab(ctx);
+  let prof: { id: string; read_model_version: number };
+  if (options?.readOnly) {
+    const existing = await loadAnnualProfile(orgId, clientId, scope, scoped);
+    if (!existing) {
+      return scope === 'capital_declaration'
+        ? buildCapitalFallbackReadModel(canEditEarly)
+        : {
+            ...buildCapitalFallbackReadModel(canEditEarly),
+            tab_key: 'annual_report',
+            tab_title_he: 'דוח שנתי',
+            status_card_title_he: 'סטטוס דוח שנתי',
+          };
+    }
+    prof = existing;
+  } else {
+    prof = await ensureProfile(orgId, clientId, scope);
+    await ensureSystemDocumentRows(orgId, clientId, scope);
+  }
 
   let profileQ = supabaseAdmin
     .from('client_annual_report_profiles')

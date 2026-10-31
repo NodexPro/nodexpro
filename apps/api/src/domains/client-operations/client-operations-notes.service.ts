@@ -1,6 +1,13 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { AppError, forbidden, badRequest } from '../../shared/errors.js';
 import type { RequestContext } from '../../shared/context.js';
+import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
+import {
+  assertCanAccessClientFromContext,
+  filterAuthorizedClientIds,
+  resolveOrganizationClientAccessScopeFromContext,
+} from './organization-client-access.js';
+import type { RegistryQueryInput } from './client-operations-registry-presentation.pure.js';
 
 export type OperationalNoteTypeDto = {
   code: string;
@@ -39,6 +46,30 @@ export async function listOperationalNoteTypes(): Promise<{ types: OperationalNo
 async function ensureClientInOrg(orgId: string, clientId: string): Promise<void> {
   const { data } = await supabaseAdmin.from('clients').select('id').eq('organization_id', orgId).eq('id', clientId).maybeSingle();
   if (!data) throw forbidden('Client not found');
+}
+
+export function parseRegistryQueryInput(value: unknown): RegistryQueryInput {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const query = value as Record<string, unknown>;
+  return {
+    q: typeof query.q === 'string' ? query.q : null,
+    sort_by: typeof query.sort_by === 'string' ? query.sort_by : null,
+    sort_dir: query.sort_dir === 'asc' || query.sort_dir === 'desc' ? query.sort_dir : null,
+    operational_period_key:
+      typeof query.operational_period_key === 'string' ? query.operational_period_key : null,
+    filter_operational_reporting:
+      typeof query.filter_operational_reporting === 'string' ? query.filter_operational_reporting : null,
+    filter_material: typeof query.filter_material === 'string' ? query.filter_material : null,
+    filter_payroll: typeof query.filter_payroll === 'string' ? query.filter_payroll : null,
+    filter_reporting_type:
+      typeof query.filter_reporting_type === 'string' ? query.filter_reporting_type : null,
+    filter_business_type:
+      typeof query.filter_business_type === 'string' ? query.filter_business_type : null,
+    filter_handler: typeof query.filter_handler === 'string' ? query.filter_handler : null,
+    workspace_scope: typeof query.workspace_scope === 'string' ? query.workspace_scope : null,
+    workspace_subject_user_id:
+      typeof query.workspace_subject_user_id === 'string' ? query.workspace_subject_user_id : null,
+  };
 }
 
 function truncateBody(s: string, max: number): string {
@@ -92,6 +123,7 @@ async function buildOperationalNoteMutationResult(
   ctx: RequestContext,
   clientId: string,
   note?: OperationalNoteDto,
+  registryQuery: RegistryQueryInput = {},
 ): Promise<OperationalNoteMutationResult> {
   const [{ notes }, { listClientOperationsRegistry }, { invalidateClientOperationsRegistryMaterializationCache }] =
     await Promise.all([
@@ -101,8 +133,27 @@ async function buildOperationalNoteMutationResult(
     ]);
   // Notes change registry cells (notes column) — fresh aggregate + drop cached pre-search rows.
   invalidateClientOperationsRegistryMaterializationCache(ctx.organizationId);
-  const registry = await listClientOperationsRegistry(ctx, {});
+  const registry = await listClientOperationsRegistry(ctx, registryQuery);
   return note ? { note, notes, registry } : { notes, registry };
+}
+
+async function auditNote(
+  ctx: RequestContext,
+  orgId: string,
+  clientId: string,
+  noteId: string,
+  action: string,
+  extra: Record<string, unknown> = {},
+): Promise<void> {
+  await writeAudit({
+    organizationId: orgId,
+    actorUserId: ctx.user.id,
+    moduleCode: 'client-operations',
+    entityType: 'client_operational_note',
+    entityId: noteId,
+    action,
+    payload: { client_id: clientId, note_id: noteId, ...extra },
+  });
 }
 
 export async function loadNotesAggregatesByClient(
@@ -131,6 +182,7 @@ export async function loadNotesAggregatesByClient(
 export async function listOperationalNotes(ctx: RequestContext, clientId: string): Promise<{ notes: OperationalNoteDto[] }> {
   const orgId = assertOrg(ctx);
   await ensureClientInOrg(orgId, clientId);
+  await assertCanAccessClientFromContext(ctx, clientId);
 
   const { types } = await listOperationalNoteTypes();
   const labelByCode = new Map(types.map((t) => [t.code, t.label_he]));
@@ -242,9 +294,15 @@ export async function getDueReminders(ctx: RequestContext): Promise<{ reminders:
   if (!rows.length) return { reminders: [] };
 
   const clientIds = [...new Set(rows.map((r) => r.client_id))];
-  const typeCodes = [...new Set(rows.map((r) => r.type_code))];
+  const accessScope = await resolveOrganizationClientAccessScopeFromContext(ctx);
+  const authorizedIds = filterAuthorizedClientIds(accessScope, clientIds);
+  const authorizedSet = new Set(authorizedIds);
+  const visibleRows = rows.filter((row) => authorizedSet.has(row.client_id));
+  if (!visibleRows.length) return { reminders: [] };
+
+  const typeCodes = [...new Set(visibleRows.map((r) => r.type_code))];
   const [clientsRes, typesRes] = await Promise.all([
-    supabaseAdmin.from('clients').select('id, display_name').in('id', clientIds),
+    supabaseAdmin.from('clients').select('id, display_name').in('id', authorizedIds),
     supabaseAdmin.from('client_operational_note_types').select('code, label_he').in('code', typeCodes),
   ]);
 
@@ -258,7 +316,7 @@ export async function getDueReminders(ctx: RequestContext): Promise<{ reminders:
     ((typesRes.data ?? []) as Array<{ code: string; label_he: string }>).map((t) => [t.code, t.label_he]),
   );
 
-  const reminders: DueReminderDto[] = rows.map((row) => ({
+  const reminders: DueReminderDto[] = visibleRows.map((row) => ({
     id: row.id,
     body: row.body,
     reminder_at: row.reminder_at,
@@ -286,6 +344,7 @@ export async function createOperationalNote(
     body: string;
     reminder_at?: string | null;
     ignore_reminder_conflict?: boolean;
+    query?: unknown;
   },
 ): Promise<
   | OperationalNoteMutationResult
@@ -293,6 +352,7 @@ export async function createOperationalNote(
 > {
   const orgId = assertOrg(ctx);
   await ensureClientInOrg(orgId, clientId);
+  await assertCanAccessClientFromContext(ctx, clientId);
   const text = (body.body ?? '').trim();
   if (!text) throw badRequest('body required');
 
@@ -354,7 +414,10 @@ export async function createOperationalNote(
     updated_at: createdRow.updated_at as string,
   };
 
-  return buildOperationalNoteMutationResult(ctx, clientId, note);
+  await auditNote(ctx, orgId, clientId, note.id, AUDIT_ACTIONS.CLIENT_OPERATIONS_NOTE_CREATED, {
+    type_code: note.type_code,
+  });
+  return buildOperationalNoteMutationResult(ctx, clientId, note, parseRegistryQueryInput(body.query));
 }
 
 export async function updateOperationalNote(
@@ -366,6 +429,7 @@ export async function updateOperationalNote(
     body?: string;
     reminder_at?: string | null;
     ignore_reminder_conflict?: boolean;
+    query?: unknown;
   },
 ): Promise<
   | OperationalNoteMutationResult
@@ -373,6 +437,7 @@ export async function updateOperationalNote(
 > {
   const orgId = assertOrg(ctx);
   await ensureClientInOrg(orgId, clientId);
+  await assertCanAccessClientFromContext(ctx, clientId);
 
   const { data: existing } = await supabaseAdmin
     .from('client_operational_notes')
@@ -456,16 +521,29 @@ export async function updateOperationalNote(
     updated_at: noteRow.updated_at as string,
   };
 
-  return buildOperationalNoteMutationResult(ctx, clientId, note);
+  await auditNote(ctx, orgId, clientId, note.id, AUDIT_ACTIONS.CLIENT_OPERATIONS_NOTE_UPDATED, {
+    type_code: note.type_code,
+  });
+  return buildOperationalNoteMutationResult(ctx, clientId, note, parseRegistryQueryInput(body.query));
 }
 
 export async function deleteOperationalNote(
   ctx: RequestContext,
   clientId: string,
   noteId: string,
+  body: { query?: unknown } = {},
 ): Promise<OperationalNoteMutationResult> {
   const orgId = assertOrg(ctx);
   await ensureClientInOrg(orgId, clientId);
+  await assertCanAccessClientFromContext(ctx, clientId);
+  const { data: existing } = await supabaseAdmin
+    .from('client_operational_notes')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('client_id', clientId)
+    .eq('id', noteId)
+    .maybeSingle();
+  if (!existing) throw forbidden('Note not found');
   const { error } = await supabaseAdmin
     .from('client_operational_notes')
     .delete()
@@ -473,5 +551,6 @@ export async function deleteOperationalNote(
     .eq('client_id', clientId)
     .eq('id', noteId);
   if (error) throw new AppError(500, error.message ?? 'Database error', 'SUPABASE_ERROR');
-  return buildOperationalNoteMutationResult(ctx, clientId);
+  await auditNote(ctx, orgId, clientId, noteId, AUDIT_ACTIONS.CLIENT_OPERATIONS_NOTE_DELETED);
+  return buildOperationalNoteMutationResult(ctx, clientId, undefined, parseRegistryQueryInput(body.query));
 }

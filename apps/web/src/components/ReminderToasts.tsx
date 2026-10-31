@@ -43,15 +43,7 @@ export function ReminderToasts({ enabled }: { enabled: boolean }) {
       const data = await apiJson<{ reminders: DueReminder[] }>(moduleClientOperationsRemindersDue());
       const list = Array.isArray(data?.reminders) ? data.reminders : [];
 
-      const nowMs = Date.now();
-      const toleranceMs = 0; // show only when reminder_at already arrived
-      const newOnes = list.filter((r) => {
-        if (shownIds.current.has(r.id)) return false;
-        const reminderMs = new Date(r.reminder_at).getTime();
-        if (Number.isNaN(reminderMs)) return false;
-        // only show when the reminder time has already arrived
-        return reminderMs <= nowMs + toleranceMs;
-      });
+      const newOnes = list.filter((r) => !shownIds.current.has(r.id));
       if (newOnes.length) {
         newOnes.forEach((r) => shownIds.current.add(r.id));
         setToasts((prev) => [...prev, ...newOnes]);

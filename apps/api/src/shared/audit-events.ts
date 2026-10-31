@@ -177,6 +177,9 @@ export const AUDIT_ACTIONS = {
   CLIENT_OBLIGATION_COMMAND_EXECUTED: 'client_obligation.command_executed',
   CLIENT_TASK_COMMAND_EXECUTED: 'client_task.command_executed',
   CLIENT_OPERATIONS_NIGHT_PASS_EXECUTED: 'client_operations.night_pass_executed',
+  CLIENT_OPERATIONS_NOTE_CREATED: 'client_operations.note.created',
+  CLIENT_OPERATIONS_NOTE_UPDATED: 'client_operations.note.updated',
+  CLIENT_OPERATIONS_NOTE_DELETED: 'client_operations.note.deleted',
   // Accounting Base command layer
   ACCOUNTING_BASE_PERIOD_CREATED: 'accounting_base.period_created',
   ACCOUNTING_BASE_PERIOD_LOCKED: 'accounting_base.period_locked',

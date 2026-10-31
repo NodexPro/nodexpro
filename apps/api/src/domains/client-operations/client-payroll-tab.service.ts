@@ -153,11 +153,17 @@ function pickOverride(overrideValue: unknown, baseValue: unknown): string | null
   return b || null;
 }
 
-export async function getPayrollTabReadModel(ctx: RequestContext, clientId: string): Promise<PayrollTabResponse | null> {
+export async function getPayrollTabReadModel(
+  ctx: RequestContext,
+  clientId: string,
+  options?: { readOnly?: boolean },
+): Promise<PayrollTabResponse | null> {
   const orgId = assertOrg(ctx);
   if (!canViewPayrollTab(ctx)) return null;
   await ensureClientInOrg(orgId, clientId);
-  await ensurePayrollProfile(orgId, clientId);
+  if (!options?.readOnly) {
+    await ensurePayrollProfile(orgId, clientId);
+  }
 
   const [{ data: client }, { data: tax }, { data: accountingSettings }, { data: payroll }] = await Promise.all([
     supabaseAdmin

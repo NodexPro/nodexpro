@@ -21,9 +21,10 @@ const caseSrc = readFileSync(
 const indexSrc = readFileSync(join(dir, '../../src/index.ts'), 'utf8');
 
 test('case GET hydrates both annual scopes in parallel through ensureProfile', () => {
-  assert.match(caseSrc, /getAnnualTabReadModel\(ctx, clientId\)/);
-  assert.match(caseSrc, /getAnnualTabReadModel\(ctx, clientId, 'capital_declaration'\)/);
+  assert.match(caseSrc, /getAnnualTabReadModel\(ctx, clientId, undefined, \{ readOnly: true \}\)/);
+  assert.match(caseSrc, /getAnnualTabReadModel\(ctx, clientId, 'capital_declaration', \{ readOnly: true \}\)/);
   assert.match(annualSrc, /async function ensureProfile/);
+  assert.match(annualSrc, /if \(options\?\.readOnly\)/);
   assert.match(annualSrc, /isSupabaseUniqueViolation\(error\)/);
   assert.match(annualSrc, /tab_scope: scope/);
 });

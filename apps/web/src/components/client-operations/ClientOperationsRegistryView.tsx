@@ -23,6 +23,8 @@ import {
   moduleClientOperationsClientQuickProfile,
   moduleClientOperationsOperationalNotes,
   moduleClientOperationsOperationalNote,
+  moduleClientOperationsCreateNote,
+  moduleClientOperationsDeleteNote,
 } from '../../api/endpoints';
 import {
   ClientOperationsClientQuickProfilePopover,
@@ -1194,11 +1196,12 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         body: bodyText,
         reminder_at: reminderIso,
         ignore_reminder_conflict: ignoreConflict,
+        query: query ?? {},
       };
       const url =
         editingNoteId
           ? moduleClientOperationsOperationalNote(notesModalClientId, editingNoteId)
-          : moduleClientOperationsOperationalNotes(notesModalClientId);
+          : moduleClientOperationsCreateNote(notesModalClientId);
       const res = await apiFetch(url, {
         method: 'POST',
         body: JSON.stringify(payload),
@@ -1242,8 +1245,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     if (!notesModalClientId || !canEdit) return;
     if (!window.confirm('למחוק הערה?')) return;
     setNotesError('');
-    const res = await apiFetch(moduleClientOperationsOperationalNote(notesModalClientId, noteId), {
-      method: 'DELETE',
+    const res = await apiFetch(moduleClientOperationsDeleteNote(notesModalClientId, noteId), {
+      method: 'POST',
+      body: JSON.stringify({ query: query ?? {} }),
     });
     if (!res.ok) {
       const raw = await res.json().catch(() => ({}));

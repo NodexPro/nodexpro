@@ -35,10 +35,10 @@ import {
 import {
   getClientObligationsTabReadModel,
   getClientTasksTabReadModel,
-  recomputeClientObligationsAndTasks,
 } from './client-obligations-tasks-core.service.js';
 import { formatNationalInsuranceRegistryDisplayHe } from './national-insurance-registry.js';
-import { computeVatDueRegistryDisplayHe, computeVatRegistryColumnDisplayHe } from './vat-divuach.js';
+import { computeVatRegistryColumnDisplayHe } from './vat-divuach.js';
+import { resolveVatDueDisplayByClientForRegistry } from './client-operations-reporting-due.service.js';
 import {
   applyRegistryQueryToRows,
   buildCustomColumnsCapability,
@@ -1311,6 +1311,17 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     canEdit: canEditRegistry,
   });
 
+  const vatDueDisplayByClient = await resolveVatDueDisplayByClientForRegistry({
+    organizationId: orgId,
+    selectedPeriodKey,
+    clients: [...taxByClient.entries()].map(([clientId, tax]) => ({
+      clientId,
+      vat_type: tax.vat_type,
+      vat_due_type: tax.vat_due_type,
+      vat_frequency: tax.vat_frequency,
+    })),
+  });
+
   const presentationMs = Date.now();
   const builtRows: ClientOperationsRegistryRow[] = facetSeeds.flatMap((seed) => {
     const c = seed.client;
@@ -1323,7 +1334,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     const vatTypeForDisplay = seed.obligation.vat.vat_type;
     const vatFrequencyForDisplay = seed.obligation.vat.vat_frequency;
     const vat_due_registry_display_he = tax
-      ? computeVatDueRegistryDisplayHe(tax.vat_due_type, tax.vat_frequency)
+      ? vatDueDisplayByClient.get(c.id) ?? null
       : null;
     const vatFromTax = computeVatRegistryColumnDisplayHe(
       bt,
@@ -1548,25 +1559,24 @@ export async function getClientOperationsCase(
   );
   const chartView: FeesPriceChartViewMode = options?.feesPriceChartView ?? 'last_15';
   const historyOpen = options?.historyOpenSection ?? null;
-  // Recompute overlaps independent tab reads. Obligations/tasks wait for it so they
-  // do not read a stale post-recompute snapshot. DocFlow visibility is a cheap
-  // org-module check — the modal must not probe `/docflow/aggregates/client-tab`.
-  const recomputeP = recomputeClientObligationsAndTasks(ctx, clientId, new Date());
+  // GET case is strictly read-only: no recompute, no folder/profile seeding.
+  // Recompute stays on named commands and the night pass. Command refresh
+  // also uses this read path so it cannot mutate again.
   const independentP = Promise.all([
     getClientTaxSettings(ctx, clientId),
     getClientBusinessProfileSection(ctx, clientId),
     getAccountingSettingsTabReadModel(ctx, clientId),
     getFeesTabReadModel(ctx, clientId, chartView),
-    getPayrollTabReadModel(ctx, clientId),
-    getAnnualTabReadModel(ctx, clientId),
-    getAnnualTabReadModel(ctx, clientId, 'capital_declaration'),
+    getPayrollTabReadModel(ctx, clientId, { readOnly: true }),
+    getAnnualTabReadModel(ctx, clientId, undefined, { readOnly: true }),
+    getAnnualTabReadModel(ctx, clientId, 'capital_declaration', { readOnly: true }),
     getClientDocumentsTabReadModel(ctx, clientId, {
-      skipEnsureDefaultFolders: options?.skipEnsureClientDocumentFolders === true,
+      readOnly: true,
+      skipEnsureDefaultFolders: true,
     }),
     getClientHistoryTabReadModel(ctx, clientId, historyOpen),
     orgHasActiveModule(orgId, 'docflow'),
   ]);
-  await recomputeP;
   const [
     [
       tax_settings,

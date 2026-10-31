@@ -208,8 +208,12 @@ export const moduleClientOperationsHistoryExport = (clientId: string) =>
 export const moduleClientOperationsNoteTypes = () => '/m/client-operations/note-types';
 export const moduleClientOperationsOperationalNotes = (clientId: string) =>
   `/m/client-operations/clients/${clientId}/operational-notes`;
+export const moduleClientOperationsCreateNote = (clientId: string) =>
+  `/m/client-operations/clients/${clientId}/operational-notes/commands/create_note`;
 export const moduleClientOperationsOperationalNote = (clientId: string, noteId: string) =>
   `/m/client-operations/clients/${clientId}/operational-notes/${noteId}/commands/update_note`;
+export const moduleClientOperationsDeleteNote = (clientId: string, noteId: string) =>
+  `/m/client-operations/clients/${clientId}/operational-notes/${noteId}/commands/delete_note`;
 export const moduleClientOperationsRemindersDue = () => '/m/client-operations/reminders/due';
 export const moduleClientOperationsTaxSettings = (clientId: string) =>
   `/m/client-operations/clients/${clientId}/tax-settings`;

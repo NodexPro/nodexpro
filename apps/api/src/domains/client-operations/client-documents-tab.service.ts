@@ -225,6 +225,8 @@ function brandVariantForIndex(i: number): ClientDocumentsBrandVariant {
 export type ClientDocumentsTabReadOptions = {
   /** When true, skips default-folder seeding (caller already ran `executeClientDocumentsTabCommand`, which ensures folders). */
   skipEnsureDefaultFolders?: boolean;
+  /** GET / case refresh: never insert profiles or folders. */
+  readOnly?: boolean;
 };
 
 export async function getClientDocumentsTabReadModel(
@@ -235,9 +237,36 @@ export async function getClientDocumentsTabReadModel(
   const orgId = assertOrg(ctx);
   if (!canViewDocumentsTab(ctx)) return null;
   await ensureClientInOrg(orgId, clientId);
-  await ensureDocumentProfile(orgId, clientId);
-  if (!options?.skipEnsureDefaultFolders) {
-    await ensureClientDocumentFolders(orgId, clientId);
+  if (options?.readOnly) {
+    const { data: existingProfile } = await supabaseAdmin
+      .from('client_document_profiles')
+      .select('read_model_version')
+      .eq('organization_id', orgId)
+      .eq('client_id', clientId)
+      .maybeSingle();
+    if (!existingProfile) {
+      const canEdit = canEditDocumentsTab(ctx);
+      return {
+        tab_key: 'client_documents',
+        read_model_version: 1,
+        permissions: { can_view: true, can_edit: canEdit },
+        ui: {
+          tab_title_he: 'מסמכים',
+          add_folder_label_he: 'הוסף תיקייה',
+          add_document_label_he: 'הוסף מסמך',
+          empty_folders_state_he: 'אין תיקיות',
+          empty_documents_state_he: 'אין מסמכים בתיקייה',
+        },
+        folders_grid: { columns_per_row: 3, folders: [] },
+        open_folder: null,
+        file_open_path_template: `/m/client-operations/clients/{clientId}/documents/files/{fileAssetId}/open`,
+      };
+    }
+  } else {
+    await ensureDocumentProfile(orgId, clientId);
+    if (!options?.skipEnsureDefaultFolders) {
+      await ensureClientDocumentFolders(orgId, clientId);
+    }
   }
 
   const { data: prof } = await supabaseAdmin
