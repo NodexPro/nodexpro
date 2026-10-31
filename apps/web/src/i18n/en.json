@@ -714,6 +714,29 @@
       "oneMonth": "First month free",
       "months": "First {n} months free"
     },
+    "trust": {
+      "eyebrow": "Security & Trust",
+      "title": "Your Business Data Deserves Protection.",
+      "lead": "NodexPro is designed with security, controlled access, and accountability in mind — helping accounting teams manage sensitive business information with confidence.",
+      "cards": {
+        "access": {
+          "title": "Controlled Access",
+          "description": "Access based on authorized roles and permissions."
+        },
+        "protection": {
+          "title": "Data Protection",
+          "description": "Safeguards designed to protect sensitive business information."
+        },
+        "accountability": {
+          "title": "Accountability",
+          "description": "Auditable actions and operational traceability."
+        },
+        "ongoing": {
+          "title": "Security-Focused Development",
+          "description": "Security considerations are incorporated into ongoing product development."
+        }
+      }
+    },
     "footerCopy": "© {year} NodexPro",
     "lang": {
       "aria": "Language",

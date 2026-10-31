@@ -1,0 +1,180 @@
+/* Shared public chrome for the marketing site. Presentation only. */
+
+.nx-public-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.nx-public-header {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  z-index: 20;
+  background: transparent;
+}
+
+.nx-public-header__bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 12px 22px 10px;
+  box-sizing: border-box;
+}
+
+.nx-public-header__brand {
+  display: inline-flex;
+  align-items: center;
+  grid-column: 1;
+  justify-self: start;
+}
+
+.nx-public-header__logo {
+  display: block;
+  height: clamp(26px, 4vw, 34px);
+  width: auto;
+  max-width: 160px;
+  object-fit: contain;
+}
+
+.nx-public-header__end {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+  grid-column: 3;
+}
+
+.nx-public-header__nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.nx-public-header__btn.nx-landing__btn {
+  box-sizing: border-box;
+  min-width: 0;
+  width: max-content;
+  min-height: 28px;
+  height: 28px;
+  padding: 0 12px;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.nx-public-header__horizon {
+  height: 1px;
+  margin-inline: 22px;
+  border: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(139, 92, 246, 0.08) 0%,
+    rgba(59, 130, 246, 0.45) 22%,
+    rgba(94, 231, 255, 0.95) 50%,
+    rgba(59, 130, 246, 0.45) 78%,
+    rgba(139, 92, 246, 0.08) 100%
+  );
+  box-shadow:
+    0 0 8px rgba(94, 231, 255, 0.45),
+    0 0 18px rgba(59, 130, 246, 0.25);
+}
+
+.nx-public-lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.nx-public-lang__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 24px;
+  padding: 2px;
+  border-radius: 4px;
+  border: 1px solid rgba(148, 163, 184, 0.42);
+  background: rgba(2, 6, 23, 0.35);
+  cursor: pointer;
+  line-height: 0;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.nx-public-lang__btn:hover {
+  border-color: rgba(19, 191, 208, 0.55);
+}
+
+.nx-public-lang__btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(19, 191, 208, 0.42);
+}
+
+.nx-public-lang__btn.is-selected {
+  border-color: rgba(19, 191, 208, 0.92);
+  box-shadow: 0 0 0 1px rgba(19, 191, 208, 0.35);
+}
+
+.nx-public-lang__flag {
+  display: block;
+  width: 26px;
+  height: 14px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.45);
+}
+
+.nx-public-footer {
+  padding: 24px clamp(16px, 4vw, 28px) 36px;
+  background: #020617;
+  border-top: 1px solid rgba(51, 65, 85, 0.45);
+  text-align: center;
+}
+
+.nx-public-footer__copy {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(148, 163, 184, 0.85);
+}
+
+@media (max-width: 430px) {
+  .nx-public-header__bar {
+    padding-inline: 16px;
+    gap: 8px;
+  }
+
+  .nx-public-header__horizon {
+    margin-inline: 16px;
+  }
+
+  .nx-public-header__end {
+    gap: 6px;
+  }
+
+  .nx-public-header__btn.nx-landing__btn {
+    min-width: 0;
+    padding-inline: 10px;
+  }
+}
+
+@media (max-width: 320px) {
+  .nx-public-header__bar {
+    padding-inline: 12px;
+  }
+
+  .nx-public-header__nav {
+    gap: 4px;
+  }
+}

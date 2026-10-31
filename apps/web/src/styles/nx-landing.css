@@ -1,13 +1,16 @@
-/* Public NodexPro landing — marketing surface only. No app-shell styles. */
+/* Public NodexPro landing — marketing surface only. No app-shell styles. Hero is full-bleed. */
 
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Sora:wght@500;600;700&display=swap');
 
 .nx-landing {
   --nx-landing-brand: #123756;
   --nx-landing-cyan: #5ee7ff;
+  --nx-landing-blue: #3b82f6;
+  --nx-landing-purple: #8b5cf6;
   --nx-landing-text: #f8fafc;
   --nx-landing-muted: rgba(226, 232, 240, 0.82);
-  --nx-landing-stage: min(1180px, calc(100% - clamp(24px, 6vw, 80px)));
+  --nx-landing-gutter: clamp(18px, 5vw, 72px);
+  --nx-landing-stage: min(1180px, calc(100% - (var(--nx-landing-gutter) * 2)));
 
   min-height: 100vh;
   color: var(--nx-landing-text);
@@ -30,14 +33,14 @@
 }
 
 .nx-landing__header-inner {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: clamp(8px, 2vw, 16px);
-  width: var(--nx-landing-stage);
-  max-width: 1180px;
-  margin-inline: auto;
-  padding: clamp(12px, 2vw, 18px) 0 10px;
+  gap: 12px;
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+  padding: 12px 22px 10px;
   box-sizing: border-box;
 }
 
@@ -72,7 +75,7 @@
 
 .nx-landing__horizon {
   height: 1px;
-  margin-inline: 4%;
+  margin-inline: 22px;
   border: 0;
   background: linear-gradient(
     90deg,
@@ -94,56 +97,75 @@
   min-height: 100dvh;
   display: flex;
   align-items: center;
-  padding-block: clamp(88px, 12vw, 120px) clamp(32px, 6vw, 64px);
-  padding-inline: 0;
+  padding: 96px var(--nx-landing-gutter) 72px;
   box-sizing: border-box;
-  background-color: #020617;
   overflow: hidden;
-}
-
-.nx-landing__hero-stage {
-  position: relative;
-  z-index: 1;
-  width: var(--nx-landing-stage);
-  max-width: 1180px;
-  margin-inline: auto;
-  display: grid;
-  grid-template-columns: minmax(min(100%, 18rem), 0.92fr) minmax(0, 1.15fr);
-  grid-template-areas: 'copy art';
-  align-items: center;
-  gap: clamp(16px, 3vw, 40px);
-}
-
-.nx-landing__hero-content {
-  grid-area: copy;
-  position: relative;
-  z-index: 1;
-  min-width: 0;
-  max-width: 36rem;
-}
-
-.nx-landing__hero-art {
-  grid-area: art;
-  min-width: 0;
-  min-height: clamp(220px, 46vh, 620px);
-  align-self: stretch;
-  background-color: transparent;
+  background-color: #020617;
+  /* Original composition: art is the page itself, not a framed photo. */
   background-image: url('/nodexpro-hero.png?v=3d7e051');
   background-repeat: no-repeat;
-  background-size: contain;
-  background-position: center;
+  background-size: auto 100%;
+  background-position: right center;
+}
+
+/* Soft left blend so the PNG edge dissolves into the page, not a rectangle. */
+.nx-landing__hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
   pointer-events: none;
+  background: linear-gradient(
+    to right,
+    #020617 0%,
+    rgba(2, 6, 23, 0.62) 18%,
+    rgba(2, 6, 23, 0.18) 36%,
+    rgba(2, 6, 23, 0) 52%
+  );
+}
+
+.nx-landing__hero::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 140px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(2, 6, 23, 0), rgba(2, 6, 23, 0.92) 70%, #020617);
+}
+
+/*
+ * Physical left/center copy — do not flip the cosmic art in RTL.
+ * Desktop title uses the readable dark band and stays one line.
+ */
+.nx-landing__hero-content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  width: min(100%, calc(100% - 32%), 1080px);
+  max-width: 1080px;
+  margin-left: 0;
+  margin-right: auto;
+  text-align: center;
 }
 
 .nx-landing__hero-title {
   margin: 0 0 18px;
+  width: 100%;
   font-family: Sora, Manrope, system-ui, sans-serif;
-  font-size: clamp(2rem, 4.6vw, 3.5rem);
+  font-size: clamp(1.7rem, 2.15vw + 0.95rem, 3.05rem);
   font-weight: 700;
-  line-height: 1.08;
+  line-height: 1.12;
   letter-spacing: -0.03em;
   color: #f8fafc;
+  text-align: center;
   text-shadow: 0 2px 24px rgba(2, 6, 23, 0.45);
+}
+
+.nx-landing__hero-title-text {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
 }
 
 .nx-landing__hero-accent {
@@ -154,74 +176,92 @@
 }
 
 .nx-landing__hero-lead {
-  margin: 0 0 28px;
+  margin: 0 auto 28px;
   max-width: 34rem;
   font-size: clamp(0.95rem, 1.6vw, 1.05rem);
   line-height: 1.55;
   font-weight: 500;
   color: var(--nx-landing-muted);
+  text-align: center;
 }
 
 .nx-landing__hero-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 12px;
 }
 
+/*
+ * Landing CTAs copy the live Create Client modal buttons
+ * (`.nx-client-create--deep-ocean-glass .nx-clients-form__footer .nx-glass-btn*`).
+ * Geometry from `.nx-glass-btn` + Deep Ocean footer overrides. Not the generic purple token.
+ */
 .nx-landing__btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  height: auto;
   min-width: 96px;
   min-height: 36px;
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 14px;
   font-weight: 600;
   line-height: 1.2;
   cursor: pointer;
   font-family: inherit;
+  color: #ffffff;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .nx-landing__btn--primary {
-  color: #f4f0ff;
-  border: 1px solid rgba(196, 184, 255, 0.7);
+  color: #ffffff;
+  border: 1px solid rgba(19, 191, 208, 0.78);
   background:
-    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.28), transparent 48%),
-    linear-gradient(180deg, rgba(128, 116, 242, 0.72) 0%, rgba(102, 87, 232, 0.5) 100%);
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.34), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.62) 0%, rgba(19, 191, 208, 0.48) 100%);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.32),
-    0 6px 16px rgba(102, 87, 232, 0.28);
+    0 0 16px rgba(19, 191, 208, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }
 
 .nx-landing__btn--primary:hover {
-  border-color: rgba(220, 210, 255, 0.72);
-  background: linear-gradient(115deg, rgba(128, 116, 242, 0.62) 0%, rgba(102, 87, 232, 0.48) 100%);
+  border-color: rgba(120, 232, 240, 0.92);
+  background: linear-gradient(180deg, rgba(54, 169, 198, 0.74) 0%, rgba(19, 191, 208, 0.58) 100%);
 }
 
-.nx-landing__btn--primary:focus-visible,
+.nx-landing__btn--primary:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.42),
+    0 0 14px rgba(19, 191, 208, 0.32);
+}
+
+.nx-landing__btn--ghost {
+  color: #ffffff;
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.nx-landing__btn--ghost:hover {
+  border-color: rgba(19, 191, 208, 0.7);
+  background: rgba(23, 84, 122, 0.38);
+}
+
 .nx-landing__btn--ghost:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(125, 236, 247, 0.45);
+  box-shadow: 0 0 0 2px rgba(19, 191, 208, 0.36);
 }
 
 .nx-landing__btn--primary:disabled,
 .nx-landing__btn--ghost:disabled {
   opacity: 0.55;
   cursor: not-allowed;
-}
-
-.nx-landing__btn--ghost {
-  color: #eef6ff;
-  border: 1px solid rgba(210, 238, 255, 0.45);
-  background: rgba(8, 38, 82, 0.35);
-}
-
-.nx-landing__btn--ghost:hover {
-  border-color: rgba(94, 231, 255, 0.55);
-  background: rgba(18, 55, 86, 0.45);
 }
 
 .nx-landing__modules {
@@ -247,9 +287,10 @@
 .nx-landing__modules-inner {
   position: relative;
   z-index: 1;
-  width: var(--nx-landing-stage);
-  max-width: 1180px;
-  margin-inline: auto;
+  width: auto;
+  max-width: none;
+  margin-inline: clamp(24px, 2.5vw, 32px);
+  box-sizing: border-box;
 }
 
 .nx-landing__eyebrow {
@@ -302,6 +343,82 @@
 .nx-landing__module-desc {
   margin: 0;
   font-size: 0.92rem;
+  line-height: 1.5;
+  color: rgba(203, 213, 225, 0.88);
+}
+
+/* Security & Trust — i18n presentation only. Future Website Studio typed block: security_trust. */
+.nx-landing__trust {
+  position: relative;
+  padding: clamp(32px, 5vw, 48px) 0 clamp(56px, 8vw, 80px);
+  background-color: #020617;
+}
+
+.nx-landing__trust-inner {
+  width: auto;
+  max-width: none;
+  margin-inline: clamp(24px, 2.5vw, 32px);
+  box-sizing: border-box;
+}
+
+.nx-landing__trust-title {
+  margin: 0 0 14px;
+  font-family: Sora, Manrope, system-ui, sans-serif;
+  font-size: clamp(1.75rem, 3.4vw, 2.5rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: #f8fafc;
+}
+
+.nx-landing__trust-lead {
+  margin: 0 0 28px;
+  max-width: 48rem;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: rgba(203, 213, 225, 0.9);
+}
+
+.nx-landing__trust-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.nx-landing__trust-card {
+  min-width: 0;
+  padding: 18px 16px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  background: linear-gradient(
+    160deg,
+    rgba(15, 23, 42, 0.58) 0%,
+    rgba(18, 55, 86, 0.32) 55%,
+    rgba(2, 6, 23, 0.5) 100%
+  );
+  backdrop-filter: blur(10px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.nx-landing__trust-icon {
+  display: block;
+  width: 28px;
+  height: 28px;
+  margin-block-end: 12px;
+  color: #13bfd0;
+}
+
+.nx-landing__trust-card-title {
+  margin: 0 0 8px;
+  font-family: Sora, Manrope, system-ui, sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.nx-landing__trust-card-desc {
+  margin: 0;
+  font-size: 0.88rem;
   line-height: 1.5;
   color: rgba(203, 213, 225, 0.88);
 }
@@ -512,19 +629,42 @@
   }
 }
 
-@media (max-width: 1024px) {
-  .nx-landing__hero-stage {
-    grid-template-columns: minmax(min(100%, 16rem), 0.88fr) minmax(0, 1fr);
-    gap: clamp(12px, 2.4vw, 24px);
-  }
-
-  .nx-landing__hero-art {
-    min-height: clamp(200px, 40vh, 480px);
-    background-position: center;
-  }
-}
-
 @media (max-width: 960px) {
+  .nx-landing__hero {
+    /* Fill the viewport so PNG bounds never appear as a framed photo. */
+    background-size: cover;
+    background-position: 72% center;
+  }
+
+  .nx-landing__hero::before {
+    background: linear-gradient(
+      to right,
+      rgba(2, 6, 23, 0.72) 0%,
+      rgba(2, 6, 23, 0.28) 42%,
+      rgba(2, 6, 23, 0) 68%
+    );
+  }
+
+  .nx-landing__hero-content {
+    width: min(100%, 520px);
+    max-width: 520px;
+    justify-items: start;
+    text-align: start;
+  }
+
+  .nx-landing__hero-title,
+  .nx-landing__hero-lead {
+    text-align: start;
+  }
+
+  .nx-landing__hero-title-text {
+    white-space: normal;
+  }
+
+  .nx-landing__hero-actions {
+    justify-content: flex-start;
+  }
+
   .nx-landing__showcase-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -532,51 +672,52 @@
   .nx-landing__module-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .nx-landing__trust-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1023px) {
+  .nx-landing__hero-title-text {
+    white-space: normal;
+  }
 }
 
 @media (max-width: 768px) {
-  .nx-landing__hero {
-    min-height: auto;
-    padding-block: 84px 36px;
-  }
-
-  .nx-landing__hero-stage {
-    grid-template-columns: minmax(min(100%, 16rem), 1fr) minmax(0, 0.95fr);
-    gap: 16px;
-  }
-
-  .nx-landing__hero-art {
-    min-height: clamp(200px, 38vw, 360px);
-  }
-
   .nx-landing__hero-title {
-    font-size: clamp(1.85rem, 4.2vw, 2.6rem);
+    font-size: clamp(1.85rem, 6.4vw, 2.6rem);
   }
 }
 
 @media (max-width: 720px) {
   .nx-landing__hero {
-    min-height: auto;
-    align-items: stretch;
-    padding-block: 76px 28px;
+    min-height: min(100dvh, 780px);
+    align-items: center;
+    padding: 88px var(--nx-landing-gutter) 48px;
+    background-size: cover;
+    background-position: 85% center;
   }
 
-  .nx-landing__hero-stage {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      'art'
-      'copy';
-    gap: 18px;
-  }
-
-  .nx-landing__hero-art {
-    min-height: clamp(180px, 48vw, 280px);
-    background-position: center;
-    background-size: contain;
+  .nx-landing__hero::before {
+    background: linear-gradient(
+      180deg,
+      rgba(2, 6, 23, 0.38) 0%,
+      rgba(2, 6, 23, 0.18) 46%,
+      rgba(2, 6, 23, 0.08) 100%
+    );
   }
 
   .nx-landing__hero-content {
-    max-width: none;
+    max-width: 100%;
+    width: 100%;
+    justify-items: start;
+    text-align: start;
+  }
+
+  .nx-landing__hero-title,
+  .nx-landing__hero-lead {
+    text-shadow: 0 2px 18px rgba(2, 6, 23, 0.85);
   }
 
   .nx-landing__hero-actions {
@@ -592,18 +733,22 @@
     padding-block-start: 12px;
   }
 
-  .nx-landing__nav .nx-landing__btn {
-    min-width: 0;
-    padding-inline: 10px;
-  }
-
   .nx-landing__modules {
     padding-block: 40px 64px;
     background-size: 100% auto;
     background-position: center top;
   }
 
+  .nx-landing__modules-inner,
+  .nx-landing__trust-inner {
+    margin-inline: 16px;
+  }
+
   .nx-landing__module-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .nx-landing__trust-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -617,13 +762,16 @@
 }
 
 @media (max-width: 430px) {
-  .nx-landing__header-actions {
-    gap: 6px;
+  .nx-landing__header-inner {
+    padding-inline: 16px;
   }
 
-  .nx-landing__lang.nx-glass-lang--compact .nx-glass-lang__btn {
-    min-width: 40px;
-    padding-inline: 8px;
+  .nx-landing__horizon {
+    margin-inline: 16px;
+  }
+
+  .nx-landing__header-actions {
+    gap: 6px;
   }
 }
 

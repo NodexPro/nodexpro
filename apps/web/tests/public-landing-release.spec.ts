@@ -64,25 +64,57 @@ test('landing chrome keys exist in English and Hebrew and do not leak the other 
 
 test('landing CTA routes stay /register and /login', () => {
   const page = read('src/pages/LandingPage.tsx');
+  const header = read('src/components/public/PublicHeader.tsx');
+  const shell = read('src/components/public/PublicSiteShell.tsx');
   assert.match(page, /to="\/register"/);
   assert.match(page, /to="\/login"/);
-  assert.match(page, /<\/section>\s*<LandingModuleShowcase \/>\s*<section className="nx-landing__modules"/);
-  assert.match(page, /dir=\{dir\}/);
-  assert.match(page, /PublicLanguageSwitch/);
+  assert.match(header, /to="\/register"/);
+  assert.match(header, /to="\/login"/);
+  assert.match(
+    page,
+    /<\/section>\s*<LandingModuleShowcase \/>\s*<section className="nx-landing__modules"/,
+  );
+  assert.match(page, /<\/section>\s*\n\s*<LandingSecurityTrust \/>/);
+  assert.match(shell, /dir=\{dir\}/);
+  assert.match(shell, /PublicHeader/);
+  assert.match(shell, /PublicFooter/);
+  assert.match(header, /PublicLanguageSwitch/);
 });
 
-test('hero is a fluid grid with a separate art layer and no 72px monitor lock', () => {
+test('hero is a full-bleed composition, not a contained art card', () => {
   const css = read('src/styles/nx-landing.css');
-  assert.match(css, /grid-template-areas:\s*'copy art'/);
-  assert.match(css, /\.nx-landing__hero-art \{/);
-  assert.match(css, /background-size:\s*contain/);
+  const page = read('src/pages/LandingPage.tsx');
+  const shell = read('src/styles/nx-public-shell.css');
+  assert.match(css, /\.nx-landing__hero \{[\s\S]*background-image:\s*url\('\/nodexpro-hero\.png/);
+  assert.match(css, /background-size:\s*auto 100%/);
+  assert.match(css, /background-position:\s*right center/);
+  assert.doesNotMatch(css, /\.nx-landing__hero-art/);
+  assert.doesNotMatch(css, /grid-template-areas:\s*'copy art'/);
+  assert.doesNotMatch(css, /background-size:\s*contain/);
+  assert.doesNotMatch(page, /nx-landing__hero-art/);
+  assert.doesNotMatch(page, /<br \/>\s*\{t\('landing\.heroTitleTail'\)\}/);
+  assert.match(css, /white-space:\s*nowrap/);
   assert.match(css, /clamp\(/);
-  assert.match(css, /minmax\(/);
-  assert.match(css, /@media \(max-width: 1024px\)/);
   assert.match(css, /@media \(max-width: 768px\)/);
-  assert.doesNotMatch(css, /72px/);
-  assert.doesNotMatch(css, /background-size:\s*cover/);
-  assert.match(css, /border-radius: 6px/);
+  assert.match(css, /rgba\(19, 191, 208, 0\.78\)/);
+  assert.match(css, /rgba\(54, 169, 198, 0\.62\)/);
+  assert.doesNotMatch(css, /rgba\(128, 116, 242/);
+  assert.match(shell, /padding: 12px 22px 10px/);
+  assert.match(shell, /max-width:\s*none/);
+  assert.match(shell, /\.nx-public-header__btn[\s\S]*min-height: 28px/);
+  assert.match(shell, /rgba\(19, 191, 208, 0\.92\)/);
+});
+
+test('public language switch uses local flag marks, not remote images', () => {
+  const sw = read('src/components/landing/PublicLanguageSwitch.tsx');
+  const flags = read('src/components/public/PublicLanguageFlags.tsx');
+  assert.match(sw, /EnglishLangFlag/);
+  assert.match(sw, /HebrewLangFlag/);
+  assert.match(sw, /aria-label=\{t\('landing\.lang\.en'\)\}/);
+  assert.match(sw, /title=\{t\('landing\.lang\.he'\)\}/);
+  assert.match(flags, /<svg /);
+  assert.doesNotMatch(sw, /flagcdn|countryflags|twemoji|unpkg|jsdelivr/i);
+  assert.doesNotMatch(flags, /https?:\/\//);
 });
 
 test('Sign in reuses the Create account glass shell', () => {
@@ -121,6 +153,39 @@ test('price presentation uses backend amount/currency and i18n period labels', (
   );
   assert.equal(trial, 'First 2 months free');
   assert.deepEqual(localizeLineList((key) => (key.endsWith('.0') ? 'שורה' : key), 'x', ['raw']), ['שורה']);
+});
+
+test('Security & Trust is a conservative i18n section with a future security_trust block id', () => {
+  const page = read('src/pages/LandingPage.tsx');
+  const src = read('src/components/landing/LandingSecurityTrust.tsx');
+  const css = read('src/styles/nx-landing.css');
+  const registry = read('src/components/landing/landing-security-trust.pure.ts');
+  const landingEn = (en as { landing: { trust: { title: string; lead: string; cards: Record<string, { title: string; description: string }> } } }).landing.trust;
+  const landingHe = (he as { landing: { trust: { title: string; lead: string; cards: Record<string, { title: string; description: string }> } } }).landing.trust;
+
+  assert.match(page, /<LandingSecurityTrust \/>/);
+  assert.match(registry, /LANDING_SECURITY_TRUST_BLOCK_TYPE = 'security_trust'/);
+  assert.match(src, /landing\.trust\.title/);
+  assert.match(src, /landing\.trust\.cards\.\$\{key\}\.title/);
+  assert.doesNotMatch(src, /ISO|SOC 2|encrypted at rest|HIPAA|GDPR/i);
+  assert.match(css, /grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.match(css, /\.nx-landing__trust-grid/);
+  assert.equal(landingEn.title, 'Your Business Data Deserves Protection.');
+  assert.equal(landingHe.title, 'המידע העסקי שלכם ראוי להגנה.');
+  assert.equal(landingEn.cards.access.title, 'Controlled Access');
+  assert.equal(landingHe.cards.access.title, 'בקרת גישה');
+  assert.equal(landingEn.cards.ongoing.title, 'Security-Focused Development');
+  assert.equal(
+    landingEn.cards.ongoing.description,
+    'Security considerations are incorporated into ongoing product development.',
+  );
+  assert.equal(landingHe.cards.ongoing.title, 'פיתוח עם דגש על אבטחה');
+  assert.match(css, /\.nx-landing__modules-inner \{[\s\S]*?max-width:\s*none/);
+  assert.match(css, /\.nx-landing__trust-inner \{[\s\S]*?max-width:\s*none/);
+  assert.match(css, /margin-inline:\s*clamp\(24px, 2\.5vw, 32px\)/);
+  for (const row of walkStrings(landingEn).concat(walkStrings(landingHe))) {
+    assert.doesNotMatch(row.value, /ISO\s*27001|SOC\s*2|HIPAA|encrypted at rest|GDPR certified/i, row.key);
+  }
 });
 
 test('middleware stores Vercel country and never overwrites nx-lang', () => {
