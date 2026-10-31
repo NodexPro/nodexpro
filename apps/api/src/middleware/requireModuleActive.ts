@@ -9,6 +9,24 @@ import {
 } from '../domains/modules/member-module-access.service.js';
 import { resolveModuleEntitlementCode } from '../shared/module-entitlement.pure.js';
 
+const MODULE_CATALOG_TTL_MS = 30_000;
+type ModuleCatalogRow = { id: string; code: string; is_active?: boolean; is_system?: boolean | null };
+const moduleCatalogCache = new Map<string, { row: ModuleCatalogRow; expiresAtMs: number }>();
+
+async function loadModuleCatalogRow(code: string): Promise<ModuleCatalogRow | null> {
+  const cached = moduleCatalogCache.get(code);
+  if (cached && cached.expiresAtMs > Date.now()) return cached.row;
+  const { data: mod } = await supabaseAdmin
+    .from('modules')
+    .select('id, code, is_active, is_system')
+    .eq('code', code)
+    .single();
+  if (!mod) return null;
+  const row = mod as ModuleCatalogRow;
+  moduleCatalogCache.set(code, { row, expiresAtMs: Date.now() + MODULE_CATALOG_TTL_MS });
+  return row;
+}
+
 export function requireModuleActive(moduleCode: string) {
   return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     const entitlementModuleCode = resolveModuleEntitlementCode(moduleCode);
@@ -29,11 +47,7 @@ export function requireModuleActive(moduleCode: string) {
     // below, after entitlement, exactly where the grant check always ran.
     const staffGrantPrefetch = prefetchStaffViewerModuleGrant(ctx);
 
-    const { data: mod } = await supabaseAdmin
-      .from('modules')
-      .select('id, code, is_active, is_system')
-      .eq('code', entitlementModuleCode)
-      .single();
+    const mod = await loadModuleCatalogRow(entitlementModuleCode);
     if (!mod) {
       console.warn('[docflow][deny] requireModuleActive: module not found', {
         module: moduleCode,

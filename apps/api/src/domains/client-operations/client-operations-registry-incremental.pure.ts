@@ -39,6 +39,22 @@ export function spliceClientRowIntoRegistryMaterialization<
   };
 }
 
+const exclusiveTails = new Map<string, Promise<unknown>>();
+
+/** Serialize incremental write-through per cache key so concurrent staff splices cannot clobber each other. */
+export function runExclusiveByKey<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = exclusiveTails.get(key) ?? Promise.resolve();
+  const next = prev.then(fn, fn);
+  exclusiveTails.set(
+    key,
+    next.then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
+  return next;
+}
+
 export const SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS = new Set([
   'set_material_brought',
   'set_income_tax_advance_material_brought',

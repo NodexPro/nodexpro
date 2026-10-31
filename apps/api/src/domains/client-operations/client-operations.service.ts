@@ -113,7 +113,10 @@ import {
   buildClientOperationsRegistryMaterializationCacheKey,
   clientOperationsRegistryMaterializationCache,
 } from './client-operations-registry-materialization-cache.js';
-import { spliceClientRowIntoRegistryMaterialization } from './client-operations-registry-incremental.pure.js';
+import {
+  runExclusiveByKey,
+  spliceClientRowIntoRegistryMaterialization,
+} from './client-operations-registry-incremental.pure.js';
 import type { BoundedTtlCacheSource } from '../../shared/bounded-ttl-cache.js';
 import {
   manualRowWorkspaceKeyForScope,
@@ -490,6 +493,9 @@ export type ClientOperationsRegistryPreSearchMaterialization = {
   columns_needing_legacy_baseline: ClientOperationsRegistryResponse['columns_needing_legacy_baseline'];
   /** Pre-search manual-row values (`slot:columnKey` → text); null when a business filter hides manual rows. */
   manual_row_values_by_slot_column: Map<string, string> | null;
+  /** Chrome reused on single-client rematerialize — never a second source of truth. */
+  handler_display_by_user_id?: Map<string, string | null>;
+  visible_custom_columns?: Awaited<ReturnType<typeof loadActiveCustomColumnsExtended>>;
   stage_timings: Record<string, number>;
   materialized_at_ms: number;
 };
@@ -582,7 +588,10 @@ export async function listClientOperationsRegistry(
   const incrementalClientIds = (options?.onlyClientIds ?? [])
     .map((id) => String(id ?? '').trim())
     .filter(Boolean);
-  const buildMaterialization = (clientIds?: string[]) =>
+  const buildMaterialization = (
+    clientIds?: string[],
+    reuseSharedFrom?: ClientOperationsRegistryPreSearchMaterialization | null,
+  ) =>
     buildClientOperationsRegistryPreSearchMaterialization({
       orgId,
       accessScope: materializationAccess,
@@ -593,6 +602,7 @@ export async function listClientOperationsRegistry(
       filterActive,
       anyBusinessFilter,
       onlyClientIds: clientIds,
+      reuseSharedFrom,
     });
   let materialization: ClientOperationsRegistryPreSearchMaterialization;
   let materializationSource: 'bypass' | BoundedTtlCacheSource | 'incremental';
@@ -606,23 +616,26 @@ export async function listClientOperationsRegistry(
     filters: filterActive,
   });
   if (options?.materializationCache === true && incrementalClientIds.length) {
-    const peeked = clientOperationsRegistryMaterializationCache.peek(cacheKey);
-    if (peeked) {
-      const rebuilt = await buildMaterialization(incrementalClientIds);
-      materialization = incrementalClientIds.reduce(
+    const incrementalResolved = await runExclusiveByKey(cacheKey, async () => {
+      const peeked = clientOperationsRegistryMaterializationCache.peek(cacheKey);
+      if (!peeked) {
+        return clientOperationsRegistryMaterializationCache.getOrBuild(cacheKey, () => buildMaterialization());
+      }
+      const rebuilt = await buildMaterialization(incrementalClientIds, peeked);
+      const latest = clientOperationsRegistryMaterializationCache.peek(cacheKey);
+      if (!latest) {
+        // Structural invalidate raced the rebuild — do not write the stale snapshot back.
+        return clientOperationsRegistryMaterializationCache.getOrBuild(cacheKey, () => buildMaterialization());
+      }
+      const next = incrementalClientIds.reduce(
         (acc, clientId) => spliceClientRowIntoRegistryMaterialization(acc, rebuilt, clientId),
-        peeked,
+        latest,
       );
-      clientOperationsRegistryMaterializationCache.set(cacheKey, materialization);
-      materializationSource = 'incremental';
-    } else {
-      const resolved = await clientOperationsRegistryMaterializationCache.getOrBuild(
-        cacheKey,
-        () => buildMaterialization(),
-      );
-      materialization = resolved.value;
-      materializationSource = resolved.source;
-    }
+      clientOperationsRegistryMaterializationCache.set(cacheKey, next);
+      return { value: next, source: 'incremental' as const };
+    });
+    materialization = incrementalResolved.value;
+    materializationSource = incrementalResolved.source;
   } else if (options?.materializationCache === true) {
     const resolved = await clientOperationsRegistryMaterializationCache.getOrBuild(
       cacheKey,
@@ -743,6 +756,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
   filterActive: ReturnType<typeof normalizeClientOperationsRegistryBusinessFilterQuery>;
   anyBusinessFilter: boolean;
   onlyClientIds?: string[];
+  reuseSharedFrom?: ClientOperationsRegistryPreSearchMaterialization | null;
 }): Promise<ClientOperationsRegistryPreSearchMaterialization> {
   const {
     orgId,
@@ -754,6 +768,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     filterActive,
     anyBusinessFilter,
     onlyClientIds,
+    reuseSharedFrom,
   } = input;
   const stageTimings: Record<string, number> = {};
   const markStage = (name: string, startedMs: number) => {
@@ -794,7 +809,41 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
   };
 
   const bootMs = Date.now();
-  const bootPromise = settled(
+  const reuseChrome = reuseSharedFrom
+    ? {
+        noteTypes: reuseSharedFrom.note_types,
+        period: {
+          selected_period_key: selectedPeriodKey,
+          default_period_key: defaultPeriodKey,
+          available_periods: reuseSharedFrom.period.available_periods,
+        },
+        userPeriodDataCopySourcePeriods: reuseSharedFrom.user_period_data_copy_source_periods,
+        filtersContract: reuseSharedFrom.filters,
+        handlerDisplayByUserId: reuseSharedFrom.handler_display_by_user_id ?? new Map<string, string | null>(),
+        userColumnsPeriodExtras: {
+          visibleColumns: reuseSharedFrom.visible_custom_columns ?? [],
+          visibilityByColumn: new Map(),
+          user_column_period_setup: reuseSharedFrom.user_column_period_setup,
+          columns_needing_legacy_baseline: reuseSharedFrom.columns_needing_legacy_baseline,
+        },
+        visibleCustomColumns: reuseSharedFrom.visible_custom_columns ?? [],
+        customColumnsCapability: reuseSharedFrom.custom_columns_capability,
+        toolbarCapabilities: reuseSharedFrom.toolbar_capabilities,
+        columns: reuseSharedFrom.columns,
+        manualRowsPeriodSetup: reuseSharedFrom.manual_rows_period_setup,
+        manualRowValuesBySlotColumn: reuseSharedFrom.manual_row_values_by_slot_column ?? null,
+      }
+    : null;
+  if (reuseChrome) markStage('shared_reused_from_peek', bootMs);
+  const bootPromise = reuseChrome
+    ? Promise.resolve([
+        { types: reuseChrome.noteTypes },
+        reuseChrome.visibleCustomColumns,
+        reuseChrome.period.available_periods,
+        reuseChrome.userPeriodDataCopySourcePeriods,
+        [] as Array<{ user_id: string; display_name: string }>,
+      ] as const)
+    : settled(
     timed(
       'boot_note_types_columns_periods_handlers',
       bootMs,
@@ -807,7 +856,9 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       ]),
     ),
   );
-  const userColumnsExtrasPromise = settled(
+  const userColumnsExtrasPromise = reuseChrome
+    ? Promise.resolve(reuseChrome.userColumnsPeriodExtras)
+    : settled(
     timed(
       'user_columns_period_extras',
       bootMs,
@@ -822,7 +873,9 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       ),
     ),
   );
-  const manualRowsPeriodSetupPromise = settled(
+  const manualRowsPeriodSetupPromise = reuseChrome
+    ? Promise.resolve(reuseChrome.manualRowsPeriodSetup)
+    : settled(
     timed(
       'manual_rows_period_setup',
       bootMs,
@@ -835,7 +888,9 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     ),
   );
   // Manual cells belong only to the resolved workspace subject. Five slots are still materialized.
-  const manualRowValuesPromise = settled(
+  const manualRowValuesPromise = reuseChrome
+    ? Promise.resolve(reuseChrome.manualRowValuesBySlotColumn)
+    : settled(
     timed(
       'manual_row_values',
       bootMs,
@@ -849,7 +904,9 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     ),
   );
 
-  const sharedInputsPromise = settled(
+  const sharedInputsPromise = reuseChrome
+    ? Promise.resolve(reuseChrome)
+    : settled(
     (async () => {
       const [
         [noteTypesResult, customColumns, availablePeriods, userPeriodDataCopySourcePeriods, handlerFilterOptions],
@@ -928,6 +985,8 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     manual_rows_period_setup: shared.manualRowsPeriodSetup,
     columns_needing_legacy_baseline: shared.userColumnsPeriodExtras.columns_needing_legacy_baseline,
     manual_row_values_by_slot_column: shared.manualRowValuesBySlotColumn,
+    handler_display_by_user_id: shared.handlerDisplayByUserId,
+    visible_custom_columns: shared.visibleCustomColumns,
     stage_timings: stageTimings,
     materialized_at_ms: Date.now(),
   });
@@ -957,6 +1016,45 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
   if (scopedClientIds) {
     activeClientsQuery = activeClientsQuery.in('id', scopedClientIds);
   }
+  const annualReportTaxYear = resolveAnnualReportTaxYearForOperationalPeriod(selectedPeriodKey);
+  const payrollPeriodKey = mapOperationalPeriodKeyToPayrollPeriodKey(selectedPeriodKey);
+  const phase1EarlyIds = scopedClientIds && scopedClientIds.length ? scopedClientIds : null;
+  const phase1EarlyPromise = phase1EarlyIds
+    ? Promise.all([
+        supabaseAdmin
+          .from('client_operational_profiles')
+          .select(PROFILE_SELECT)
+          .eq('organization_id', orgId)
+          .in('client_id', phase1EarlyIds),
+        supabaseAdmin
+          .from('client_tax_settings')
+          .select(
+            'client_id, vat_due_type, vat_frequency, vat_type, income_tax_advance_enabled, income_tax_advance_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_deductions_file_number, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency'
+          )
+          .eq('organization_id', orgId)
+          .in('client_id', phase1EarlyIds),
+        loadPeriodApplicabilitySnapshots({
+          organizationId: orgId,
+          operationalPeriodKey: selectedPeriodKey,
+          clientIds: phase1EarlyIds,
+        }),
+        loadPeriodMaterialFacts({
+          organizationId: orgId,
+          operationalPeriodKey: selectedPeriodKey,
+          clientIds: phase1EarlyIds,
+        }),
+        loadPayrollPeriodSalaryDataReceived({
+          organizationId: orgId,
+          payrollPeriodKey,
+          clientIds: phase1EarlyIds,
+        }),
+        loadManualCellStatusesForPeriod({
+          organizationId: orgId,
+          operationalPeriodKey: selectedPeriodKey,
+          clientIds: phase1EarlyIds,
+        }),
+      ])
+    : null;
   const activeClientsResult = await timed('active_clients', setupMs, activeClientsQuery);
   const { data: activeClients } = activeClientsResult;
 
@@ -986,8 +1084,6 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
   }
 
   const clientIds = safeClients.map((c) => c.id);
-  const annualReportTaxYear = resolveAnnualReportTaxYearForOperationalPeriod(selectedPeriodKey);
-  const payrollPeriodKey = mapOperationalPeriodKeyToPayrollPeriodKey(selectedPeriodKey);
 
   // Phase 1 — set-based inputs required to compute row filter facets (all clients).
   const phase1Ms = Date.now();
@@ -998,40 +1094,42 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     materialFacts,
     payrollSalaryByClient,
     manualStatusesByClientColumn,
-  ] = await Promise.all([
-    supabaseAdmin
-      .from('client_operational_profiles')
-      .select(PROFILE_SELECT)
-      .eq('organization_id', orgId)
-      .in('client_id', clientIds),
-    supabaseAdmin
-      .from('client_tax_settings')
-      .select(
-        'client_id, vat_due_type, vat_frequency, vat_type, income_tax_advance_enabled, income_tax_advance_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_deductions_file_number, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency'
-      )
-      .eq('organization_id', orgId)
-      .in('client_id', clientIds),
-    loadPeriodApplicabilitySnapshots({
-      organizationId: orgId,
-      operationalPeriodKey: selectedPeriodKey,
-      clientIds,
-    }),
-    loadPeriodMaterialFacts({
-      organizationId: orgId,
-      operationalPeriodKey: selectedPeriodKey,
-      clientIds,
-    }),
-    loadPayrollPeriodSalaryDataReceived({
-      organizationId: orgId,
-      payrollPeriodKey,
-      clientIds,
-    }),
-    loadManualCellStatusesForPeriod({
-      organizationId: orgId,
-      operationalPeriodKey: selectedPeriodKey,
-      clientIds,
-    }),
-  ]);
+  ] = phase1EarlyPromise
+    ? await phase1EarlyPromise
+    : await Promise.all([
+        supabaseAdmin
+          .from('client_operational_profiles')
+          .select(PROFILE_SELECT)
+          .eq('organization_id', orgId)
+          .in('client_id', clientIds),
+        supabaseAdmin
+          .from('client_tax_settings')
+          .select(
+            'client_id, vat_due_type, vat_frequency, vat_type, income_tax_advance_enabled, income_tax_advance_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_deductions_file_number, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency'
+          )
+          .eq('organization_id', orgId)
+          .in('client_id', clientIds),
+        loadPeriodApplicabilitySnapshots({
+          organizationId: orgId,
+          operationalPeriodKey: selectedPeriodKey,
+          clientIds,
+        }),
+        loadPeriodMaterialFacts({
+          organizationId: orgId,
+          operationalPeriodKey: selectedPeriodKey,
+          clientIds,
+        }),
+        loadPayrollPeriodSalaryDataReceived({
+          organizationId: orgId,
+          payrollPeriodKey,
+          clientIds,
+        }),
+        loadManualCellStatusesForPeriod({
+          organizationId: orgId,
+          operationalPeriodKey: selectedPeriodKey,
+          clientIds,
+        }),
+      ]);
   markStage('phase1_facet_inputs', phase1Ms);
   const profilesByClientId = new Map<string, Record<string, unknown>>();
   for (const p of (profiles ?? []) as unknown as Array<{ client_id: string }>) {

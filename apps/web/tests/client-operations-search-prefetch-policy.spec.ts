@@ -57,6 +57,9 @@ test('page: prefetchPeriods guards on the pure policy before any adjacent GET', 
   assert.match(prefetch, /registryUrl\(\{[\s\S]*?operational_period_key:\s*key/);
   assert.match(prefetch, /workspace_scope:\s*baseQuery\.workspace_scope/);
   assert.match(prefetch, /workspace_subject_user_id:\s*baseQuery\.workspace_subject_user_id/);
+  assert.match(prefetch, /max:\s*1/);
+  assert.match(prefetch, /userSlotsEnsureRef\.current === 'pending'/);
+  assert.match(pageSource, /2500/);
   assert.match(pageSource, /appendClientOperationsWorkspaceQuery\(moduleClientOperationsRegistry\(params\)/);
   // Cache key path includes workspace dimensions (no cross-workspace leakage).
   assert.match(pageSource, /workspace_scope/);

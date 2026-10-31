@@ -413,8 +413,9 @@ export function ClientOperationsRegistry() {
       // (each is a full registry GET). Resumes when q is empty and no filter is active.
       if (!shouldPrefetchAdjacentPeriods(baseQuery)) return;
       if (commandInFlightRef.current > 0) return;
+      if (userSlotsEnsureRef.current === 'pending') return;
       const cacheQuery = toCacheQuery(baseQuery);
-      const keys = selectPeriodPrefetchKeys({ selectedPeriodKey, availablePeriods, max: 4 });
+      const keys = selectPeriodPrefetchKeys({ selectedPeriodKey, availablePeriods, max: 1 });
       for (const key of keys) {
         if (getPeriodAggregateCache(periodCacheRef.current, key, cacheQuery)) continue;
         if (prefetchInflightRef.current.has(key)) continue;
@@ -582,7 +583,7 @@ export function ClientOperationsRegistry() {
             selected,
             available,
           );
-          }, 800);
+          }, 2500);
         })
         .catch((e) => {
           if (e instanceof Error && e.name === 'AbortError') return;
