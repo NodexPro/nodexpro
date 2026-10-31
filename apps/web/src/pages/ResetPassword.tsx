@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { useI18n } from '../i18n/I18nProvider';
+import { PublicAuthShell } from '../components/auth/PublicAuthShell';
 
 /**
  * After reset link: Supabase redirects with hash (implicit) or ?code= (PKCE).
@@ -8,6 +10,7 @@ import { supabase } from '../lib/supabase';
  */
 export function ResetPassword() {
   const navigate = useNavigate();
+  const { t } = useI18n();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
@@ -64,11 +67,11 @@ export function ResetPassword() {
     e.preventDefault();
     setError('');
     if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+      setError(t('auth.passwordMin'));
       return;
     }
     if (password !== confirm) {
-      setError('Passwords do not match.');
+      setError(t('auth.passwordsMismatch'));
       return;
     }
     setLoading(true);
@@ -78,7 +81,7 @@ export function ResetPassword() {
       await supabase.auth.signOut();
       navigate('/login', { replace: true, state: { passwordResetOk: true } });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not update password');
+      setError(err instanceof Error ? err.message : t('auth.updatePasswordFailed'));
     } finally {
       setLoading(false);
     }
@@ -86,67 +89,82 @@ export function ResetPassword() {
 
   if (phase === 'loading') {
     return (
-      <div style={{ maxWidth: 400, margin: '80px auto', padding: 24 }}>
-        <h1>Set new password</h1>
-        <p style={{ color: '#6b7280' }}>Verifying reset link…</p>
-      </div>
+      <PublicAuthShell title={t('auth.setNewPassword')} testId="nx-reset-password">
+        <p className="nx-glass-muted">{t('auth.verifyingReset')}</p>
+      </PublicAuthShell>
     );
   }
 
   if (phase === 'invalid') {
     return (
-      <div style={{ maxWidth: 400, margin: '80px auto', padding: 24 }}>
-        <h1>Set new password</h1>
-        <p style={{ color: '#b91c1c' }}>
-          This reset link is invalid or has expired. Request a new one from the sign-in page.
+      <PublicAuthShell title={t('auth.setNewPassword')} testId="nx-reset-password">
+        <p className="nx-glass-alert nx-glass-alert--error" role="alert">
+          {t('auth.resetInvalid')}
         </p>
-        <p style={{ marginTop: 16 }}>
-          <Link to="/forgot-password">Forgot password</Link>
-          {' · '}
-          <Link to="/login">Sign in</Link>
-        </p>
-      </div>
+        <div className="nx-glass-auth__links">
+          <p>
+            <Link className="nx-glass-link" to="/forgot-password">
+              {t('auth.forgotPassword')}
+            </Link>
+            {' · '}
+            <Link className="nx-glass-link" to="/login">
+              {t('auth.signIn')}
+            </Link>
+          </p>
+        </div>
+      </PublicAuthShell>
     );
   }
 
   return (
-    <div style={{ maxWidth: 400, margin: '80px auto', padding: 24 }}>
-      <h1>Set new password</h1>
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: 16 }}>
-          <label htmlFor="password">New password</label>
+    <PublicAuthShell title={t('auth.setNewPassword')} testId="nx-reset-password">
+      <form onSubmit={handleSubmit} aria-busy={loading}>
+        <div className="nx-glass-field">
+          <label className="nx-glass-label" htmlFor="password">
+            {t('auth.newPassword')}
+          </label>
           <input
             id="password"
+            className="nx-glass-input"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={6}
             autoComplete="new-password"
-            style={{ display: 'block', width: '100%', padding: 8 }}
           />
         </div>
-        <div style={{ marginBottom: 16 }}>
-          <label htmlFor="confirm">Confirm password</label>
+        <div className="nx-glass-field">
+          <label className="nx-glass-label" htmlFor="confirm">
+            {t('auth.confirmPassword')}
+          </label>
           <input
             id="confirm"
+            className="nx-glass-input"
             type="password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             required
             minLength={6}
             autoComplete="new-password"
-            style={{ display: 'block', width: '100%', padding: 8 }}
           />
         </div>
-        {error && <p style={{ color: 'red', marginBottom: 16 }}>{error}</p>}
-        <button type="submit" disabled={loading}>
-          {loading ? 'Saving…' : 'Save password'}
+        {error && (
+          <p className="nx-glass-alert nx-glass-alert--error" role="alert">
+            {error}
+          </p>
+        )}
+        <button className="nx-glass-btn nx-glass-btn--purple" type="submit" disabled={loading}>
+          {loading ? t('auth.savingPassword') : t('auth.savePassword')}
         </button>
       </form>
-      <p style={{ marginTop: 16 }}>
-        <Link to="/login">Back to sign in</Link>
-      </p>
-    </div>
+      <div className="nx-glass-auth__links">
+        <p>
+          <Link className="nx-glass-link" to="/login">
+            {t('auth.backToSignIn')}
+          </Link>
+        </p>
+      </div>
+    </PublicAuthShell>
   );
 }

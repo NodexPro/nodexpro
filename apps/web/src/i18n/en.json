@@ -661,7 +661,140 @@
     "recoveryHint": "You can reset the password without leaving this page.",
     "mfaChallenge": "Enter the authenticator code to continue.",
     "verifyCode": "Verify code",
-    "recoveryPrompt": "Forgot password?"
+    "recoveryPrompt": "Forgot password?",
+    "sendResetLink": "Send reset link",
+    "sendingReset": "Sending…",
+    "resetTitle": "Reset password",
+    "resetLead": "Enter your email and we will send you a reset link.",
+    "checkEmail": "Check your email",
+    "checkEmailBody": "If an account exists for that address, we sent a link to reset your password. Open it on this device; the link expires after a while.",
+    "backToSignIn": "Back to sign in",
+    "emailRequired": "Email is required",
+    "requestFailed": "Request failed",
+    "setNewPassword": "Set new password",
+    "verifyingReset": "Verifying reset link…",
+    "resetInvalid": "This reset link is invalid or has expired. Request a new one from the sign-in page.",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm password",
+    "savePassword": "Save password",
+    "savingPassword": "Saving…",
+    "passwordMin": "Password must be at least 6 characters.",
+    "passwordsMismatch": "Passwords do not match.",
+    "updatePasswordFailed": "Could not update password"
+  },
+  "landing": {
+    "brandHome": "NodexPro home",
+    "navAria": "Account",
+    "login": "Login",
+    "signIn": "Sign in",
+    "getStarted": "Get Started",
+    "heroAria": "NodexPro introduction",
+    "heroTitleLead": "One Platform.",
+    "heroTitleTail": "All Your Business",
+    "heroLead": "NodexPro brings your work, clients, finance, documents and operations together in one connected business platform.",
+    "eyebrow": "Powerful modules",
+    "modulesTitleLead": "Everything you need.",
+    "modulesTitleTail": "In one platform.",
+    "modulesAria": "NodexPro modules",
+    "showcaseAria": "NodexPro modules",
+    "availableNow": "Available now",
+    "comingSoon": "Coming soon",
+    "details": "Details",
+    "hideDetails": "Hide details",
+    "priceUnavailable": "Pricing soon",
+    "features": "Features",
+    "whatYouGet": "What you get today",
+    "alreadyBuilt": "Already built",
+    "comingNext": "Coming next",
+    "period": {
+      "month": "month",
+      "year": "year"
+    },
+    "trial": {
+      "oneMonth": "First month free",
+      "months": "First {n} months free"
+    },
+    "footerCopy": "© {year} NodexPro",
+    "lang": {
+      "aria": "Language",
+      "en": "English",
+      "he": "עברית"
+    },
+    "loading": "Loading…",
+    "emptyModules": "Modules will appear here shortly.",
+    "loadFailed": "The module catalog could not be loaded.",
+    "modules": {
+      "work_engine": {
+        "title": "Work Engine",
+        "description": "Operational queues and client document workflows in one connected workspace."
+      },
+      "accounting": {
+        "title": "Accounting",
+        "description": "Financial entries, balances, and summaries grounded in Accounting Base."
+      },
+      "invoices": {
+        "title": "Invoices",
+        "description": "Create and manage income documents for your office and represented clients."
+      },
+      "clients": {
+        "title": "Clients",
+        "description": "Organize office clients, contacts, and day-to-day client operations."
+      },
+      "documents": {
+        "title": "Documents",
+        "description": "Keep client documents and related delivery workflows in one place."
+      },
+      "tax_brain": {
+        "title": "Tax Brain",
+        "description": "Tax settings and obligations for client operations — without inventing legal truth."
+      }
+    },
+    "catalog": {
+      "client-operations": {
+        "name": "Client Operations",
+        "tagline": "Run your whole client roster from one live monthly spreadsheet.",
+        "summary": "Client Operations gives accounting offices a single working grid for every client and every reporting period.",
+        "existing": {
+          "0": "Client registry spreadsheet with monthly period tabs",
+          "1": "Status tracking for VAT, income-tax advances, national insurance and deductions",
+          "2": "Custom columns and manual rows for work specific to your office",
+          "3": "Search, filters and printable client lists",
+          "4": "ToDo board with priorities and an archive",
+          "5": "Office and per-employee workspaces with client-level access control"
+        }
+      },
+      "docflow": {
+        "name": "DocFlow",
+        "tagline": "One place for every conversation and document request with your clients.",
+        "summary": "DocFlow connects your office and your clients around the work itself, so requests, files and replies stop living in scattered inboxes.",
+        "existing": {
+          "0": "Client portal invitations",
+          "1": "Client conversation threads and an office inbox",
+          "2": "Document requests and file attachments",
+          "3": "Automatic communication rules and reminders"
+        },
+        "planned": {
+          "0": "Self-serve activation and billing",
+          "1": "Wider rollout to all offices"
+        }
+      },
+      "invoice": {
+        "name": "Invoices",
+        "tagline": "Issue and track income documents for your office and your clients.",
+        "summary": "Invoices lets you create income documents, deliver them and follow payment status from one workspace.",
+        "existing": {
+          "0": "Quotes, tax invoices and receipts",
+          "1": "Branded PDF documents",
+          "2": "Email delivery with delivery history",
+          "3": "Recurring invoices for retainer clients",
+          "4": "Payment recording against documents"
+        },
+        "planned": {
+          "0": "Self-serve activation and billing",
+          "1": "Wider rollout to all offices"
+        }
+      }
+    }
   },
   "clientOperations": {
     "registry": {

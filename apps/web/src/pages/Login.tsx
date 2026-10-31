@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { apiJson, ApiError } from '../api/client';
 import { AUTH } from '../api/endpoints';
 import { useI18n } from '../i18n/I18nProvider';
-import { UiLanguageSwitch } from '../components/glass/UiLanguageSwitch';
+import { PublicAuthShell } from '../components/auth/PublicAuthShell';
 import {
   loginCooldownMessage,
   loginFailureCode,
@@ -25,7 +25,6 @@ import {
 export function Login() {
   const { t, lang } = useI18n();
   const uiLang = loginUiLang(lang);
-  const dir = lang === 'he' ? 'rtl' : 'ltr';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [mfaCode, setMfaCode] = useState('');
@@ -133,51 +132,69 @@ export function Login() {
   }
 
   return (
-    <div dir={dir} lang={lang} style={{ maxWidth: 400, margin: '80px auto', padding: 24 }}>
-      <UiLanguageSwitch compact />
-      <h1>{t('auth.signIn')}</h1>
+    <PublicAuthShell title={t('auth.signIn')} testId="nx-login">
       {passwordResetOk && (
-        <p style={{ color: '#059669', marginBottom: 16 }}>{t('auth.passwordResetOk')}</p>
+        <p className="nx-glass-alert nx-glass-alert--ok">{t('auth.passwordResetOk')}</p>
       )}
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: 16 }}>
-          <label htmlFor="email">{t('auth.email')}</label>
+      <form onSubmit={handleSubmit} aria-busy={loading}>
+        <div className="nx-glass-field">
+          <label className="nx-glass-label" htmlFor="email">
+            {t('auth.email')}
+          </label>
           <input
             id="email"
+            className="nx-glass-input"
             type="email"
+            inputMode="email"
+            autoComplete="email"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            style={{ display: 'block', width: '100%', padding: 8 }}
           />
         </div>
-        <div style={{ marginBottom: 16 }}>
-          <label htmlFor="password">{t('auth.password')}</label>
+        <div className="nx-glass-field">
+          <label className="nx-glass-label" htmlFor="password">
+            {t('auth.password')}
+          </label>
           <input
             id="password"
+            className="nx-glass-input"
             type="password"
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required={!challengeRequired}
-            style={{ display: 'block', width: '100%', padding: 8 }}
           />
         </div>
         {challengeRequired ? (
-          <div style={{ marginBottom: 16 }}>
-            <label htmlFor="mfa-code">{t('auth.mfaChallenge')}</label>
+          <div className="nx-glass-field">
+            <label className="nx-glass-label" htmlFor="mfa-code">
+              {t('auth.mfaChallenge')}
+            </label>
             <input
               id="mfa-code"
+              className="nx-glass-input"
               inputMode="numeric"
               autoComplete="one-time-code"
               value={mfaCode}
               onChange={(e) => setMfaCode(e.target.value)}
               required
-              style={{ display: 'block', width: '100%', padding: 8 }}
             />
           </div>
         ) : null}
-        {error && <p style={{ color: 'red', marginBottom: 16 }}>{error}</p>}
-        <button type="submit" disabled={loading || cooldownSeconds > 0}>
+        {error && (
+          <p className="nx-glass-alert nx-glass-alert--error" role="alert">
+            {error}
+          </p>
+        )}
+        <button
+          className="nx-glass-btn nx-glass-btn--purple"
+          type="submit"
+          disabled={loading || cooldownSeconds > 0}
+        >
           {cooldownSeconds > 0
             ? loginCooldownMessage(cooldownSeconds, uiLang)
             : challengeRequired
@@ -185,25 +202,19 @@ export function Login() {
               : t('auth.signIn')}
         </button>
       </form>
-      <p
-        style={
-          offerRecovery
-            ? {
-                marginTop: 16,
-                padding: 12,
-                border: '1px solid #2563eb',
-                background: '#eff6ff',
-                fontWeight: 700,
-              }
-            : { marginTop: 12 }
-        }
-      >
-        <Link to="/forgot-password">{t('auth.recoveryPrompt')}</Link>
-        {offerRecovery ? <span style={{ display: 'block', marginTop: 8 }}>{t('auth.recoveryHint')}</span> : null}
-      </p>
-      <p style={{ marginTop: 16 }}>
-        <Link to={registerTo}>{t('auth.createAccount')}</Link>
-      </p>
-    </div>
+      <div className={`nx-glass-auth__links${offerRecovery ? ' nx-glass-alert nx-glass-alert--ok' : ''}`}>
+        <p>
+          <Link className="nx-glass-link" to="/forgot-password">
+            {t('auth.recoveryPrompt')}
+          </Link>
+          {offerRecovery ? <span className="nx-glass-muted">{t('auth.recoveryHint')}</span> : null}
+        </p>
+        <p>
+          <Link className="nx-glass-link" to={registerTo}>
+            {t('auth.createAccount')}
+          </Link>
+        </p>
+      </div>
+    </PublicAuthShell>
   );
 }

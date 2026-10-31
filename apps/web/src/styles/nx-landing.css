@@ -5,16 +5,15 @@
 .nx-landing {
   --nx-landing-brand: #123756;
   --nx-landing-cyan: #5ee7ff;
-  --nx-landing-blue: #3b82f6;
-  --nx-landing-purple: #8b5cf6;
   --nx-landing-text: #f8fafc;
   --nx-landing-muted: rgba(226, 232, 240, 0.82);
+  --nx-landing-stage: min(1180px, calc(100% - clamp(24px, 6vw, 80px)));
 
   min-height: 100vh;
   color: var(--nx-landing-text);
   background-color: #020617;
   font-family: Manrope, system-ui, sans-serif;
-  overflow-x: hidden;
+  overflow-x: clip;
 }
 
 .nx-landing a {
@@ -34,10 +33,20 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: clamp(8px, 2vw, 16px);
+  width: var(--nx-landing-stage);
   max-width: 1180px;
-  margin: 0 auto;
-  padding: 18px 28px 12px;
+  margin-inline: auto;
+  padding: clamp(12px, 2vw, 18px) 0 10px;
+  box-sizing: border-box;
+}
+
+.nx-landing__header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: clamp(8px, 1.6vw, 14px);
+  min-width: 0;
 }
 
 .nx-landing__brand {
@@ -48,7 +57,7 @@
 
 .nx-landing__logo {
   display: block;
-  height: 34px;
+  height: clamp(26px, 4vw, 34px);
   width: auto;
   max-width: 160px;
   object-fit: contain;
@@ -57,39 +66,13 @@
 .nx-landing__nav {
   display: inline-flex;
   align-items: center;
-  gap: 14px;
+  gap: 8px;
+  min-width: 0;
 }
 
-.nx-landing__nav-link,
-.nx-landing__nav-cta {
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.2;
-  color: rgba(248, 250, 252, 0.92);
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-}
-
-.nx-landing__nav-link:hover {
-  color: #fff;
-}
-
-.nx-landing__nav-cta {
-  padding: 7px 14px;
-  border: 1px solid rgba(148, 163, 184, 0.45);
-  border-radius: 8px;
-  background: rgba(15, 23, 42, 0.25);
-}
-
-.nx-landing__nav-cta:hover {
-  color: #fff;
-  border-color: rgba(94, 231, 255, 0.55);
-  background: rgba(18, 55, 86, 0.35);
-}
-
-/* Thin neon horizon under header */
 .nx-landing__horizon {
   height: 1px;
-  margin: 0 4%;
+  margin-inline: 4%;
   border: 0;
   background: linear-gradient(
     90deg,
@@ -106,47 +89,56 @@
 
 .nx-landing__hero {
   position: relative;
+  isolation: isolate;
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
   align-items: center;
-  /* Left 72px ≈ header edge breathing room; content sits in the open left of the art. */
-  padding: 96px 28px 72px 72px;
+  padding-block: clamp(88px, 12vw, 120px) clamp(32px, 6vw, 64px);
+  padding-inline: 0;
   box-sizing: border-box;
   background-color: #020617;
-  /* ?v= busts sticky browser cache of CSS backgrounds (same path as /nodexpro-hero.png). */
-  background-image: url('/nodexpro-hero.png?v=3d7e051');
-  background-repeat: no-repeat;
-  /* Height-fit (not cover): avoid upscaling past native 1672×940 — keeps
-     embedded panel digits sharper on large desktops. Dark left fill matches art. */
-  background-size: auto 100%;
-  background-position: right center;
+  overflow: hidden;
 }
 
-.nx-landing__hero::after {
-  content: '';
-  position: absolute;
-  inset-inline: 0;
-  bottom: 0;
-  height: 140px;
-  pointer-events: none;
-  background: linear-gradient(to bottom, rgba(2, 6, 23, 0), rgba(2, 6, 23, 0.92) 70%, #020617);
+.nx-landing__hero-stage {
+  position: relative;
+  z-index: 1;
+  width: var(--nx-landing-stage);
+  max-width: 1180px;
+  margin-inline: auto;
+  display: grid;
+  grid-template-columns: minmax(min(100%, 18rem), 0.92fr) minmax(0, 1.15fr);
+  grid-template-areas: 'copy art';
+  align-items: center;
+  gap: clamp(16px, 3vw, 40px);
 }
 
 .nx-landing__hero-content {
+  grid-area: copy;
   position: relative;
   z-index: 1;
-  max-width: 520px;
-  width: min(100%, 520px);
-  margin-inline-end: auto;
-  /* Was centered to the 1180px column — pushed the cluster ~150–180px in on desktop. */
-  margin-inline-start: 0;
+  min-width: 0;
+  max-width: 36rem;
+}
+
+.nx-landing__hero-art {
+  grid-area: art;
+  min-width: 0;
+  min-height: clamp(220px, 46vh, 620px);
+  align-self: stretch;
+  background-color: transparent;
+  background-image: url('/nodexpro-hero.png?v=3d7e051');
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+  pointer-events: none;
 }
 
 .nx-landing__hero-title {
   margin: 0 0 18px;
   font-family: Sora, Manrope, system-ui, sans-serif;
-  font-size: clamp(2.35rem, 5vw, 3.6rem);
+  font-size: clamp(2rem, 4.6vw, 3.5rem);
   font-weight: 700;
   line-height: 1.08;
   letter-spacing: -0.03em;
@@ -164,7 +156,7 @@
 .nx-landing__hero-lead {
   margin: 0 0 28px;
   max-width: 34rem;
-  font-size: 1.05rem;
+  font-size: clamp(0.95rem, 1.6vw, 1.05rem);
   line-height: 1.55;
   font-weight: 500;
   color: var(--nx-landing-muted);
@@ -181,46 +173,64 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 118px;
-  padding: 10px 20px;
-  border-radius: 8px;
+  min-width: 96px;
+  min-height: 36px;
+  padding: 8px 16px;
+  border-radius: 6px;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1.2;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .nx-landing__btn--primary {
-  color: #f8fafc;
-  background: linear-gradient(135deg, #123756 0%, #1d4ed8 55%, #2563eb 100%);
-  border: 1px solid rgba(94, 231, 255, 0.28);
-  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.28);
+  color: #f4f0ff;
+  border: 1px solid rgba(196, 184, 255, 0.7);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.28), transparent 48%),
+    linear-gradient(180deg, rgba(128, 116, 242, 0.72) 0%, rgba(102, 87, 232, 0.5) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.32),
+    0 6px 16px rgba(102, 87, 232, 0.28);
 }
 
 .nx-landing__btn--primary:hover {
-  transform: translateY(-1px);
-  border-color: rgba(94, 231, 255, 0.5);
+  border-color: rgba(220, 210, 255, 0.72);
+  background: linear-gradient(115deg, rgba(128, 116, 242, 0.62) 0%, rgba(102, 87, 232, 0.48) 100%);
+}
+
+.nx-landing__btn--primary:focus-visible,
+.nx-landing__btn--ghost:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(125, 236, 247, 0.45);
+}
+
+.nx-landing__btn--primary:disabled,
+.nx-landing__btn--ghost:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .nx-landing__btn--ghost {
-  color: rgba(248, 250, 252, 0.95);
-  background: rgba(15, 23, 42, 0.35);
-  border: 1px solid rgba(148, 163, 184, 0.4);
+  color: #eef6ff;
+  border: 1px solid rgba(210, 238, 255, 0.45);
+  background: rgba(8, 38, 82, 0.35);
 }
 
 .nx-landing__btn--ghost:hover {
-  border-color: rgba(94, 231, 255, 0.45);
-  background: rgba(18, 55, 86, 0.4);
+  border-color: rgba(94, 231, 255, 0.55);
+  background: rgba(18, 55, 86, 0.45);
 }
 
 .nx-landing__modules {
   position: relative;
-  /* Left 72px matches hero content inset. */
-  padding: 56px 28px 80px 72px;
+  padding: clamp(40px, 6vw, 56px) 0 clamp(56px, 8vw, 80px);
   background-color: #020617;
   background-image: url('/nodexpro-space-background.png');
-  background-repeat: repeat-y;
-  background-size: cover;
+  background-repeat: no-repeat;
+  background-size: 100% auto;
   background-position: center top;
 }
 
@@ -237,9 +247,9 @@
 .nx-landing__modules-inner {
   position: relative;
   z-index: 1;
+  width: var(--nx-landing-stage);
   max-width: 1180px;
-  /* Left-aligned with hero content (was margin: 0 auto → centered ~150–180px in). */
-  margin: 0;
+  margin-inline: auto;
 }
 
 .nx-landing__eyebrow {
@@ -297,7 +307,7 @@
 }
 
 .nx-landing__footer {
-  padding: 24px 28px 36px;
+  padding: 24px clamp(16px, 4vw, 28px) 36px;
   background: #020617;
   border-top: 1px solid rgba(51, 65, 85, 0.45);
   text-align: center;
@@ -309,83 +319,18 @@
   color: rgba(148, 163, 184, 0.85);
 }
 
-@media (max-width: 960px) {
-  .nx-landing__module-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .nx-landing__hero {
-    /* Narrower viewports: fill width so the finance cluster stays visible. */
-    background-size: cover;
-    background-position: 72% center;
-  }
-
-  .nx-landing__hero-content {
-    max-width: 460px;
-    padding: 16px 16px 16px 0;
-    background: linear-gradient(
-      90deg,
-      rgba(2, 6, 23, 0.72) 0%,
-      rgba(2, 6, 23, 0.45) 70%,
-      rgba(2, 6, 23, 0) 100%
-    );
-    border-radius: 12px;
-  }
-}
-
-@media (max-width: 720px) {
-  .nx-landing__header-inner {
-    padding: 14px 18px 10px;
-  }
-
-  .nx-landing__logo {
-    height: 28px;
-  }
-
-  .nx-landing__hero {
-    min-height: auto;
-    padding: 88px 18px 56px;
-    background-position: 85% center;
-    background-size: cover;
-  }
-
-  .nx-landing__hero-content {
-    max-width: 100%;
-    margin-inline-start: 0;
-    padding: 14px;
-    background: rgba(2, 6, 23, 0.72);
-  }
-
-  .nx-landing__hero-actions {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .nx-landing__btn {
-    width: 100%;
-  }
-
-  .nx-landing__modules {
-    padding: 40px 18px 64px;
-    background-position: center top;
-  }
-
-  .nx-landing__module-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
 /* ---- Module showcase strip (below hero) — data from backend aggregate ---- */
 .nx-landing__showcase {
   position: relative;
   z-index: 2;
-  padding: 0 28px 48px 72px;
+  padding: 0 0 clamp(32px, 5vw, 48px);
   background-color: #020617;
 }
 
 .nx-landing__showcase-inner {
+  width: var(--nx-landing-stage);
   max-width: 1180px;
-  margin: 0;
+  margin-inline: auto;
 }
 
 .nx-landing__showcase-grid {
@@ -400,6 +345,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
   padding: 22px 20px 18px;
   border-radius: 14px;
   border: 1px solid rgba(148, 163, 184, 0.22);
@@ -501,35 +447,20 @@
 
 .nx-landing__showcase-details-btn {
   align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
   gap: 8px;
-  padding: 7px 14px;
-  border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  background: rgba(15, 23, 42, 0.35);
-  color: rgba(248, 250, 252, 0.95);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.nx-landing__showcase-details-btn:hover,
-.nx-landing__showcase-details-btn:focus-visible {
-  outline: none;
-  border-color: rgba(94, 231, 255, 0.55);
-  background: rgba(18, 55, 86, 0.45);
 }
 
 .nx-landing__showcase-chevron {
   width: 7px;
   height: 7px;
-  border-right: 2px solid currentColor;
+  border-inline-end: 2px solid currentColor;
   border-bottom: 2px solid currentColor;
   transform: rotate(45deg) translateY(-2px);
   transition: transform 0.15s ease;
+}
+
+[dir='rtl'] .nx-landing__showcase-chevron {
+  transform: rotate(-45deg) translateY(-2px);
 }
 
 .nx-landing__showcase-card.is-open .nx-landing__showcase-chevron {
@@ -569,6 +500,11 @@
   color: rgba(196, 181, 253, 0.92);
 }
 
+.nx-landing__showcase-status-msg {
+  margin: 0;
+  color: rgba(203, 213, 225, 0.88);
+}
+
 @media (min-width: 961px) {
   /* Peek the strip into the hero fade so it sits right under Get Started. */
   .nx-landing__showcase {
@@ -576,18 +512,128 @@
   }
 }
 
+@media (max-width: 1024px) {
+  .nx-landing__hero-stage {
+    grid-template-columns: minmax(min(100%, 16rem), 0.88fr) minmax(0, 1fr);
+    gap: clamp(12px, 2.4vw, 24px);
+  }
+
+  .nx-landing__hero-art {
+    min-height: clamp(200px, 40vh, 480px);
+    background-position: center;
+  }
+}
+
 @media (max-width: 960px) {
   .nx-landing__showcase-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .nx-landing__module-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .nx-landing__hero {
+    min-height: auto;
+    padding-block: 84px 36px;
+  }
+
+  .nx-landing__hero-stage {
+    grid-template-columns: minmax(min(100%, 16rem), 1fr) minmax(0, 0.95fr);
+    gap: 16px;
+  }
+
+  .nx-landing__hero-art {
+    min-height: clamp(200px, 38vw, 360px);
+  }
+
+  .nx-landing__hero-title {
+    font-size: clamp(1.85rem, 4.2vw, 2.6rem);
+  }
 }
 
 @media (max-width: 720px) {
+  .nx-landing__hero {
+    min-height: auto;
+    align-items: stretch;
+    padding-block: 76px 28px;
+  }
+
+  .nx-landing__hero-stage {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'art'
+      'copy';
+    gap: 18px;
+  }
+
+  .nx-landing__hero-art {
+    min-height: clamp(180px, 48vw, 280px);
+    background-position: center;
+    background-size: contain;
+  }
+
+  .nx-landing__hero-content {
+    max-width: none;
+  }
+
+  .nx-landing__hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nx-landing__hero-actions .nx-landing__btn {
+    width: 100%;
+  }
+
+  .nx-landing__header-inner {
+    padding-block-start: 12px;
+  }
+
+  .nx-landing__nav .nx-landing__btn {
+    min-width: 0;
+    padding-inline: 10px;
+  }
+
+  .nx-landing__modules {
+    padding-block: 40px 64px;
+    background-size: 100% auto;
+    background-position: center top;
+  }
+
+  .nx-landing__module-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .nx-landing__showcase {
-    padding: 8px 18px 40px;
+    padding: 8px 0 40px;
   }
 
   .nx-landing__showcase-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 430px) {
+  .nx-landing__header-actions {
+    gap: 6px;
+  }
+
+  .nx-landing__lang.nx-glass-lang--compact .nx-glass-lang__btn {
+    min-width: 40px;
+    padding-inline: 8px;
+  }
+}
+
+@media (max-width: 320px) {
+  .nx-landing__nav {
+    gap: 4px;
+  }
+
+  .nx-landing__btn {
+    min-width: 0;
+    padding-inline: 10px;
   }
 }

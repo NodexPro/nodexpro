@@ -64,7 +64,8 @@ test('login pages render backend cooldown and do not sign in around the API', ()
   assert.match(login, /retryAfterSecondsFromFailure/);
   assert.match(login, /loginCooldownMessage/);
   assert.match(login, /useI18n/);
-  assert.match(login, /dir=\{dir\}/);
+  assert.match(login, /PublicAuthShell/);
+  assert.match(read('../src/components/auth/PublicAuthShell.tsx'), /dir=\{dir\}/);
   assert.match(owner, /signInWithIdentifier/);
   assert.equal(owner.includes('signInWithPassword'), false);
   assert.equal(owner.includes('Enter the SMS code'), false);

@@ -46,7 +46,26 @@
     "recoveryHint": "Можно сбросить пароль, не покидая эту страницу.",
     "mfaChallenge": "Введите код аутентификатора, чтобы продолжить.",
     "verifyCode": "Проверить код",
-    "recoveryPrompt": "Забыли пароль?"
+    "recoveryPrompt": "Забыли пароль?",
+    "sendResetLink": "Отправить ссылку",
+    "sendingReset": "Отправка…",
+    "resetTitle": "Сброс пароля",
+    "resetLead": "Введите email — мы отправим ссылку для сброса пароля.",
+    "checkEmail": "Проверьте почту",
+    "checkEmailBody": "Если аккаунт с этим адресом существует, мы отправили ссылку для сброса пароля. Откройте её на этом устройстве; ссылка действует ограниченное время.",
+    "backToSignIn": "Вернуться ко входу",
+    "emailRequired": "Укажите email",
+    "requestFailed": "Запрос не выполнен",
+    "setNewPassword": "Новый пароль",
+    "verifyingReset": "Проверяем ссылку…",
+    "resetInvalid": "Ссылка недействительна или истекла. Запросите новую на экране входа.",
+    "newPassword": "Новый пароль",
+    "confirmPassword": "Подтверждение пароля",
+    "savePassword": "Сохранить пароль",
+    "savingPassword": "Сохранение…",
+    "passwordMin": "Пароль должен содержать не менее 6 символов.",
+    "passwordsMismatch": "Пароли не совпадают.",
+    "updatePasswordFailed": "Не удалось обновить пароль"
   },
   "clientOperations": {
     "registry": {
