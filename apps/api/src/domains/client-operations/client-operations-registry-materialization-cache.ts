@@ -15,8 +15,9 @@
  * - Access scope (OFFICE vs ASSIGNED:<userId>) is resolved from authenticated membership BEFORE
  *   cache lookup — Staff can never select or reuse an OFFICE cache entry.
  * - The key MUST NOT include `q`, `sort_by`, `sort_dir` (post-materialization concerns).
- * - Commands never read this cache (they always rebuild) and invalidate the org scope so a later
- *   GET cannot serve pre-mutation rows.
+ * - Single-client commands peek this cache, rematerialize only the mutated client, splice, and
+ *   write-through. Structural commands invalidate the org scope so a later GET cannot serve
+ *   pre-mutation rows. The mutated client is never served from the pre-write entry.
  * - Process-local + short TTL: staleness from writes performed outside this process (other API
  *   instances / other domains touching `clients`) is bounded by the TTL.
  */

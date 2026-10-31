@@ -726,7 +726,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [addColumnLabel, setAddColumnLabel] = useState('');
   const [addColumnDataType, setAddColumnDataType] = useState<'text' | 'number' | 'date' | 'boolean'>('text');
   const [commandError, setCommandError] = useState('');
-  const [pendingMarkKey, setPendingMarkKey] = useState<string | null>(null);
+  const [pendingMarkKeys, setPendingMarkKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const pendingMarkKeysRef = useRef<Set<string>>(new Set());
   const [editingHeaderColumnId, setEditingHeaderColumnId] = useState<string | null>(null);
   const [headerDraft, setHeaderDraft] = useState('');
   const [editingCellKey, setEditingCellKey] = useState<string | null>(null);
@@ -2606,15 +2607,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   };
 
   const runMarkCommand = async (markKey: string, body: Record<string, unknown>, fallback: string) => {
-    if (pendingMarkKey) return;
-    setPendingMarkKey(markKey);
+    if (pendingMarkKeysRef.current.has(markKey)) return;
+    pendingMarkKeysRef.current.add(markKey);
+    setPendingMarkKeys(new Set(pendingMarkKeysRef.current));
     setCommandError('');
     try {
       await onRegistryCommand?.(body);
     } catch (error) {
       setCommandError(localizeRegistryCommandError(error, fallback));
     } finally {
-      setPendingMarkKey(null);
+      pendingMarkKeysRef.current.delete(markKey);
+      setPendingMarkKeys(new Set(pendingMarkKeysRef.current));
     }
   };
 
@@ -3514,7 +3517,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 : stream.cell?.value,
             );
             const markKey = `${r.client_id}:material:${stream.key}`;
-            const saving = pendingMarkKey === markKey;
+            const saving = pendingMarkKeys.has(markKey);
             return (
               <label
                 key={stream.key}
@@ -3525,7 +3528,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   type="checkbox"
                   className="nx-co-sheet__checkbox"
                   checked={checked}
-                  disabled={!editable || !canEdit || !col.editable || !onRegistryCommand || Boolean(pendingMarkKey)}
+                  disabled={!editable || !canEdit || !col.editable || !onRegistryCommand || pendingMarkKeys.has(markKey)}
                   aria-busy={saving}
                   aria-label={`חומר ${stream.labelHe} — ${clientLabel} — ${periodLabel}${editable ? '' : ' — לא נדרש החודש'}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
                   onChange={() => {
@@ -3586,7 +3589,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             const editable = Boolean(item?.editable) && !(form.key === '126' && item?.completed);
             const checked = Boolean(item?.completed);
             const markKey = `${r.client_id}:ni:${form.key}`;
-            const saving = pendingMarkKey === markKey;
+            const saving = pendingMarkKeys.has(markKey);
             return (
               <label
                 key={form.key}
@@ -3597,7 +3600,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   type="checkbox"
                   className="nx-co-sheet__checkbox"
                   checked={checked}
-                  disabled={!editable || !canEdit || !col.editable || !onRegistryCommand || Boolean(pendingMarkKey)}
+                  disabled={!editable || !canEdit || !col.editable || !onRegistryCommand || pendingMarkKeys.has(markKey)}
                   aria-busy={saving}
                   aria-label={`ב״ל ניכויים ${form.labelHe} — ${clientLabel} — ${periodLabel}${editable ? '' : ' — לא נדרש החודש'}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
                   onChange={() => {
@@ -3635,7 +3638,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       const editable = Boolean(cell.editable);
       const checked = Boolean(cell.completed);
       const markKey = `${r.client_id}:itd`;
-      const saving = pendingMarkKey === markKey;
+      const saving = pendingMarkKeys.has(markKey);
       return (
         <label
           className={`nx-co-sheet__itd-slot${editable ? '' : ' is-inactive'}${saving ? ' is-saving' : ''}`}
@@ -3645,7 +3648,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             type="checkbox"
             className="nx-co-sheet__checkbox"
             checked={checked}
-            disabled={!editable || !canEdit || !col.editable || !onRegistryCommand || Boolean(pendingMarkKey)}
+            disabled={!editable || !canEdit || !col.editable || !onRegistryCommand || pendingMarkKeys.has(markKey)}
             aria-busy={saving}
             aria-label={`${col.label} — ${clientLabel} — ${periodLabel}${editable ? '' : ' — לא נדרש החודש'}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
             onChange={() => {

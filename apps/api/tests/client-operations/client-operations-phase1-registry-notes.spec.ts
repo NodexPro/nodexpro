@@ -128,7 +128,7 @@ test('material VAT checkbox is a named command returning refreshed registry aggr
   assert.match(customColumns, /command === 'set_material_brought'/);
   assert.match(customColumns, /client_operational_profiles/);
   assert.match(customColumns, /material_brought_flag: value/);
-  assert.match(customColumns, /listClientOperationsRegistry\(ctx,\s*responseQuery\)/);
+  assert.match(customColumns, /refreshClientOperationsRegistryAfterMutation/);
   assert.doesNotMatch(view, /setRows\(.*material_brought/i);
 });
 

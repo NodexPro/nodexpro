@@ -119,7 +119,7 @@ test('7 named commands only (cell value + period init)', () => {
 
 test('8 command returns full refreshed aggregate', () => {
   assert.match(commandSource, /set_client_operations_manual_row_cell_value/);
-  assert.match(commandSource, /return listClientOperationsRegistry\(ctx, responseQuery\)/);
+  assert.match(commandSource, /refreshClientOperationsRegistryAfterMutation/);
 });
 
 test('9-11 tenant RBAC audit', () => {

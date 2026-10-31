@@ -504,12 +504,12 @@ test('core archive/restore/bulk invalidate the CO registry materialization cache
   assert.match(restoreFn, /is_archived:\s*false/);
 });
 
-test('commands: never read the cache, invalidate, and return a freshly built full aggregate', () => {
-  assert.match(customColumnsSource, /invalidateClientOperationsRegistryMaterializationCache\(orgId\)/);
-  assert.match(customColumnsSource, /return listClientOperationsRegistry\(ctx, responseQuery\);/);
-  assert.doesNotMatch(customColumnsSource, /materializationCache: true/);
-  assert.match(notesSource, /invalidateClientOperationsRegistryMaterializationCache\(ctx\.organizationId\)/);
-  assert.match(notesSource, /listClientOperationsRegistry\(ctx, \{\}\)/);
+test('commands: single-client writes splice a fresh row into the full aggregate', () => {
+  assert.match(customColumnsSource, /refreshClientOperationsRegistryAfterMutation/);
+  assert.match(customColumnsSource, /mutatedClientId: incrementalRegistryClientId/);
+  assert.match(customColumnsSource, /materializationCache: true/);
+  assert.match(notesSource, /invalidateClientOperationsRegistryMaterializationCache\(ctx.organizationId\)/);
+  assert.match(notesSource, /listClientOperationsRegistry\(ctx,/);
   assert.doesNotMatch(notesSource, /materializationCache: true/);
   // Work Engine clients-tab is a GET aggregate of the same registry — same org-keyed cache.
   assert.match(workEngineClientsTabSource, /materializationCache:\s*true/);

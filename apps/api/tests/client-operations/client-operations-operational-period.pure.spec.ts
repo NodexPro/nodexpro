@@ -387,7 +387,7 @@ test('15 — command returns same-period aggregate (source contract)', () => {
   assert.match(custom, /set_material_brought/);
   assert.match(custom, /upsertPeriodMaterialFact/);
   assert.match(custom, /responseQuery\.operational_period_key/);
-  assert.match(custom, /listClientOperationsRegistry\(ctx,\s*responseQuery\)/);
+  assert.match(custom, /refreshClientOperationsRegistryAfterMutation/);
 });
 
 test('16 — advances bi-monthly uses odd operational months (same CO filing vocabulary)', () => {
@@ -905,7 +905,7 @@ test('MC7 — material commands return same-period aggregate (source contract)',
   assert.match(custom, /setPayrollPeriodSalaryDataReceived/);
   assert.match(custom, /MATERIAL_REGISTRY_COMMANDS/);
   assert.match(custom, /responseQuery\.operational_period_key/);
-  assert.match(custom, /listClientOperationsRegistry\(ctx,\s*responseQuery\)/);
+  assert.match(custom, /refreshClientOperationsRegistryAfterMutation/);
 
   assert.match(audit, /CLIENT_OPERATIONS_INCOME_TAX_ADVANCE_MATERIAL_BROUGHT_SET/);
   assert.match(audit, /client_operations\.income_tax_advance_material_brought\.set/);

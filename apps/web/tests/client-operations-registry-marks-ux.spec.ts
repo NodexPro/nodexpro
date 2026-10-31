@@ -67,7 +67,9 @@ test('command notice sits next to the sheet and uses the cyan notice class', () 
 });
 
 test('mark click uses pending state and never locally flips the business checked value', () => {
-  assert.match(view, /pendingMarkKey/);
+  assert.match(view, /pendingMarkKeys/);
+  assert.match(view, /pendingMarkKeys\.has\(markKey\)/);
+  assert.doesNotMatch(view, /Boolean\(pendingMarkKey\)/);
   assert.match(view, /runMarkCommand/);
   assert.match(view, /aria-busy=\{saving\}/);
   assert.match(view, /if \(!cell\?\.editable\) return/);

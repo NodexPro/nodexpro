@@ -50,6 +50,7 @@ import {
 import { setClientOperationsManualRowCellValue, initializeManualRowsForPeriod } from './client-operations-manual-rows.service.js';
 import { copyClientOperationsUserPeriodData } from './client-operations-user-period-data-copy.service.js';
 import { assertCanAccessClientFromContext } from './organization-client-access.js';
+import { SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS } from './client-operations-registry-incremental.pure.js';
 import {
   isValidClientOperationsManualCellStatus,
   resolveAllowedManualStatusesForWrite,
@@ -456,6 +457,15 @@ async function loadMaterialCommandObligation(input: {
   });
 }
 
+function incrementalRegistryClientId(
+  command: string,
+  body: ClientOperationsRegistryCommandBody,
+): string | null {
+  if (!SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has(command)) return null;
+  const clientId = typeof body.client_id === 'string' ? body.client_id.trim() : '';
+  return clientId || null;
+}
+
 export async function executeClientOperationsRegistryCommand(
   ctx: RequestContext,
   body: ClientOperationsRegistryCommandBody
@@ -463,6 +473,7 @@ export async function executeClientOperationsRegistryCommand(
   const orgId = assertOrg(ctx);
   assertEdit(ctx);
   const command = typeof body.command === 'string' ? body.command : '';
+  let reuseMaterializationCache = false;
 
   // Client-scoped registry commands must obey assignment ACL before any write.
   if (body.client_id !== undefined && body.client_id !== null && String(body.client_id).trim() !== '') {
@@ -516,6 +527,8 @@ export async function executeClientOperationsRegistryCommand(
         created_keys: ensured.created_keys,
         active_count: ensured.active_count,
       });
+    } else {
+      reuseMaterializationCache = true;
     }
   } else if (command === 'rename_client_operations_custom_column') {
     const column = await loadOwnedColumn(orgId, body.column_id);
@@ -919,14 +932,8 @@ export async function executeClientOperationsRegistryCommand(
     throw badRequest('Unknown registry command');
   }
 
-  const [{ listClientOperationsRegistry }, { invalidateClientOperationsRegistryMaterializationCache }] =
-    await Promise.all([
-      import('./client-operations.service.js'),
-      import('./client-operations-registry-materialization-cache.js'),
-    ]);
-  // Mutation result is always a fresh full aggregate (no cache read); drop cached pre-search
-  // materializations for this org so a later GET cannot serve pre-mutation rows.
-  invalidateClientOperationsRegistryMaterializationCache(orgId);
+  const { refreshClientOperationsRegistryAfterMutation, listClientOperationsRegistry } =
+    await import('./client-operations.service.js');
   const responseQuery = queryFrom(body.query);
   if (
     MATERIAL_REGISTRY_COMMANDS.has(command) ||
@@ -945,7 +952,15 @@ export async function executeClientOperationsRegistryCommand(
         responseQuery.operational_period_key,
     );
   }
-  return listClientOperationsRegistry(ctx, responseQuery);
+  // No-op ensure: GET already populated the materialization — do not drop it and rebuild.
+  if (reuseMaterializationCache) {
+    return listClientOperationsRegistry(ctx, responseQuery, { materializationCache: true });
+  }
+  // Single-client writes rematerialize that client and splice into the peeked full aggregate.
+  // Structural writes still invalidate the org and rebuild a full aggregate.
+  return refreshClientOperationsRegistryAfterMutation(ctx, responseQuery, {
+    mutatedClientId: incrementalRegistryClientId(command, body),
+  });
 }
 
 export { buildCustomColumnsCapability };

@@ -207,6 +207,7 @@ export function ClientOperationsRegistry() {
   const [renderedAggregatePeriodKey, setRenderedAggregatePeriodKey] = useState<string | null>(null);
   const periodCacheRef = useRef<Map<string, PeriodAggregateCacheEntry<RegistryAggregate>>>(new Map());
   const prefetchInflightRef = useRef<Set<string>>(new Set());
+  const commandInFlightRef = useRef(0);
   /** Last backend-authoritative available_periods (not FE-optimistic). */
   const backendAvailablePeriodsRef = useRef<string[]>([]);
   const cacheOrganizationIdRef = useRef<string | null>(null);
@@ -411,6 +412,7 @@ export function ClientOperationsRegistry() {
       // Active search (`q`) or business filters: never fan-out adjacent-period prefetches
       // (each is a full registry GET). Resumes when q is empty and no filter is active.
       if (!shouldPrefetchAdjacentPeriods(baseQuery)) return;
+      if (commandInFlightRef.current > 0) return;
       const cacheQuery = toCacheQuery(baseQuery);
       const keys = selectPeriodPrefetchKeys({ selectedPeriodKey, availablePeriods, max: 4 });
       for (const key of keys) {
@@ -560,7 +562,10 @@ export function ClientOperationsRegistry() {
           const selected = resolveRegistryAggregatePeriodKey(data);
           if (!selected || viewedPeriodKeyRef.current !== selected) return;
           const available = data.period?.available_periods ?? [];
-          prefetchPeriods(
+          window.setTimeout(() => {
+            if (commandInFlightRef.current > 0) return;
+            if (seq !== loadSeqRef.current) return;
+            prefetchPeriods(
             {
               q: nextQuery.q,
               sort_by: nextQuery.sort_by,
@@ -577,6 +582,7 @@ export function ClientOperationsRegistry() {
             selected,
             available,
           );
+          }, 800);
         })
         .catch((e) => {
           if (e instanceof Error && e.name === 'AbortError') return;
@@ -707,8 +713,9 @@ export function ClientOperationsRegistry() {
   }, []);
 
   const onRegistryCommand = useCallback(
-    (body: Record<string, unknown>, options?: { applyAggregate?: boolean }) =>
-      apiJson<RegistryAggregate>(moduleClientOperationsRegistryCommands(), {
+    (body: Record<string, unknown>, options?: { applyAggregate?: boolean }) => {
+      commandInFlightRef.current += 1;
+      return apiJson<RegistryAggregate>(moduleClientOperationsRegistryCommands(), {
         method: 'POST',
         body: JSON.stringify({
           ...body,
@@ -719,11 +726,16 @@ export function ClientOperationsRegistry() {
               query.operational_period_key,
           },
         }),
-      }).then((data) => {
-        if (options?.applyAggregate !== false) applyAggregate(data);
-        // Deferred paint/custom-cell responses: do not poison period cache with mid-flight siblings.
-        return data;
-      }),
+      })
+        .then((data) => {
+          if (options?.applyAggregate !== false) applyAggregate(data);
+          // Deferred paint/custom-cell responses: do not poison period cache with mid-flight siblings.
+          return data;
+        })
+        .finally(() => {
+          commandInFlightRef.current = Math.max(0, commandInFlightRef.current - 1);
+        });
+    },
     [applyAggregate, query],
   );
 

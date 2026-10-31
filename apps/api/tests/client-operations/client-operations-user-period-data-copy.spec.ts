@@ -143,9 +143,9 @@ test('19-20 no duplicate column identity; visibility ensure only', () => {
 
 test('21-23 command invalidates cache + returns target aggregate', () => {
   assert.match(commandService, /copy_client_operations_user_period_data/);
-  assert.match(commandService, /invalidateClientOperationsRegistryMaterializationCache\(orgId\)/);
+  assert.match(commandService, /refreshClientOperationsRegistryAfterMutation/);
   assert.match(commandService, /target_operational_period_key/);
-  assert.match(commandService, /return listClientOperationsRegistry\(ctx, responseQuery\)/);
+  assert.match(commandService, /mutatedClientId: incrementalRegistryClientId/);
   const copyBranch = commandService.slice(
     commandService.indexOf("command === 'copy_client_operations_user_period_data'"),
   );

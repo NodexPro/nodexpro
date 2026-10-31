@@ -113,6 +113,7 @@ import {
   buildClientOperationsRegistryMaterializationCacheKey,
   clientOperationsRegistryMaterializationCache,
 } from './client-operations-registry-materialization-cache.js';
+import { spliceClientRowIntoRegistryMaterialization } from './client-operations-registry-incremental.pure.js';
 import type { BoundedTtlCacheSource } from '../../shared/bounded-ttl-cache.js';
 import {
   manualRowWorkspaceKeyForScope,
@@ -497,9 +498,16 @@ export type ClientOperationsRegistryReadOptions = {
   /**
    * GET /registry and Work Engine clients-tab GET: reuse the pre-search materialization
    * within its short TTL (same org + period + filters + capability; `q` / sort are applied
-   * per request). Commands never set this — they always rebuild fresh truth.
+   * per request).
+   * After a single-client command, used together with `onlyClientIds` so the mutated
+   * client is rebuilt and spliced into the peeked rows — still a full aggregate.
    */
   materializationCache?: boolean;
+  /**
+   * Rematerialize only these clients from the database. When the matching cache entry
+   * is present, unchanged rows are reused; the named clients are never served stale.
+   */
+  onlyClientIds?: string[];
 };
 
 async function loadHandlerDisplayNamesByUserIds(
@@ -571,7 +579,10 @@ export async function listClientOperationsRegistry(
   // GET /registry and Work Engine clients-tab pass materializationCache: true.
   // accessScopeKey = workspace projection (OFFICE / ASSIGNED:<subject>). canEditRegistry separates
   // viewer action capability so Owner editability cannot leak into Staff view-only caches.
-  const buildMaterialization = () =>
+  const incrementalClientIds = (options?.onlyClientIds ?? [])
+    .map((id) => String(id ?? '').trim())
+    .filter(Boolean);
+  const buildMaterialization = (clientIds?: string[]) =>
     buildClientOperationsRegistryPreSearchMaterialization({
       orgId,
       accessScope: materializationAccess,
@@ -581,22 +592,41 @@ export async function listClientOperationsRegistry(
       canEditRegistry,
       filterActive,
       anyBusinessFilter,
+      onlyClientIds: clientIds,
     });
   let materialization: ClientOperationsRegistryPreSearchMaterialization;
-  let materializationSource: 'bypass' | BoundedTtlCacheSource;
-  if (options?.materializationCache === true) {
-    const cacheKey = buildClientOperationsRegistryMaterializationCacheKey({
-      organizationId: orgId,
-      accessScopeKey: materializationAccess.access_scope_key,
-      manualWorkspaceKey: manualWorkspaceCacheKey(manualWorkspace),
-      selectedPeriodKey,
-      defaultPeriodKey,
-      canEditRegistry,
-      filters: filterActive,
-    });
+  let materializationSource: 'bypass' | BoundedTtlCacheSource | 'incremental';
+  const cacheKey = buildClientOperationsRegistryMaterializationCacheKey({
+    organizationId: orgId,
+    accessScopeKey: materializationAccess.access_scope_key,
+    manualWorkspaceKey: manualWorkspaceCacheKey(manualWorkspace),
+    selectedPeriodKey,
+    defaultPeriodKey,
+    canEditRegistry,
+    filters: filterActive,
+  });
+  if (options?.materializationCache === true && incrementalClientIds.length) {
+    const peeked = clientOperationsRegistryMaterializationCache.peek(cacheKey);
+    if (peeked) {
+      const rebuilt = await buildMaterialization(incrementalClientIds);
+      materialization = incrementalClientIds.reduce(
+        (acc, clientId) => spliceClientRowIntoRegistryMaterialization(acc, rebuilt, clientId),
+        peeked,
+      );
+      clientOperationsRegistryMaterializationCache.set(cacheKey, materialization);
+      materializationSource = 'incremental';
+    } else {
+      const resolved = await clientOperationsRegistryMaterializationCache.getOrBuild(
+        cacheKey,
+        () => buildMaterialization(),
+      );
+      materialization = resolved.value;
+      materializationSource = resolved.source;
+    }
+  } else if (options?.materializationCache === true) {
     const resolved = await clientOperationsRegistryMaterializationCache.getOrBuild(
       cacheKey,
-      buildMaterialization,
+      () => buildMaterialization(),
     );
     materialization = resolved.value;
     materializationSource = resolved.source;
@@ -678,6 +708,27 @@ export async function listClientOperationsRegistry(
 }
 
 /**
+ * Command refresh: full aggregate, but a single-client write rematerializes only that client
+ * and splices it into the peeked pre-search rows. Structural writes drop the org cache and rebuild.
+ * Auth / RBAC / Stage 3 ACL still run on this request before any cache peek.
+ */
+export async function refreshClientOperationsRegistryAfterMutation(
+  ctx: RequestContext,
+  query: RegistryQueryInput,
+  options?: { mutatedClientId?: string | null },
+): Promise<ClientOperationsRegistryResponse> {
+  const mutatedClientId = String(options?.mutatedClientId ?? '').trim();
+  if (mutatedClientId) {
+    return listClientOperationsRegistry(ctx, query, {
+      materializationCache: true,
+      onlyClientIds: [mutatedClientId],
+    });
+  }
+  invalidateClientOperationsRegistryMaterializationCache(ctx.organizationId);
+  return listClientOperationsRegistry(ctx, query, { materializationCache: true });
+}
+
+/**
  * Expensive PRE-SEARCH aggregate build (tenant-scoped, period-resolved, business-filtered rows).
  * Pure read of business truth; never applies `q` / sort. Called directly by commands / other read
  * models, and through the short-TTL materialization cache by GET /registry.
@@ -691,6 +742,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
   canEditRegistry: boolean;
   filterActive: ReturnType<typeof normalizeClientOperationsRegistryBusinessFilterQuery>;
   anyBusinessFilter: boolean;
+  onlyClientIds?: string[];
 }): Promise<ClientOperationsRegistryPreSearchMaterialization> {
   const {
     orgId,
@@ -701,6 +753,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     canEditRegistry,
     filterActive,
     anyBusinessFilter,
+    onlyClientIds,
   } = input;
   const stageTimings: Record<string, number> = {};
   const markStage = (name: string, startedMs: number) => {
@@ -886,14 +939,23 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
   }
 
   const setupMs = Date.now();
+  const incrementalIds = (onlyClientIds ?? []).map((id) => String(id ?? '').trim()).filter(Boolean);
+  let scopedClientIds: string[] | null = assignedOnlyIds;
+  if (incrementalIds.length) {
+    const only = new Set(incrementalIds);
+    scopedClientIds = assignedOnlyIds ? assignedOnlyIds.filter((id) => only.has(id)) : incrementalIds;
+    if (scopedClientIds.length === 0) {
+      return finishMaterialization(await sharedInputsPromise, []);
+    }
+  }
   let activeClientsQuery = supabaseAdmin
     .from('clients')
     .select('id, display_name, tax_id, created_at, is_archived')
     .eq('organization_id', orgId)
     .eq('is_archived', false)
     .order('display_name', { ascending: true });
-  if (assignedOnlyIds) {
-    activeClientsQuery = activeClientsQuery.in('id', assignedOnlyIds);
+  if (scopedClientIds) {
+    activeClientsQuery = activeClientsQuery.in('id', scopedClientIds);
   }
   const activeClientsResult = await timed('active_clients', setupMs, activeClientsQuery);
   const { data: activeClients } = activeClientsResult;
@@ -1236,6 +1298,19 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     .filter((s) => s.niDeductionsConfigured)
     .map((s) => s.client.id);
 
+  // VAT due display depends only on tax settings + period — overlap it with phase 2.
+  const vatDueMs = Date.now();
+  const vatDuePromise = settled(resolveVatDueDisplayByClientForRegistry({
+    organizationId: orgId,
+    selectedPeriodKey,
+    clients: [...taxByClient.entries()].map(([clientId, tax]) => ({
+      clientId,
+      vat_type: tax.vat_type,
+      vat_due_type: tax.vat_due_type,
+      vat_frequency: tax.vat_frequency,
+    })),
+  }));
+
   // Phase 2 — presentation-only set-based loads for matching clients (or all when unfiltered).
   const phase2Ms = Date.now();
   const [
@@ -1298,6 +1373,8 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
         new Map(),
       ];
   markStage('phase2_presentation_loads', phase2Ms);
+  const vatDueDisplayByClient = await vatDuePromise;
+  markStage('vat_due_display', vatDueMs);
 
   const annualReportCells = projectAnnualReportCells({
     clientIds: matchingClientIds,
@@ -1309,17 +1386,6 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     clientIds: matchingClientIds,
     openByClientId: openCapitalInstancesByClient,
     canEdit: canEditRegistry,
-  });
-
-  const vatDueDisplayByClient = await resolveVatDueDisplayByClientForRegistry({
-    organizationId: orgId,
-    selectedPeriodKey,
-    clients: [...taxByClient.entries()].map(([clientId, tax]) => ({
-      clientId,
-      vat_type: tax.vat_type,
-      vat_due_type: tax.vat_due_type,
-      vat_frequency: tax.vat_frequency,
-    })),
   });
 
   const presentationMs = Date.now();

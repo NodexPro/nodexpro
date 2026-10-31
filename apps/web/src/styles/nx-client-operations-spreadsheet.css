@@ -997,9 +997,14 @@
 }
 
 .nx-co-sheet__table td input[type='checkbox']:checked,
-.nx-co-sheet__table td .nx-co-sheet__checkbox:checked {
+.nx-co-sheet__table td input[type='checkbox']:checked:hover,
+.nx-co-sheet__table td input[type='checkbox']:checked:focus-visible,
+.nx-co-sheet__table td .nx-co-sheet__checkbox:checked,
+.nx-co-sheet__table td .nx-co-sheet__checkbox:checked:hover,
+.nx-co-sheet__table td .nx-co-sheet__checkbox:checked:focus-visible {
   box-shadow: none;
   background: linear-gradient(180deg, #268cff 0%, #123756 100%);
+  background-image: linear-gradient(180deg, #268cff 0%, #123756 100%);
 }
 
 .nx-co-sheet__material-slot.is-saving .nx-co-sheet__checkbox,
