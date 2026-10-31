@@ -20,6 +20,8 @@ import {
   resolveMaterialBroughtForPeriod,
   resolvePayrollMaterialForPeriod,
   resolveVatApplicabilityForOperationalPeriod,
+  decideMaterialMarkCommandEligibility,
+  buildObligationCheckboxCell,
   shouldIncludeArchivedClientInOperationalPeriodRegistry,
   shouldEmitOperationalPeriodRegistryRow,
   type OperationalPeriodSnapshotInputs,
@@ -896,8 +898,9 @@ test('MC7 — material commands return same-period aggregate (source contract)',
   assert.match(custom, /command === 'set_payroll_material_brought'/);
   assert.match(custom, /upsertPeriodIncomeTaxAdvanceMaterialFact/);
   assert.match(custom, /income_data_received_flag: value/);
-  assert.match(custom, /snapshot\?\.income_tax_advance_applicable/);
-  assert.match(custom, /snapshot\?\.payroll_applicable/);
+  assert.match(custom, /resolveRegistryObligationSemantics/);
+  assert.match(custom, /decideMaterialMarkCommandEligibility/);
+  assert.match(custom, /CLIENT_OPERATIONS_PAYROLL_NOT_APPLICABLE/);
   assert.match(custom, /mapOperationalPeriodKeyToPayrollPeriodKey\(operationalPeriodKey\)/);
   assert.match(custom, /setPayrollPeriodSalaryDataReceived/);
   assert.match(custom, /MATERIAL_REGISTRY_COMMANDS/);
@@ -920,5 +923,35 @@ test('MC7 — material commands return same-period aggregate (source contract)',
   assert.match(presentation, /key: 'material_brought'/);
   assert.match(presentation, /label: 'חומר'/);
   assert.doesNotMatch(presentation, /label: 'חומר למע״מ'/);
+});
+
+test('erroneous operational mark can be cleared even when the month is not due', () => {
+  assert.equal(
+    decideMaterialMarkCommandEligibility({ intendedValue: false, obligationDue: false }),
+    'allow',
+  );
+  assert.equal(
+    decideMaterialMarkCommandEligibility({ intendedValue: true, obligationDue: false }),
+    'reject_not_applicable',
+  );
+  assert.equal(
+    decideMaterialMarkCommandEligibility({ intendedValue: true, obligationDue: true }),
+    'allow',
+  );
+  const kept = buildObligationCheckboxCell({
+    configured: true,
+    due: false,
+    completed: true,
+  });
+  assert.equal(kept.editable, true);
+  assert.equal(kept.completed, true);
+  assert.equal(kept.value, true);
+  const empty = buildObligationCheckboxCell({
+    configured: true,
+    due: false,
+    completed: false,
+  });
+  assert.equal(empty.editable, false);
+  assert.equal(empty.completed, null);
 });
 

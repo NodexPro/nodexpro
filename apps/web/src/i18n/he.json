@@ -662,6 +662,19 @@
     "mfaChallenge": "הזינו את קוד המאמת כדי להמשיך.",
     "verifyCode": "אימות קוד",
     "recoveryPrompt": "שכחתם סיסמה?"
+  },
+  "clientOperations": {
+    "registry": {
+      "saving": "שומר…",
+      "errors": {
+        "payrollNotApplicable": "חומר שכר אינו רלוונטי לתקופה זו",
+        "materialNotApplicable": "חומר מע״מ אינו רלוונטי לתקופה זו",
+        "incomeTaxAdvanceNotApplicable": "חומר מקדמות מס הכנסה אינו רלוונטי לתקופה זו",
+        "niDeductionsNotApplicable": "ניכויי ביטוח לאומי אינם רלוונטיים לתקופה זו",
+        "incomeTaxDeductionsNotDue": "ניכויי מס הכנסה אינם רלוונטיים לתקופה זו",
+        "saveFailed": "שמירת הסימון נכשלה"
+      }
+    }
   }
 }
 

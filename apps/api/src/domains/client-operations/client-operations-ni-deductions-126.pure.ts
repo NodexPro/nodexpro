@@ -217,14 +217,28 @@ export function buildNiDeductionsRegistryCell(input: {
     };
   }
   if (!due) {
-    // Configured obligation exists — disabled squares, not dash.
+    const done102 = Boolean(input.reported102);
+    const done100 = Boolean(input.reported100);
+    // 126 is a completed cycle, not an operational flag — never invent a completed 126 in a not-due month.
     return {
       configured: true,
       due: false,
       applicable: false,
       items: {
-        '102': { configured: true, due: false, applicable: false, editable: false, completed: null },
-        '100': { configured: true, due: false, applicable: false, editable: false, completed: null },
+        '102': {
+          configured: true,
+          due: false,
+          applicable: false,
+          editable: done102,
+          completed: done102 ? true : null,
+        },
+        '100': {
+          configured: true,
+          due: false,
+          applicable: false,
+          editable: done100,
+          completed: done100 ? true : null,
+        },
         '126': {
           configured: true,
           due: false,

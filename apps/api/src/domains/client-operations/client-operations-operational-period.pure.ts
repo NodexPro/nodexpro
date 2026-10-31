@@ -64,13 +64,14 @@ export function buildObligationCheckboxCell(input: {
     };
   }
   if (!input.due) {
+    const done = Boolean(input.completed);
     return {
       configured: true,
       due: false,
       applicable: false,
-      editable: false,
-      completed: null,
-      value: null,
+      editable: done,
+      completed: done ? true : null,
+      value: done ? true : null,
     };
   }
   const done = Boolean(input.completed);
@@ -82,6 +83,19 @@ export function buildObligationCheckboxCell(input: {
     completed: done,
     value: done,
   };
+}
+
+/**
+ * SET requires a due obligation (same semantics as the registry square).
+ * UNSET of an operational flag is allowed in the same period so an erroneous
+ * mark can be cleared. Irreversible actions (NI 126 cycle) are not this helper.
+ */
+export function decideMaterialMarkCommandEligibility(input: {
+  intendedValue: boolean;
+  obligationDue: boolean;
+}): 'allow' | 'reject_not_applicable' {
+  if (input.intendedValue === false) return 'allow';
+  return input.obligationDue ? 'allow' : 'reject_not_applicable';
 }
 
 /** VAT obligation configured (independent of whether this month is a filing month). */
@@ -608,13 +622,14 @@ export function buildIncomeTaxDeductionsRegistryCell(input: {
     };
   }
   if (!input.due) {
+    const done = Boolean(input.completed);
     return {
       configured: true,
       due: false,
       applicable: false,
-      editable: false,
-      completed: null,
-      value: null,
+      editable: done,
+      completed: done ? true : null,
+      value: done ? true : null,
     };
   }
   const done = Boolean(input.completed);

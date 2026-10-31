@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { apiFetch, apiJson, userFacingApiMessage } from '../../api/client';
+import { apiFetch, apiJson, ApiError, userFacingApiMessage } from '../../api/client';
+import { localizeClientOperationsRegistryCommandError } from '../../lib/client-operations-registry-command-error.pure';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../i18n/I18nProvider';
 import {
@@ -725,6 +726,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [addColumnLabel, setAddColumnLabel] = useState('');
   const [addColumnDataType, setAddColumnDataType] = useState<'text' | 'number' | 'date' | 'boolean'>('text');
   const [commandError, setCommandError] = useState('');
+  const [pendingMarkKey, setPendingMarkKey] = useState<string | null>(null);
   const [editingHeaderColumnId, setEditingHeaderColumnId] = useState<string | null>(null);
   const [headerDraft, setHeaderDraft] = useState('');
   const [editingCellKey, setEditingCellKey] = useState<string | null>(null);
@@ -2590,6 +2592,32 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     return () => window.clearTimeout(timer);
   }, [periodCopyFeedback]);
 
+  const localizeRegistryCommandError = (error: unknown, fallback: string) => {
+    if (error instanceof ApiError) {
+      return localizeClientOperationsRegistryCommandError(
+        { code: error.code, message: error.message },
+        t,
+        fallback,
+      );
+    }
+    return error instanceof Error && error.message
+      ? localizeClientOperationsRegistryCommandError({ message: error.message }, t, fallback)
+      : fallback;
+  };
+
+  const runMarkCommand = async (markKey: string, body: Record<string, unknown>, fallback: string) => {
+    if (pendingMarkKey) return;
+    setPendingMarkKey(markKey);
+    setCommandError('');
+    try {
+      await onRegistryCommand?.(body);
+    } catch (error) {
+      setCommandError(localizeRegistryCommandError(error, fallback));
+    } finally {
+      setPendingMarkKey(null);
+    }
+  };
+
   const commitCustomHeaderRename = async (column: ClientOperationsRegistryColumn, label: string) => {
     if (!canEdit || !column.custom_column_id || !onRegistryCommand) return;
     setCommandError('');
@@ -2617,7 +2645,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         : stream === 'income_tax_advance'
           ? cells?.income_tax_advance
           : cells?.payroll;
-    if (!cell?.applicable) return;
+    if (!cell?.editable) return;
     const command =
       stream === 'vat'
         ? 'set_material_brought'
@@ -2628,18 +2656,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       stream === 'vat'
         ? Boolean(cell.value ?? row.material_brought_flag)
         : Boolean(cell.value);
-    setCommandError('');
-    try {
-      await onRegistryCommand({
+    await runMarkCommand(
+      `${row.client_id}:material:${stream}`,
+      {
         command,
         client_id: row.client_id,
         value: !current,
         operational_period_key: query?.operational_period_key ?? null,
         query,
-      });
-    } catch (error) {
-      setCommandError(error instanceof Error ? error.message : 'שמירת חומר נכשלה');
-    }
+      },
+      t('clientOperations.registry.errors.saveFailed'),
+    );
   };
   const toggleNiDeductionsItem = async (
     row: ClientOperationsRegistryRow,
@@ -2648,49 +2675,50 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     if (statusPaintMode) return;
     if (!canEdit || !onRegistryCommand) return;
     const cell = row.national_insurance_deductions_cell;
-    if (!cell?.applicable) return;
-    const item = cell.items[formKey];
-    if (!item?.applicable) return;
-    setCommandError('');
-    try {
-      if (formKey === '126') {
-        if (item.completed) return;
-        await onRegistryCommand({
+    const item = cell?.items[formKey];
+    if (!item?.editable) return;
+    if (formKey === '126') {
+      if (item.completed) return;
+      await runMarkCommand(
+        `${row.client_id}:ni:126`,
+        {
           command: 'complete_ni_deductions_126_cycle',
           client_id: row.client_id,
           operational_period_key: query?.operational_period_key ?? null,
           query,
-        });
-        return;
-      }
-      await onRegistryCommand({
+        },
+        t('clientOperations.registry.errors.saveFailed'),
+      );
+      return;
+    }
+    await runMarkCommand(
+      `${row.client_id}:ni:${formKey}`,
+      {
         command: formKey === '102' ? 'set_ni_deductions_reported_102' : 'set_ni_deductions_reported_100',
         client_id: row.client_id,
         value: !Boolean(item.completed),
         operational_period_key: query?.operational_period_key ?? null,
         query,
-      });
-    } catch (error) {
-      setCommandError(error instanceof Error ? error.message : 'שמירת ב״ל ניכויים נכשלה');
-    }
+      },
+      t('clientOperations.registry.errors.saveFailed'),
+    );
   };
   const toggleIncomeTaxDeductions = async (row: ClientOperationsRegistryRow) => {
     if (statusPaintMode) return;
     if (!canEdit || !onRegistryCommand) return;
     const cell = row.income_tax_deductions_cell;
-    if (!cell?.configured || !cell.due || !cell.editable || !cell.applicable) return;
-    setCommandError('');
-    try {
-      await onRegistryCommand({
+    if (!cell?.editable) return;
+    await runMarkCommand(
+      `${row.client_id}:itd`,
+      {
         command: 'set_income_tax_deductions_reported',
         client_id: row.client_id,
         value: !Boolean(cell.completed),
         operational_period_key: query?.operational_period_key ?? null,
         query,
-      });
-    } catch (error) {
-      setCommandError(error instanceof Error ? error.message : 'שמירת מ״ה ניכויים נכשלה');
-    }
+      },
+      t('clientOperations.registry.errors.saveFailed'),
+    );
   };
   const setOperationalTargetDate = async (
     row: ClientOperationsRegistryRow,
@@ -3479,26 +3507,27 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 </span>
               );
             }
-            const active = Boolean(
-              stream.cell?.due && stream.cell?.applicable && (stream.cell?.editable ?? true),
-            );
+            const editable = Boolean(stream.cell?.editable);
             const checked = Boolean(
               stream.key === 'vat'
                 ? stream.cell?.value ?? r.material_brought_flag
                 : stream.cell?.value,
             );
+            const markKey = `${r.client_id}:material:${stream.key}`;
+            const saving = pendingMarkKey === markKey;
             return (
               <label
                 key={stream.key}
-                className={`nx-co-sheet__material-slot${active ? '' : ' is-inactive'}`}
-                title={active ? undefined : `${stream.labelHe} מוגדר — אין דיווח בחודש זה`}
+                className={`nx-co-sheet__material-slot${editable ? '' : ' is-inactive'}${saving ? ' is-saving' : ''}`}
+                title={editable ? undefined : `${stream.labelHe} מוגדר — אין דיווח בחודש זה`}
               >
                 <input
                   type="checkbox"
                   className="nx-co-sheet__checkbox"
                   checked={checked}
-                  disabled={!active || !canEdit || !col.editable || !onRegistryCommand}
-                  aria-label={`חומר ${stream.labelHe} — ${clientLabel} — ${periodLabel}${active ? '' : ' — לא נדרש החודש'}`}
+                  disabled={!editable || !canEdit || !col.editable || !onRegistryCommand || Boolean(pendingMarkKey)}
+                  aria-busy={saving}
+                  aria-label={`חומר ${stream.labelHe} — ${clientLabel} — ${periodLabel}${editable ? '' : ' — לא נדרש החודש'}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
                   onChange={() => {
                     if (statusPaintMode) return;
                     void toggleMaterialStream(r, stream.key);
@@ -3554,26 +3583,23 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 </span>
               );
             }
-            const active = Boolean(item?.due && item?.applicable && (item?.editable ?? true));
+            const editable = Boolean(item?.editable) && !(form.key === '126' && item?.completed);
             const checked = Boolean(item?.completed);
+            const markKey = `${r.client_id}:ni:${form.key}`;
+            const saving = pendingMarkKey === markKey;
             return (
               <label
                 key={form.key}
-                className={`nx-co-sheet__material-slot${active ? '' : ' is-inactive'}`}
-                title={active ? undefined : `${form.labelHe} מוגדר — אין דיווח בחודש זה`}
+                className={`nx-co-sheet__material-slot${editable ? '' : ' is-inactive'}${saving ? ' is-saving' : ''}`}
+                title={editable ? undefined : `${form.labelHe} מוגדר — אין דיווח בחודש זה`}
               >
                 <input
                   type="checkbox"
                   className="nx-co-sheet__checkbox"
                   checked={checked}
-                  disabled={
-                    !active ||
-                    !canEdit ||
-                    !col.editable ||
-                    !onRegistryCommand ||
-                    (form.key === '126' && checked)
-                  }
-                  aria-label={`ב״ל ניכויים ${form.labelHe} — ${clientLabel} — ${periodLabel}${active ? '' : ' — לא נדרש החודש'}`}
+                  disabled={!editable || !canEdit || !col.editable || !onRegistryCommand || Boolean(pendingMarkKey)}
+                  aria-busy={saving}
+                  aria-label={`ב״ל ניכויים ${form.labelHe} — ${clientLabel} — ${periodLabel}${editable ? '' : ' — לא נדרש החודש'}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
                   onChange={() => {
                     if (statusPaintMode) return;
                     void toggleNiDeductionsItem(r, form.key);
@@ -3606,19 +3632,22 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           </span>
         );
       }
-      const active = Boolean(cell.due && cell.editable && cell.applicable);
+      const editable = Boolean(cell.editable);
       const checked = Boolean(cell.completed);
+      const markKey = `${r.client_id}:itd`;
+      const saving = pendingMarkKey === markKey;
       return (
         <label
-          className={`nx-co-sheet__itd-slot${active ? '' : ' is-inactive'}`}
-          title={active ? undefined : 'יש תיק ניכויים — אין דיווח בחודש זה'}
+          className={`nx-co-sheet__itd-slot${editable ? '' : ' is-inactive'}${saving ? ' is-saving' : ''}`}
+          title={editable ? undefined : 'יש תיק ניכויים — אין דיווח בחודש זה'}
         >
           <input
             type="checkbox"
             className="nx-co-sheet__checkbox"
             checked={checked}
-            disabled={!active || !canEdit || !col.editable || !onRegistryCommand}
-            aria-label={`${col.label} — ${clientLabel} — ${periodLabel}${active ? '' : ' — לא נדרש החודש'}`}
+            disabled={!editable || !canEdit || !col.editable || !onRegistryCommand || Boolean(pendingMarkKey)}
+            aria-busy={saving}
+            aria-label={`${col.label} — ${clientLabel} — ${periodLabel}${editable ? '' : ' — לא נדרש החודש'}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
             onChange={() => {
               if (statusPaintMode) return;
               void toggleIncomeTaxDeductions(r);
@@ -4389,6 +4418,16 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         {renderSpreadsheetToolbar()}
         {renderFilterBar()}
         {error ? <div className="nx-co-sheet__error">{error}</div> : null}
+        {commandError ? (
+          <div
+            className="nx-co-sheet__command-notice"
+            role="status"
+            aria-live="polite"
+            data-testid="client-operations-command-notice"
+          >
+            {commandError}
+          </div>
+        ) : null}
         <div
           className={`nx-co-sheet__workspace${loading || periodContentPending ? ' is-loading' : ''}${
             periodContentPending ? ' is-period-pending' : ''
@@ -4404,7 +4443,6 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           onSelectPeriod={(key) => flushDirtyBeforePeriodChange(key)}
         />
         </div>
-        {commandError ? <div className="nx-co-sheet__error">{commandError}</div> : null}
         {periodCopyFeedback ? (
           <div className="nx-co-sheet__copy-feedback" role="status" aria-live="polite">
             {periodCopyFeedback}

@@ -21,9 +21,23 @@ test('toolbar is a single nowrap row; page does not wrap controls', () => {
   assert.match(src, /clients\.searchPlaceholder/);
   assert.match(src, /clients\.views\.label/);
   assert.match(src, /clients\.sort\.label/);
+  const toolbarStart = src.indexOf('nx-clients-toolbar__row');
+  const toolbarEnd = src.indexOf('</div>', src.indexOf('clients.sort.label'));
+  const toolbarBlock = src.slice(toolbarStart, toolbarEnd);
+  assert.doesNotMatch(toolbarBlock, /clients\.perPage/);
+  assert.doesNotMatch(toolbarBlock, /clients\.previous/);
+  assert.match(src, /data-testid="clients-pagination"/);
+  const pagerIdx = src.indexOf('data-testid="clients-pagination"');
+  const tableIdx = src.indexOf('<table className="nx-clients-table">');
+  assert.ok(tableIdx >= 0 && pagerIdx > tableIdx);
   assert.match(src, /clients\.perPage/);
   assert.match(src, /clients\.previous/);
   assert.match(src, /clients\.next/);
+});
+
+test('pagination lives in a compact footer under the table', () => {
+  assert.match(css, /\.nx-clients-pager \{/);
+  assert.match(css, /\.nx-clients-table-wrap \{[\s\S]*max-height:/);
 });
 
 test('client name is plain text — no card navigation from the list', () => {

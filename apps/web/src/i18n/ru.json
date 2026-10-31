@@ -47,5 +47,18 @@
     "mfaChallenge": "Введите код аутентификатора, чтобы продолжить.",
     "verifyCode": "Проверить код",
     "recoveryPrompt": "Забыли пароль?"
+  },
+  "clientOperations": {
+    "registry": {
+      "saving": "Сохранение…",
+      "errors": {
+        "payrollNotApplicable": "Материал зарплаты не относится к этому периоду",
+        "materialNotApplicable": "Материал НДС не относится к этому периоду",
+        "incomeTaxAdvanceNotApplicable": "Материал авансов подоходного налога не относится к этому периоду",
+        "niDeductionsNotApplicable": "Удержания национального страхования не относятся к этому периоду",
+        "incomeTaxDeductionsNotDue": "Удержания подоходного налога не относятся к этому периоду",
+        "saveFailed": "Не удалось сохранить отметку"
+      }
+    }
   }
 }

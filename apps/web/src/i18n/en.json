@@ -662,6 +662,19 @@
     "mfaChallenge": "Enter the authenticator code to continue.",
     "verifyCode": "Verify code",
     "recoveryPrompt": "Forgot password?"
+  },
+  "clientOperations": {
+    "registry": {
+      "saving": "Saving…",
+      "errors": {
+        "payrollNotApplicable": "Payroll material is not applicable for this period",
+        "materialNotApplicable": "VAT material is not applicable for this period",
+        "incomeTaxAdvanceNotApplicable": "Income-tax advance material is not applicable for this period",
+        "niDeductionsNotApplicable": "National-insurance deductions are not applicable for this period",
+        "incomeTaxDeductionsNotDue": "Income-tax deductions are not due for this period",
+        "saveFailed": "Could not save the mark"
+      }
+    }
   }
 }
 

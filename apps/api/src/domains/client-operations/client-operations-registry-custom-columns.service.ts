@@ -23,11 +23,13 @@ import {
   setIncomeTaxDeductionsReportedForRegistry,
   upsertPeriodIncomeTaxAdvanceMaterialFact,
   upsertPeriodMaterialFact,
-  type PeriodApplicabilitySnapshotRow,
 } from './client-operations-operational-period.service.js';
 import {
+  decideMaterialMarkCommandEligibility,
   mapOperationalPeriodKeyToPayrollPeriodKey,
   resolveDefaultOperationalPeriodKey,
+  resolveRegistryObligationSemantics,
+  type RegistryObligationSemantics,
 } from './client-operations-operational-period.pure.js';
 import {
   completeCapitalDeclarationInstance,
@@ -377,11 +379,27 @@ const INCOME_TAX_DEDUCTIONS_REGISTRY_COMMANDS = new Set([
   'set_income_tax_deductions_reported',
 ]);
 
-async function ensurePeriodSnapshotForMaterialCommand(input: {
+const MATERIAL_NOT_APPLICABLE_CODE = 'CLIENT_OPERATIONS_MATERIAL_NOT_APPLICABLE';
+const PAYROLL_NOT_APPLICABLE_CODE = 'CLIENT_OPERATIONS_PAYROLL_NOT_APPLICABLE';
+const INCOME_TAX_ADVANCE_NOT_APPLICABLE_CODE = 'CLIENT_OPERATIONS_INCOME_TAX_ADVANCE_NOT_APPLICABLE';
+const NI_DEDUCTIONS_NOT_APPLICABLE_CODE = 'CLIENT_OPERATIONS_NI_DEDUCTIONS_NOT_APPLICABLE';
+const INCOME_TAX_DEDUCTIONS_NOT_DUE_CODE = 'CLIENT_OPERATIONS_INCOME_TAX_DEDUCTIONS_NOT_DUE';
+
+function rejectUnlessMaterialMarkAllowed(input: {
+  intendedValue: boolean;
+  obligationDue: boolean;
+  code: string;
+  message: string;
+}): void {
+  if (decideMaterialMarkCommandEligibility(input) === 'allow') return;
+  throw badRequest(input.message, input.code);
+}
+
+async function loadMaterialCommandObligation(input: {
   orgId: string;
   clientId: string;
   operationalPeriodKey: string;
-}): Promise<PeriodApplicabilitySnapshotRow | undefined> {
+}): Promise<RegistryObligationSemantics> {
   const client = await ensureActiveClientInOrg(input.orgId, input.clientId);
   const [{ data: profile, error: profileError }, { data: tax, error: taxError }] = await Promise.all([
     supabaseAdmin
@@ -401,6 +419,20 @@ async function ensurePeriodSnapshotForMaterialCommand(input: {
   ]);
   assertQueryError(profileError, 'Failed to load operational profile');
   assertQueryError(taxError, 'Failed to load tax settings');
+  const live = {
+    vat_type: tax?.vat_type ?? null,
+    vat_frequency: tax?.vat_frequency ?? null,
+    payroll_flag: profile?.payroll_flag ?? null,
+    income_tax_advance_enabled: tax?.income_tax_advance_enabled ?? null,
+    income_tax_advance_frequency: tax?.income_tax_advance_frequency ?? null,
+    income_tax_deductions_enabled: tax?.income_tax_deductions_enabled ?? null,
+    income_tax_deductions_file_number: tax?.income_tax_deductions_file_number ?? null,
+    income_tax_deductions_frequency: tax?.income_tax_deductions_frequency ?? null,
+    national_insurance_type: tax?.national_insurance_type ?? null,
+    national_insurance_monthly_amount: tax?.national_insurance_monthly_amount ?? null,
+    national_insurance_deductions_file_number:
+      tax?.national_insurance_deductions_file_number ?? null,
+  };
   const existing = await loadPeriodApplicabilitySnapshots({
     organizationId: input.orgId,
     operationalPeriodKey: input.operationalPeriodKey,
@@ -413,23 +445,15 @@ async function ensurePeriodSnapshotForMaterialCommand(input: {
     sources: [{
       client_id: input.clientId,
       client_created_at: client.created_at,
-      inputs: {
-        vat_type: tax?.vat_type ?? null,
-        vat_frequency: tax?.vat_frequency ?? null,
-        payroll_flag: profile?.payroll_flag ?? null,
-        income_tax_advance_enabled: tax?.income_tax_advance_enabled ?? null,
-        income_tax_advance_frequency: tax?.income_tax_advance_frequency ?? null,
-        income_tax_deductions_enabled: tax?.income_tax_deductions_enabled ?? null,
-        income_tax_deductions_file_number: tax?.income_tax_deductions_file_number ?? null,
-        income_tax_deductions_frequency: tax?.income_tax_deductions_frequency ?? null,
-        national_insurance_type: tax?.national_insurance_type ?? null,
-        national_insurance_monthly_amount: tax?.national_insurance_monthly_amount ?? null,
-        national_insurance_deductions_file_number:
-          tax?.national_insurance_deductions_file_number ?? null,
-      },
+      inputs: live,
     }],
   });
-  return snapshots.get(input.clientId);
+  return resolveRegistryObligationSemantics({
+    periodKey: input.operationalPeriodKey,
+    openPeriodKey: resolveDefaultOperationalPeriodKey(),
+    live,
+    snapshot: snapshots.get(input.clientId) ?? null,
+  });
 }
 
 export async function executeClientOperationsRegistryCommand(
@@ -628,12 +652,17 @@ export async function executeClientOperationsRegistryCommand(
     const clientId = idFrom(body.client_id, 'client_id');
     const value = booleanFrom(body.value, 'value');
     const operationalPeriodKey = operationalPeriodKeyFrom(body.operational_period_key);
-    const snapshot = await ensurePeriodSnapshotForMaterialCommand({
+    const obligation = await loadMaterialCommandObligation({
       orgId,
       clientId,
       operationalPeriodKey,
     });
-    if (!snapshot?.vat_applicable) throw badRequest('Material brought is not applicable for this period');
+    rejectUnlessMaterialMarkAllowed({
+      intendedValue: value,
+      obligationDue: obligation.vat.due,
+      code: MATERIAL_NOT_APPLICABLE_CODE,
+      message: 'Material brought is not applicable for this period',
+    });
     await upsertPeriodMaterialFact({
       ctx,
       organizationId: orgId,
@@ -667,14 +696,17 @@ export async function executeClientOperationsRegistryCommand(
     const clientId = idFrom(body.client_id, 'client_id');
     const value = booleanFrom(body.value, 'value');
     const operationalPeriodKey = operationalPeriodKeyFrom(body.operational_period_key);
-    const snapshot = await ensurePeriodSnapshotForMaterialCommand({
+    const obligation = await loadMaterialCommandObligation({
       orgId,
       clientId,
       operationalPeriodKey,
     });
-    if (!snapshot?.income_tax_advance_applicable) {
-      throw badRequest('Income tax advance material is not applicable for this period');
-    }
+    rejectUnlessMaterialMarkAllowed({
+      intendedValue: value,
+      obligationDue: obligation.income_tax_advance.due,
+      code: INCOME_TAX_ADVANCE_NOT_APPLICABLE_CODE,
+      message: 'Income tax advance material is not applicable for this period',
+    });
     await upsertPeriodIncomeTaxAdvanceMaterialFact({
       ctx,
       organizationId: orgId,
@@ -705,14 +737,17 @@ export async function executeClientOperationsRegistryCommand(
     const clientId = idFrom(body.client_id, 'client_id');
     const value = booleanFrom(body.value, 'value');
     const operationalPeriodKey = operationalPeriodKeyFrom(body.operational_period_key);
-    const snapshot = await ensurePeriodSnapshotForMaterialCommand({
+    const obligation = await loadMaterialCommandObligation({
       orgId,
       clientId,
       operationalPeriodKey,
     });
-    if (!snapshot?.payroll_applicable) {
-      throw badRequest('Payroll material is not applicable for this period');
-    }
+    rejectUnlessMaterialMarkAllowed({
+      intendedValue: value,
+      obligationDue: obligation.payroll.due,
+      code: PAYROLL_NOT_APPLICABLE_CODE,
+      message: 'Payroll material is not applicable for this period',
+    });
     const payrollPeriodKey = mapOperationalPeriodKeyToPayrollPeriodKey(operationalPeriodKey);
     await setPayrollPeriodSalaryDataReceived({
       organizationId: orgId,
@@ -756,14 +791,17 @@ export async function executeClientOperationsRegistryCommand(
     const clientId = idFrom(body.client_id, 'client_id');
     const operationalPeriodKey = operationalPeriodKeyFrom(body.operational_period_key);
     const enabled = booleanFrom(body.value, 'value');
-    const snapshot = await ensurePeriodSnapshotForMaterialCommand({
+    const obligation = await loadMaterialCommandObligation({
       orgId,
       clientId,
       operationalPeriodKey,
     });
-    if (!snapshot?.national_insurance_deductions_applicable) {
-      throw badRequest('NI deductions are not applicable for this period');
-    }
+    rejectUnlessMaterialMarkAllowed({
+      intendedValue: enabled,
+      obligationDue: obligation.national_insurance_deductions.due,
+      code: NI_DEDUCTIONS_NOT_APPLICABLE_CODE,
+      message: 'NI deductions are not applicable for this period',
+    });
     await setNiDeductionsReportedStepForRegistry({
       ctx,
       clientId,
@@ -774,13 +812,13 @@ export async function executeClientOperationsRegistryCommand(
   } else if (command === 'complete_ni_deductions_126_cycle') {
     const clientId = idFrom(body.client_id, 'client_id');
     const operationalPeriodKey = operationalPeriodKeyFrom(body.operational_period_key);
-    const snapshot = await ensurePeriodSnapshotForMaterialCommand({
+    const obligation = await loadMaterialCommandObligation({
       orgId,
       clientId,
       operationalPeriodKey,
     });
-    if (!snapshot?.national_insurance_deductions_applicable) {
-      throw badRequest('NI deductions are not applicable for this period');
+    if (!obligation.national_insurance_deductions.due) {
+      throw badRequest('NI deductions are not applicable for this period', NI_DEDUCTIONS_NOT_APPLICABLE_CODE);
     }
     await completeNiDeductions126CycleForRegistry({
       ctx,
@@ -791,14 +829,17 @@ export async function executeClientOperationsRegistryCommand(
     const clientId = idFrom(body.client_id, 'client_id');
     const operationalPeriodKey = operationalPeriodKeyFrom(body.operational_period_key);
     const enabled = booleanFrom(body.value, 'value');
-    const snapshot = await ensurePeriodSnapshotForMaterialCommand({
+    const obligation = await loadMaterialCommandObligation({
       orgId,
       clientId,
       operationalPeriodKey,
     });
-    if (!snapshot?.income_tax_deductions_applicable) {
-      throw badRequest('Income-tax deductions are not due for this period');
-    }
+    rejectUnlessMaterialMarkAllowed({
+      intendedValue: enabled,
+      obligationDue: obligation.income_tax_deductions.due,
+      code: INCOME_TAX_DEDUCTIONS_NOT_DUE_CODE,
+      message: 'Income-tax deductions are not due for this period',
+    });
     await setIncomeTaxDeductionsReportedForRegistry({
       organizationId: orgId,
       clientId,

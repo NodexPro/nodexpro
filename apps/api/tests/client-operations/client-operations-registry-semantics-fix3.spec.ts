@@ -143,9 +143,9 @@ test('7 — file + semi_annual February → disabled checkbox NOT dash', () => {
 
 test('8 — disabled checkbox cannot execute completion command (source)', () => {
   assert.match(registryCmd, /set_income_tax_deductions_reported/);
-  assert.match(registryCmd, /income_tax_deductions_applicable/);
-  assert.match(registryView, /!cell\?\.configured \|\| !cell\.due \|\| !cell\.editable/);
-  assert.match(registryView, /disabled=\{!active/);
+  assert.match(registryCmd, /INCOME_TAX_DEDUCTIONS_NOT_DUE/);
+  assert.match(registryView, /if \(!cell\?\.editable\) return/);
+  assert.match(registryView, /disabled=\{!editable/);
 });
 
 test('completed due month → checked', () => {

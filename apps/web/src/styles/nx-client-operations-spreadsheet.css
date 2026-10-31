@@ -996,6 +996,19 @@
   height: 6.5px;
 }
 
+.nx-co-sheet__table td input[type='checkbox']:checked,
+.nx-co-sheet__table td .nx-co-sheet__checkbox:checked {
+  box-shadow: none;
+  background: linear-gradient(180deg, #268cff 0%, #123756 100%);
+}
+
+.nx-co-sheet__material-slot.is-saving .nx-co-sheet__checkbox,
+.nx-co-sheet__itd-slot.is-saving .nx-co-sheet__checkbox {
+  outline: 2px solid rgba(125, 236, 247, 0.95);
+  outline-offset: 2px;
+  opacity: 1;
+}
+
 .nx-co-sheet input[type='checkbox']:indeterminate::after {
   width: 10px;
 }
@@ -1403,6 +1416,18 @@
 .nx-co-sheet__error {
   color: #b91c1c;
   font-size: 13px;
+}
+
+.nx-co-sheet__command-notice {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #7decf7;
+  background: rgba(8, 38, 82, 0.42);
+  border: 1px solid rgba(125, 236, 247, 0.55);
 }
 
 .nx-co-sheet__loading {

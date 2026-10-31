@@ -504,40 +504,6 @@ export function Clients() {
               <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
             ))}
           </select>
-          <span className="nx-clients-label">{t('clients.perPage')}</span>
-          <select
-            value={limit}
-            onChange={(e) => { setLimit(Number(e.target.value)); setOffset(0); }}
-            className="nx-glass-input nx-glass-input--inline nx-clients-toolbar__limit"
-          >
-            <option value={10}>10</option>
-            <option value={20}>20</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-          </select>
-          {total > 0 && (
-            <>
-              <button
-                type="button"
-                disabled={offset === 0 || loading}
-                onClick={() => setOffset((o) => Math.max(0, o - limit))}
-                className="nx-glass-btn nx-glass-btn--secondary"
-              >
-                {t('clients.previous')}
-              </button>
-              <button
-                type="button"
-                disabled={!hasMore || loading}
-                onClick={() => setOffset((o) => o + limit)}
-                className="nx-glass-btn nx-glass-btn--secondary"
-              >
-                {t('clients.next')}
-              </button>
-              <span className="nx-clients-toolbar__meta">
-                {t('clients.showing')} {offset + 1}–{Math.min(offset + limit, total)} {t('clients.of')} {total}
-              </span>
-            </>
-          )}
         </div>
       </div>
       </section>
@@ -813,7 +779,8 @@ export function Clients() {
       {loading ? (
         <p className="nx-clients-empty">{t('common.loading')}</p>
       ) : (
-        <section className="nx-glass-card nx-clients-table-wrap">
+        <section className="nx-glass-card nx-clients-table-card">
+          <div className="nx-clients-table-wrap">
           <table className="nx-clients-table">
             <thead>
               <tr>
@@ -858,11 +825,47 @@ export function Clients() {
               ))}
             </tbody>
           </table>
+          </div>
           {list.length === 0 && (
             <p className="nx-clients-empty">
               {searchApplied ? t('clients.noResultsSearch') : t('clients.empty')}
             </p>
           )}
+          <div className="nx-clients-pager" data-testid="clients-pagination">
+            <span className="nx-clients-label">{t('clients.perPage')}</span>
+            <select
+              value={limit}
+              onChange={(e) => { setLimit(Number(e.target.value)); setOffset(0); }}
+              className="nx-glass-input nx-glass-input--inline nx-clients-toolbar__limit"
+              aria-label={t('clients.perPage')}
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+            <button
+              type="button"
+              disabled={offset === 0 || loading}
+              onClick={() => setOffset((o) => Math.max(0, o - limit))}
+              className="nx-glass-btn nx-glass-btn--secondary"
+            >
+              {t('clients.previous')}
+            </button>
+            <button
+              type="button"
+              disabled={!hasMore || loading}
+              onClick={() => setOffset((o) => o + limit)}
+              className="nx-glass-btn nx-glass-btn--secondary"
+            >
+              {t('clients.next')}
+            </button>
+            {total > 0 ? (
+              <span className="nx-clients-toolbar__meta">
+                {t('clients.showing')} {offset + 1}–{Math.min(offset + limit, total)} {t('clients.of')} {total}
+              </span>
+            ) : null}
+          </div>
         </section>
       )}
     </div>

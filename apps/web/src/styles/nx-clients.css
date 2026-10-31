@@ -75,7 +75,28 @@
   color: rgba(238, 246, 255, 0.72);
 }
 
+.nx-clients-table-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .nx-clients-table-wrap {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: min(62vh, 640px);
+}
+
+.nx-clients-pager {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(8, 38, 82, 0.28);
+  border: 1px solid rgba(70, 213, 255, 0.22);
   overflow-x: auto;
 }
 
