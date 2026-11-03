@@ -1,4 +1,5 @@
 import React from 'react';
+import { useI18n } from '../i18n/I18nProvider';
 
 type NoteModalProps = {
   open: boolean;
@@ -28,7 +29,11 @@ export function ClientNoteModal({
   onReminderAtChange,
   children,
 }: NoteModalProps) {
+  const { t } = useI18n();
   if (!open) return null;
+  const notesTitle = clientName
+    ? t('clientOperations.notes.titleNamed').replace('{{name}}', clientName)
+    : t('clientOperations.notes.title');
 
   const profileLabelStyle: React.CSSProperties = {
     fontSize: 14,
@@ -54,20 +59,22 @@ export function ClientNoteModal({
         className="nx-modal"
         role="dialog"
         aria-modal="true"
-        aria-label={`הערות — ${clientName}`}
+        aria-label={notesTitle}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="nx-modal-header">
           <div className="nx-modal-title-wrap nx-modal-title-wrap-stacked">
-            <h2 className="nx-modal-title">הערות</h2>
-            <span className="nx-modal-subtitle">לקוח: {clientName}</span>
+            <h2 className="nx-modal-title">{t('clientOperations.notes.title')}</h2>
+            <span className="nx-modal-subtitle">
+              {t('clientOperations.notes.clientPrefix')} {clientName}
+            </span>
           </div>
           <button
             type="button"
             className="nx-modal-close"
             onClick={onClose}
-            aria-label="סגור"
-            title="סגור"
+            aria-label={t('clientOperations.close')}
+            title={t('clientOperations.close')}
           >
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
               <path
@@ -84,7 +91,7 @@ export function ClientNoteModal({
           {children}
 
           {/* Fallback empty state when caller wants a simple single-note modal */}
-          {!children && <div className="nx-empty-note">אין הערות עדיין</div>}
+          {!children && <div className="nx-empty-note">{t('clientOperations.noNotesYet')}</div>}
 
           <div className="nx-divider" />
 
@@ -92,7 +99,7 @@ export function ClientNoteModal({
             <div className="nx-modal-fields-row">
               <div className="nx-field nx-field-equal" style={{ flex: 1, minWidth: 0 }}>
                 <label className="nx-field-label" htmlFor="note-type" style={profileLabelStyle}>
-                  סוג
+                  {t('clientOperations.notes.type')}
                 </label>
                 <div className="nx-select-wrap">
                   <select
@@ -102,11 +109,11 @@ export function ClientNoteModal({
                     onChange={(e) => onTypeChange(e.target.value)}
                     style={inputStyle}
                   >
-                    <option value="call">שיחה</option>
-                    <option value="note_no_date">הערה ללא תאריך</option>
-                    <option value="reminder">תזכורת</option>
-                    <option value="congratulate">ברכה</option>
-                    <option value="action">פעולה</option>
+                    <option value="call">{t('clientOperations.notes.call')}</option>
+                    <option value="note_no_date">{t('clientOperations.notes.undated')}</option>
+                    <option value="reminder">{t('clientOperations.notes.reminder')}</option>
+                    <option value="congratulate">{t('clientOperations.notes.greeting')}</option>
+                    <option value="action">{t('clientOperations.notes.action')}</option>
                   </select>
                   <span className="nx-select-icon" aria-hidden="true">
                     <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
@@ -124,7 +131,7 @@ export function ClientNoteModal({
 
               <div className="nx-field nx-field-equal" style={{ flex: 1, minWidth: 0 }}>
                 <label className="nx-field-label" htmlFor="note-reminder" style={profileLabelStyle}>
-                  תאריך ושעה — אופציונלי
+                  {t('clientOperations.notes.datetimeOptional')}
                 </label>
                 <div className="nx-datetime-wrap">
                   <input
@@ -160,12 +167,12 @@ export function ClientNoteModal({
 
             <div className="nx-field">
               <label className="nx-field-label" htmlFor="note-text" style={profileLabelStyle}>
-                טקסט
+                {t('clientOperations.notes.text')}
               </label>
               <textarea
                 id="note-text"
                 className="nx-textarea nx-textarea-polish"
-                placeholder="כתבו כאן הערה..."
+                placeholder={t('clientOperations.notes.placeholder')}
                 value={noteText}
                 onChange={(e) => onTextChange(e.target.value)}
                 style={inputStyle}
@@ -175,10 +182,10 @@ export function ClientNoteModal({
 
           <div className="nx-modal-footer">
             <button type="button" className="nx-btn nx-btn-primary" onClick={onSave}>
-              שמירה
+              {t('clientOperations.save')}
             </button>
             <button type="button" className="nx-btn nx-btn-secondary" onClick={onClose}>
-              ביטול
+              {t('clientOperations.cancel')}
             </button>
           </div>
         </div>

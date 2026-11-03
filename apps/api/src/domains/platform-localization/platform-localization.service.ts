@@ -3,19 +3,23 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { assertPlatformOwner } from '../../shared/platform-owner.js';
 import { badRequest, conflict } from '../../shared/errors.js';
 import type { RequestContext } from '../../shared/context.js';
-import { CANONICAL_SOURCE_EN, CANONICAL_SOURCE_HE } from './canonical-catalog.js';
+import { bundledSourceForLocale, CANONICAL_SOURCE_EN } from './canonical-catalog.js';
 import {
   DATE_FORMAT_OPTIONS,
   canPublishLanguage,
   isIso4217Code,
   isLocaleCode,
+  mergePublishedCatalog,
+  moduleCompleteness,
   moduleGroupForKey,
   normalizeCurrencyCode,
   placeholdersMatch,
   publishedCurrencyOptions,
   publishedLanguageOptions,
+  snapshotFromEntries,
   timezoneOptions,
   translationCompleteness,
+  translationEntryFilterStatus,
   validateLocalizationPreferences,
 } from './platform-localization.pure.js';
 
@@ -28,8 +32,25 @@ const LOCALIZATION_COMMANDS = new Set([
   'update_platform_language',
   'save_platform_translation_draft',
   'publish_platform_language',
+  'rollback_platform_language',
   'sync_platform_translation_catalog',
 ]);
+
+let catalogSeeded = false;
+let catalogKeysCache: Array<{ key: string; source_en: string; module_group: string }> | null = null;
+let languagesCache: LanguageRow[] | null = null;
+
+function invalidateLocalizationCaches(): void {
+  catalogSeeded = false;
+  catalogKeysCache = null;
+  languagesCache = null;
+}
+
+function isMissingSnapshotColumn(error: { message?: string; code?: string } | null | undefined): boolean {
+  if (!error) return false;
+  const hay = `${error.code ?? ''} ${error.message ?? ''}`.toLowerCase();
+  return hay.includes('snapshot') && (hay.includes('does not exist') || hay.includes('42703') || hay.includes('pgrst204') || hay.includes('schema cache') || hay.includes('column'));
+}
 
 type CurrencyRow = {
   code: string;
@@ -70,28 +91,37 @@ async function loadCurrencies(): Promise<CurrencyRow[]> {
   return (data ?? []) as CurrencyRow[];
 }
 
-async function loadLanguages(): Promise<LanguageRow[]> {
+async function loadLanguages(force = false): Promise<LanguageRow[]> {
+  if (!force && languagesCache) return languagesCache;
   const { data, error } = await supabaseAdmin
     .from('platform_languages')
     .select('locale_code, name, direction, status, version, published_at, updated_at')
     .order('locale_code');
   if (error) throw error;
-  return (data ?? []) as LanguageRow[];
+  languagesCache = (data ?? []) as LanguageRow[];
+  return languagesCache;
 }
 
-async function loadCatalogKeys(): Promise<Array<{ key: string; source_en: string; module_group: string }>> {
+async function loadCatalogKeys(force = false): Promise<Array<{ key: string; source_en: string; module_group: string }>> {
+  if (!force && catalogKeysCache) return catalogKeysCache;
   const { data, error } = await supabaseAdmin
     .from('platform_translation_keys')
     .select('key, source_en, module_group')
     .order('key');
   if (error) throw error;
-  return (data ?? []) as Array<{ key: string; source_en: string; module_group: string }>;
+  catalogKeysCache = (data ?? []) as Array<{ key: string; source_en: string; module_group: string }>;
+  return catalogKeysCache;
 }
 
 async function ensureCatalogSeeded(): Promise<void> {
+  if (catalogSeeded) return;
   const existing = await loadCatalogKeys();
-  if (existing.length > 0) return;
+  if (existing.length >= Object.keys(CANONICAL_SOURCE_EN).length) {
+    catalogSeeded = true;
+    return;
+  }
   await syncCanonicalCatalogInternal(null);
+  catalogSeeded = true;
 }
 
 async function syncCanonicalCatalogInternal(actorUserId: string | null): Promise<number> {
@@ -102,72 +132,193 @@ async function syncCanonicalCatalogInternal(actorUserId: string | null): Promise
   }));
   const { error } = await supabaseAdmin.from('platform_translation_keys').upsert(rows, { onConflict: 'key' });
   if (error) throw error;
-  const languages = await loadLanguages();
+  const languages = await loadLanguages(true);
   for (const language of languages) {
-    const source = language.locale_code === 'he' ? CANONICAL_SOURCE_HE : CANONICAL_SOURCE_EN;
-    const values = rows.map((row) => ({
-      locale_code: language.locale_code,
-      key: row.key,
-      value: language.locale_code === 'en' || language.locale_code === 'he' ? (source[row.key] ?? '') : '',
-      status: language.status === 'published' && (language.locale_code === 'en' || language.locale_code === 'he')
-        ? 'published'
-        : 'draft',
-      updated_by_user_id: actorUserId,
-    }));
-    const { error: valueErr } = await supabaseAdmin
+    const { data: existingRows, error: existingErr } = await supabaseAdmin
       .from('platform_translation_values')
-      .upsert(values, { onConflict: 'locale_code,key' });
-    if (valueErr) throw valueErr;
+      .select('key')
+      .eq('locale_code', language.locale_code);
+    if (existingErr) throw existingErr;
+    const have = new Set((existingRows ?? []).map((row) => String(row.key)));
+    const source = bundledSourceForLocale(language.locale_code);
+    const inserts = rows
+      .filter((row) => !have.has(row.key))
+      .map((row) => ({
+        locale_code: language.locale_code,
+        key: row.key,
+        value: source[row.key] ?? '',
+        status:
+          language.status === 'published' && (language.locale_code === 'en' || language.locale_code === 'he')
+            ? 'published'
+            : 'draft',
+        updated_by_user_id: actorUserId,
+      }));
+    if (inserts.length) {
+      const { error: valueErr } = await supabaseAdmin.from('platform_translation_values').insert(inserts);
+      if (valueErr) throw valueErr;
+    }
   }
+  invalidateLocalizationCaches();
+  catalogSeeded = true;
+  await loadCatalogKeys(true);
+  await loadLanguages(true);
   return rows.length;
 }
 
-async function languageWorkspace(locale: string) {
+async function loadLatestPublishedSnapshot(locale: string): Promise<Record<string, string> | null> {
+  const { data, error } = await supabaseAdmin
+    .from('platform_language_versions')
+    .select('snapshot, version')
+    .eq('locale_code', locale)
+    .eq('status', 'published')
+    .order('version', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    if (isMissingSnapshotColumn(error)) return null;
+    throw error;
+  }
+  const snapshot = data?.snapshot;
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null;
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(snapshot as Record<string, unknown>)) {
+    if (typeof value === 'string' && value.trim()) out[key] = value;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+async function insertLanguageVersion(row: Record<string, unknown>): Promise<void> {
+  const withSnapshot = await supabaseAdmin.from('platform_language_versions').insert(row);
+  if (!withSnapshot.error) return;
+  if (!isMissingSnapshotColumn(withSnapshot.error)) throw withSnapshot.error;
+  const { snapshot: _ignored, ...withoutSnapshot } = row;
+  const fallback = await supabaseAdmin.from('platform_language_versions').insert(withoutSnapshot);
+  if (fallback.error) throw fallback.error;
+}
+
+async function capturePublishedSnapshotIfMissing(language: LanguageRow): Promise<void> {
+  if (language.status !== 'published') return;
+  const existingQuery = await supabaseAdmin
+    .from('platform_language_versions')
+    .select('id, snapshot, version')
+    .eq('locale_code', language.locale_code)
+    .eq('version', language.version)
+    .maybeSingle();
+  if (existingQuery.error && isMissingSnapshotColumn(existingQuery.error)) return;
+  if (existingQuery.error) throw existingQuery.error;
+  const existing = existingQuery.data;
+  const currentSnap = existing?.snapshot;
+  if (currentSnap && typeof currentSnap === 'object' && !Array.isArray(currentSnap) && Object.keys(currentSnap).length > 0) {
+    return;
+  }
+  const { data } = await supabaseAdmin
+    .from('platform_translation_values')
+    .select('key, value, status')
+    .eq('locale_code', language.locale_code)
+    .eq('status', 'published');
+  const snapshot = mergePublishedCatalog({
+    bundled: bundledSourceForLocale(language.locale_code),
+    snapshot: null,
+    livePublished: Object.fromEntries(
+      (data ?? [])
+        .filter((row) => typeof row.key === 'string' && typeof row.value === 'string')
+        .map((row) => [String(row.key), String(row.value)]),
+    ),
+  });
+  if (existing?.id) {
+    const updated = await supabaseAdmin.from('platform_language_versions').update({ snapshot }).eq('id', existing.id);
+    if (updated.error && !isMissingSnapshotColumn(updated.error)) throw updated.error;
+    return;
+  }
+  await insertLanguageVersion({
+    locale_code: language.locale_code,
+    version: language.version,
+    status: 'published',
+    completeness_ratio: 1,
+    snapshot,
+    published_at: language.published_at,
+  });
+}
+
+async function languageWorkspace(locale: string, preloaded?: { languages?: LanguageRow[] }) {
   await ensureCatalogSeeded();
-  const languages = await loadLanguages();
+  const languages = preloaded?.languages ?? (await loadLanguages());
   const language = languages.find((row) => row.locale_code === locale) ?? null;
   if (!language) throw badRequest('Language not found.');
   const keys = await loadCatalogKeys();
-  const { data: values, error } = await supabaseAdmin
-    .from('platform_translation_values')
-    .select('key, value, status, updated_at')
-    .eq('locale_code', locale);
+  const [{ data: values, error }, versions] = await Promise.all([
+    supabaseAdmin.from('platform_translation_values').select('key, value, status, updated_at').eq('locale_code', locale),
+    supabaseAdmin
+      .from('platform_language_versions')
+      .select('version, status, completeness_ratio, published_at, snapshot')
+      .eq('locale_code', locale)
+      .order('version', { ascending: false })
+      .limit(20),
+  ]);
   if (error) throw error;
+  let versionRows: Array<{
+    version?: number;
+    status?: string;
+    completeness_ratio?: number;
+    published_at?: string | null;
+    snapshot?: unknown;
+  }> = versions.data ?? [];
+  if (versions.error) {
+    if (!isMissingSnapshotColumn(versions.error)) throw versions.error;
+    const fallback = await supabaseAdmin
+      .from('platform_language_versions')
+      .select('version, status, completeness_ratio, published_at')
+      .eq('locale_code', locale)
+      .order('version', { ascending: false })
+      .limit(20);
+    if (fallback.error) throw fallback.error;
+    versionRows = fallback.data ?? [];
+  }
   const byKey = new Map((values ?? []).map((row) => [row.key as string, row]));
   const entries = keys.map((keyRow) => {
     const current = byKey.get(keyRow.key);
     const value = typeof current?.value === 'string' ? current.value : '';
+    const status = typeof current?.status === 'string' ? current.status : 'draft';
+    const placeholder_ok = value.trim() ? placeholdersMatch(keyRow.source_en, value) : value.trim() === '';
     return {
       key: keyRow.key,
       module_group: keyRow.module_group,
       source_en: keyRow.source_en,
       value,
-      status: current?.status ?? 'draft',
-      placeholder_ok: value.trim() ? placeholdersMatch(keyRow.source_en, value) : value.trim() === '',
+      status,
+      filter_status: translationEntryFilterStatus({ value, status, placeholder_ok }),
+      placeholder_ok,
     };
   });
   const translatedCount = entries.filter((entry) => entry.value.trim().length > 0 && entry.placeholder_ok).length;
   const placeholderFailures = entries.filter((entry) => entry.value.trim().length > 0 && !entry.placeholder_ok).length;
   const completeness = translationCompleteness({ catalogSize: keys.length, translatedCount });
   const groups = [...new Set(entries.map((entry) => entry.module_group))];
+  const module_completeness = moduleCompleteness(entries);
   return {
     language,
     entries,
     groups,
     completeness,
+    module_completeness,
+    versions: versionRows.map((row) => ({
+      version: row.version,
+      status: row.status,
+      completeness_ratio: row.completeness_ratio,
+      published_at: row.published_at,
+      has_snapshot: Boolean(
+        'snapshot' in row &&
+          row.snapshot &&
+          typeof row.snapshot === 'object' &&
+          Object.keys(row.snapshot as object).length,
+      ),
+    })),
     placeholder_failures: placeholderFailures,
     catalog_size: keys.length,
     translated_count: translatedCount,
-    uncovered_application_areas: [
-      'Clients list and client card (bundled i18n)',
-      'Dashboard V2.5',
-      'Work Engine',
-      'Income / documents',
-      'DocFlow',
-      'Users & Roles',
-      'Modules and Billing',
-      'Client Operations',
-    ],
+    uncovered_application_areas: module_completeness
+      .filter((row) => row.missing_count > 0)
+      .map((row) => row.module_group),
   };
 }
 
@@ -327,7 +478,7 @@ export async function buildOwnerLanguagesAggregate(ctx: RequestContext, localeRa
   const selected = isLocaleCode(String(localeRaw ?? ''))
     ? String(localeRaw)
     : languages.find((row) => row.locale_code === 'en')?.locale_code ?? languages[0]?.locale_code ?? 'en';
-  const workspace = await languageWorkspace(selected);
+  const workspace = await languageWorkspace(selected, { languages });
   return {
     aggregate_key: 'owner_languages_aggregate',
     languages,
@@ -342,6 +493,7 @@ export async function buildOwnerLanguagesAggregate(ctx: RequestContext, localeRa
       'update_platform_language',
       'save_platform_translation_draft',
       'publish_platform_language',
+      'rollback_platform_language',
       'sync_platform_translation_catalog',
     ],
   };
@@ -349,28 +501,30 @@ export async function buildOwnerLanguagesAggregate(ctx: RequestContext, localeRa
 
 export async function loadPublishedTranslationCatalog(locale: string): Promise<Record<string, string>> {
   if (!isLocaleCode(locale)) return {};
+  const bundled = bundledSourceForLocale(locale);
   const { data: language } = await supabaseAdmin
     .from('platform_languages')
     .select('locale_code, status')
     .eq('locale_code', locale)
     .maybeSingle();
   if (!language || language.status !== 'published') {
-    if (locale === 'en') return { ...CANONICAL_SOURCE_EN };
-    if (locale === 'he') return { ...CANONICAL_SOURCE_HE };
-    return {};
+    return { ...bundled };
   }
-  const { data } = await supabaseAdmin
-    .from('platform_translation_values')
-    .select('key, value, status')
-    .eq('locale_code', locale)
-    .eq('status', 'published');
-  const out: Record<string, string> = locale === 'he' ? { ...CANONICAL_SOURCE_HE } : { ...CANONICAL_SOURCE_EN };
+  const [{ data }, snapshot] = await Promise.all([
+    supabaseAdmin
+      .from('platform_translation_values')
+      .select('key, value, status')
+      .eq('locale_code', locale)
+      .eq('status', 'published'),
+    loadLatestPublishedSnapshot(locale),
+  ]);
+  const livePublished: Record<string, string> = {};
   for (const row of data ?? []) {
     if (typeof row.key === 'string' && typeof row.value === 'string' && row.value.trim()) {
-      out[row.key] = row.value;
+      livePublished[row.key] = row.value;
     }
   }
-  return out;
+  return mergePublishedCatalog({ bundled, snapshot, livePublished });
 }
 
 async function refreshedOwnerCurrencies(ctx: RequestContext) {
@@ -527,6 +681,10 @@ export async function executePlatformLocalizationCommand(
       const locale_code = String(payload.locale_code ?? '').trim();
       const entries = Array.isArray(payload.entries) ? payload.entries : [];
       if (!isLocaleCode(locale_code)) throw badRequest('Locale is required.');
+      const languages = await loadLanguages();
+      const language = languages.find((row) => row.locale_code === locale_code);
+      if (!language) throw badRequest('Language not found.');
+      await capturePublishedSnapshotIfMissing(language);
       const keys = await loadCatalogKeys();
       const allowed = new Set(keys.map((row) => row.key));
       const upserts = [];
@@ -555,12 +713,13 @@ export async function executePlatformLocalizationCommand(
         .update({ status: 'review', updated_at: new Date().toISOString(), updated_by_user_id: ctx.user.id })
         .eq('locale_code', locale_code)
         .neq('status', 'published');
+      languagesCache = null;
       await writeAudit({
         ...auditBase(ctx),
         entityType: 'platform_language',
         entityId: locale_code,
         action: AUDIT_ACTIONS.PLATFORM_TRANSLATION_DRAFT_SAVED,
-        payload: { locale_code, updated_keys: upserts.length },
+        payload: { locale_code, updated_keys: upserts.length, published_snapshot_preserved: true },
       });
       return { ok: true, command, refreshed: await refreshedOwnerLanguages(ctx, locale_code) };
     }
@@ -575,6 +734,7 @@ export async function executePlatformLocalizationCommand(
       });
       if (!allowed.ok) throw badRequest(allowed.message, allowed.code);
       const nextVersion = Number(workspace.language.version ?? 1) + 1;
+      const snapshot = snapshotFromEntries(workspace.entries);
       await supabaseAdmin
         .from('platform_languages')
         .update({
@@ -589,20 +749,108 @@ export async function executePlatformLocalizationCommand(
         .from('platform_translation_values')
         .update({ status: 'published', updated_at: new Date().toISOString() })
         .eq('locale_code', locale_code);
-      await supabaseAdmin.from('platform_language_versions').insert({
+      await insertLanguageVersion({
         locale_code,
         version: nextVersion,
         status: 'published',
         completeness_ratio: workspace.completeness.ratio,
+        snapshot,
         published_at: new Date().toISOString(),
         published_by_user_id: ctx.user.id,
       });
+      invalidateLocalizationCaches();
       await writeAudit({
         ...auditBase(ctx),
         entityType: 'platform_language',
         entityId: locale_code,
         action: AUDIT_ACTIONS.PLATFORM_LANGUAGE_PUBLISHED,
-        payload: { locale_code, version: nextVersion, completeness_ratio: workspace.completeness.ratio },
+        payload: { locale_code, version: nextVersion, completeness_ratio: workspace.completeness.ratio, snapshot_keys: Object.keys(snapshot).length },
+      });
+      return { ok: true, command, refreshed: await refreshedOwnerLanguages(ctx, locale_code) };
+    }
+    case 'rollback_platform_language': {
+      const locale_code = String(payload.locale_code ?? '').trim();
+      const version = Number(payload.version ?? 0);
+      if (!isLocaleCode(locale_code)) throw badRequest('Locale is required.');
+      if (!Number.isInteger(version) || version < 1) throw badRequest('Published version is required.');
+      const versionQuery = await supabaseAdmin
+        .from('platform_language_versions')
+        .select('version, snapshot, status')
+        .eq('locale_code', locale_code)
+        .eq('version', version)
+        .maybeSingle();
+      if (versionQuery.error && isMissingSnapshotColumn(versionQuery.error)) {
+        throw badRequest('This version has no snapshot and cannot be rolled back safely.');
+      }
+      if (versionQuery.error) throw versionQuery.error;
+      const versionRow = versionQuery.data;
+      if (!versionRow) throw badRequest('Translation version not found.');
+      const snapshotRaw = versionRow.snapshot;
+      if (!snapshotRaw || typeof snapshotRaw !== 'object' || Array.isArray(snapshotRaw)) {
+        throw badRequest('This version has no snapshot and cannot be rolled back safely.');
+      }
+      const snapshot = snapshotFromEntries(
+        Object.entries(snapshotRaw as Record<string, unknown>).map(([key, value]) => ({
+          key,
+          value: typeof value === 'string' ? value : '',
+        })),
+      );
+      if (!Object.keys(snapshot).length) {
+        throw badRequest('This version has no snapshot and cannot be rolled back safely.');
+      }
+      const keys = await loadCatalogKeys();
+      const allowed = new Set(keys.map((row) => row.key));
+      const restores = Object.entries(snapshot)
+        .filter(([key]) => allowed.has(key))
+        .map(([key, value]) => ({
+          locale_code,
+          key,
+          value,
+          status: 'published',
+          updated_at: new Date().toISOString(),
+          updated_by_user_id: ctx.user.id,
+        }));
+      if (restores.length) {
+        const { error } = await supabaseAdmin
+          .from('platform_translation_values')
+          .upsert(restores, { onConflict: 'locale_code,key' });
+        if (error) throw error;
+      }
+      const { data: language } = await supabaseAdmin
+        .from('platform_languages')
+        .select('version')
+        .eq('locale_code', locale_code)
+        .maybeSingle();
+      const nextVersion = Number(language?.version ?? version) + 1;
+      await supabaseAdmin
+        .from('platform_languages')
+        .update({
+          status: 'published',
+          version: nextVersion,
+          published_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          updated_by_user_id: ctx.user.id,
+        })
+        .eq('locale_code', locale_code);
+      await insertLanguageVersion({
+        locale_code,
+        version: nextVersion,
+        status: 'published',
+        completeness_ratio: translationCompleteness({
+          catalogSize: keys.length,
+          translatedCount: restores.length,
+        }).ratio,
+        snapshot,
+        published_at: new Date().toISOString(),
+        published_by_user_id: ctx.user.id,
+      });
+      invalidateLocalizationCaches();
+      await writeAudit({
+        ...auditBase(ctx),
+        entityType: 'platform_language',
+        entityId: locale_code,
+        action: AUDIT_ACTIONS.PLATFORM_LANGUAGE_ROLLED_BACK,
+        payload: { locale_code, from_version: version, restored_version: nextVersion, restored_keys: restores.length },
       });
       return { ok: true, command, refreshed: await refreshedOwnerLanguages(ctx, locale_code) };
     }

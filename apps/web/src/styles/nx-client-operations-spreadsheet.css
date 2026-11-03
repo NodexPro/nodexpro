@@ -44,7 +44,7 @@
   --nx-co-header-bg: var(--nx-table-header);
   --nx-co-text: var(--nx-text-primary);
   --nx-co-muted: var(--nx-text-secondary);
-  direction: rtl;
+  direction: inherit;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -665,7 +665,7 @@
   font-size: 13px;
   color: var(--nx-text-primary);
   background: var(--nx-table-bg);
-  direction: rtl;
+  direction: inherit;
 }
 
 .nx-co-sheet__table td {
@@ -2135,7 +2135,7 @@
     0 0 18px rgba(0, 207, 239, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.95);
   color: #0b1f33;
-  direction: rtl;
+  direction: inherit;
   text-align: right;
   /* Portaled to body: Inter/ui-sans lack Hebrew → UA serif fallback. Force Arial. */
   font-family: Arial, sans-serif;

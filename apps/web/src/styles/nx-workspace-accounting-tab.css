@@ -34,7 +34,7 @@
   flex-direction: column;
   gap: 12px;
   min-width: 0;
-  direction: rtl;
+  direction: inherit;
   --nx-ws-acc-row: minmax(0, 0.72fr) minmax(8rem, 1.4fr);
 }
 
@@ -52,7 +52,7 @@
 .nx-modal.nx-workspace-modal .nx-ws-accounting-card {
   display: flex;
   flex-direction: column;
-  direction: rtl;
+  direction: inherit;
   min-width: 0;
   min-height: 0;
   padding: 12px 14px 10px;

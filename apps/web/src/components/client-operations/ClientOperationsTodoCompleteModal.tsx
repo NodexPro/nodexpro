@@ -5,6 +5,7 @@
  * Uses the module's existing form/modal classes (nx-co-todo-form*, nx-btn nx-btn-taxes-compact).
  */
 import { useEffect, useId, useRef, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useI18n } from '../../i18n/I18nProvider';
 
 type Props = {
   clientLabel: string | null;
@@ -32,6 +33,7 @@ export function ClientOperationsTodoCompleteModal({
   onConfirm,
   onCancel,
 }: Props) {
+  const { t } = useI18n();
   const titleId = useId();
   const taskId = useId();
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -89,17 +91,16 @@ export function ClientOperationsTodoCompleteModal({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={taskId}
-        dir="rtl"
         onSubmit={onSubmit}
       >
         <div className="nx-co-todo-form__header">
-          <h3 id={titleId}>סיום משימה</h3>
+          <h3 id={titleId}>{t('clientOperations.todo.completeTitle')}</h3>
           <button
             type="button"
             className="nx-co-todo-board__close"
             onClick={onCancel}
             disabled={busy}
-            aria-label="סגור"
+            aria-label={t('clientOperations.close')}
             data-testid="client-operations-todo-complete-x"
           >
             ×
@@ -112,13 +113,13 @@ export function ClientOperationsTodoCompleteModal({
             {taskText}
           </p>
           <label className="nx-co-todo-form__field">
-            <span>סיבת סגירה</span>
+            <span>{t('clientOperations.todo.completionReason')}</span>
             <input
               ref={inputRef}
               type="text"
               value={reason}
               maxLength={reasonMaxLength}
-              placeholder="אופציונלי"
+              placeholder={t('clientOperations.todo.optional')}
               disabled={busy}
               onChange={(e) => onReasonChange(e.target.value)}
               data-testid="client-operations-todo-complete-reason"
@@ -138,7 +139,7 @@ export function ClientOperationsTodoCompleteModal({
             disabled={busy}
             data-testid="client-operations-todo-complete-cancel"
           >
-            ביטול
+            {t('clientOperations.cancel')}
           </button>
           <button
             type="submit"
@@ -146,7 +147,7 @@ export function ClientOperationsTodoCompleteModal({
             disabled={busy}
             data-testid="client-operations-todo-complete-confirm"
           >
-            סיום והעברה לארכיון
+            {t('clientOperations.todo.completeAndArchive')}
           </button>
         </div>
       </form>

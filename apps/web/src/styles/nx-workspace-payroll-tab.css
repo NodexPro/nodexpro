@@ -24,7 +24,7 @@
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-payroll {
-  direction: rtl;
+  direction: inherit;
   min-width: 0;
   max-width: 100%;
 }

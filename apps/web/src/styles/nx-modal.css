@@ -25,7 +25,7 @@
     0 24px 64px rgba(15, 23, 42, 0.18),
     0 8px 24px rgba(15, 23, 42, 0.08);
   overflow: hidden;
-  direction: rtl;
+  direction: inherit;
   color: #0f172a;
 }
 
@@ -577,6 +577,7 @@
 .nx-modal.nx-workspace-modal {
   width: min(1040px, 100%);
   background: #f8fafc;
+  direction: inherit;
   /* תמיד מתפרש לגובה החלון (פחות padding overlay) — לא כרטיס צף קצר עם גלילה מיותרת */
   max-height: calc(100vh - 48px);
   max-height: calc(100dvh - 48px);
@@ -592,6 +593,7 @@
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  direction: inherit;
   width: 100%;
   overflow: hidden;
 }
@@ -706,7 +708,7 @@
 
 .nx-workspace-tabs-bar {
   display: flex;
-  direction: rtl;
+  direction: inherit;
   align-items: flex-end;
   justify-content: flex-start;
   flex-wrap: nowrap;
@@ -2656,7 +2658,7 @@
 /* ===== Client folder modal top tabs: full-width equal distribution ===== */
 .nx-workspace-panel-root .nx-workspace-tabs-bar {
   display: flex !important;
-  direction: rtl;
+  direction: inherit;
   width: 100%;
   box-sizing: border-box;
   align-items: stretch;

@@ -1,4 +1,5 @@
 ﻿import { useMemo, useState } from 'react';
+import { useI18n } from '../../i18n/I18nProvider';
 import {
   buildClientOperationsOperationalPeriodKey,
   formatClientOperationsOperationalPeriodTabLabel,
@@ -21,6 +22,7 @@ export type ClientOperationsPeriodSheetTabsProps = {
  */
 export function ClientOperationsPeriodSheetTabs(props: ClientOperationsPeriodSheetTabsProps) {
   const { availablePeriods, selectedPeriodKey, defaultPeriodKey, disabled, onSelectPeriod } = props;
+  const { t } = useI18n();
   const [plusOpen, setPlusOpen] = useState(false);
 
   const seed = parseClientOperationsOperationalPeriodKey(
@@ -54,8 +56,8 @@ export function ClientOperationsPeriodSheetTabs(props: ClientOperationsPeriodShe
   };
 
   return (
-    <div className="nx-co-sheet__period-tabs" data-testid="client-operations-period-tabs" dir="rtl">
-      <div className="nx-co-sheet__period-tabs-scroll" role="tablist" aria-label="חודשי תפעול">
+    <div className="nx-co-sheet__period-tabs" data-testid="client-operations-period-tabs">
+      <div className="nx-co-sheet__period-tabs-scroll" role="tablist" aria-label={t('clientOperations.periods.aria')}>
         {tabs.map((key) => {
           const active = key === selectedPeriodKey;
           // Backend default_period_key = current working period (no FE calendar math).
@@ -88,8 +90,8 @@ export function ClientOperationsPeriodSheetTabs(props: ClientOperationsPeriodShe
           type="button"
           className="nx-co-sheet__period-tab nx-co-sheet__period-tab--plus"
           disabled={disabled}
-          aria-label="פתיחת חודש תפעול"
-          title="פתיחת חודש"
+          aria-label={t('clientOperations.periods.openMonth')}
+          title={t('clientOperations.periods.openMonthTitle')}
           onClick={openPlus}
         >
           +
@@ -97,13 +99,13 @@ export function ClientOperationsPeriodSheetTabs(props: ClientOperationsPeriodShe
       </div>
 
       {plusOpen ? (
-        <div className="nx-co-sheet__period-opener" role="dialog" aria-label="בחירת חודש תפעול">
+        <div className="nx-co-sheet__period-opener" role="dialog" aria-label={t('clientOperations.periods.chooseMonth')}>
           <label className="nx-co-sheet__period-opener-field">
-            <span>חודש</span>
+            <span>{t('clientOperations.periods.month')}</span>
             <select
               value={month}
               onChange={(e) => setMonth(Number(e.target.value))}
-              aria-label="חודש"
+              aria-label={t('clientOperations.periods.month')}
             >
               {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                 <option key={m} value={m}>
@@ -113,19 +115,19 @@ export function ClientOperationsPeriodSheetTabs(props: ClientOperationsPeriodShe
             </select>
           </label>
           <label className="nx-co-sheet__period-opener-field">
-            <span>שנה</span>
+            <span>{t('clientOperations.periods.year')}</span>
             <input
               type="number"
               min={2000}
               max={2100}
               value={year}
               onChange={(e) => setYear(Number(e.target.value))}
-              aria-label="שנה"
+              aria-label={t('clientOperations.periods.year')}
             />
           </label>
           <div className="nx-co-sheet__period-opener-actions">
             <button type="button" className="nx-co-sheet__btn" onClick={() => setPlusOpen(false)}>
-              סגור
+              {t('clientOperations.close')}
             </button>
             <button
               type="button"
@@ -133,7 +135,7 @@ export function ClientOperationsPeriodSheetTabs(props: ClientOperationsPeriodShe
               onClick={submitOpenPeriod}
               disabled={!buildClientOperationsOperationalPeriodKey(month, year)}
             >
-              פתח
+              {t('clientOperations.periods.open')}
             </button>
           </div>
         </div>

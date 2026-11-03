@@ -10,7 +10,22 @@ type TranslationEntry = {
   source_en?: string;
   value?: string;
   status?: string;
+  filter_status?: string;
   placeholder_ok?: boolean;
+};
+type ModuleCompleteness = {
+  module_group?: string;
+  catalog_size?: number;
+  translated_count?: number;
+  missing_count?: number;
+  ratio?: number;
+};
+type LanguageVersion = {
+  version?: number;
+  status?: string;
+  completeness_ratio?: number;
+  published_at?: string | null;
+  has_snapshot?: boolean;
 };
 
 type LanguagesAggregate = {
@@ -18,6 +33,7 @@ type LanguagesAggregate = {
   selected_locale?: string;
   workspace?: {
     completeness?: { ratio?: number; complete?: boolean };
+    module_completeness?: ModuleCompleteness[];
     placeholder_failures?: number;
     catalog_size?: number;
     translated_count?: number;
@@ -25,31 +41,41 @@ type LanguagesAggregate = {
     entries?: TranslationEntry[];
     groups?: string[];
     language?: LanguageRow;
+    versions?: LanguageVersion[];
   };
   ai_translation?: { available?: boolean; note?: string };
+  allowed_actions?: string[];
 };
 
 export function PlatformOwnerLanguagesPage() {
   const [aggregate, setAggregate] = useState<LanguagesAggregate | null>(null);
   const [locale, setLocale] = useState('en');
   const [search, setSearch] = useState('');
+  const [groupFilter, setGroupFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'missing' | 'draft' | 'published'>('all');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [baseline, setBaseline] = useState<Record<string, string>>({});
   const [newLang, setNewLang] = useState({ locale_code: '', name: '', direction: 'ltr' });
+
+  const applyAggregate = (data: LanguagesAggregate, fallbackLocale: string) => {
+    setAggregate(data);
+    setLocale(String(data.selected_locale ?? fallbackLocale));
+    const nextDrafts: Record<string, string> = {};
+    for (const entry of data.workspace?.entries ?? []) {
+      if (entry.key) nextDrafts[entry.key] = entry.value ?? '';
+    }
+    setDrafts(nextDrafts);
+    setBaseline(nextDrafts);
+  };
 
   const load = useCallback(async (nextLocale?: string) => {
     setError('');
     try {
       const selected = nextLocale ?? locale;
       const data = await apiJson<LanguagesAggregate>(`${OWNER.languages}?locale=${encodeURIComponent(selected)}`);
-      setAggregate(data);
-      setLocale(String(data.selected_locale ?? selected));
-      const nextDrafts: Record<string, string> = {};
-      for (const entry of data.workspace?.entries ?? []) {
-        if (entry.key) nextDrafts[entry.key] = entry.value ?? '';
-      }
-      setDrafts(nextDrafts);
+      applyAggregate(data, selected);
     } catch (e) {
       setError(userFacingApiMessage(e));
     }
@@ -69,14 +95,7 @@ export function PlatformOwnerLanguagesPage() {
         body: JSON.stringify({ command, payload }),
       })) as { refreshed?: { aggregate?: LanguagesAggregate } };
       if (out.refreshed?.aggregate) {
-        setAggregate(out.refreshed.aggregate);
-        const selected = String(out.refreshed.aggregate.selected_locale ?? locale);
-        setLocale(selected);
-        const nextDrafts: Record<string, string> = {};
-        for (const entry of out.refreshed.aggregate.workspace?.entries ?? []) {
-          if (entry.key) nextDrafts[entry.key] = entry.value ?? '';
-        }
-        setDrafts(nextDrafts);
+        applyAggregate(out.refreshed.aggregate, locale);
       } else {
         await load(locale);
       }
@@ -87,20 +106,36 @@ export function PlatformOwnerLanguagesPage() {
     }
   }
 
+  const dirtyEntries = useMemo(
+    () =>
+      Object.entries(drafts)
+        .filter(([key, value]) => value !== (baseline[key] ?? ''))
+        .map(([key, value]) => ({ key, value })),
+    [drafts, baseline],
+  );
+
   const entries = useMemo(() => {
     const q = search.trim().toLowerCase();
     return (aggregate?.workspace?.entries ?? []).filter((entry) => {
+      if (groupFilter !== 'all' && entry.module_group !== groupFilter) return false;
+      const status = entry.filter_status ?? (entry.status === 'published' ? 'published' : entry.value?.trim() ? 'draft' : 'missing');
+      if (statusFilter !== 'all' && status !== statusFilter) return false;
       if (!q) return true;
       return `${entry.key} ${entry.source_en} ${entry.value}`.toLowerCase().includes(q);
     });
-  }, [aggregate, search]);
+  }, [aggregate, search, groupFilter, statusFilter]);
+
+  const catalogSize = Number(aggregate?.workspace?.catalog_size ?? 0);
+  const moduleRows = aggregate?.workspace?.module_completeness ?? [];
+  const versions = aggregate?.workspace?.versions ?? [];
+  const groups = aggregate?.workspace?.groups ?? [];
 
   return (
     <div className="nx-owner-modules">
       <h1 className="nx-owner-modules__title">Languages & Translations</h1>
       <p className="nx-owner-modules__subtitle">
-        Manual translation catalog. Completeness is measured against the canonical settings/account keys, not the entire
-        application. AI generation is not available.
+        Platform UI catalog. Completeness is measured against every registered NodexPro UI key.
+        Client names, documents, legal values, and user data are not translated. AI generation is not available.
       </p>
       {error ? <p style={{ color: '#b91c1c' }}>{error}</p> : null}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -153,22 +188,68 @@ export function PlatformOwnerLanguagesPage() {
         </button>
       </form>
       <p>
-        Completeness: {Math.round(Number(aggregate?.workspace?.completeness?.ratio ?? 0) * 100)}% · placeholders failed:{' '}
+        Completeness: {Math.round(Number(aggregate?.workspace?.completeness?.ratio ?? 0) * 100)}% · {aggregate?.workspace?.translated_count ?? 0}/{catalogSize} keys · placeholders failed:{' '}
         {aggregate?.workspace?.placeholder_failures ?? 0}
       </p>
       <p style={{ color: '#6b7280', fontSize: 13 }}>{aggregate?.ai_translation?.note}</p>
-      <input
-        placeholder="Search key or source text"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        style={{ marginBottom: 12, width: 'min(420px, 100%)' }}
-      />
+      <h3>Completeness by module</h3>
+      <div style={{ overflowX: 'auto', marginBottom: 16 }}>
+        <table className="nx-owner-sheet">
+          <thead>
+            <tr>
+              <th>Module</th>
+              <th>Translated</th>
+              <th>Missing</th>
+              <th>%</th>
+            </tr>
+          </thead>
+          <tbody>
+            {moduleRows.map((row) => (
+              <tr key={String(row.module_group)}>
+                <td>{row.module_group}</td>
+                <td>
+                  {row.translated_count}/{row.catalog_size}
+                </td>
+                <td>{row.missing_count}</td>
+                <td>{Math.round(Number(row.ratio ?? 0) * 100)}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
+        <input
+          placeholder="Search key or source text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ width: 'min(420px, 100%)' }}
+        />
+        <select value={groupFilter} onChange={(e) => setGroupFilter(e.target.value)} aria-label="Filter by module">
+          <option value="all">All modules</option>
+          {groups.map((group) => (
+            <option key={group} value={group}>
+              {group}
+            </option>
+          ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+          aria-label="Filter by status"
+        >
+          <option value="all">All statuses</option>
+          <option value="missing">Missing</option>
+          <option value="draft">Draft</option>
+          <option value="published">Published</option>
+        </select>
+      </div>
       <div style={{ overflowX: 'auto', maxHeight: 480 }}>
         <table className="nx-owner-sheet">
           <thead>
             <tr>
               <th>Group</th>
               <th>Key</th>
+              <th>Status</th>
               <th>English</th>
               <th>Translation</th>
             </tr>
@@ -180,6 +261,7 @@ export function PlatformOwnerLanguagesPage() {
                 <td>
                   <code>{entry.key}</code>
                 </td>
+                <td>{entry.filter_status ?? entry.status}</td>
                 <td>{entry.source_en}</td>
                 <td>
                   <input
@@ -193,19 +275,19 @@ export function PlatformOwnerLanguagesPage() {
           </tbody>
         </table>
       </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
         <button
           type="button"
           className="nx-btn nx-btn-taxes-compact"
-          disabled={busy}
+          disabled={busy || dirtyEntries.length === 0}
           onClick={() =>
             void run('save_platform_translation_draft', {
               locale_code: locale,
-              entries: Object.entries(drafts).map(([key, value]) => ({ key, value })),
+              entries: dirtyEntries,
             })
           }
         >
-          Save draft
+          Save draft{dirtyEntries.length ? ` (${dirtyEntries.length})` : ''}
         </button>
         <button
           type="button"
@@ -216,10 +298,28 @@ export function PlatformOwnerLanguagesPage() {
           Publish language
         </button>
       </div>
-      <h3>Uncovered application areas</h3>
+      <h3>Published versions</h3>
       <ul>
-        {(aggregate?.workspace?.uncovered_application_areas ?? []).map((item) => (
-          <li key={item}>{item}</li>
+        {versions.length === 0 ? <li>No published snapshots yet.</li> : null}
+        {versions.map((version) => (
+          <li key={String(version.version)} style={{ marginBottom: 8 }}>
+            v{version.version} · {version.status} · {Math.round(Number(version.completeness_ratio ?? 0) * 100)}%
+            {version.has_snapshot ? (
+              <button
+                type="button"
+                className="nx-btn nx-btn-taxes-compact"
+                style={{ marginInlineStart: 8 }}
+                disabled={busy}
+                onClick={() =>
+                  void run('rollback_platform_language', { locale_code: locale, version: version.version })
+                }
+              >
+                Rollback to v{version.version}
+              </button>
+            ) : (
+              <span style={{ marginInlineStart: 8, color: '#6b7280' }}>no snapshot</span>
+            )}
+          </li>
         ))}
       </ul>
     </div>

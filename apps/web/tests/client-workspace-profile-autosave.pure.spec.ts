@@ -53,7 +53,7 @@ test('debounce is 700–900 ms and the named update_profile command is reused', 
   assert.doesNotMatch(panelSrc, />\s*שמירה\s*</);
   assert.doesNotMatch(panelSrc, />\s*ביטול\s*</);
   assert.match(panelSrc, /clientProfileSaveStateLabelHe/);
-  assert.match(panelSrc, /נסה שוב/);
+  assert.match(panelSrc, /clientOperations\.retry/);
   assert.match(panelSrc, /beforeunload/);
   assert.match(panelSrc, /clientProfileNeedsLeaveGuard/);
   assert.match(panelSrc, /previous\.flush\(\)/);
@@ -107,9 +107,9 @@ test('empty business type stays empty; עוסק פטור and other allowed types
 test('business-type control does not use a disabled empty option that browsers display as עוסק פטור', () => {
   assert.match(panelSrc, /clientProfileBusinessTypeSelectOptions/);
   assert.match(panelSrc, /hydrateClientProfileBusinessType/);
-  assert.match(panelSrc, /נא לבחור/);
+  assert.match(panelSrc, /clientOperations\.fields\.pleaseSelect/);
   assert.doesNotMatch(
-    panelSrc.slice(panelSrc.indexOf('aria-label="סוג עסק"')),
+    panelSrc.slice(panelSrc.indexOf("aria-label={t('clientOperations.fields.businessType')}")),
     /<option value="" disabled>/,
   );
   const allowed = readFileSync(

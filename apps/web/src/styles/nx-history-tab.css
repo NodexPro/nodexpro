@@ -15,7 +15,7 @@
   min-height: 280px;
   background: transparent;
   padding: 0;
-  direction: rtl;
+  direction: inherit;
   text-align: right;
 }
 

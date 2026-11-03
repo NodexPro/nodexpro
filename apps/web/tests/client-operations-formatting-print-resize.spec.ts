@@ -266,8 +266,8 @@ test('toolbar: print button calls handlePrint', () => {
 test('toolbar: text color moved out of עוד menu to A-color button in main toolbar', () => {
   // The עוד menu now only has fill/number/borders
   assert.match(viewSource, /צבע רקע/);
-  assert.match(viewSource, /פורמט מספר/);
-  assert.match(viewSource, /גבולות/);
+  assert.match(viewSource, /clientOperations\.numberFormat/);
+  assert.match(viewSource, /clientOperations\.borders/);
   // Text color is now via palette swatches (commitPresentationOrToolDefault) not a native color picker in more menu
   assert.match(viewSource, /commitPresentationOrToolDefault\(\{ color: swatch\.hex \}\)/);
   // The A-color control carries the text-color capability testid
@@ -317,11 +317,12 @@ test('view: toggleHiddenColumn pushes column_visibility undo entry', () => {
 
 // ── View source: print function ───────────────────────────────────────────────
 
-test('view: handlePrint opens window with landscape and RTL table', () => {
+test('view: handlePrint opens window with landscape and locale-driven direction', () => {
   assert.match(viewSource, /handlePrint/);
   assert.match(viewSource, /window\.open/);
   assert.match(viewSource, /size: landscape/);
-  assert.match(viewSource, /direction: rtl/);
+  assert.match(viewSource, /printDir = lang === 'he' \? 'rtl' : 'ltr'/);
+  assert.match(viewSource, /direction: \$\{printDir\}/);
 });
 
 test('view: handlePrint uses selectPrintableColumnKeys from pure module', () => {

@@ -35,14 +35,14 @@ const toolbarSlice = (() => {
   return viewSource.slice(start, end);
 })();
 
-test('1 CO route header shows ניהול לקוחות as the module title', () => {
-  assert.match(coHeaderSource, /CLIENT_OPERATIONS_HEADER_TITLE_HE = 'ניהול לקוחות'/);
-  assert.match(coHeaderSource, /<h1 className="nx-co-app-header__title">\{CLIENT_OPERATIONS_HEADER_TITLE_HE\}<\/h1>/);
+test('1 CO route header shows the module title from existing i18n', () => {
+  assert.match(coHeaderSource, /CLIENT_OPERATIONS_HEADER_TITLE_KEY = 'clientOperations\.moduleTitle'/);
+  assert.match(coHeaderSource, /<h1 className="nx-co-app-header__title">\{moduleTitle\}<\/h1>/);
   assert.match(layoutSource, /isClientOperationsModule \? \(\s*<ClientOperationsAppHeader/);
 });
 
-test('1b title sits on the RIGHT (RTL header, title at inline-start)', () => {
-  assert.match(coHeaderSource, /<header className="nx-co-app-header" dir="rtl"/);
+test('1b title sits at inline-start and follows platform direction', () => {
+  assert.doesNotMatch(coHeaderSource, /dir="rtl"/);
   // Title wrap is the first grid cell → inline-start → right side under dir=rtl.
   assert.match(
     coHeaderSource,
@@ -70,14 +70,14 @@ test('2 duplicate inner title תפעול לקוחות is not rendered in the she
     'fullscreen → header cluster → toolbar order',
   );
   // Print HTML keeps its own document heading (separate print renderer, unchanged).
-  assert.match(viewSource, /<h1>ניהול לקוחות — \$\{periodHeading\}<\/h1>/);
+  assert.match(viewSource, /<h1>\$\{t\('clientOperations\.moduleTitle'\)\} — \$\{periodHeading\}<\/h1>/);
 });
 
 test('3 CO header hides duplicated account / language chrome', () => {
   assert.doesNotMatch(coHeaderSource, /topBar\.language/);
   // CO header has workspace <select> (Stage 4) — not account/language chrome.
   assert.doesNotMatch(coHeaderSource, /onSelectOrg|onSignOut|user\.fullName|user\.email|activeOrg/);
-  assert.doesNotMatch(coHeaderSource, /useI18n/);
+  assert.doesNotMatch(coHeaderSource, /language_selector|setLang|topBar\.language/);
   // No fake chrome either.
   assert.doesNotMatch(coHeaderSource, /Add Client|הוסף לקוח|notification|התראות|help|עזרה|settings|הגדרות/i);
   // Layout: CO header gets search + workspace slots; never generic AppHeader on CO route.
@@ -93,7 +93,7 @@ test('3 CO header hides duplicated account / language chrome', () => {
 test('4 search field renderer exists exactly once (single renderSearchField)', () => {
   const inputs = viewSource.match(/type="search"/g) ?? [];
   assert.equal(inputs.length, 1, 'exactly one <input type="search"> in the registry view');
-  const placeholders = viewSource.match(/placeholder="חיפוש בטבלה…"/g) ?? [];
+  const placeholders = viewSource.match(/placeholder=\{t\('clientOperations\.searchPlaceholder'\)\}/g) ?? [];
   assert.equal(placeholders.length, 1);
   assert.match(viewSource, /const renderSearchField = \(placement: 'header' \| 'toolbar'\) =>/);
   assert.match(viewSource, /data-testid="client-operations-search"/);

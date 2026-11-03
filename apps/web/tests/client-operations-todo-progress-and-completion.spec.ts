@@ -158,7 +158,7 @@ test('autosave: status labels (Hebrew) — nothing shown when idle', () => {
 // ── A. progress note UI ──────────────────────────────────────────────────────────────────────────────
 
 test('A — שלב טיפול: labelled field, named command, create payload, backend limits, no status enum', () => {
-  assert.match(modal, /<span>שלב טיפול<\/span>/);
+  assert.match(modal, /clientOperations\.todo\.progressStep/);
   assert.match(modal, /command: 'update_client_operations_todo_progress_note'/);
   assert.match(modal, /progress_note: progressNote\.trim\(\) \|\| null/); // create command payload
   assert.match(modal, /maxLength=\{fieldLimits\?\.progress_note_max_length\}/);
@@ -190,7 +190,7 @@ test('A — card popover: hover / keyboard focus / tap, Escape closes only the p
   assert.match(popover, /createPortal\(/);
   assert.match(popover, /role="tooltip"/);
   assert.match(popover, /document\.addEventListener\('pointerdown'/); // outside tap dismisses a pinned popover
-  assert.match(popover, /<div className="nx-co-todo-note-popover__label">שלב טיפול<\/div>/);
+  assert.match(popover, /clientOperations\.todo\.progressStep/);
   assert.match(css, /\.nx-co-todo-note-popover \{[^}]*position: fixed;/);
   // Same font family as the rest of the module (the portal lives outside the overlay, so it is listed explicitly).
   assert.match(css, /\.nx-co-todo-note-popover,\s*\.nx-co-todo-note-popover \*,[\s\S]*?font-family: Arial, sans-serif !important;/);
@@ -199,11 +199,11 @@ test('A — card popover: hover / keyboard focus / tap, Escape closes only the p
 // ── B. completion dialog ─────────────────────────────────────────────────────────────────────────────
 
 test('B — completion dialog: texts, X, Cancel, Escape, accessibility', () => {
-  assert.match(completeModal, /<h3 id=\{titleId\}>סיום משימה<\/h3>/);
-  assert.match(completeModal, /<span>סיבת סגירה<\/span>/);
-  assert.match(completeModal, /סיום והעברה לארכיון/);
-  assert.match(completeModal, /ביטול/);
-  assert.match(completeModal, /className="nx-co-todo-board__close"[\s\S]*?aria-label="סגור"[\s\S]*?×/); // visible X
+  assert.match(completeModal, /<h3 id=\{titleId\}>\{t\('clientOperations\.todo\.completeTitle'\)\}<\/h3>/);
+  assert.match(completeModal, /<span>\{t\('clientOperations\.todo\.completionReason'\)\}<\/span>/);
+  assert.match(completeModal, /clientOperations\.todo\.completeAndArchive/);
+  assert.match(completeModal, /clientOperations\.cancel/);
+  assert.match(completeModal, /className="nx-co-todo-board__close"[\s\S]*?aria-label=\{t\('clientOperations\.close'\)\}[\s\S]*?×/); // visible X
   assert.match(completeModal, /role="dialog"/);
   assert.match(completeModal, /aria-modal="true"/);
   assert.match(completeModal, /aria-labelledby=\{titleId\}/);
@@ -255,9 +255,11 @@ test('B — reopen contract unchanged (single command, board + archive truth); c
 // ── archive column ───────────────────────────────────────────────────────────────────────────────────
 
 test('archive: separate סיבת סגירה column (before actions); green only for non-empty values; null stays neutral', () => {
-  assert.match(modal, /<th>הושלם על ידי<\/th>\s*<th>סיבת סגירה<\/th>\s*<th>פעולות<\/th>/);
-  assert.match(modal, /t\.completion_reason\s*\?\s*'nx-co-todo-archive__reason nx-co-todo-archive__reason--set'\s*:\s*'nx-co-todo-archive__reason'/);
-  assert.match(modal, /\{t\.completion_reason \?\? '—'\}/);
+  assert.match(modal, /clientOperations\.todo\.completedBy/);
+  assert.match(modal, /clientOperations\.todo\.completionReason/);
+  assert.match(modal, /clientOperations\.todo\.actions/);
+  assert.match(modal, /row\.completion_reason\s*\?\s*'nx-co-todo-archive__reason nx-co-todo-archive__reason--set'\s*:\s*'nx-co-todo-archive__reason'/);
+  assert.match(modal, /\{row\.completion_reason \?\? '—'\}/);
   assert.match(css, /\.nx-co-todo-archive__reason--set \{\s*color: #15803d;\s*\}/);
   // Card + aggregate types carry the backend fields.
   assert.match(modal, /completion_reason: string \| null;/);

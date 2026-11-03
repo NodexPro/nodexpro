@@ -29,8 +29,8 @@ test('עוד toolbar button is hidden (menu implementation retained)', () => {
   // Underlying more menu (fill / number / borders) must remain in source.
   assert.match(viewSource, /nx-co-sheet__more-menu/);
   assert.match(viewSource, /צבע רקע/);
-  assert.match(viewSource, /פורמט מספר/);
-  assert.match(viewSource, /גבולות/);
+  assert.match(viewSource, /clientOperations\.numberFormat/);
+  assert.match(viewSource, /clientOperations\.borders/);
   assert.match(viewSource, /setMoreOpen/);
 });
 

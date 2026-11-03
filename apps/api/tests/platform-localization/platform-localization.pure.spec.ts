@@ -5,11 +5,14 @@ import {
   defaultUiLanguageFromCountry,
   flattenMessageTree,
   isIso4217Code,
+  mergePublishedCatalog,
+  moduleCompleteness,
   placeholdersMatch,
   publishedCurrencyOptions,
   publishedLanguageOptions,
   resolvePersistedUiLanguage,
   translationCompleteness,
+  translationEntryFilterStatus,
   uiLanguageDirection,
   validateLocalizationPreferences,
 } from '../../src/domains/platform-localization/platform-localization.pure.js';
@@ -33,6 +36,33 @@ test('draft languages are not selectable and incomplete catalogs cannot publish'
   assert.equal(canPublishLanguage({ catalogSize: 10, translatedCount: 9, placeholderFailures: 0 }).ok, false);
   assert.equal(canPublishLanguage({ catalogSize: 10, translatedCount: 10, placeholderFailures: 1 }).ok, false);
   assert.equal(canPublishLanguage({ catalogSize: 10, translatedCount: 10, placeholderFailures: 0 }).ok, true);
+});
+
+test('published overlay keeps last snapshot when a later draft hides the live published row', () => {
+  const merged = mergePublishedCatalog({
+    bundled: { 'nav.dashboard': 'Dashboard', 'settings.save': 'Save' },
+    snapshot: { 'settings.save': 'Save published' },
+    livePublished: { 'nav.dashboard': 'Owner dashboard' },
+  });
+  assert.equal(merged['nav.dashboard'], 'Owner dashboard');
+  assert.equal(merged['settings.save'], 'Save published');
+});
+
+test('module completeness is measured per group against the full catalog', () => {
+  const rows = moduleCompleteness([
+    { module_group: 'clientOperations', value: 'Search', placeholder_ok: true },
+    { module_group: 'clientOperations', value: '', placeholder_ok: true },
+    { module_group: 'settings', value: 'Save', placeholder_ok: true },
+  ]);
+  const co = rows.find((row) => row.module_group === 'clientOperations');
+  const settings = rows.find((row) => row.module_group === 'settings');
+  assert.equal(co?.catalog_size, 2);
+  assert.equal(co?.translated_count, 1);
+  assert.equal(co?.missing_count, 1);
+  assert.equal(settings?.ratio, 1);
+  assert.equal(translationEntryFilterStatus({ value: '', status: 'draft', placeholder_ok: true }), 'missing');
+  assert.equal(translationEntryFilterStatus({ value: 'Hi', status: 'draft', placeholder_ok: true }), 'draft');
+  assert.equal(translationEntryFilterStatus({ value: 'Hi', status: 'published', placeholder_ok: true }), 'published');
 });
 
 test('placeholder integrity and localization preference validation', () => {

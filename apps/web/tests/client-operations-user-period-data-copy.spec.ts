@@ -28,7 +28,7 @@ test('1-2 right-click grid opens centered source modal; chrome unrelated not wir
   assert.match(viewSource, /data-testid="client-operations-grid-surface"/);
   assert.match(viewSource, /setPeriodCopySourceOpen\(true\)/);
   assert.match(viewSource, /data-testid="client-operations-period-copy-source-modal"/);
-  assert.match(viewSource, /העתק מידע מחודש/);
+  assert.match(viewSource, /clientOperations\.copyFromMonth/);
   assert.doesNotMatch(viewSource, /nx-co-sheet__context-menu/);
   assert.doesNotMatch(viewSource, /AppSidebar[\s\S]{0,40}onContextMenu/);
 });
@@ -48,7 +48,7 @@ test('4-5 current period excluded; source selection works', () => {
   assert.match(viewSource, /sourcePeriodsForUserPeriodDataCopy/);
   assert.match(viewSource, /userPeriodDataCopySourcePeriods/);
   assert.match(viewSource, /setPeriodCopySelectedSource/);
-  assert.match(viewSource, /המשך/);
+  assert.match(viewSource, /clientOperations\.continue/);
   assert.doesNotMatch(
     viewSource.slice(
       viewSource.indexOf('sourcePeriodsForCopy = useMemo'),
@@ -66,11 +66,11 @@ test('6-8 conflict UI + EMPTY_ONLY default + cancel', () => {
     }),
     true,
   );
-  assert.match(viewSource, /העתק רק לתאים ריקים/);
-  assert.match(viewSource, /החלף את הנתונים הקיימים/);
+  assert.match(viewSource, /clientOperations\.copyEmptyOnly/);
+  assert.match(viewSource, /clientOperations\.copyReplace/);
   assert.match(viewSource, /mode: 'empty_only'/);
   assert.match(viewSource, /setPeriodCopyDialog\(null\)/);
-  assert.match(viewSource, /ביטול/);
+  assert.match(viewSource, /clientOperations\.cancel/);
   assert.match(viewSource, /data-testid="client-operations-period-copy-dialog"/);
 });
 

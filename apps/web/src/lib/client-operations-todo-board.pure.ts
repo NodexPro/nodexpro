@@ -14,13 +14,14 @@ export const TODO_PRIORITY_LANES: Array<{
   /** Presentation number. Lane "5" is null / no priority — never submitted as 5. */
   visual_number: '1' | '2' | '3' | '4' | '5';
   label_he: string;
+  labelKey: string;
   accent: 'red' | 'orange' | 'gold' | 'green' | 'blue';
 }> = [
-  { id: 'p1', priority: 1, visual_number: '1', label_he: 'דחוף', accent: 'red' },
-  { id: 'p2', priority: 2, visual_number: '2', label_he: 'גבוה', accent: 'orange' },
-  { id: 'p3', priority: 3, visual_number: '3', label_he: 'בינוני', accent: 'gold' },
-  { id: 'p4', priority: 4, visual_number: '4', label_he: 'נמוך', accent: 'green' },
-  { id: 'none', priority: null, visual_number: '5', label_he: 'ללא עדיפות', accent: 'blue' },
+  { id: 'p1', priority: 1, visual_number: '1', label_he: 'דחוף', labelKey: 'clientOperations.todo.urgent', accent: 'red' },
+  { id: 'p2', priority: 2, visual_number: '2', label_he: 'גבוה', labelKey: 'clientOperations.todo.high', accent: 'orange' },
+  { id: 'p3', priority: 3, visual_number: '3', label_he: 'בינוני', labelKey: 'clientOperations.todo.medium', accent: 'gold' },
+  { id: 'p4', priority: 4, visual_number: '4', label_he: 'נמוך', labelKey: 'clientOperations.todo.low', accent: 'green' },
+  { id: 'none', priority: null, visual_number: '5', label_he: 'ללא עדיפות', labelKey: 'clientOperations.todo.noPriority', accent: 'blue' },
 ];
 
 export function todoPriorityToLaneId(priority: number | null | undefined): TodoPriorityLaneId {

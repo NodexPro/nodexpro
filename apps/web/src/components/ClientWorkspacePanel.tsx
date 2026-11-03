@@ -19,6 +19,7 @@ import { ClientHistoryTab } from './ClientHistoryTab';
 import type { ClientHistoryTabModel } from './client-history-tab-types';
 import { ClientObligationsTab, type ClientObligationsTabModel } from './ClientObligationsTab';
 import { ClientDocflowTab } from './ClientDocflowTab';
+import { useI18n } from '../i18n/I18nProvider';
 import {
   CLIENT_PROFILE_AUTOSAVE_DEBOUNCE_MS,
   buildClientProfileUpdatePayload,
@@ -212,18 +213,18 @@ type WorkspaceTabKey =
   | 'salary'
   | 'history';
 
-const TAB_ORDER: Array<{ key: WorkspaceTabKey; label: string }> = [
-  { key: 'client', label: 'פרטי לקוח' },
-  { key: 'taxes', label: 'מיסים' },
-  { key: 'accounting', label: 'הגדרות הנה״ח' },
-  { key: 'obligations', label: 'התחייבויות' },
-  { key: 'docflow', label: 'DocFlow' },
-  { key: 'documents', label: 'מסמכים' },
-  { key: 'annual', label: 'דוח שנתי' },
-  { key: 'equity', label: 'הצהרת הון' },
-  { key: 'fees', label: 'שכ״ט' },
-  { key: 'salary', label: 'שכר' },
-  { key: 'history', label: 'היסטוריה' },
+const TAB_ORDER: Array<{ key: WorkspaceTabKey; labelKey: string }> = [
+  { key: 'client', labelKey: 'clientOperations.tabs.client' },
+  { key: 'taxes', labelKey: 'clientOperations.tabs.taxes' },
+  { key: 'accounting', labelKey: 'clientOperations.tabs.accounting' },
+  { key: 'obligations', labelKey: 'clientOperations.tabs.obligations' },
+  { key: 'docflow', labelKey: 'clientOperations.tabs.docflow' },
+  { key: 'documents', labelKey: 'clientOperations.tabs.documents' },
+  { key: 'annual', labelKey: 'clientOperations.tabs.annual' },
+  { key: 'equity', labelKey: 'clientOperations.tabs.equity' },
+  { key: 'fees', labelKey: 'clientOperations.tabs.fees' },
+  { key: 'salary', labelKey: 'clientOperations.tabs.salary' },
+  { key: 'history', labelKey: 'clientOperations.tabs.history' },
 ];
 
 /** Hide from client-folder modal top nav only — obligations domain/tab content retained. */
@@ -315,7 +316,7 @@ function emptyTaxPlaceholderBundle(row: RegistryRowForPlaceholderCase): ClientTa
 function emptyAccountingSectionPlaceholder(): ClientBusinessProfileSectionResponse {
   return {
     section_key: 'business_profile',
-    section_label: 'פרופיל עסקי',
+    section_label: 'Business profile',
     permissions: { can_view_business_profile: false, can_edit_business_profile: false },
     version: 0,
     fields: [],
@@ -367,17 +368,17 @@ export function buildPlaceholderClientCaseFromRegistryRow(row: RegistryRowForPla
   };
 }
 
-const CLIENT_STATUS_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'active', label: 'פעיל' },
-  { value: 'inactive', label: 'לא פעיל' },
-  { value: 'pending', label: 'ממתין' },
+const CLIENT_STATUS_OPTIONS: Array<{ value: string; labelKey: string }> = [
+  { value: 'active', labelKey: 'clientOperations.status.active' },
+  { value: 'inactive', labelKey: 'clientOperations.status.inactive' },
+  { value: 'pending', labelKey: 'clientOperations.status.pending' },
 ];
 
-function formatDateHe(iso: string | null | undefined): string {
+function formatDateHe(iso: string | null | undefined, locale: string): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('he-IL');
+  return d.toLocaleDateString(locale === 'he' ? 'he-IL' : 'en-GB');
 }
 
 export function ClientWorkspacePanel({
@@ -409,6 +410,7 @@ export function ClientWorkspacePanel({
   /** Lets the parent overlay flush pending edits before dismissing the workspace. */
   profileFlushRef?: MutableRefObject<(() => Promise<boolean>) | null>;
 }) {
+  const { t, lang } = useI18n();
   const [activeTab, setActiveTab] = useState<WorkspaceTabKey>(
     TAB_ORDER.some((t) => t.key === initialTab) ? (initialTab as WorkspaceTabKey) : 'client',
   );
@@ -508,8 +510,11 @@ export function ClientWorkspacePanel({
           const todoConflict =
             e instanceof ApiError && e.code === 'CLIENT_HANDLER_TODO_CONFLICT'
               ? typeof e.details?.conflicting_todo_count === 'number'
-                ? `לא ניתן לשנות מטפל בתיק — קיימות ${e.details.conflicting_todo_count} משימות ToDo פעילות שאינן תואמות. יש להשלים או להעביר את המשימות תחילה.`
-                : 'לא ניתן לשנות מטפל בתיק — קיימות משימות ToDo פעילות. יש להשלים או להעביר את המשימות תחילה.'
+                ? t('clientOperations.handlerBlockedCount').replace(
+                    '{{count}}',
+                    String(e.details.conflicting_todo_count),
+                  )
+                : t('clientOperations.handlerBlocked')
               : null;
           throw new Error(todoConflict ?? (e instanceof Error ? e.message : 'Failed to save'));
         }
@@ -586,7 +591,8 @@ export function ClientWorkspacePanel({
     () => TAB_ORDER.filter((t) => isWorkspaceNavTabVisible(t.key, docflowTabVisible, folderModal)),
     [docflowTabVisible, folderModal]
   );
-  const activeTabLabel = tabs.find((t) => t.key === activeTab)?.label ?? '';
+  const activeTabMeta = tabs.find((tab) => tab.key === activeTab);
+  const activeTabLabel = activeTabMeta ? t(activeTabMeta.labelKey) : '';
   useEffect(() => {
     if (!isWorkspaceNavTabVisible(activeTab, docflowTabVisible, folderModal)) setActiveTab('client');
   }, [activeTab, docflowTabVisible, folderModal]);
@@ -606,12 +612,12 @@ export function ClientWorkspacePanel({
     <div className="client-profile-card">
       {activeTab !== 'client' && (
         <div className="client-profile-bottom-note">
-          {`עוד אין נתונים — ${activeTabLabel}`}
+          {t('clientOperations.emptyTab').replace('{{tab}}', activeTabLabel)}
         </div>
       )}
       <div className="client-profile-grid">
         <div className="client-field">
-          <div className="client-field-label">שם לקוח</div>
+          <div className="client-field-label">{t('clientOperations.fields.clientName')}</div>
           {isClientTab ? (
             <div className="client-field-box">
               <ClientFieldDecorIcon kind="building" />
@@ -620,7 +626,7 @@ export function ClientWorkspacePanel({
                 onChange={(e) => applyDraftPatch((s) => ({ ...s, client_name: e.target.value }))}
                 readOnly={clientFieldsLocked}
                 className="client-field-box-input"
-                aria-label="שם לקוח"
+                aria-label={t('clientOperations.fields.clientName')}
                 style={{
                   border: 'none',
                   background: 'transparent',
@@ -641,7 +647,7 @@ export function ClientWorkspacePanel({
         </div>
 
         <div className="client-field">
-          <div className="client-field-label">ת.ז / ח.פ</div>
+          <div className="client-field-label">{t('clientOperations.fields.taxId')}</div>
           {isClientTab ? (
             <div className="client-field-box">
               <ClientFieldDecorIcon kind="id-card" />
@@ -650,7 +656,7 @@ export function ClientWorkspacePanel({
                 onChange={(e) => applyDraftPatch((s) => ({ ...s, government_id: e.target.value }))}
                 readOnly={clientFieldsLocked}
                 className="client-field-box-input"
-                aria-label="ת.ז / ח.פ"
+                aria-label={t('clientOperations.fields.taxId')}
                 style={{
                   border: 'none',
                   background: 'transparent',
@@ -671,7 +677,7 @@ export function ClientWorkspacePanel({
         </div>
 
         <div className="client-field">
-          <div className="client-field-label">סוג עסק</div>
+          <div className="client-field-label">{t('clientOperations.fields.businessType')}</div>
           {isClientTab ? (
             <div className="client-field-box">
               <ClientFieldDecorIcon kind="briefcase" />
@@ -679,7 +685,7 @@ export function ClientWorkspacePanel({
                 value={draft.business_type}
                 onChange={(e) => applyDraftPatch((s) => ({ ...s, business_type: e.target.value }))}
                 disabled={clientFieldsLocked}
-                aria-label="סוג עסק"
+                aria-label={t('clientOperations.fields.businessType')}
                 style={{
                   border: 'none',
                   background: 'transparent',
@@ -691,7 +697,7 @@ export function ClientWorkspacePanel({
                 }}
               >
                 <option value="">
-                  נא לבחור
+                  {t('clientOperations.fields.pleaseSelect')}
                 </option>
                 {clientProfileBusinessTypeSelectOptions(draft.business_type).map((opt) => (
                   <option key={opt} value={opt}>
@@ -709,7 +715,7 @@ export function ClientWorkspacePanel({
         </div>
 
         <div className="client-field">
-          <div className="client-field-label">סטטוס לקוח</div>
+          <div className="client-field-label">{t('clientOperations.fields.clientStatus')}</div>
           {isClientTab ? (
             <div className="client-field-box">
               <ClientFieldDecorIcon kind="status" />
@@ -717,7 +723,7 @@ export function ClientWorkspacePanel({
                 value={draft.status}
                 onChange={(e) => applyDraftPatch((s) => ({ ...s, status: e.target.value }))}
                 disabled={clientFieldsLocked}
-                aria-label="סטטוס לקוח"
+                aria-label={t('clientOperations.fields.clientStatus')}
                 style={{
                   border: 'none',
                   background: 'transparent',
@@ -730,7 +736,7 @@ export function ClientWorkspacePanel({
               >
                 {CLIENT_STATUS_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>
-                    {o.label}
+                    {t(o.labelKey)}
                   </option>
                 ))}
               </select>
@@ -744,7 +750,7 @@ export function ClientWorkspacePanel({
         </div>
 
         <div className="client-field">
-          <div className="client-field-label">איש קשר</div>
+          <div className="client-field-label">{t('clientOperations.fields.contact')}</div>
           {isClientTab ? (
             <div className="client-field-box">
               <ClientFieldDecorIcon kind="user" />
@@ -753,7 +759,7 @@ export function ClientWorkspacePanel({
                 onChange={(e) => applyDraftPatch((s) => ({ ...s, contact_person: e.target.value }))}
                 readOnly={clientFieldsLocked}
                 className="client-field-box-input"
-                aria-label="איש קשר"
+                aria-label={t('clientOperations.fields.contact')}
                 style={{
                   border: 'none',
                   background: 'transparent',
@@ -774,7 +780,7 @@ export function ClientWorkspacePanel({
         </div>
 
         <div className="client-field">
-          <div className="client-field-label">טלפון</div>
+          <div className="client-field-label">{t('clientOperations.fields.phone')}</div>
           {isClientTab ? (
             <div className="client-field-box">
               <ClientFieldDecorIcon kind="phone" />
@@ -783,7 +789,7 @@ export function ClientWorkspacePanel({
                 onChange={(e) => applyDraftPatch((s) => ({ ...s, phone: e.target.value }))}
                 readOnly={clientFieldsLocked}
                 className="client-field-box-input"
-                aria-label="טלפון"
+                aria-label={t('clientOperations.fields.phone')}
                 style={{
                   border: 'none',
                   background: 'transparent',
@@ -804,7 +810,7 @@ export function ClientWorkspacePanel({
         </div>
 
         <div className="client-field">
-          <div className="client-field-label">אימייל</div>
+          <div className="client-field-label">{t('clientOperations.fields.email')}</div>
           {isClientTab ? (
             <div className="client-field-box">
               <ClientFieldDecorIcon kind="mail" />
@@ -813,7 +819,7 @@ export function ClientWorkspacePanel({
                 onChange={(e) => applyDraftPatch((s) => ({ ...s, email: e.target.value }))}
                 readOnly={clientFieldsLocked}
                 className="client-field-box-input"
-                aria-label="אימייל"
+                aria-label={t('clientOperations.fields.email')}
                 style={{
                   border: 'none',
                   background: 'transparent',
@@ -834,7 +840,7 @@ export function ClientWorkspacePanel({
         </div>
 
         <div className="client-field">
-          <div className="client-field-label">כתובת</div>
+          <div className="client-field-label">{t('clientOperations.fields.address')}</div>
           {isClientTab ? (
             <div className="client-field-box">
               <ClientFieldDecorIcon kind="pin" />
@@ -843,7 +849,7 @@ export function ClientWorkspacePanel({
                 onChange={(e) => applyDraftPatch((s) => ({ ...s, address_text: e.target.value }))}
                 readOnly={clientFieldsLocked}
                 className="client-field-box-input"
-                aria-label="כתובת"
+                aria-label={t('clientOperations.fields.address')}
                 style={{
                   border: 'none',
                   background: 'transparent',
@@ -864,7 +870,7 @@ export function ClientWorkspacePanel({
         </div>
 
         <div className="client-field">
-          <div className="client-field-label">מטפל בתיק</div>
+          <div className="client-field-label">{t('clientOperations.fields.handler')}</div>
           {isClientTab ? (
             <div className="client-field-box">
               <ClientFieldDecorIcon kind="user" />
@@ -877,7 +883,7 @@ export function ClientWorkspacePanel({
                   }))
                 }
                 disabled={clientFieldsLocked}
-                aria-label="מטפל בתיק"
+                aria-label={t('clientOperations.fields.handler')}
                 style={{
                   border: 'none',
                   background: 'transparent',
@@ -905,15 +911,15 @@ export function ClientWorkspacePanel({
         </div>
 
         <div className="client-field">
-          <div className="client-field-label">תאריך תחילת טיפול</div>
+          <div className="client-field-label">{t('clientOperations.fields.startedAt')}</div>
           <div className="client-field-box">
             <ClientFieldDecorIcon kind="calendar" />
-            {formatDateHe(localWorkspace.client.started_at)}
+            {formatDateHe(localWorkspace.client.started_at, lang)}
           </div>
         </div>
 
         <div className="client-field">
-          <div className="client-field-label">תאריך סיום טיפול</div>
+          <div className="client-field-label">{t('clientOperations.fields.endedAt')}</div>
           {isClientTab ? (
             <div className="client-field-box">
               <ClientFieldDecorIcon kind="calendar" />
@@ -922,7 +928,7 @@ export function ClientWorkspacePanel({
                 value={draft.ended_at}
                 onChange={(e) => applyDraftPatch((s) => ({ ...s, ended_at: e.target.value }))}
                 readOnly={clientFieldsLocked}
-                aria-label="תאריך סיום טיפול"
+                aria-label={t('clientOperations.fields.endedAt')}
                 style={{
                   border: 'none',
                   background: 'transparent',
@@ -937,7 +943,7 @@ export function ClientWorkspacePanel({
           ) : (
             <div className="client-field-box">
               <ClientFieldDecorIcon kind="calendar" />
-              {formatDateHe(localWorkspace.client.ended_at)}
+              {formatDateHe(localWorkspace.client.ended_at, lang)}
             </div>
           )}
         </div>
@@ -972,7 +978,7 @@ export function ClientWorkspacePanel({
               }}
               disabled={clientFieldsLocked}
             >
-              נסה שוב
+              {t('clientOperations.retry')}
             </button>
           </>
         ) : null}
@@ -981,7 +987,7 @@ export function ClientWorkspacePanel({
   );
 
   return (
-    <div className="nx-workspace-panel-root" style={{ direction: 'rtl' }}>
+    <div className="nx-workspace-panel-root">
       <div className="nx-workspace-header">
         <div className="nx-workspace-header-left" aria-hidden="true">
           <img className="nx-workspace-logo" src={logoSrc} alt="" />
@@ -993,7 +999,7 @@ export function ClientWorkspacePanel({
         <div className="nx-workspace-header-right" aria-hidden="true" />
 
         {showClose && (
-          <button type="button" className="nx-workspace-close" onClick={() => void requestWorkspaceClose()} aria-label="סגור" title="סגור">
+          <button type="button" className="nx-workspace-close" onClick={() => void requestWorkspaceClose()} aria-label={t('clientOperations.close')} title={t('clientOperations.close')}>
             ×
           </button>
         )}
@@ -1001,16 +1007,16 @@ export function ClientWorkspacePanel({
       <div className="nx-workspace-header-divider" />
 
       <div className="nx-workspace-tabs-bar" role="tablist" aria-label="Workspace tabs">
-        {tabs.map((t) => (
+        {tabs.map((tab) => (
           <button
-            key={t.key}
+            key={tab.key}
             type="button"
             role="tab"
-            aria-selected={activeTab === t.key}
-            className={`nx-workspace-tab-link ${activeTab === t.key ? 'nx-workspace-tab-link-active' : ''}`}
-            onClick={() => void requestTabChange(t.key)}
+            aria-selected={activeTab === tab.key}
+            className={`nx-workspace-tab-link ${activeTab === tab.key ? 'nx-workspace-tab-link-active' : ''}`}
+            onClick={() => void requestTabChange(tab.key)}
           >
-            {t.label}
+            {t(tab.labelKey)}
           </button>
         ))}
       </div>
@@ -1034,7 +1040,7 @@ export function ClientWorkspacePanel({
       ) : null}
       {caseHydrating ? (
         <div style={{ margin: '0 16px 8px', fontSize: 13, color: '#94a3b8', fontWeight: 600 }}>
-          טוען נתונים מהשרת…
+          {t('clientOperations.loadingFromServer')}
         </div>
       ) : null}
 
@@ -1042,7 +1048,7 @@ export function ClientWorkspacePanel({
         {caseHydrating && activeTab !== 'client' ? (
           <div className="nx-workspace-loading" style={{ minHeight: 200 }}>
             <p className="nx-loading-muted" style={{ margin: 0 }}>
-              טוען נתונים…
+              {t('clientOperations.loadingData')}
             </p>
           </div>
         ) : activeTab === 'taxes' && localWorkspace.tax_settings ? (
@@ -1064,7 +1070,7 @@ export function ClientWorkspacePanel({
         ) : activeTab === 'fees' && !localWorkspace.fees_tab ? (
           <div className="client-profile-card">
             <p className="nx-fees-empty" style={{ padding: 16 }}>
-              אין הרשאת צפייה בשכ״ט או שהנתונים אינם זמינים.
+              {t('clientOperations.noFeesPermission')}
             </p>
           </div>
         ) : activeTab === 'salary' && localWorkspace.payroll_tab ? (
@@ -1076,7 +1082,7 @@ export function ClientWorkspacePanel({
         ) : activeTab === 'salary' && !localWorkspace.payroll_tab ? (
           <div className="client-profile-card">
             <p className="nx-fees-empty" style={{ padding: 16 }}>
-              אין הרשאת צפייה בשכר או שהנתונים אינם זמינים.
+              {t('clientOperations.noPayrollPermission')}
             </p>
           </div>
         ) : activeTab === 'annual' && localWorkspace.annual_tab ? (
@@ -1088,7 +1094,7 @@ export function ClientWorkspacePanel({
         ) : activeTab === 'annual' && !localWorkspace.annual_tab ? (
           <div className="client-profile-card">
             <p className="nx-fees-empty" style={{ padding: 16 }}>
-              אין הרשאת צפייה בדוח השנתי או שהנתונים אינם זמינים.
+              {t('clientOperations.noAnnualPermission')}
             </p>
           </div>
         ) : activeTab === 'equity' && localWorkspace.capital_declaration_tab ? (
@@ -1100,7 +1106,7 @@ export function ClientWorkspacePanel({
         ) : activeTab === 'equity' && !localWorkspace.capital_declaration_tab ? (
           <div className="client-profile-card">
             <p className="nx-fees-empty" style={{ padding: 16 }}>
-              אין הרשאת צפייה בהצהרת הון או שהנתונים אינם זמינים.
+              {t('clientOperations.noEquityPermission')}
             </p>
           </div>
         ) : activeTab === 'documents' && localWorkspace.client_documents_tab ? (
@@ -1112,7 +1118,7 @@ export function ClientWorkspacePanel({
         ) : activeTab === 'documents' && !localWorkspace.client_documents_tab ? (
           <div className="client-profile-card">
             <p className="nx-fees-empty" style={{ padding: 16 }}>
-              אין הרשאת צפייה במסמכים או שהנתונים אינם זמינים.
+              {t('clientOperations.noDocumentsPermission')}
             </p>
           </div>
         ) : activeTab === 'obligations' && localWorkspace.client_obligations_tab ? (
@@ -1124,7 +1130,7 @@ export function ClientWorkspacePanel({
         ) : activeTab === 'obligations' && !localWorkspace.client_obligations_tab ? (
           <div className="client-profile-card">
             <p className="nx-fees-empty" style={{ padding: 16 }}>
-              אין נתוני התחייבויות זמינים כרגע.
+              {t('clientOperations.noObligationsData')}
             </p>
           </div>
         ) : activeTab === 'docflow' ? (
@@ -1151,7 +1157,7 @@ export function ClientWorkspacePanel({
         ) : activeTab === 'history' && !localWorkspace.client_history_tab ? (
           <div className="client-profile-card">
             <p className="nx-fees-empty" style={{ padding: 16 }}>
-              אין הרשאת צפייה בהיסטוריה או שהנתונים אינם זמינים.
+              {t('clientOperations.noHistoryPermission')}
             </p>
           </div>
         ) : (
@@ -1173,10 +1179,11 @@ function WorkspaceModalShell({
   /** While loading, tabs show wait cursor and aria-busy; after error/empty, tabs stay disabled but not "busy". */
   tabState?: 'loading' | 'idle';
 }) {
+  const { t } = useI18n();
   const busy = tabState === 'loading';
   const tabCursor = busy ? 'wait' : 'default';
   return (
-    <div className="nx-workspace-panel-root" style={{ direction: 'rtl' }}>
+    <div className="nx-workspace-panel-root">
       <div className="nx-workspace-header">
         <div className="nx-workspace-header-left" aria-hidden="true">
           <img className="nx-workspace-logo" src={logoSrc} alt="" />
@@ -1185,15 +1192,15 @@ function WorkspaceModalShell({
           </span>
         </div>
         <div className="nx-workspace-header-right" aria-hidden="true" />
-        <button type="button" className="nx-workspace-close" onClick={onClose} aria-label="סגור" title="סגור">
+        <button type="button" className="nx-workspace-close" onClick={onClose} aria-label={t('clientOperations.close')} title={t('clientOperations.close')}>
           ×
         </button>
       </div>
       <div className="nx-workspace-header-divider" />
       <div className="nx-workspace-tabs-bar" role="tablist" aria-label="Workspace tabs" aria-busy={busy}>
-        {TAB_ORDER.filter((t) => isWorkspaceNavTabVisible(t.key, false, true)).map((t) => (
+        {TAB_ORDER.filter((t) => isWorkspaceNavTabVisible(t.key, false, true)).map((tab) => (
           <button
-            key={t.key}
+            key={tab.key}
             type="button"
             role="tab"
             disabled
@@ -1204,7 +1211,7 @@ function WorkspaceModalShell({
               opacity: 0.85,
             }}
           >
-            {t.label}
+            {t(tab.labelKey)}
           </button>
         ))}
       </div>
@@ -1233,6 +1240,7 @@ export function ClientWorkspaceModal({
   /** After מיסים save — e.g. refresh registry without closing modal. */
   onTaxSettingsSaved?: () => void;
 }) {
+  const { t } = useI18n();
   const profileFlushRef = useRef<(() => Promise<boolean>) | null>(null);
   if (!open) return null;
 
@@ -1273,7 +1281,7 @@ export function ClientWorkspaceModal({
             {loading ? (
               <div className="nx-workspace-loading" style={{ minHeight: 200 }}>
                 <p className="nx-loading-muted" style={{ margin: 0 }}>
-                  טוען…
+                  {t('clientOperations.loading')}
                 </p>
               </div>
             ) : error ? (
@@ -1309,10 +1317,6 @@ export function ClientWorkspacePage({
   if (error) return <p style={{ color: '#b91c1c', padding: 24 }}>{error}</p>;
   if (!workspace) return <p style={{ color: '#6b7280', padding: 24 }}>No data.</p>;
 
-  return (
-    <div style={{ direction: 'rtl' }}>
-      <ClientWorkspacePanel workspace={workspace} initialTab={initialTab} />
-    </div>
-  );
+  return <ClientWorkspacePanel workspace={workspace} initialTab={initialTab} />;
 }
 

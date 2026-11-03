@@ -23,7 +23,7 @@ test('DocFlow tab visibility comes from the case aggregate, not a hidden client-
 });
 
 test('folder-icon modal hides DocFlow from top nav without deleting the module', () => {
-  assert.match(panelSrc, /key:\s*'docflow',\s*label:\s*'DocFlow'/);
+  assert.match(panelSrc, /key:\s*'docflow',\s*labelKey:\s*'clientOperations\.tabs\.docflow'/);
   assert.match(panelSrc, /FOLDER_MODAL_HIDDEN_NAV_TAB_KEYS/);
   assert.match(panelSrc, /new Set<WorkspaceTabKey>\(\['docflow'\]\)/);
   assert.match(panelSrc, /folderModal/);
@@ -33,7 +33,7 @@ test('folder-icon modal hides DocFlow from top nav without deleting the module',
 });
 
 test('התחייבויות is defined in TAB_ORDER but hidden from modal top nav', () => {
-  assert.match(panelSrc, /key:\s*'obligations',\s*label:\s*'התחייבויות'/);
+  assert.match(panelSrc, /key:\s*'obligations',\s*labelKey:\s*'clientOperations\.tabs\.obligations'/);
   assert.match(panelSrc, /HIDDEN_WORKSPACE_NAV_TAB_KEYS/);
   assert.match(panelSrc, /new Set<WorkspaceTabKey>\(\['obligations'\]\)/);
   assert.match(panelSrc, /isWorkspaceNavTabVisible/);
@@ -41,18 +41,18 @@ test('התחייבויות is defined in TAB_ORDER but hidden from modal top nav
 });
 
 test('remaining top tabs stay in TAB_ORDER for rendering content', () => {
-  for (const label of [
-    'פרטי לקוח',
-    'מיסים',
-    'הגדרות הנה״ח',
-    'מסמכים',
-    'דוח שנתי',
-    'הצהרת הון',
-    'שכ״ט',
-    'שכר',
-    'היסטוריה',
+  for (const key of [
+    'clientOperations.tabs.client',
+    'clientOperations.tabs.taxes',
+    'clientOperations.tabs.accounting',
+    'clientOperations.tabs.documents',
+    'clientOperations.tabs.annual',
+    'clientOperations.tabs.equity',
+    'clientOperations.tabs.fees',
+    'clientOperations.tabs.salary',
+    'clientOperations.tabs.history',
   ]) {
-    assert.match(panelSrc, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.match(panelSrc, new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
 });
 
@@ -75,7 +75,7 @@ test('full-width equal distribution CSS for remaining modal top tabs', () => {
   assert.match(modalCss, /\.nx-workspace-panel-root \.nx-workspace-tabs-bar/);
   assert.match(modalCss, /flex:\s*1\s+1\s+0/);
   assert.match(modalCss, /width:\s*100%/);
-  assert.match(modalCss, /direction:\s*rtl/);
+  assert.match(modalCss, /direction:\s*inherit/);
   assert.match(modalCss, /\.nx-workspace-tab-link-active/);
   assert.match(modalCss, /:focus-visible/);
 });
@@ -96,7 +96,7 @@ test('client profile persists only through the existing update_profile command w
   assert.doesNotMatch(panelSrc, />\s*שמירה\s*</);
   assert.doesNotMatch(panelSrc, />\s*ביטול\s*</);
   assert.match(panelSrc, /nx-workspace-client-footer/);
-  assert.match(panelSrc, /נסה שוב/);
+  assert.match(panelSrc, /clientOperations\.retry/);
   const premium = readFileSync(join(dir, '../src/styles/nx-workspace-modal-premium.css'), 'utf8');
   assert.doesNotMatch(premium, /nx-workspace-client-footer[^{]*\{[^}]*display:\s*none/);
 });

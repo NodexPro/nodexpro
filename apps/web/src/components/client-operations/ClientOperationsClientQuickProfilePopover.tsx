@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useI18n } from '../../i18n/I18nProvider';
 import { placeClientOperationsQuickProfilePopover } from '../../lib/client-operations-quick-profile-placement.pure';
 import '../../styles/nx-client-quick-card.css';
 import '../../styles/nx-co-client-quick-profile.css';
@@ -50,13 +51,14 @@ type Props = {
 };
 
 function CopyButton({ value, label }: { value: string; label: string }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   return (
     <button
       type="button"
       className="nx-client-quick-card__copy"
-      aria-label={`העתק ${label}`}
-      title={copied ? 'הועתק' : 'העתק'}
+      aria-label={t('clientOperations.quickProfile.copyNamed').replace('{{label}}', label)}
+      title={copied ? t('clientOperations.quickProfile.copied') : t('clientOperations.quickProfile.copy')}
       onClick={(e) => {
         e.stopPropagation();
         void navigator.clipboard.writeText(value).then(() => {
@@ -95,6 +97,7 @@ function ProfileRow({ row }: { row: ClientOperationsQuickProfileRow }) {
  * Renders only backend-ready rows — no domain branching.
  */
 export function ClientOperationsClientQuickProfilePopover({ profile, anchorEl, loading = false, onClose }: Props) {
+  const { t } = useI18n();
   const titleId = useId();
   const cardRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
@@ -152,18 +155,17 @@ export function ClientOperationsClientQuickProfilePopover({ profile, anchorEl, l
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        dir="rtl"
         style={{ top: pos.top, left: pos.left }}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="nx-co-client-quick-profile__header">
           <h2 id={titleId} className="nx-client-quick-card__title">
-            {profile?.title ?? 'טוען כרטיס מהיר…'}
+            {profile?.title ?? t('clientOperations.quickProfile.loading')}
           </h2>
           <button
             type="button"
             className="nx-co-client-quick-profile__close"
-            aria-label="סגור"
+            aria-label={t('clientOperations.close')}
             onClick={onClose}
           >
             ×
@@ -171,7 +173,7 @@ export function ClientOperationsClientQuickProfilePopover({ profile, anchorEl, l
         </div>
         {loading || !profile ? (
           <div className="nx-co-client-quick-profile__skeleton" aria-live="polite" aria-busy="true">
-            <div className="nx-co-client-quick-profile__section-title">פרטי לקוח</div>
+            <div className="nx-co-client-quick-profile__section-title">{t('clientOperations.quickProfile.clientDetails')}</div>
             <span />
             <span />
             <span />
@@ -180,7 +182,7 @@ export function ClientOperationsClientQuickProfilePopover({ profile, anchorEl, l
           <dl className="nx-client-quick-card__rows">
             {identity.length > 0 ? (
             <div className="nx-co-client-quick-profile__section">
-              <div className="nx-co-client-quick-profile__section-title">פרטי לקוח</div>
+              <div className="nx-co-client-quick-profile__section-title">{t('clientOperations.quickProfile.clientDetails')}</div>
               {identity.map((row) => (
                 <ProfileRow key={row.key} row={row} />
               ))}
@@ -188,7 +190,7 @@ export function ClientOperationsClientQuickProfilePopover({ profile, anchorEl, l
             ) : null}
             {accounting.length > 0 ? (
             <div className="nx-co-client-quick-profile__section">
-              <div className="nx-co-client-quick-profile__section-title">הנה״ח</div>
+              <div className="nx-co-client-quick-profile__section-title">{t('clientOperations.quickProfile.accounting')}</div>
               {accounting.map((row) => (
                 <ProfileRow key={row.key} row={row} />
               ))}

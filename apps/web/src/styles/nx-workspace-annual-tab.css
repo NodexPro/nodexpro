@@ -32,7 +32,7 @@
   margin: 0;
   max-width: none;
   min-width: 0;
-  direction: rtl;
+  direction: inherit;
   color: #e8f4ff;
 }
 

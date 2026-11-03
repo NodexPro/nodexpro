@@ -31,11 +31,11 @@ import {
 } from '../../lib/client-operations-todo-client-picker.pure';
 import {
   createProgressNoteAutosaver,
-  progressNoteSaveStateLabelHe,
   type ProgressNoteAutosaver,
   type ProgressNoteSaveState,
 } from '../../lib/client-operations-todo-progress-note-autosave.pure';
 import { ClientOperationsTodoClientPicker } from './ClientOperationsTodoClientPicker';
+import { useI18n } from '../../i18n/I18nProvider';
 import { ClientOperationsTodoCompleteModal } from './ClientOperationsTodoCompleteModal';
 import {
   ClientOperationsTodoNotePopover,
@@ -129,11 +129,11 @@ type Props = {
   canEdit: boolean;
 };
 
-function formatDateHe(iso: string | null | undefined): string {
+function formatTodoDate(iso: string | null | undefined, lang: string): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('he-IL');
+  return d.toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-GB');
 }
 
 export function ClientOperationsTodoBoardModal({
@@ -143,6 +143,7 @@ export function ClientOperationsTodoBoardModal({
   workspaceLabelHe,
   canEdit,
 }: Props) {
+  const { t, lang } = useI18n();
   // The parent passes a fresh object literal on every render. Depending on its identity re-created every
   // callback below and re-ran the open effect (board refetch + closing open forms) on each parent render.
   // Only the two primitives are the workspace identity.
@@ -206,7 +207,7 @@ export function ClientOperationsTodoBoardModal({
       } catch (e) {
         if (e instanceof Error && e.name === 'AbortError') return;
         if (seq !== boardSeqRef.current) return;
-        setError(e instanceof Error ? e.message : 'שגיאה בטעינת הלוח');
+        setError(e instanceof Error ? e.message : t('clientOperations.todo.boardLoadError'));
       } finally {
         if (seq === boardSeqRef.current) setLoading(false);
       }
@@ -238,7 +239,7 @@ export function ClientOperationsTodoBoardModal({
       } catch (e) {
         if (e instanceof Error && e.name === 'AbortError') return;
         if (seq !== archiveSeqRef.current) return;
-        setArchiveError(e instanceof Error ? e.message : 'שגיאה בטעינת הארכיון');
+        setArchiveError(e instanceof Error ? e.message : t('clientOperations.todo.archiveLoadError'));
       } finally {
         if (seq === archiveSeqRef.current) setArchiveLoading(false);
       }
@@ -356,7 +357,7 @@ export function ClientOperationsTodoBoardModal({
       setCompleteReason('');
       setEditTask(null);
     } catch (e) {
-      setCompleteError(e instanceof Error ? e.message : 'שגיאה בסימון הושלם');
+      setCompleteError(e instanceof Error ? e.message : t('clientOperations.todo.completeError'));
     } finally {
       setCompleteBusy(false);
     }
@@ -394,7 +395,7 @@ export function ClientOperationsTodoBoardModal({
         setArchive(data as ClientOperationsTodoArchiveAggregate);
       }
     } catch (e) {
-      setArchiveError(e instanceof Error ? e.message : 'שגיאה בפתיחה מחדש');
+      setArchiveError(e instanceof Error ? e.message : t('clientOperations.todo.reopenError'));
     } finally {
       setBusyTodoId(null);
     }
@@ -475,16 +476,16 @@ export function ClientOperationsTodoBoardModal({
                 data-testid="client-operations-todo-create"
                 onClick={() => setCreateOpen(true)}
               >
-                + משימה חדשה
+                + {t('clientOperations.todo.newTask')}
               </button>
             ) : null}
             <input
               className="nx-co-todo-board__search"
               type="search"
-              placeholder="חיפוש לקוח / ת.ז. / משימה"
+              placeholder={t('clientOperations.todo.searchHint')}
               value={searchDraft}
               onChange={(e) => setSearchDraft(e.target.value)}
-              aria-label="חיפוש בלוח"
+              aria-label={t('clientOperations.todo.searchBoard')}
               data-testid="client-operations-todo-board-search"
             />
             <button
@@ -496,7 +497,7 @@ export function ClientOperationsTodoBoardModal({
                 setArchivePage(1);
               }}
             >
-              ארכיון
+              {t('clientOperations.todo.archive')}
             </button>
           </div>
           <div className="nx-co-todo-board__topbar-end">
@@ -513,7 +514,7 @@ export function ClientOperationsTodoBoardModal({
                   setPage(next);
                   void loadBoard({ page: next, q: searchQ, quiet: true });
                 }}
-                aria-label="עמוד קודם"
+                aria-label={t('clientOperations.todo.previousPage')}
               >
                 ‹
               </button>
@@ -529,7 +530,7 @@ export function ClientOperationsTodoBoardModal({
                   setPage(next);
                   void loadBoard({ page: next, q: searchQ, quiet: true });
                 }}
-                aria-label="עמוד הבא"
+                aria-label={t('clientOperations.todo.nextPage')}
               >
                 ›
               </button>
@@ -539,7 +540,7 @@ export function ClientOperationsTodoBoardModal({
             type="button"
             className="nx-co-todo-board__close"
             onClick={onClose}
-            aria-label="סגור"
+            aria-label={t('clientOperations.close')}
             data-testid="client-operations-todo-board-close"
           >
             ×
@@ -563,7 +564,7 @@ export function ClientOperationsTodoBoardModal({
             <div className="nx-co-todo-lanes" data-testid="client-operations-todo-lanes">
               {activeTotal === 0 && !searchQ ? (
                 <p className="nx-co-todo-board__empty-note" data-testid="client-operations-todo-empty">
-                  אין משימות פתוחות
+                  {t('clientOperations.todo.emptyOpen')}
                 </p>
               ) : null}
               {TODO_PRIORITY_LANES.map((lane) => (
@@ -571,11 +572,11 @@ export function ClientOperationsTodoBoardModal({
                   key={lane.id}
                   className={`nx-co-todo-lane nx-co-todo-lane--${lane.accent}`}
                   data-lane={lane.id}
-                  aria-label={`${lane.visual_number} ${lane.label_he}`}
+                  aria-label={`${lane.visual_number} ${t(lane.labelKey)}`}
                 >
                   <div className="nx-co-todo-lane__rail">
                     <span className="nx-co-todo-lane__num">{lane.visual_number}</span>
-                    <span className="nx-co-todo-lane__label">{lane.label_he}</span>
+                    <span className="nx-co-todo-lane__label">{t(lane.labelKey)}</span>
                   </div>
                   <div className="nx-co-todo-lane__cards">
                     {lanes[lane.id].map((task) => (
@@ -657,19 +658,19 @@ export function ClientOperationsTodoBoardModal({
             className="nx-co-todo-archive"
             role="dialog"
             aria-modal="true"
-            aria-label="ארכיון משימות"
+            aria-label={t('clientOperations.todo.archiveTitle')}
             data-testid="client-operations-todo-archive"
           >
             <div className="nx-co-todo-archive__header">
-              <h2 className="nx-co-todo-archive__title">ארכיון משימות</h2>
+              <h2 className="nx-co-todo-archive__title">{t('clientOperations.todo.archiveTitle')}</h2>
               <div className="nx-co-todo-archive__tools">
                 <input
                   className="nx-co-todo-board__search"
                   type="search"
-                  placeholder="חיפוש בארכיון"
+                  placeholder={t('clientOperations.todo.searchArchive')}
                   value={archiveSearchDraft}
                   onChange={(e) => setArchiveSearchDraft(e.target.value)}
-                  aria-label="חיפוש בארכיון"
+                  aria-label={t('clientOperations.todo.searchArchive')}
                 />
                 <select
                   className="nx-co-todo-archive__filter"
@@ -678,20 +679,20 @@ export function ClientOperationsTodoBoardModal({
                     setArchivePriority(e.target.value);
                     setArchivePage(1);
                   }}
-                  aria-label="סינון עדיפות"
+                  aria-label={t('clientOperations.todo.priorityFilter')}
                 >
-                  <option value="all">כל העדיפויות</option>
+                  <option value="all">{t('clientOperations.todo.allPriorities')}</option>
                   <option value="1">1</option>
                   <option value="2">2</option>
                   <option value="3">3</option>
                   <option value="4">4</option>
-                  <option value="none">ללא עדיפות</option>
+                  <option value="none">{t('clientOperations.todo.noPriority')}</option>
                 </select>
                 <button
                   type="button"
                   className="nx-co-todo-board__close"
                   onClick={closeArchive}
-                  aria-label="סגור ארכיון"
+                  aria-label={t('clientOperations.todo.closeArchive')}
                   data-testid="client-operations-todo-archive-close"
                 >
                   ×
@@ -705,60 +706,60 @@ export function ClientOperationsTodoBoardModal({
             ) : null}
             <div className="nx-co-todo-archive__table-wrap">
               {archiveLoading && !archive ? (
-                <p className="nx-co-todo-board__empty">טוען ארכיון…</p>
+                <p className="nx-co-todo-board__empty">{t('clientOperations.todo.loadingArchive')}</p>
               ) : (
                 <table className="nx-co-todo-archive__table">
                   <thead>
                     <tr>
-                      <th>לקוח</th>
-                      <th>ת.ז./ח.פ.</th>
-                      <th>משימה</th>
-                      <th>עדיפות</th>
-                      <th>נוצר בתאריך</th>
-                      <th>הושלם בתאריך</th>
-                      <th>הושלם על ידי</th>
-                      <th>סיבת סגירה</th>
-                      <th>פעולות</th>
+                      <th>{t('clientOperations.todo.client')}</th>
+                      <th>{t('clientOperations.todo.taxId')}</th>
+                      <th>{t('clientOperations.todo.task')}</th>
+                      <th>{t('clientOperations.todo.priority')}</th>
+                      <th>{t('clientOperations.todo.createdAt')}</th>
+                      <th>{t('clientOperations.todo.completedAt')}</th>
+                      <th>{t('clientOperations.todo.completedBy')}</th>
+                      <th>{t('clientOperations.todo.completionReason')}</th>
+                      <th>{t('clientOperations.todo.actions')}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(archive?.tasks ?? []).map((t) => (
-                      <tr key={t.id}>
+                    {(archive?.tasks ?? []).map((row) => (
+                      <tr key={row.id}>
                         <td>
-                          {t.client.display_name ?? '—'}
-                          {t.client.is_one_time ? (
-                            <span className="nx-co-todo-one-time-tag">חד פעמי</span>
+                          {row.client.display_name ?? '—'}
+                          {row.client.is_one_time ? (
+                            <span className="nx-co-todo-one-time-tag">{t('clientOperations.todo.oneTime')}</span>
                           ) : null}
                         </td>
-                        <td>{t.client.tax_id ?? '—'}</td>
-                        <td>{t.task_text}</td>
+                        <td>{row.client.tax_id ?? '—'}</td>
+                        <td>{row.task_text}</td>
                         <td>
-                          <span className={`nx-co-todo-archive__pri nx-co-todo-archive__pri--${todoPriorityToLaneId(t.priority)}`}>
-                            {formatTodoPriorityLabelHe(t.priority)}
+                          <span className={`nx-co-todo-archive__pri nx-co-todo-archive__pri--${todoPriorityToLaneId(row.priority)}`}>
+                            {row.priority == null ? t('clientOperations.todo.noPriority') : formatTodoPriorityLabelHe(row.priority)}
                           </span>
                         </td>
-                        <td>{formatDateHe(t.created_at)}</td>
-                        <td>{formatDateHe(t.completed_at)}</td>
-                        <td>{t.completed_by?.display_name ?? '—'}</td>
+                        <td>{formatTodoDate(row.created_at, lang)}</td>
+                        <td>{formatTodoDate(row.completed_at, lang)}</td>
+                        <td>{row.completed_by?.display_name ?? '—'}</td>
                         <td
                           className={
-                            t.completion_reason
+                            row.completion_reason
                               ? 'nx-co-todo-archive__reason nx-co-todo-archive__reason--set'
                               : 'nx-co-todo-archive__reason'
                           }
                           data-testid="client-operations-todo-archive-reason"
                         >
-                          {t.completion_reason ?? '—'}
+                          {row.completion_reason ?? '—'}
                         </td>
                         <td>
-                          {t.allowed_actions.includes('reopen_client_operations_todo') ? (
+                          {row.allowed_actions.includes('reopen_client_operations_todo') ? (
                             <button
                               type="button"
                               className="nx-btn nx-btn-taxes-compact nx-btn-secondary nx-co-todo-btn"
-                              disabled={busyTodoId === t.id}
-                              onClick={() => void onReopen(t)}
+                              disabled={busyTodoId === row.id}
+                              onClick={() => void onReopen(row)}
                             >
-                              פתח מחדש
+                              {t('clientOperations.todo.reopen')}
                             </button>
                           ) : (
                             '—'
@@ -806,6 +807,7 @@ function TodoStickyCard(props: {
   onDoubleClick: () => void;
   onComplete: () => void;
 }) {
+  const { t, lang } = useI18n();
   const { task, accent, busy, onDoubleClick, onComplete } = props;
   const canComplete = task.allowed_actions.includes('complete_client_operations_todo');
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -872,18 +874,18 @@ function TodoStickyCard(props: {
     >
       <span className="nx-co-todo-sticky__pip" aria-hidden="true" />
       <div className="nx-co-todo-sticky__client">
-        {task.client.display_name ?? 'לקוח'}
-        {task.client.is_one_time ? <span className="nx-co-todo-one-time-tag">חד פעמי</span> : null}
+        {task.client.display_name ?? t('clientOperations.todo.client')}
+        {task.client.is_one_time ? <span className="nx-co-todo-one-time-tag">{t('clientOperations.todo.oneTime')}</span> : null}
       </div>
       <div className="nx-co-todo-sticky__tax">{task.client.tax_id ?? '—'}</div>
       <div className="nx-co-todo-sticky__text">{task.task_text}</div>
-      <div className="nx-co-todo-sticky__date">{formatDateHe(task.created_at)}</div>
+      <div className="nx-co-todo-sticky__date">{formatTodoDate(task.created_at, lang)}</div>
       {canComplete ? (
         <button
           type="button"
           className="nx-co-todo-sticky__done"
-          title="סמן כהושלם"
-          aria-label="סמן כהושלם"
+          title={t('clientOperations.todo.markComplete')}
+          aria-label={t('clientOperations.todo.markComplete')}
           disabled={busy}
           onClick={(e) => {
             e.stopPropagation();
@@ -917,6 +919,7 @@ function TodoFormModal(props: {
   /** Opens the completion confirmation (the form never completes a ToDo by itself). */
   onRequestComplete?: (task: ClientOperationsTodoCard) => void;
 }) {
+  const { t } = useI18n();
   const { mode, task, workspaceQuery, oneTimeClient, fieldLimits, boardView, onBoardRefreshed, onClose, onSaved, onRequestComplete } = props;
   const oneTimeAllowed = oneTimeClient?.allowed === true;
   // Edit: the backend tells which kind of client the ToDo has (client.is_one_time) — never inferred here.
@@ -970,6 +973,7 @@ function TodoFormModal(props: {
       initialValue: task?.progress_note ?? '',
       save: (value) => noteSaveCommandRef.current(value),
       onState: setNoteSave,
+      errorMessage: t('clientOperations.todo.progressSaveError'),
     });
     saverRef.current = saver;
     return () => {
@@ -980,7 +984,16 @@ function TodoFormModal(props: {
   }, [taskId]);
   const canEditNote =
     mode === 'create' || task?.allowed_actions.includes('update_client_operations_todo_progress_note') === true;
-  const noteStateLabel = mode === 'edit' ? progressNoteSaveStateLabelHe(noteSave) : null;
+  const noteStateLabel =
+    mode !== 'edit'
+      ? null
+      : noteSave.status === 'pending' || noteSave.status === 'saving'
+        ? t('clientOperations.saving')
+        : noteSave.status === 'saved'
+          ? t('clientOperations.saved')
+          : noteSave.status === 'error'
+            ? noteSave.error ?? t('clientOperations.todo.progressSaveError')
+            : null;
 
   /** Settle any pending note save before leaving / completing; a second failed attempt lets the user leave. */
   const closeAttemptFailedRef = useRef(false);
@@ -1042,9 +1055,9 @@ function TodoFormModal(props: {
         // Canonical client wins; otherwise the typed text is a one-time client name. The backend validates the
         // identity (and the client ACL for canonical clients) — this only builds the command payload.
         const typedName = oneTimeName || clientQ.trim();
-        if (!clientId && !typedName) throw new Error('נא לבחור לקוח או להקליד שם לקוח');
+        if (!clientId && !typedName) throw new Error(t('clientOperations.todo.needClient'));
         const text = taskText.trim();
-        if (!text) throw new Error('נא להזין טקסט משימה');
+        if (!text) throw new Error(t('clientOperations.todo.needTaskText'));
         const body: Record<string, unknown> = {
           command: 'create_client_operations_todo',
           ...(clientId
@@ -1071,7 +1084,7 @@ function TodoFormModal(props: {
       } else if (task) {
         // Settle a pending שלב טיפול save first so the two commands never race.
         if (saverRef.current && !(await saverRef.current.flush())) {
-          throw new Error('שגיאה בשמירת שלב טיפול');
+          throw new Error(t('clientOperations.todo.progressSaveError'));
         }
         const data = await apiJson<ClientOperationsTodoBoardAggregate>(
           moduleClientOperationsTodoCommands(),
@@ -1096,7 +1109,7 @@ function TodoFormModal(props: {
         onSaved(data);
       }
     } catch (e) {
-      setFormError(e instanceof Error ? e.message : 'שגיאה בשמירה');
+      setFormError(e instanceof Error ? e.message : t('clientOperations.todo.saveError'));
     } finally {
       setSaving(false);
     }
@@ -1117,10 +1130,10 @@ function TodoFormModal(props: {
         }
       }}
     >
-      <form className="nx-co-todo-form" onSubmit={(e) => void onSubmit(e)} dir="rtl">
+      <form className="nx-co-todo-form" onSubmit={(e) => void onSubmit(e)}>
         <div className="nx-co-todo-form__header">
-          <h3>{mode === 'create' ? 'משימה חדשה' : 'עריכת משימה'}</h3>
-          <button type="button" className="nx-co-todo-board__close" onClick={requestClose} aria-label="סגור">
+          <h3>{mode === 'create' ? t('clientOperations.todo.newTask') : t('clientOperations.todo.editTask')}</h3>
+          <button type="button" className="nx-co-todo-board__close" onClick={requestClose} aria-label={t('clientOperations.close')}>
             ×
           </button>
         </div>
@@ -1162,7 +1175,7 @@ function TodoFormModal(props: {
             />
           ) : editingOneTime ? (
             <label className="nx-co-todo-form__field">
-              <span>לקוח (חד פעמי)</span>
+              <span>{t('clientOperations.todo.clientOneTimeField')}</span>
               <input
                 type="text"
                 value={oneTimeName}
@@ -1173,7 +1186,7 @@ function TodoFormModal(props: {
             </label>
           ) : (
             <label className="nx-co-todo-form__field">
-              <span>לקוח</span>
+              <span>{t('clientOperations.todo.client')}</span>
               <input type="text" value={clientLabel} readOnly />
             </label>
           )}
@@ -1185,12 +1198,12 @@ function TodoFormModal(props: {
               value={taxId}
               readOnly={mode === 'create' ? Boolean(clientId) : !editingOneTime}
               maxLength={oneTimeClient?.tax_id_max_length}
-              placeholder={mode === 'create' ? (clientId ? undefined : 'אופציונלי') : editingOneTime ? 'אופציונלי' : undefined}
+              placeholder={mode === 'create' ? (clientId ? undefined : t('clientOperations.todo.optional')) : editingOneTime ? t('clientOperations.todo.optional') : undefined}
               onChange={(e) => setTaxId(e.target.value)}
             />
           </label>
           <label className="nx-co-todo-form__field">
-            <span>משימה</span>
+            <span>{t('clientOperations.todo.task')}</span>
             <textarea
               value={taskText}
               onChange={(e) => setTaskText(e.target.value)}
@@ -1200,13 +1213,13 @@ function TodoFormModal(props: {
             />
           </label>
           <label className="nx-co-todo-form__field">
-            <span>שלב טיפול</span>
+            <span>{t('clientOperations.todo.progressStep')}</span>
             <input
               type="text"
               value={progressNote}
               maxLength={fieldLimits?.progress_note_max_length}
               readOnly={!canEditNote}
-              placeholder="אופציונלי"
+              placeholder={t('clientOperations.todo.optional')}
               aria-describedby={noteStateLabel ? noteStateId : undefined}
               data-testid="client-operations-todo-progress-note"
               onChange={(e) => {
@@ -1232,8 +1245,8 @@ function TodoFormModal(props: {
             ) : null}
           </label>
           <div className="nx-co-todo-form__field">
-            <span>עדיפות</span>
-            <div className="nx-co-todo-priority" role="radiogroup" aria-label="עדיפות">
+            <span>{t('clientOperations.todo.priority')}</span>
+            <div className="nx-co-todo-priority" role="radiogroup" aria-label={t('clientOperations.todo.priority')}>
               {TODO_PRIORITY_LANES.map((lane) => {
                 const token = lane.priority == null ? 'none' : String(lane.priority);
                 const selected = priority === token;
@@ -1243,7 +1256,7 @@ function TodoFormModal(props: {
                     type="button"
                     role="radio"
                     aria-checked={selected}
-                    aria-label={`${lane.visual_number} ${lane.label_he}`}
+                    aria-label={`${lane.visual_number} ${t(lane.labelKey)}`}
                     className={`nx-co-todo-priority__btn nx-co-todo-priority__btn--${lane.accent}${selected ? ' is-selected' : ''}`}
                     onClick={() => setPriority(token)}
                   >
@@ -1266,14 +1279,14 @@ function TodoFormModal(props: {
             onClick={requestClose}
             disabled={saving}
           >
-            ביטול
+            {t('clientOperations.cancel')}
           </button>
           <button
             type="submit"
             className="nx-btn nx-btn-taxes-compact nx-btn-primary nx-co-todo-btn"
             disabled={saving}
           >
-            {mode === 'create' ? 'צור משימה' : 'שמור'}
+            {mode === 'create' ? t('clientOperations.todo.createTask') : t('clientOperations.save')}
           </button>
           {mode === 'edit' &&
           task?.allowed_actions.includes('complete_client_operations_todo') &&
@@ -1288,7 +1301,7 @@ function TodoFormModal(props: {
                 void (async () => {
                   const ok = (await saverRef.current?.flush()) ?? true;
                   if (!ok) {
-                    setFormError('שגיאה בשמירת שלב טיפול');
+                    setFormError(t('clientOperations.todo.progressSaveError'));
                     return;
                   }
                   onRequestComplete(task);
@@ -1305,14 +1318,17 @@ function TodoFormModal(props: {
 }
 
 /** Hebrew message for Stage 5A CLIENT_HANDLER_TODO_CONFLICT. */
-export function formatClientHandlerTodoConflictMessage(error: unknown): string | null {
+export function formatClientHandlerTodoConflictMessage(
+  error: unknown,
+  t: (key: string) => string,
+): string | null {
   if (!(error instanceof ApiError) || error.code !== 'CLIENT_HANDLER_TODO_CONFLICT') return null;
   const count =
     typeof error.details?.conflicting_todo_count === 'number'
       ? error.details.conflicting_todo_count
       : null;
   if (count != null) {
-    return `לא ניתן לשנות מטפל בתיק — קיימות ${count} משימות ToDo פעילות שאינן תואמות. יש להשלים או להעביר את המשימות תחילה.`;
+    return t('clientOperations.handlerBlockedCount').replace('{{count}}', String(count));
   }
-  return 'לא ניתן לשנות מטפל בתיק — קיימות משימות ToDo פעילות. יש להשלים או להעביר את המשימות תחילה.';
+  return t('clientOperations.handlerBlocked');
 }

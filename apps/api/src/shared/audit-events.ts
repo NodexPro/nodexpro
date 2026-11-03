@@ -23,6 +23,7 @@ export const AUDIT_ACTIONS = {
   PLATFORM_LANGUAGE_UPDATED: 'platform.language_updated',
   PLATFORM_TRANSLATION_DRAFT_SAVED: 'platform.translation_draft_saved',
   PLATFORM_LANGUAGE_PUBLISHED: 'platform.language_published',
+  PLATFORM_LANGUAGE_ROLLED_BACK: 'platform.language_rolled_back',
   PLATFORM_TRANSLATION_CATALOG_SYNCED: 'platform.translation_catalog_synced',
   ORGANIZATION_CREATED: 'organization.created',
   ORGANIZATION_UPDATED: 'organization.updated',

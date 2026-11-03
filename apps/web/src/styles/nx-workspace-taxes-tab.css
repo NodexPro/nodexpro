@@ -24,7 +24,7 @@
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-taxes {
-  direction: rtl;
+  direction: inherit;
 }
 
 /* Use the modal navy (same as הגדרות הנה״ח) instead of the lighter Client Details inner panel.

@@ -1,9 +1,16 @@
 /**
- * Canonical account/settings translation catalog.
- * Bundled English/Hebrew UI still covers the rest of the application until those
- * strings are migrated onto this registry. Completeness metrics apply to this catalog only.
+ * Canonical UI translation catalog for Owner Languages & Translations.
+ * Account/settings keys stay explicit; the rest is the bundled web dictionary
+ * (apps/web/src/i18n) flattened into this registry. Completeness is measured
+ * against this full catalog — not a 48-key subset.
  */
-export const CANONICAL_SOURCE_EN: Record<string, string> = {
+import {
+  BUNDLED_UI_SOURCE_EN,
+  BUNDLED_UI_SOURCE_HE,
+  BUNDLED_UI_SOURCE_RU,
+} from './bundled-ui-catalog.js';
+
+export const ACCOUNT_SETTINGS_SOURCE_EN: Record<string, string> = {
   'common.loading': 'Loading…',
   'common.save': 'Save',
   'common.cancel': 'Cancel',
@@ -57,7 +64,7 @@ export const CANONICAL_SOURCE_EN: Record<string, string> = {
   'dashboard.activeClients': 'Active Clients',
 };
 
-export const CANONICAL_SOURCE_HE: Record<string, string> = {
+export const ACCOUNT_SETTINGS_SOURCE_HE: Record<string, string> = {
   'common.loading': 'טוען…',
   'common.save': 'שמירה',
   'common.cancel': 'ביטול',
@@ -110,3 +117,23 @@ export const CANONICAL_SOURCE_HE: Record<string, string> = {
   'clients.create': 'לקוח חדש',
   'dashboard.activeClients': 'לקוחות פעילים',
 };
+
+export const CANONICAL_SOURCE_EN: Record<string, string> = {
+  ...BUNDLED_UI_SOURCE_EN,
+  ...ACCOUNT_SETTINGS_SOURCE_EN,
+};
+
+export const CANONICAL_SOURCE_HE: Record<string, string> = {
+  ...BUNDLED_UI_SOURCE_HE,
+  ...ACCOUNT_SETTINGS_SOURCE_HE,
+};
+
+export const CANONICAL_SOURCE_RU: Record<string, string> = {
+  ...BUNDLED_UI_SOURCE_RU,
+};
+
+export function bundledSourceForLocale(locale: string): Record<string, string> {
+  if (locale === 'he') return CANONICAL_SOURCE_HE;
+  if (locale === 'ru') return { ...CANONICAL_SOURCE_EN, ...CANONICAL_SOURCE_RU };
+  return CANONICAL_SOURCE_EN;
+}

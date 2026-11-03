@@ -5,6 +5,7 @@
  */
 import { useEffect, useLayoutEffect, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { useI18n } from '../../i18n/I18nProvider';
 
 const POPOVER_MAX_WIDTH = 260;
 const VIEWPORT_MARGIN = 8;
@@ -29,6 +30,7 @@ export function ClientOperationsTodoNotePopover(props: {
   anchorRef: RefObject<HTMLElement | null>;
 }) {
   const { id, note, anchorRef } = props;
+  const { t } = useI18n();
   const [placement, setPlacement] = useState<Placement | null>(null);
 
   useLayoutEffect(() => {
@@ -51,12 +53,11 @@ export function ClientOperationsTodoNotePopover(props: {
     <div
       id={id}
       role="tooltip"
-      dir="rtl"
       className="nx-co-todo-note-popover"
       data-testid="client-operations-todo-note-popover"
       style={{ left: placement.left, top: placement.top, bottom: placement.bottom, width: placement.width }}
     >
-      <div className="nx-co-todo-note-popover__label">שלב טיפול</div>
+      <div className="nx-co-todo-note-popover__label">{t('clientOperations.todo.progressStep')}</div>
       <div className="nx-co-todo-note-popover__text">{note}</div>
     </div>,
     document.body,

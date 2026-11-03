@@ -145,7 +145,7 @@ test('AD — Arial on all ToDo portal layers', () => {
 
 test('AE — client handler ToDo conflict Hebrew UX', () => {
   assert.match(panel, /CLIENT_HANDLER_TODO_CONFLICT/);
-  assert.match(panel, /משימות ToDo פעילות/);
+  assert.match(panel, /clientOperations\.handlerBlocked/);
 });
 
 test('URLs outside endpoints.ts; commands path', () => {
@@ -196,7 +196,7 @@ test('header brand sits on the physical left; other clusters stay RTL', () => {
   assert.match(modal, /<h2 className="nx-co-todo-board__title">ToDo List<\/h2>/);
   assert.match(css, /\.nx-co-todo-board__brand \{[\s\S]*?direction: ltr;/);
   assert.match(css, /\.nx-co-todo-board__brand \{[\s\S]*?order: 1;/);
-  assert.match(css, /\.nx-co-todo-board \{[^}]*direction: rtl;/);
+  assert.match(css, /\.nx-co-todo-board \{[^}]*direction: inherit;/);
   assert.doesNotMatch(css, /\.nx-co-todo-board__topbar \{[^}]*direction:\s*ltr;/);
   assert.doesNotMatch(css, /\.nx-co-todo-lanes \{[^}]*direction:\s*ltr;/);
 });
@@ -205,7 +205,7 @@ test('header Close sits on the physical right; one button, same handler', () => 
   const topbar = modal.slice(modal.indexOf('nx-co-todo-board__topbar'), modal.indexOf('nx-co-todo-board__error'));
   assert.match(topbar, /data-testid="client-operations-todo-board-close"/);
   assert.equal((topbar.match(/nx-co-todo-board__close/g) ?? []).length, 1);
-  assert.match(topbar, /aria-label="סגור"/);
+  assert.match(topbar, /aria-label=\{t\('clientOperations\.close'\)\}/);
   assert.match(topbar, /onClick=\{onClose\}/);
   const endBlock = modal.slice(modal.indexOf('nx-co-todo-board__topbar-end'), modal.indexOf('nx-co-todo-board__close'));
   assert.doesNotMatch(endBlock, /__close/);

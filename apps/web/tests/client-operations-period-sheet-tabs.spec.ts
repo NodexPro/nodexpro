@@ -65,7 +65,7 @@ test('month tabs render backend available_periods; + opens period without clonin
   );
   assert.match(tabs, /availablePeriods/);
   assert.match(tabs, /onSelectPeriod/);
-  assert.match(tabs, /פתח/);
+  assert.match(tabs, /clientOperations\.periods\.open/);
   assert.match(view, /ClientOperationsPeriodSheetTabs/);
   assert.match(view, /fullscreenOpen/);
   assert.ok((view.match(/ClientOperationsPeriodSheetTabs/g) || []).length >= 2);
@@ -80,7 +80,7 @@ test('NOT APPLICABLE material is visually distinct from unchecked', () => {
   assert.match(view, /nx-co-sheet__material-slot is-na/);
   assert.match(view, /stream\.cell\?\.configured \?\? stream\.cell\?\.applicable/);
   assert.match(view, /is-inactive/);
-  assert.match(view, /מוגדר — אין דיווח בחודש זה/);
+  assert.match(view, /clientOperations\.configuredNoReportThisMonth/);
   assert.match(view, /obligationApplicable/);
 });
 
@@ -182,7 +182,7 @@ test('חומר column renders three backend-driven subcontrols מע״מ / מה״
   assert.match(view, /set_income_tax_advance_material_brought/);
   assert.match(view, /set_payroll_material_brought/);
   assert.match(view, /nx-co-sheet__material-header-title/);
-  assert.match(view, />חומר</);
+  assert.match(view, /clientOperations\.material/);
   assert.match(view, /מע״מ/);
   assert.match(view, /מה״כ/);
   assert.match(view, /שכר/);

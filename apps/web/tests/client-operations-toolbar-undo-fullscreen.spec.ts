@@ -26,19 +26,19 @@ test('search: no visible חפש text button; magnifier inside field', () => {
 });
 
 test('toolbar: redo and wrap hidden; alignment icons present', () => {
-  assert.match(viewSource, /hidden[\s\S]*בצע שוב/);
-  assert.match(viewSource, /hidden[\s\S]*גלישה/);
+  assert.match(viewSource, /hidden[\s\S]*clientOperations\.redo/);
+  assert.match(viewSource, /hidden[\s\S]*clientOperations\.wrapText/);
   assert.doesNotMatch(viewSource, />\s*יישור ימין\s*</);
   assert.doesNotMatch(viewSource, />\s*מרכז\s*</);
   assert.doesNotMatch(viewSource, />\s*יישור שמאל\s*</);
-  assert.match(viewSource, /aria-label="יישור ימין"/);
-  assert.match(viewSource, /aria-label="מרכז"/);
-  assert.match(viewSource, /aria-label="יישור שמאל"/);
+  assert.match(viewSource, /aria-label=\{t\('clientOperations\.alignRight'\)\}/);
+  assert.match(viewSource, /aria-label=\{t\('clientOperations\.alignCenter'\)\}/);
+  assert.match(viewSource, /aria-label=\{t\('clientOperations\.alignLeft'\)\}/);
   assert.match(viewSource, /nx-co-sheet__btn--icon/);
 });
 
 test('undo: icon-only real stack max 10 via named inverse paths', () => {
-  assert.match(viewSource, /aria-label="בטל"/);
+  assert.match(viewSource, /aria-label=\{t\('clientOperations\.undo'\)\}/);
   assert.doesNotMatch(viewSource, />\s*בטל\s*</);
   assert.match(viewSource, /undoLastAction/);
   assert.match(viewSource, /pushClientOperationsUndoEntry/);

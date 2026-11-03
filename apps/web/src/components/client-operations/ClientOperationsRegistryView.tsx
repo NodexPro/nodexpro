@@ -432,6 +432,10 @@ function displayForColumn(r: ClientOperationsRegistryRow, col: ClientOperationsR
   return value;
 }
 
+function fillI18n(template: string, vars: Record<string, string>): string {
+  return Object.entries(vars).reduce((acc, [key, value]) => acc.replaceAll(`{{${key}}}`, value), template);
+}
+
 /** Row pitch of the spreadsheet grid (matches the canvas row gradient in nx-client-operations-spreadsheet.css). */
 const SHEET_GRID_ROW_PITCH_PX = 31;
 
@@ -1246,7 +1250,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
   const deleteNote = async (noteId: string) => {
     if (!notesModalClientId || !canEdit) return;
-    if (!window.confirm('למחוק הערה?')) return;
+    if (!window.confirm(t('clientOperations.deleteNoteConfirm'))) return;
     setNotesError('');
     const res = await apiFetch(moduleClientOperationsDeleteNote(notesModalClientId, noteId), {
       method: 'POST',
@@ -1387,7 +1391,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const capTitle = (id: string) => {
     const c = capById.get(id);
     if (!c) return undefined;
-    return c.available ? c.label_he : `${c.label_he}: ${c.reason_he ?? 'לא זמין'}`;
+    return c.available ? c.label_he : `${c.label_he}: ${c.reason_he ?? t('clientOperations.unavailable')}`;
   };
   const widthForColumn = (col: ClientOperationsRegistryColumn) =>
     columnWidths[col.key] ?? col.default_width_px ?? (col.cell_kind === 'folder' ? 44 : col.cell_kind === 'custom' ? 140 : 110);
@@ -1785,7 +1789,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       completeCustomCellSaveFailure(customCellSlotsRef.current, start.key);
       preserveEditorDraftIfNeeded(start.key, meta);
       notifyCustomCellFlightSettled(start.key);
-      setCommandError(error instanceof Error ? error.message : 'שמירת הערך נכשלה');
+      setCommandError(error instanceof Error ? error.message : t('clientOperations.saveValueFailed'));
     }
   };
 
@@ -2123,7 +2127,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             };
           }),
         );
-        setCommandError(error instanceof Error ? error.message : 'עדכון סטטוס נכשל');
+        setCommandError(error instanceof Error ? error.message : t('clientOperations.updateStatusFailed'));
         onReloadRegistry?.();
       }
     };
@@ -2208,7 +2212,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         if (startNext) await executePaint(startNext);
       } catch (error) {
         completeManualStatusPaintFailure(statusPaintSlotsRef.current, start.key);
-        setCommandError(error instanceof Error ? error.message : 'ביטול סטטוס נכשל');
+        setCommandError(error instanceof Error ? error.message : t('clientOperations.clearStatusFailed'));
         onReloadRegistry?.();
       }
     };
@@ -2234,7 +2238,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         applyAggregateReconciled(data);
       }
     } catch (error) {
-      setCommandError(error instanceof Error ? error.message : 'ביטול ערך נכשל');
+      setCommandError(error instanceof Error ? error.message : t('clientOperations.clearValueFailed'));
       onReloadRegistry?.();
     } finally {
       skipUndoPushRef.current = false;
@@ -2349,16 +2353,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       .join('');
     const tableRows = `${clientTableRows}${manualTableRows}`;
 
+    const printDir = lang === 'he' ? 'rtl' : 'ltr';
     const printWin = window.open('', '_blank', 'width=1200,height=850');
     if (!printWin) return;
     printWin.document.write(`<!DOCTYPE html>
-<html dir="rtl" lang="he">
+<html dir="${printDir}" lang="${lang}">
 <head>
 <meta charset="UTF-8">
-<title>ניהול לקוחות — ${periodHeading}</title>
+<title>${t('clientOperations.moduleTitle')} — ${periodHeading}</title>
 <style>
   @page { size: landscape; margin: 1cm; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; direction: rtl; margin: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; direction: ${printDir}; margin: 0; }
   h1 { font-size: 13px; font-weight: 700; margin: 0 0 6px; color: #123756; }
   table { width: 100%; border-collapse: collapse; table-layout: auto; }
   th, td { border: 1px solid #ccc; padding: 3px 6px; text-align: right; white-space: nowrap; font-size: 11px; vertical-align: middle; }
@@ -2370,7 +2375,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 </style>
 </head>
 <body>
-<h1>ניהול לקוחות — ${periodHeading}</h1>
+<h1>${t('clientOperations.moduleTitle')} — ${periodHeading}</h1>
 <table>
 <thead><tr>${tableHeaders}</tr></thead>
 <tbody>${tableRows}</tbody>
@@ -2403,7 +2408,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const editCustomCell = async (row: ClientOperationsRegistryRow, column: ClientOperationsRegistryColumn) => {
     if (!canEdit || !column.editable || !column.custom_column_id || !onRegistryCommand) return;
     const current = displayForColumn(row, column);
-    const value = window.prompt(column.label.trim() || 'ערך', current);
+    const value = window.prompt(column.label.trim() || t('clientOperations.value'), current);
     if (value === null) return;
     setCommandError('');
     try {
@@ -2415,7 +2420,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         operational_period_key: query?.operational_period_key ?? period?.selected_period_key ?? null,
       });
     } catch (error) {
-      setCommandError(error instanceof Error ? error.message : 'שמירת הערך נכשלה');
+      setCommandError(error instanceof Error ? error.message : t('clientOperations.saveValueFailed'));
     }
   };
 
@@ -2456,7 +2461,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       });
       setColumnSettingsTarget(null);
     } catch (error) {
-      setCommandError(error instanceof Error ? error.message : 'שמירת הגדרות עמודה נכשלה');
+      setCommandError(error instanceof Error ? error.message : t('clientOperations.saveColumnSettingsFailed'));
     }
   };
 
@@ -2470,7 +2475,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         column_ids: periodSetupSelection,
       });
     } catch (error) {
-      setCommandError(error instanceof Error ? error.message : 'אתחול עמודות לתקופה נכשל');
+      setCommandError(error instanceof Error ? error.message : t('clientOperations.initPeriodColumnsFailed'));
     }
   };
 
@@ -2524,10 +2529,13 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         );
         setPeriodCopyDialog(null);
         setPeriodCopyFeedback(
-          `המידע הועתק מ־${formatClientOperationsOperationalPeriodTabLabel(sourcePeriodKey)} ל־${formatClientOperationsOperationalPeriodTabLabel(targetPeriodKeyForCopy)}`,
+          fillI18n(t('clientOperations.copiedFromTo'), {
+            source: formatClientOperationsOperationalPeriodTabLabel(sourcePeriodKey),
+            target: formatClientOperationsOperationalPeriodTabLabel(targetPeriodKeyForCopy),
+          }),
         );
       } catch (error) {
-        setCommandError(error instanceof Error ? error.message : 'העתקת מידע מחודש נכשלה');
+        setCommandError(error instanceof Error ? error.message : t('clientOperations.copyMonthFailed'));
       } finally {
         setPeriodCopyBusy(false);
       }
@@ -2632,7 +2640,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       });
       setEditingHeaderColumnId(null);
     } catch (error) {
-      setCommandError(error instanceof Error ? error.message : 'שינוי שם העמודה נכשל');
+      setCommandError(error instanceof Error ? error.message : t('clientOperations.renameColumnFailed'));
     }
   };
   const toggleMaterialStream = async (
@@ -2743,7 +2751,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         query,
       });
     } catch (error) {
-      setCommandError(error instanceof Error ? error.message : 'שמירת תאריך יעד נכשלה');
+      setCommandError(error instanceof Error ? error.message : t('clientOperations.saveDueDateFailed'));
     }
   };
   const openCapitalDeclaration = async (row: ClientOperationsRegistryRow) => {
@@ -2757,7 +2765,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         query,
       });
     } catch (error) {
-      setCommandError(error instanceof Error ? error.message : 'פתיחת הצהרת הון נכשלה');
+      setCommandError(error instanceof Error ? error.message : t('clientOperations.openCapitalDeclarationFailed'));
     }
   };
   const createColumn = async () => {
@@ -2772,7 +2780,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       setAddColumnOpen(false);
       setAddColumnLabel('');
     } catch (error) {
-      setCommandError(error instanceof Error ? error.message : 'יצירת העמודה נכשלה');
+      setCommandError(error instanceof Error ? error.message : t('clientOperations.createColumnFailed'));
     }
   };
 
@@ -2808,8 +2816,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           type="button"
           className="nx-co-sheet__search-icon-btn"
           disabled={!isCap('search')}
-          title={capTitle('search') ?? 'חיפוש'}
-          aria-label="חיפוש"
+          title={capTitle('search') ?? t('clientOperations.search')}
+          aria-label={t('clientOperations.search')}
           onClick={() => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); applyLiveSearch(searchDraft); }}
         >
           <svg className="nx-co-sheet__search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -2822,8 +2830,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           value={searchDraft}
           disabled={!isCap('search')}
           title={capTitle('search')}
-          placeholder="חיפוש בטבלה…"
-          aria-label="חיפוש לקוחות"
+          placeholder={t('clientOperations.searchPlaceholder')}
+          aria-label={t('clientOperations.searchClients')}
           onChange={(e) => onSearchDraftChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && isCap('search')) {
@@ -2845,7 +2853,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               <svg className="nx-co-sheet__search-spinner" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <circle cx="12" cy="12" r="9" />
               </svg>
-              <span className="nx-co-sheet__sr-only">מחפש...</span>
+              <span className="nx-co-sheet__sr-only">{t('clientOperations.searching')}</span>
             </>
           ) : null}
         </span>
@@ -2868,15 +2876,15 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     const paletteRows = clientOperationsTextColorPaletteRows();
 
     return (
-      <div className="nx-co-sheet__toolbar" role="toolbar" aria-label="כלי גיליון">
+      <div className="nx-co-sheet__toolbar" role="toolbar" aria-label={t('clientOperations.sheetTools')}>
         {/* ── Undo ── */}
         <div className="nx-co-sheet__toolbar-group">
           <button
             type="button"
             className="nx-co-sheet__btn nx-co-sheet__btn--icon"
             disabled={!isCap('undo') || coUndoStack.length === 0}
-            title={capTitle('undo') ?? 'בטל'}
-            aria-label="בטל"
+            title={capTitle('undo') ?? t('clientOperations.undo')}
+            aria-label={t('clientOperations.undo')}
             onClick={undoLastAction}
           >
             <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -2885,7 +2893,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             </svg>
           </button>
           {/* HIDDEN — redo retained for later restore */}
-          <button type="button" className="nx-co-sheet__btn" hidden disabled={!isCap('redo') || redoStack.length === 0} title={capTitle('redo')} onClick={redoPresentation}>בצע שוב</button>
+          <button type="button" className="nx-co-sheet__btn" hidden disabled={!isCap('redo') || redoStack.length === 0} title={capTitle('redo')} onClick={redoPresentation}>{t('clientOperations.redo')}</button>
         </div>
 
         {/* ── Format: B I U | align | font-size | A-color (always visually active) ── */}
@@ -2922,8 +2930,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             type="button"
             className={`nx-co-sheet__btn nx-co-sheet__btn--icon${currentAlign === 'right' ? ' is-active' : ''}`}
             disabled={!isCap('align_right')}
-            title={capTitle('align_right') ?? 'יישור ימין'}
-            aria-label="יישור ימין"
+            title={capTitle('align_right') ?? t('clientOperations.alignRight')}
+            aria-label={t('clientOperations.alignRight')}
             onMouseDown={preserveActiveCellOnToolbarMouseDown}
             onClick={() => commitPresentationOrToolDefault({ align: 'right' })}
           >
@@ -2933,8 +2941,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             type="button"
             className={`nx-co-sheet__btn nx-co-sheet__btn--icon${currentAlign === 'center' ? ' is-active' : ''}`}
             disabled={!isCap('align_center')}
-            title={capTitle('align_center') ?? 'מרכז'}
-            aria-label="מרכז"
+            title={capTitle('align_center') ?? t('clientOperations.alignCenter')}
+            aria-label={t('clientOperations.alignCenter')}
             onMouseDown={preserveActiveCellOnToolbarMouseDown}
             onClick={() => commitPresentationOrToolDefault({ align: 'center' })}
           >
@@ -2944,23 +2952,23 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             type="button"
             className={`nx-co-sheet__btn nx-co-sheet__btn--icon${currentAlign === 'left' ? ' is-active' : ''}`}
             disabled={!isCap('align_left')}
-            title={capTitle('align_left') ?? 'יישור שמאל'}
-            aria-label="יישור שמאל"
+            title={capTitle('align_left') ?? t('clientOperations.alignLeft')}
+            aria-label={t('clientOperations.alignLeft')}
             onMouseDown={preserveActiveCellOnToolbarMouseDown}
             onClick={() => commitPresentationOrToolDefault({ align: 'left' })}
           >
             <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" d="M4 7h12M4 12h16M4 17h10" /></svg>
           </button>
           {/* HIDDEN — wrap retained */}
-          <button type="button" className={`nx-co-sheet__btn${currentWrap ? ' is-active' : ''}`} hidden disabled={!isCap('wrap_text')} title={capTitle('wrap_text')} onClick={() => commitPresentationOrToolDefault({ wrap: !currentWrap })}>גלישה</button>
+          <button type="button" className={`nx-co-sheet__btn${currentWrap ? ' is-active' : ''}`} hidden disabled={!isCap('wrap_text')} title={capTitle('wrap_text')} onClick={() => commitPresentationOrToolDefault({ wrap: !currentWrap })}>{t('clientOperations.wrapText')}</button>
 
           {/* Font-size selector — always visually active */}
           <select
             data-testid="font-size-control"
             className="nx-co-sheet__font-size-select"
             value={currentFontSize}
-            title="גודל גופן"
-            aria-label="גודל גופן"
+            title={t('clientOperations.fontSize')}
+            aria-label={t('clientOperations.fontSize')}
             onMouseDown={preserveActiveCellOnToolbarMouseDown}
             onChange={(e) => commitPresentationOrToolDefault({ fontSize: Number(e.target.value) })}
           >
@@ -2976,8 +2984,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               data-testid="text-color-control"
               className={`nx-co-sheet__btn nx-co-sheet__btn--icon nx-co-sheet__color-a-btn${colorPaletteOpen ? ' is-active' : ''}`}
               disabled={!isCap('text_color')}
-              title="צבע טקסט"
-              aria-label="צבע טקסט"
+              title={t('clientOperations.textColor')}
+              aria-label={t('clientOperations.textColor')}
               aria-expanded={colorPaletteOpen}
               onMouseDown={preserveActiveCellOnToolbarMouseDown}
               onClick={() => setColorPaletteOpen((v) => !v)}
@@ -2989,7 +2997,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               >A</span>
             </button>
             {colorPaletteOpen && (
-              <div className="nx-co-sheet__color-palette" role="dialog" aria-label="בחירת צבע טקסט">
+              <div className="nx-co-sheet__color-palette" role="dialog" aria-label={t('clientOperations.chooseTextColor')}>
                 {([paletteRows.standard, paletteRows.beautiful] as const).map((row, ri) => (
                   <div key={ri} className="nx-co-sheet__color-palette-row">
                     {row.map((swatch) => (
@@ -3021,8 +3029,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               type="button"
               data-testid="column-visibility-control"
               className={`nx-co-sheet__btn nx-co-sheet__btn--icon${columnVisibilityOpen ? ' is-active' : ''}`}
-              title="הצג / הסתר עמודות"
-              aria-label="הצג / הסתר עמודות"
+              title={t('clientOperations.showHideColumns')}
+              aria-label={t('clientOperations.showHideColumns')}
               aria-expanded={columnVisibilityOpen}
               onClick={() => setColumnVisibilityOpen((v) => !v)}
             >
@@ -3036,7 +3044,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               </svg>
             </button>
             {columnVisibilityOpen && (
-              <div className="nx-co-sheet__col-visibility-popover" role="dialog" aria-label="הצג / הסתר עמודות">
+              <div className="nx-co-sheet__col-visibility-popover" role="dialog" aria-label={t('clientOperations.showHideColumns')}>
                 {columns.filter((c) => c.cell_kind !== 'folder').map((c) => {
                   const mandatory = isClientOperationsMandatoryVisibleColumn(c.key);
                   return (
@@ -3060,7 +3068,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
         {/* ── Status paint modes ── */}
         {manualStatusPaintModes.length ? (
-          <div className="nx-co-sheet__toolbar-group nx-co-sheet__toolbar-group--status-paint" role="toolbar" aria-label="מצב צביעת סטטוס">
+          <div className="nx-co-sheet__toolbar-group nx-co-sheet__toolbar-group--status-paint" role="toolbar" aria-label={t('clientOperations.statusPaint')}>
             {manualStatusPaintModes.map((mode) => (
               <button
                 key={mode.id}
@@ -3097,12 +3105,12 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             type="button"
             className={`nx-co-sheet__btn${fullscreenOpen ? ' is-active' : ''}`}
             disabled={capById.has('fullscreen') && !isCap('fullscreen')}
-            title={fullscreenOpen ? 'יציאה ממסך מלא' : (capTitle('fullscreen') ?? 'מסך מלא')}
-            aria-label={fullscreenOpen ? 'יציאה ממסך מלא' : 'מסך מלא'}
+            title={fullscreenOpen ? t('clientOperations.exitFullscreen') : (capTitle('fullscreen') ?? t('clientOperations.fullscreen'))}
+            aria-label={fullscreenOpen ? t('clientOperations.exitFullscreen') : t('clientOperations.fullscreen')}
             aria-pressed={fullscreenOpen}
             onClick={() => setFullscreenOpen((open) => !open)}
           >
-            {fullscreenOpen ? 'יציאה ממסך מלא' : '⊞ מסך מלא'}
+            {fullscreenOpen ? t('clientOperations.exitFullscreen') : `⊞ ${t('clientOperations.fullscreen')}`}
           </button>
 
           {/* Create-client lives on /clients — keep Core command + modal, hide this toolbar button. */}
@@ -3112,8 +3120,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             type="button"
             data-testid="print-control"
             className="nx-co-sheet__btn nx-co-sheet__btn--icon"
-            title="הדפסה"
-            aria-label="הדפסה"
+            title={t('clientOperations.print')}
+            aria-label={t('clientOperations.print')}
             onClick={handlePrint}
           >
             <svg className="nx-co-sheet__toolbar-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -3129,7 +3137,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             <button
               type="button"
               className="nx-co-sheet__btn"
-              title="עוד פעולות גיליון"
+              title={t('clientOperations.moreSheetActions')}
               hidden
               data-testid="co-toolbar-more"
               aria-hidden="true"
@@ -3150,7 +3158,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   />
                 </label>
                 <label className="nx-co-sheet__btn nx-co-sheet__number-format">
-                  פורמט מספר
+                  {t('clientOperations.numberFormat')}
                   <select
                     value={
                       currentCellPres?.numberFormat
@@ -3161,11 +3169,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     title={capTitle('number_format')}
                     onChange={(e) => commitPresentationOrToolDefault({ numberFormat: e.target.value as CellPresentation['numberFormat'] })}
                   >
-                    <option value="general">כללי</option>
-                    <option value="number">מספר</option>
-                    <option value="currency">מטבע</option>
-                    <option value="percent">אחוז</option>
-                    <option value="date">תאריך</option>
+                    <option value="general">{t('clientOperations.formatGeneral')}</option>
+                    <option value="number">{t('clientOperations.formatNumber')}</option>
+                    <option value="currency">{t('clientOperations.formatCurrency')}</option>
+                    <option value="percent">{t('clientOperations.formatPercent')}</option>
+                    <option value="date">{t('clientOperations.formatDate')}</option>
                   </select>
                 </label>
                 <button
@@ -3175,7 +3183,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   title={capTitle('borders')}
                   onClick={() => setBordersOn((v) => !v)}
                 >
-                  גבולות
+                  {t('clientOperations.borders')}
                 </button>
               </div>
             ) : null}
@@ -3226,7 +3234,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       <div
         className="nx-co-sheet__filter-bar"
         role="toolbar"
-        aria-label="סינון ניהול לקוחות"
+        aria-label={t('clientOperations.filterAria')}
         data-testid="client-operations-filter-bar"
       >
         <div className="nx-co-sheet__filter-bar-scroll">
@@ -3252,7 +3260,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     options={def.options}
                     value={selected}
                     disabled={!onQueryChange}
-                    onChange={(nextCsv) => applyBusinessFilterChange(def.id, nextCsv)}
+                    onChange={(nextCsv: string) => applyBusinessFilterChange(def.id, nextCsv)}
                   />
                 </div>
               );
@@ -3285,10 +3293,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             type="button"
             className="nx-co-sheet__filter-clear"
             disabled={!onQueryChange || !clearAvailable}
-            title={filters.clear_action?.label_he ?? 'נקה סינון'}
+            title={filters.clear_action?.label_he ?? t('clientOperations.clearFilter')}
             onClick={clearBusinessFilters}
           >
-            {filters.clear_action?.label_he ?? 'נקה סינון'}
+            {filters.clear_action?.label_he ?? t('clientOperations.clearFilter')}
           </button>
         </div>
       </div>
@@ -3332,7 +3340,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               ? undefined
               : {
                   width: '100%',
-                  textAlign: 'right',
+                  textAlign: 'start',
                   background: 'rgba(59,130,246,0.06)',
                   border: '1px solid #e5e7eb',
                   borderRadius: 8,
@@ -3354,7 +3362,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           type="button"
           className={`nx-co-sheet__custom-cell${value ? '' : ' is-blank'}`}
           onDoubleClick={() => void editCustomCell(r, col)}
-          title="לחיצה כפולה לעריכה"
+          title={t('clientOperations.doubleClickToEdit')}
         >
           {value}
         </button>
@@ -3375,7 +3383,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         return (
           <span
             className={`nx-co-sheet__date-field is-na${canOpenCapital ? ' is-openable' : ''}`}
-            title={canOpenCapital ? 'פתיחת הצהרת הון' : undefined}
+            title={canOpenCapital ? t('clientOperations.openCapitalDeclaration') : undefined}
           >
             <span className="nx-co-sheet__date-field-value">—</span>
             {canOpenCapital ? (
@@ -3383,8 +3391,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 type="button"
                 className="nx-co-sheet__date-field-plus"
                 disabled={!canEdit || !onRegistryCommand}
-                title="פתיחת הצהרת הון"
-                aria-label={`פתיחת הצהרת הון — ${r.client_name ?? r.client_id}`}
+                title={t('clientOperations.openCapitalDeclaration')}
+                aria-label={`${t('clientOperations.openCapitalDeclaration')} — ${r.client_name ?? r.client_id}`}
                 onClick={(event) => {
                   event.stopPropagation();
                   void openCapitalDeclaration(r);
@@ -3492,7 +3500,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         },
       ];
       return (
-        <div className="nx-co-sheet__material" role="group" aria-label={`חומר — ${clientLabel}`}>
+        <div className="nx-co-sheet__material" role="group" aria-label={`${t('clientOperations.material')} — ${clientLabel}`}>
           {streams.map((stream) => {
             // Backend owns configured/due. Not configured → —. Configured+not-due → disabled square.
             const configured = Boolean(
@@ -3503,8 +3511,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 <span
                   key={stream.key}
                   className="nx-co-sheet__material-slot is-na"
-                  title={`${stream.labelHe} לא מוגדר`}
-                  aria-label={`חומר ${stream.labelHe} — ${clientLabel} — ${periodLabel} — לא מוגדר`}
+                  title={`${stream.labelHe} ${t('clientOperations.notConfigured')}`}
+                  aria-label={`${t('clientOperations.material')} ${stream.labelHe} — ${clientLabel} — ${periodLabel} — ${t('clientOperations.notConfigured')}`}
                 >
                   —
                 </span>
@@ -3522,7 +3530,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               <label
                 key={stream.key}
                 className={`nx-co-sheet__material-slot${editable ? '' : ' is-inactive'}${saving ? ' is-saving' : ''}`}
-                title={editable ? undefined : `${stream.labelHe} מוגדר — אין דיווח בחודש זה`}
+                title={editable ? undefined : `${stream.labelHe} ${t('clientOperations.configuredNoReportThisMonth')}`}
               >
                 <input
                   type="checkbox"
@@ -3530,7 +3538,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   checked={checked}
                   disabled={!editable || !canEdit || !col.editable || !onRegistryCommand || pendingMarkKeys.has(markKey)}
                   aria-busy={saving}
-                  aria-label={`חומר ${stream.labelHe} — ${clientLabel} — ${periodLabel}${editable ? '' : ' — לא נדרש החודש'}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
+                  aria-label={`${t('clientOperations.material')} ${stream.labelHe} — ${clientLabel} — ${periodLabel}${editable ? '' : t('clientOperations.notRequiredThisMonth')}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
                   onChange={() => {
                     if (statusPaintMode) return;
                     void toggleMaterialStream(r, stream.key);
@@ -3559,7 +3567,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       const niConfigured = Boolean(niCell?.configured ?? niCell?.applicable);
       if (!niConfigured) {
         return (
-          <span className="nx-co-sheet__na" title="אין תיק ניכויים" aria-label={`${col.label} —`}>
+          <span className="nx-co-sheet__na" title={t('clientOperations.noDeductionsFile')} aria-label={`${col.label} —`}>
             —
           </span>
         );
@@ -3579,8 +3587,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 <span
                   key={form.key}
                   className="nx-co-sheet__material-slot is-na"
-                  title={`${form.labelHe} לא מוגדר`}
-                  aria-label={`ב״ל ניכויים ${form.labelHe} — ${clientLabel} — ${periodLabel} — לא מוגדר`}
+                  title={`${form.labelHe} ${t('clientOperations.notConfigured')}`}
+                  aria-label={`ב״ל ניכויים ${form.labelHe} — ${clientLabel} — ${periodLabel} — ${t('clientOperations.notConfigured')}`}
                 >
                   —
                 </span>
@@ -3594,7 +3602,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               <label
                 key={form.key}
                 className={`nx-co-sheet__material-slot${editable ? '' : ' is-inactive'}${saving ? ' is-saving' : ''}`}
-                title={editable ? undefined : `${form.labelHe} מוגדר — אין דיווח בחודש זה`}
+                title={editable ? undefined : `${form.labelHe} ${t('clientOperations.configuredNoReportThisMonth')}`}
               >
                 <input
                   type="checkbox"
@@ -3602,7 +3610,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   checked={checked}
                   disabled={!editable || !canEdit || !col.editable || !onRegistryCommand || pendingMarkKeys.has(markKey)}
                   aria-busy={saving}
-                  aria-label={`ב״ל ניכויים ${form.labelHe} — ${clientLabel} — ${periodLabel}${editable ? '' : ' — לא נדרש החודש'}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
+                  aria-label={`ב״ל ניכויים ${form.labelHe} — ${clientLabel} — ${periodLabel}${editable ? '' : t('clientOperations.notRequiredThisMonth')}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
                   onChange={() => {
                     if (statusPaintMode) return;
                     void toggleNiDeductionsItem(r, form.key);
@@ -3630,7 +3638,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       const cell = r.income_tax_deductions_cell;
       if (!cell?.configured) {
         return (
-          <span className="nx-co-sheet__na" title="אין תיק ניכויים" aria-label={`${col.label} —`}>
+          <span className="nx-co-sheet__na" title={t('clientOperations.noDeductionsFile')} aria-label={`${col.label} —`}>
             —
           </span>
         );
@@ -3642,7 +3650,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       return (
         <label
           className={`nx-co-sheet__itd-slot${editable ? '' : ' is-inactive'}${saving ? ' is-saving' : ''}`}
-          title={editable ? undefined : 'יש תיק ניכויים — אין דיווח בחודש זה'}
+          title={editable ? undefined : t('clientOperations.hasDeductionsFileNoReport')}
         >
           <input
             type="checkbox"
@@ -3650,7 +3658,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             checked={checked}
             disabled={!editable || !canEdit || !col.editable || !onRegistryCommand || pendingMarkKeys.has(markKey)}
             aria-busy={saving}
-            aria-label={`${col.label} — ${clientLabel} — ${periodLabel}${editable ? '' : ' — לא נדרש החודש'}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
+            aria-label={`${col.label} — ${clientLabel} — ${periodLabel}${editable ? '' : t('clientOperations.notRequiredThisMonth')}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
             onChange={() => {
               if (statusPaintMode) return;
               void toggleIncomeTaxDeductions(r);
@@ -3682,7 +3690,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             e.stopPropagation();
             openQuickProfile(r, e.currentTarget);
           }}
-          aria-label={`כרטיס מהיר ${r.client_name ?? ''}`}
+          aria-label={`${t('clientOperations.quickCard')} ${r.client_name ?? ''}`}
         >
           {text}
         </button>
@@ -3710,7 +3718,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             <th key={column.key} data-col={column.key} data-freeze={column.freeze_default ? 'true' : 'false'} style={{ textAlign: column.align }}>
               {column.key === 'material_brought' ? (
                 <div className="nx-co-sheet__material-header">
-                  <span className="nx-co-sheet__material-header-title">חומר</span>
+                  <span className="nx-co-sheet__material-header-title">{t('clientOperations.material')}</span>
                   <div className="nx-co-sheet__material-header-subs" aria-hidden="true">
                     <span>מע״מ</span>
                     <span>מה״כ</span>
@@ -3733,7 +3741,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       className="nx-co-sheet__header-edit"
                       value={headerDraft}
                       autoFocus
-                      aria-label="שם עמודה"
+                      aria-label={t('clientOperations.columnName')}
                       onChange={(event) => setHeaderDraft(event.target.value)}
                       onClick={(event) => event.stopPropagation()}
                       onBlur={() => void commitCustomHeaderRename(column, headerDraft)}
@@ -3752,7 +3760,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       type="button"
                       className={`nx-co-sheet__header-label${column.label.trim() ? '' : ' is-blank'}`}
                       disabled={!canEdit || !column.custom_column_id}
-                      title={canEdit ? 'לחיצה לשינוי שם העמודה' : undefined}
+                      title={canEdit ? t('clientOperations.clickToRenameColumn') : undefined}
                       onClick={(event) => {
                         event.stopPropagation();
                         if (!canEdit || !column.custom_column_id) return;
@@ -3767,8 +3775,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     <button
                       type="button"
                       className="nx-co-sheet__col-gear"
-                      aria-label="הגדרות עמודה"
-                      title="הגדרות עמודה"
+                      aria-label={t('clientOperations.columnSettings')}
+                      title={t('clientOperations.columnSettings')}
                       onMouseDown={(event) => {
                         // Keep rename/resize isolated — gear must not steal header rename focus incorrectly.
                         event.preventDefault();
@@ -3797,7 +3805,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               ) : (
                 column.label
               )}
-              <span className="nx-co-sheet__resize-handle" role="separator" aria-label={`שינוי רוחב ${column.label}`} onMouseDown={(event) => beginResize(event, column)} />
+              <span className="nx-co-sheet__resize-handle" role="separator" aria-label={`${t('clientOperations.resizeColumn')} ${column.label}`} onMouseDown={(event) => beginResize(event, column)} />
             </th>
           ))}
         </tr></thead>
@@ -3889,7 +3897,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                               className="nx-co-sheet__custom-cell-input"
                               value={cellDraft}
                               autoFocus
-                              aria-label={column.label.trim() || 'ערך עמודה'}
+                              aria-label={column.label.trim() || t('clientOperations.columnValue')}
                               onChange={(event) => {
                                 const next = event.target.value;
                                 setCellDraft(next);
@@ -4020,7 +4028,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                           className="nx-co-sheet__custom-cell-input nx-co-sheet__manual-cell-input"
                           value={cellDraft}
                           autoFocus
-                          aria-label={column.label.trim() || 'ערך ידני'}
+                          aria-label={column.label.trim() || t('clientOperations.manualValue')}
                           data-testid={`co-manual-cell-input-${row.manual_row_slot}-${column.key}`}
                           onChange={(event) => {
                             const next = event.target.value;
@@ -4076,7 +4084,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           <div className="nx-co-sheet__period-pending-line" />
           <div className="nx-co-sheet__period-pending-line" />
           <div className="nx-co-sheet__period-pending-line" />
-          <p className="nx-co-sheet__period-pending-label">טוען תקופה…</p>
+          <p className="nx-co-sheet__period-pending-label">{t('clientOperations.loadingPeriod')}</p>
         </div>
       ) : null}
     </div>
@@ -4265,7 +4273,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       {notesModalClientId && (
         <ClientNoteModal
           open
-          clientName={notesModalClientName || 'לקוח'}
+          clientName={notesModalClientName || t('clientOperations.client')}
           noteType={formTypeCode}
           noteText={formBody}
           reminderAt={formReminderLocal}
@@ -4280,22 +4288,22 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           onReminderAtChange={setFormReminderLocal}
         >
           {notesLoading ? (
-            <div className="nx-empty-note">אין הערות עדיין</div>
+            <div className="nx-empty-note">{t('clientOperations.loading')}</div>
           ) : (
             <>
               {notesError && <div className="nx-alert-error">{notesError}</div>}
 
               {operationalNotes.length === 0 ? (
-                <div className="nx-empty-note">אין הערות עדיין</div>
+                <div className="nx-empty-note">{t('clientOperations.noNotesYet')}</div>
               ) : (
                 <div className="nx-modal-notes-list">
                   {operationalNotes.map((n) => (
                     <div key={n.id} className="nx-note-card">
-                      <div style={{ flex: 1, minWidth: 0, textAlign: 'right' }}>
+                      <div style={{ flex: 1, minWidth: 0, textAlign: 'start' }}>
                         <div className="nx-note-card-meta">
                           {n.type_label_he}
                           {n.reminder_at
-                            ? ` · ${new Date(n.reminder_at).toLocaleString('he-IL', {
+                            ? ` · ${new Date(n.reminder_at).toLocaleString(lang === 'he' ? 'he-IL' : 'en-GB', {
                                 dateStyle: 'short',
                                 timeStyle: 'short',
                               })}`
@@ -4334,7 +4342,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   <ul>
                     {conflict.conflicts.map((c, i) => (
                       <li key={i}>
-                        <strong>{c.client_display_name ?? 'לקוח'}</strong> — {c.type_label_he}:{' '}
+                        <strong>{c.client_display_name ?? t('clientOperations.client')}</strong> — {c.type_label_he}:{' '}
                         {c.body_preview}
                       </li>
                     ))}
@@ -4377,7 +4385,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           value={workspaceSelectValue}
           disabled={loading || !onWorkspaceChange}
           onChange={(event) => onWorkspaceChange?.(event.target.value)}
-          aria-label="מרחב עבודה"
+          aria-label={t('clientOperations.workspace')}
         >
           {workspaceSelectorOptions.map((opt) => {
             const value = encodeClientOperationsWorkspaceOptionValue({
@@ -4436,7 +4444,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             periodContentPending ? ' is-period-pending' : ''
           }`}
         >
-          {loading ? <p className="nx-co-sheet__loading nx-co-sheet__loading--inline">טוען תקופה…</p> : null}
+          {loading ? <p className="nx-co-sheet__loading nx-co-sheet__loading--inline">{t('clientOperations.loadingPeriod')}</p> : null}
           {renderSpreadsheetTable()}
         <ClientOperationsPeriodSheetTabs
           availablePeriods={period?.available_periods ?? []}
@@ -4465,19 +4473,19 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   className="nx-co-period-copy-modal"
                   role="dialog"
                   aria-modal="true"
-                  aria-label="העתק מידע מחודש"
+                  aria-label={t('clientOperations.copyFromMonth')}
                   data-testid="client-operations-period-copy-source-modal"
                   onMouseDown={(event) => event.stopPropagation()}
                 >
-                  <h2 className="nx-co-period-copy-modal__title">העתק מידע מחודש</h2>
-                  <p className="nx-co-period-copy-modal__body">בחר חודש שממנו יועתק המידע:</p>
+                  <h2 className="nx-co-period-copy-modal__title">{t('clientOperations.copyFromMonth')}</h2>
+                  <p className="nx-co-period-copy-modal__body">{t('clientOperations.copyFromMonthBody')}</p>
                   {sourcePeriodsForCopy.length === 0 ? (
-                    <div className="nx-co-period-copy-modal__empty">אין חודשים זמינים</div>
+                    <div className="nx-co-period-copy-modal__empty">{t('clientOperations.noMonthsAvailable')}</div>
                   ) : (
                     <div
                       className="nx-co-period-copy-modal__period-list"
                       role="listbox"
-                      aria-label="בחירת חודש מקור"
+                      aria-label={t('clientOperations.chooseSourceMonth')}
                     >
                       {sourcePeriodsForCopy.map((key) => {
                         const selected = periodCopySelectedSource === key;
@@ -4504,7 +4512,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       disabled={periodCopyBusy}
                       onClick={closePeriodCopySourceModal}
                     >
-                      ביטול
+                      {t('clientOperations.cancel')}
                     </button>
                     <button
                       type="button"
@@ -4512,7 +4520,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       disabled={periodCopyBusy || !periodCopySelectedSource}
                       onClick={onConfirmPeriodCopySource}
                     >
-                      המשך
+                      {t('clientOperations.continue')}
                     </button>
                   </div>
                 </div>
@@ -4534,16 +4542,20 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   className="nx-co-period-copy-modal"
                   role="dialog"
                   aria-modal="true"
-                  aria-label="העתקת מידע מחודש"
+                  aria-label={t('clientOperations.copyFromMonthTitle')}
                   data-testid="client-operations-period-copy-dialog"
                   onMouseDown={(event) => event.stopPropagation()}
                 >
-                  <h2 className="nx-co-period-copy-modal__title">העתקת מידע מחודש</h2>
+                  <h2 className="nx-co-period-copy-modal__title">{t('clientOperations.copyFromMonthConfirmTitle')}</h2>
                   <p className="nx-co-period-copy-modal__body">
-                    {`כבר קיים מידע שהוזן ידנית בחודש ${formatClientOperationsOperationalPeriodTabLabel(targetPeriodKeyForCopy)}.`}
+                    {fillI18n(t('clientOperations.copyExistingManual'), {
+                      month: formatClientOperationsOperationalPeriodTabLabel(targetPeriodKeyForCopy),
+                    })}
                   </p>
                   <p className="nx-co-period-copy-modal__body">
-                    {`בחר כיצד להעתיק את המידע מ־${formatClientOperationsOperationalPeriodTabLabel(periodCopyDialog.sourcePeriodKey)}:`}
+                    {fillI18n(t('clientOperations.copyHow'), {
+                      source: formatClientOperationsOperationalPeriodTabLabel(periodCopyDialog.sourcePeriodKey),
+                    })}
                   </p>
                   <label
                     className={`nx-co-period-copy-modal__radio${periodCopyDialog.mode === 'empty_only' ? ' is-selected' : ''}`}
@@ -4558,7 +4570,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                         )
                       }
                     />
-                    <span>העתק רק לתאים ריקים</span>
+                    <span>{t('clientOperations.copyEmptyOnly')}</span>
                   </label>
                   <label
                     className={`nx-co-period-copy-modal__radio${periodCopyDialog.mode === 'replace_existing' ? ' is-selected' : ''}`}
@@ -4573,7 +4585,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                         )
                       }
                     />
-                    <span>החלף את הנתונים הקיימים</span>
+                    <span>{t('clientOperations.copyReplace')}</span>
                   </label>
                   <div className="nx-co-period-copy-modal__actions">
                     <button
@@ -4582,7 +4594,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       disabled={periodCopyBusy}
                       onClick={() => setPeriodCopyDialog(null)}
                     >
-                      ביטול
+                      {t('clientOperations.cancel')}
                     </button>
                     <button
                       type="button"
@@ -4595,7 +4607,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                         )
                       }
                     >
-                      העתק
+                      {t('clientOperations.copy')}
                     </button>
                   </div>
                 </div>
@@ -4605,8 +4617,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           : null}
         {userColumnPeriodSetup?.needed && (userColumnPeriodSetup.eligible_columns?.length ?? 0) > 0 && canEdit ? (
           <div className="nx-co-sheet__dialog-backdrop" role="presentation">
-            <div className="nx-co-sheet__dialog" role="dialog" aria-modal="true" aria-label="עמודות לתקופה">
-              <h2>{`עמודות לתקופה ${userColumnPeriodSetup.operational_period_key.slice(5)}.${userColumnPeriodSetup.operational_period_key.slice(2, 4)}`}</h2>
+            <div className="nx-co-sheet__dialog" role="dialog" aria-modal="true" aria-label={t('clientOperations.periodColumns')}>
+              <h2>{`${t('clientOperations.periodColumns')} ${userColumnPeriodSetup.operational_period_key.slice(5)}.${userColumnPeriodSetup.operational_period_key.slice(2, 4)}`}</h2>
               <label className="nx-co-sheet__check">
                 <input
                   type="checkbox"
@@ -4619,7 +4631,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     );
                   }}
                 />
-                הכל
+                {t('clientOperations.all')}
               </label>
               {userColumnPeriodSetup.eligible_columns.map((col) => (
                 <label key={col.column_id} className="nx-co-sheet__check">
@@ -4638,7 +4650,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               ))}
               <div className="nx-co-sheet__dialog-actions">
                 <button type="button" className="nx-co-sheet__btn is-active" onClick={() => void confirmPeriodSetup()}>
-                  אישור
+                  {t('clientOperations.confirm')}
                 </button>
               </div>
             </div>
@@ -4646,13 +4658,13 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         ) : null}
         {columnSettingsTarget ? (
           <div className="nx-co-sheet__dialog-backdrop" role="presentation">
-            <div className="nx-co-sheet__dialog" role="dialog" aria-modal="true" aria-label="הגדרות עמודה">
-              <button type="button" className="nx-co-sheet__close" onClick={() => setColumnSettingsTarget(null)} aria-label="סגירה">×</button>
-              <h2>הגדרות עמודה</h2>
-              <p className="nx-co-sheet__dialog-subtitle">הצגה בתקופות</p>
+            <div className="nx-co-sheet__dialog" role="dialog" aria-modal="true" aria-label={t('clientOperations.columnSettings')}>
+              <button type="button" className="nx-co-sheet__close" onClick={() => setColumnSettingsTarget(null)} aria-label={t('clientOperations.close')}>×</button>
+              <h2>{t('clientOperations.columnSettings')}</h2>
+              <p className="nx-co-sheet__dialog-subtitle">{t('clientOperations.columnSettingsSubtitle')}</p>
               {columnSettingsTarget.legacy_baseline_required ? (
                 <label>
-                  תקופת התחלה למידע הקיים
+                  {t('clientOperations.existingDataStartPeriod')}
                   <select
                     value={settingsLegacyBaseline}
                     onChange={(event) => setSettingsLegacyBaseline(event.target.value)}
@@ -4671,7 +4683,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   checked={settingsAutoFuture}
                   onChange={(event) => setSettingsAutoFuture(event.target.checked)}
                 />
-                מהתקופה הנוכחית והלאה
+                {t('clientOperations.fromCurrentPeriodOn')}
               </label>
               {(period?.available_periods ?? []).map((key) => (
                 <label key={key} className="nx-co-sheet__check">
@@ -4689,20 +4701,20 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 </label>
               ))}
               <div className="nx-co-sheet__dialog-actions">
-                <button type="button" className="nx-co-sheet__btn" onClick={() => setColumnSettingsTarget(null)}>ביטול</button>
-                <button type="button" className="nx-co-sheet__btn is-active" onClick={() => void saveColumnSettings()}>שמירה</button>
+                <button type="button" className="nx-co-sheet__btn" onClick={() => setColumnSettingsTarget(null)}>{t('clientOperations.cancel')}</button>
+                <button type="button" className="nx-co-sheet__btn is-active" onClick={() => void saveColumnSettings()}>{t('clientOperations.save')}</button>
               </div>
             </div>
           </div>
         ) : null}
         {addColumnOpen ? (
           <div className="nx-co-sheet__dialog-backdrop" role="presentation">
-            <div className="nx-co-sheet__dialog" role="dialog" aria-modal="true" aria-label="הוספת עמודה">
-              <button type="button" className="nx-co-sheet__close" onClick={() => setAddColumnOpen(false)} aria-label="סגירה">×</button>
-              <h2>הוספת עמודה</h2>
-              <label>שם עמודה<input value={addColumnLabel} onChange={(event) => setAddColumnLabel(event.target.value)} autoFocus /></label>
-              <label>סוג נתון<select value={addColumnDataType} onChange={(event) => setAddColumnDataType(event.target.value as typeof addColumnDataType)}><option value="text">טקסט</option><option value="number">מספר</option><option value="date">תאריך</option><option value="boolean">כן / לא</option></select></label>
-              <div className="nx-co-sheet__dialog-actions"><button type="button" className="nx-co-sheet__btn" onClick={() => setAddColumnOpen(false)}>ביטול</button><button type="button" className="nx-co-sheet__btn is-active" onClick={() => void createColumn()} disabled={!addColumnLabel.trim()}>שמירה</button></div>
+            <div className="nx-co-sheet__dialog" role="dialog" aria-modal="true" aria-label={t('clientOperations.addColumn')}>
+              <button type="button" className="nx-co-sheet__close" onClick={() => setAddColumnOpen(false)} aria-label={t('clientOperations.close')}>×</button>
+              <h2>{t('clientOperations.addColumn')}</h2>
+              <label>{t('clientOperations.columnName')}<input value={addColumnLabel} onChange={(event) => setAddColumnLabel(event.target.value)} autoFocus /></label>
+              <label>{t('clientOperations.dataType')}<select value={addColumnDataType} onChange={(event) => setAddColumnDataType(event.target.value as typeof addColumnDataType)}><option value="text">{t('clientOperations.text')}</option><option value="number">{t('clientOperations.formatNumber')}</option><option value="date">{t('clientOperations.formatDate')}</option><option value="boolean">{t('clientOperations.yesNo')}</option></select></label>
+              <div className="nx-co-sheet__dialog-actions"><button type="button" className="nx-co-sheet__btn" onClick={() => setAddColumnOpen(false)}>{t('clientOperations.cancel')}</button><button type="button" className="nx-co-sheet__btn is-active" onClick={() => void createColumn()} disabled={!addColumnLabel.trim()}>{t('clientOperations.save')}</button></div>
             </div>
           </div>
         ) : null}
@@ -4724,17 +4736,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   return (
     <div>
       {showPageHeader ? (
-        <PageHeader title="Nodex לקוחות" subtitle="Client registry (module v1 skeleton)" />
+        <PageHeader title={t('clientOperations.clientsBrand')} subtitle="Client registry (module v1 skeleton)" />
       ) : null}
 
       <SectionCard style={{ padding: 20 }}>
         {error && <div style={{ color: '#b91c1c', marginBottom: 12 }}>{error}</div>}
         {loading ? (
-          <p style={{ color: '#6b7280' }}>Loading…</p>
+          <p style={{ color: '#6b7280' }}>{t('clientOperations.loading')}</p>
         ) : (
           <>
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, direction: 'rtl' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, direction: 'inherit' }}>
                 <thead>
                   <tr style={{ background: '#f3f4f6' }}>
                     {visibleColumns.map((c) => (

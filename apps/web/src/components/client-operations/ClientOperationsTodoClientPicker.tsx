@@ -9,10 +9,10 @@
  * ONE-TIME client (stored on the ToDo itself by the backend — never a Core client).
  */
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useI18n } from '../../i18n/I18nProvider';
 import {
   buildTodoClientPickerRows,
   moveTodoClientPickerIndex,
-  todoOneTimeClientOptionLabel,
   TODO_CLIENT_PICKER_VISIBLE_LIMIT,
   type TodoClientPickerOption,
   type TodoClientPickerRow,
@@ -56,6 +56,7 @@ export function ClientOperationsTodoClientPicker(props: ClientOperationsTodoClie
     onSelectOneTime,
     onClearSelection,
   } = props;
+  const { t } = useI18n();
   const uid = useId();
   const inputId = `${uid}-input`;
   const listboxId = `${uid}-listbox`;
@@ -126,7 +127,7 @@ export function ClientOperationsTodoClientPicker(props: ClientOperationsTodoClie
 
   return (
     <div className="nx-co-todo-form__field nx-co-todo-client-picker">
-      <label htmlFor={inputId}>לקוח</label>
+      <label htmlFor={inputId}>{t('clientOperations.todo.client')}</label>
       <input
         id={inputId}
         type="text"
@@ -138,7 +139,7 @@ export function ClientOperationsTodoClientPicker(props: ClientOperationsTodoClie
         autoComplete="off"
         spellCheck={false}
         value={hasSelection ? (isOneTime ? oneTimeName : selectedLabel) : text}
-        placeholder="הקלד שם לקוח או ת.ז./ח.פ."
+        placeholder={t('clientOperations.todo.typeClientOrId')}
         maxLength={oneTimeNameMaxLength}
         required
         data-testid="client-operations-todo-client-input"
@@ -159,11 +160,11 @@ export function ClientOperationsTodoClientPicker(props: ClientOperationsTodoClie
       />
       {isOneTime ? (
         <span className="nx-co-todo-client-picker__mode" data-testid="client-operations-todo-one-time-badge">
-          לקוח חד פעמי
+          {t('clientOperations.todo.oneTimeClient')}
         </span>
       ) : null}
       {showList ? (
-        <ul id={listboxId} ref={listRef} className="nx-co-todo-form__suggest" role="listbox" aria-label="לקוחות">
+        <ul id={listboxId} ref={listRef} className="nx-co-todo-form__suggest" role="listbox" aria-label={t('clientOperations.todo.clients')}>
           {rows.map((row, index) => (
             <li
               key={row.kind === 'client' ? row.option.client_id : 'one-time'}
@@ -190,24 +191,24 @@ export function ClientOperationsTodoClientPicker(props: ClientOperationsTodoClie
                     <span>{row.option.tax_id ?? ''}</span>
                   </>
                 ) : (
-                  <strong>{todoOneTimeClientOptionLabel(row.name)}</strong>
+                  <strong>{t('clientOperations.todo.useTypedName').replace('{{name}}', row.name)}</strong>
                 )}
               </button>
             </li>
           ))}
           {loading && clientRowCount === 0 ? (
             <li role="presentation" className="nx-co-todo-form__suggest-note">
-              טוען…
+              {t('clientOperations.loading')}
             </li>
           ) : null}
           {noResults ? (
             <li role="presentation" className="nx-co-todo-form__suggest-note">
-              לא נמצאו לקוחות מתאימים
+              {t('clientOperations.todo.noMatchingClients')}
             </li>
           ) : null}
           {hasMore && clientRowCount > 0 ? (
             <li role="presentation" className="nx-co-todo-form__suggest-note">
-              יש עוד לקוחות — המשך להקליד כדי לצמצם
+              {t('clientOperations.todo.moreClients')}
             </li>
           ) : null}
         </ul>

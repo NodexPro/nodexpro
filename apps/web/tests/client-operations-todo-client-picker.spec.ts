@@ -71,7 +71,7 @@ test('picker component: accessible combobox, label לקוח, RTL-safe, no networ
   const picker = read('../src/components/client-operations/ClientOperationsTodoClientPicker.tsx');
   assert.match(picker, /role="combobox"/);
   assert.match(picker, /role="listbox"/);
-  assert.match(picker, /<label htmlFor=\{inputId\}>לקוח<\/label>/);
+  assert.match(picker, /<label htmlFor=\{inputId\}>\{t\('clientOperations\.todo\.client'\)\}<\/label>/);
   assert.match(picker, /aria-activedescendant/);
   assert.match(picker, /ArrowDown/);
   assert.match(picker, /e\.key === 'Enter'/);
@@ -144,10 +144,10 @@ test('picker rows: backend matches first (bounded), then the typed-name one-time
 test('picker component: canonical selection vs one-time selection, keyboard-reachable, clear mode badge', () => {
   const picker = read('../src/components/client-operations/ClientOperationsTodoClientPicker.tsx');
   assert.match(picker, /if \(row\.kind === 'client'\) onSelect\(row\.option\);\s*else onSelectOneTime\(row\.name\)/);
-  assert.match(picker, /todoOneTimeClientOptionLabel\(row\.name\)/);
+  assert.match(picker, /clientOperations\.todo\.useTypedName/);
   assert.match(picker, /data-option-kind=\{row\.kind\}/);
   assert.match(picker, /data-client-mode=/);
-  assert.match(picker, /לקוח חד פעמי/);
+  assert.match(picker, /clientOperations\.todo\.oneTimeClient/);
   // The one-time row takes part in arrow-key navigation / Enter like every other row.
   assert.match(picker, /moveTodoClientPickerIndex\(cur, e\.key === 'ArrowDown' \? 1 : -1, rows\.length\)/);
   assert.match(picker, /choose\(rows\[activeIndex\]\)/);
@@ -165,14 +165,14 @@ test('ToDo form: canonical → client_id only; typed name → external_client_na
   assert.match(modal, /const typedName = oneTimeName \|\| clientQ\.trim\(\);/);
   assert.doesNotMatch(modal, /client_id:\s*(typedName|oneTimeName|clientQ|crypto|uuid)/);
   // Valid one-time text never triggers the "choose a client" error.
-  assert.match(modal, /if \(!clientId && !typedName\) throw new Error\('נא לבחור לקוח או להקליד שם לקוח'\)/);
+  assert.match(modal, /if \(!clientId && !typedName\) throw new Error\(t\('clientOperations\.todo\.needClient'\)\)/);
   assert.doesNotMatch(modal, /throw new Error\('נא לבחור לקוח'\)/);
   // Selecting the one-time row clears any canonical id and creates nothing.
   assert.match(modal, /onSelectOneTime=\{\(name\) => \{[\s\S]*?setClientId\(''\);[\s\S]*?setOneTimeName\(name\);/);
   assert.doesNotMatch(modal, /moduleClientsCreate|create_client\b(?!_operations_todo)|new_client|client_operational_profile/i);
   // Canonical selection keeps read-only Core tax id; one-time tax id is optional + editable.
   assert.match(modal, /readOnly=\{mode === 'create' \? Boolean\(clientId\) : !editingOneTime\}/);
-  assert.match(modal, /placeholder=\{[^}]*'אופציונלי'/);
+  assert.match(modal, /placeholder=\{[^}]*clientOperations\.todo\.optional/);
   assert.doesNotMatch(modal, /<input[^>]*taxId[^>]*required/);
 });
 
@@ -190,7 +190,7 @@ test('ToDo edit: one-time fields go through the existing named edit command; typ
 
 test('card and archive show the one-time client with a clear tag; מטפל stays removed', () => {
   const modal = read('../src/components/client-operations/ClientOperationsTodoBoardModal.tsx');
-  assert.equal((modal.match(/task\.client\.is_one_time|t\.client\.is_one_time/g) ?? []).length, 2);
+  assert.equal((modal.match(/task\.client\.is_one_time|row\.client\.is_one_time/g) ?? []).length, 2);
   assert.equal((modal.match(/nx-co-todo-one-time-tag/g) ?? []).length, 2);
   assert.doesNotMatch(modal, /assigned_to_user_id|assigneeId|setAssignee|filter_assignee|showAssignee/);
   const css = read('../src/styles/nx-client-operations-todo.css');

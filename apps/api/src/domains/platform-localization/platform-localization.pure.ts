@@ -106,6 +106,76 @@ export function moduleGroupForKey(key: string): string {
   return group || 'general';
 }
 
+export type ModuleCompletenessRow = {
+  module_group: string;
+  catalog_size: number;
+  translated_count: number;
+  missing_count: number;
+  ratio: number;
+};
+
+export function moduleCompleteness(
+  entries: Array<{ module_group: string; value: string; placeholder_ok: boolean }>,
+): ModuleCompletenessRow[] {
+  const byGroup = new Map<string, { catalog_size: number; translated_count: number }>();
+  for (const entry of entries) {
+    const group = entry.module_group || 'general';
+    const current = byGroup.get(group) ?? { catalog_size: 0, translated_count: 0 };
+    current.catalog_size += 1;
+    if (entry.value.trim().length > 0 && entry.placeholder_ok) current.translated_count += 1;
+    byGroup.set(group, current);
+  }
+  return [...byGroup.entries()]
+    .map(([module_group, row]) => {
+      const completeness = translationCompleteness({
+        catalogSize: row.catalog_size,
+        translatedCount: row.translated_count,
+      });
+      return {
+        module_group,
+        catalog_size: row.catalog_size,
+        translated_count: row.translated_count,
+        missing_count: Math.max(0, row.catalog_size - row.translated_count),
+        ratio: completeness.ratio,
+      };
+    })
+    .sort((a, b) => a.module_group.localeCompare(b.module_group));
+}
+
+export function translationEntryFilterStatus(entry: {
+  value: string;
+  status: string;
+  placeholder_ok: boolean;
+}): 'missing' | 'draft' | 'published' {
+  if (!entry.value.trim() || !entry.placeholder_ok) return 'missing';
+  return entry.status === 'published' ? 'published' : 'draft';
+}
+
+export function mergePublishedCatalog(input: {
+  bundled: Record<string, string>;
+  snapshot: Record<string, string> | null | undefined;
+  livePublished: Record<string, string>;
+}): Record<string, string> {
+  const out: Record<string, string> = { ...input.bundled };
+  if (input.snapshot && typeof input.snapshot === 'object') {
+    for (const [key, value] of Object.entries(input.snapshot)) {
+      if (typeof value === 'string' && value.trim()) out[key] = value;
+    }
+  }
+  for (const [key, value] of Object.entries(input.livePublished)) {
+    if (typeof value === 'string' && value.trim()) out[key] = value;
+  }
+  return out;
+}
+
+export function snapshotFromEntries(entries: Array<{ key: string; value: string }>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const entry of entries) {
+    if (entry.key && typeof entry.value === 'string' && entry.value.trim()) out[entry.key] = entry.value;
+  }
+  return out;
+}
+
 export function translationCompleteness(input: {
   catalogSize: number;
   translatedCount: number;
