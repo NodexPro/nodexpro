@@ -73,6 +73,7 @@ test('13. language command and Users & Roles share persisted user language, not 
   assert.doesNotMatch(agg, /buildUsersRolesUi\(orgRow\?\.country_code\)/);
   const session = read('apps/api/src/domains/auth/session-preferences.service.ts');
   assert.match(session, /uiLanguage: resolvePersistedUiLanguage\(/);
+  assert.match(session, /selectUserFacingRegistryCountries/);
   const sidebar = read('apps/api/src/domains/auth/sidebar-account-block.pure.ts');
   assert.match(sidebar, /language_selector: \{[\s\S]*visible: true/);
 });

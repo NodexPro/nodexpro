@@ -1,6 +1,10 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { buildAccountSecurityAggregate } from '../account-security/account-security.service.js';
+import {
+  normalizeCountryRegistryCode,
+  selectUserFacingRegistryCountries,
+} from '../country-pack/country-registry-availability.pure.js';
 import { buildUserLocalizationAggregate } from '../platform-localization/platform-localization.service.js';
 import { resolvePersistedUiLanguage } from '../platform-localization/platform-localization.pure.js';
 import type { AccountSecurityAggregate, LocalizationAggregate } from '../../types/api.js';
@@ -93,7 +97,14 @@ export async function loadSessionPreferenceSlices(
     (typeof orgRow?.country_code === 'string' && orgRow.country_code) ||
     (typeof countrySettings?.data?.country_code === 'string' && countrySettings.data.country_code) ||
     null;
-  const countryOptions = ((countryRows ?? []) as Array<{ code: string; name: string }>).map((row) => ({
+  const visibleRows = selectUserFacingRegistryCountries(
+    ((countryRows ?? []) as Array<{ code: string; name: string; status: string }>).map((row) => ({
+      code: normalizeCountryRegistryCode(row.code),
+      name: row.name,
+      status: row.status,
+    })),
+  );
+  const countryOptions = visibleRows.map((row) => ({
     code: row.code,
     label: row.name,
   }));

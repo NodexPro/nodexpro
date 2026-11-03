@@ -7,6 +7,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import { AppError, forbidden, badRequest, notFound } from '../../shared/errors.js';
 import type { RequestContext } from '../../shared/context.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
+import { canAssignOrganizationCountry } from '../country-pack/country-registry-availability.pure.js';
 import * as legalIdentityService from '../trial/legal-identity.service.js';
 import * as trialService from '../trial/trial.service.js';
 import * as fileAccess from '../file-access/file-access.service.js';
@@ -457,6 +458,12 @@ export async function patchOrganizationSettings(
     const raw = body.country?.trim() ?? '';
     if (!raw) throw badRequest('Country is required.', 'INVALID_COUNTRY_CODE');
     const cc = raw.slice(0, 2).toUpperCase();
+    if (!canAssignOrganizationCountry({ code: cc, currentOrganizationCountryCode: previousOrgCountry })) {
+      throw badRequest(
+        'Country is not available for organization settings. Choose a registered official country.',
+        'COUNTRY_NOT_AVAILABLE',
+      );
+    }
     await assertCountryCodeRegisteredWhenRegistryPopulated(cc);
 
     if (cc !== previousOrgCountry) {

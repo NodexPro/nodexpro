@@ -4,6 +4,23 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import type { RequestContext } from '../../src/shared/context.js';
 
+const STAGING_HOST = 'kabefnmcyhughnyvoxiw.supabase.co';
+const PRODUCTION_HOST = 'ttysmceteiknzputejvc.supabase.co';
+const PROTECTED_COUNTRY_CODES = new Set(['IL', 'US']);
+const TEMPORARY_COUNTRY_POOL = ['QZ', 'QY', 'QX', 'QW', 'QV', 'AA', 'XY', 'XW', 'XV', 'ZZ'];
+
+function liveCountryPackDbConfigured(): boolean {
+  const url = process.env.SUPABASE_URL ?? '';
+  if (!url || !process.env.SUPABASE_SERVICE_ROLE_KEY) return false;
+  try {
+    const host = new URL(url).host;
+    if (host === PRODUCTION_HOST) return false;
+    return host === STAGING_HOST;
+  } catch {
+    return false;
+  }
+}
+
 type LoadedCountryPack = {
   executeCountryPackCommand: (ctx: RequestContext, command: { command: string; payload: Record<string, unknown> }) => Promise<unknown>;
   buildOwnerLegalValuesAggregate: (ctx: RequestContext) => Promise<Record<string, unknown>>;
@@ -119,8 +136,15 @@ async function cleanupEnv(env: Env): Promise<void> {
   await supabaseAdmin.from('organization_country_settings').delete().in('organization_id', [env.orgIl, env.orgUs]);
   await supabaseAdmin.from('country_pack_rulesets').delete().in('id', env.createdRulesetIds);
   await supabaseAdmin.from('country_packs').delete().in('id', env.createdPackIds);
-  if (env.createdCountryCodes.length) {
-    await supabaseAdmin.from('countries').delete().in('code', env.createdCountryCodes);
+  const temporaryCodes = env.createdCountryCodes
+    .map((code) => String(code ?? '').trim().toUpperCase())
+    .filter((code) => code && !PROTECTED_COUNTRY_CODES.has(code));
+  if (temporaryCodes.length) {
+    await supabaseAdmin.from('countries').delete().in('code', temporaryCodes);
+  }
+  if (env.marker) {
+    await supabaseAdmin.from('countries').delete().eq('name', `${env.marker}-country`);
+    await supabaseAdmin.from('countries').delete().eq('name', `${env.marker}-denied-country`);
   }
   await supabaseAdmin.from('audit_log').delete().in('actor_user_id', [env.ownerUserId, env.tenantUserId]);
   await supabaseAdmin.from('organizations').delete().in('id', [env.orgIl, env.orgUs]);
@@ -136,14 +160,21 @@ function extractIdFromAdminAggregate(result: unknown, tableKey: 'country_packs' 
   return rows[0].id;
 }
 
-function randomCountryCode(): string {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const a = alphabet[Math.floor(Math.random() * alphabet.length)];
-  const b = alphabet[Math.floor(Math.random() * alphabet.length)];
-  return `${a}${b}`;
+async function allocateTemporaryCountryCode(supabaseAdmin: SupabaseAdmin): Promise<string> {
+  const { data, error } = await supabaseAdmin.from('countries').select('code').in('code', TEMPORARY_COUNTRY_POOL);
+  if (error) throw error;
+  const used = new Set((data ?? []).map((row: { code: string }) => String(row.code ?? '').trim().toUpperCase()));
+  const code = TEMPORARY_COUNTRY_POOL.find((candidate) => !used.has(candidate));
+  if (!code) throw new Error('No isolated user-assigned country code is available for verification');
+  return code;
 }
 
-test('country-pack verification suite: security, isolation, overlap, audit, resolution', async () => {
+test('country-pack verification suite: security, isolation, overlap, audit, resolution', async (t) => {
+  if (!liveCountryPackDbConfigured()) {
+    t.skip('NOT EXECUTED: country-pack verification runs only on isolated staging');
+    return;
+  }
+
   const cp = await loadCountryPack();
   const supabaseAdmin = await getSupabaseAdmin();
   const env = await setupEnv('cp-verify');
@@ -188,14 +219,14 @@ test('country-pack verification suite: security, isolation, overlap, audit, reso
 
   try {
     // 1) Platform owner access + denied tenant roles
-    const ownerCreateCountryCode = randomCountryCode();
-    env.createdCountryCodes.push(ownerCreateCountryCode);
+    const ownerCreateCountryCode = await allocateTemporaryCountryCode(supabaseAdmin);
     await assert.doesNotReject(() =>
       cp.executeCountryPackCommand(ownerCtx, {
         command: 'create_country',
         payload: { code: ownerCreateCountryCode, name: `${env.marker}-country`, status: 'active' },
       })
     );
+    env.createdCountryCodes.push(ownerCreateCountryCode);
 
     await assert.rejects(
       () =>
@@ -445,14 +476,16 @@ test('country-pack verification suite: security, isolation, overlap, audit, reso
     });
 
     // failed owner security check
+    const deniedCountryCode = await allocateTemporaryCountryCode(supabaseAdmin);
     await assert.rejects(
       () =>
         cp.executeCountryPackCommand(tenantOrgIlCtx, {
           command: 'create_country',
-          payload: { code: 'ZY', name: 'Denied country', status: 'active' },
+          payload: { code: deniedCountryCode, name: `${env.marker}-denied-country`, status: 'active' },
         }),
       /Platform owner/i
     );
+    env.createdCountryCodes.push(deniedCountryCode);
 
     const { data: auditRows, error: auditError } = await supabaseAdmin
       .from('audit_log')
