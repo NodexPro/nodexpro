@@ -11,6 +11,11 @@ import {
   translationValueOrigin,
 } from './platform-localization-audit.pure.js';
 import {
+  CLIENT_OPERATIONS_UNVERIFIED_UI_STRINGS,
+  hardcodedSurfacesFromInventory,
+  summarizeUiInventory,
+} from './client-operations-ui-inventory.pure.js';
+import {
   DATE_FORMAT_OPTIONS,
   canPublishLanguage,
   isIso4217Code,
@@ -544,6 +549,7 @@ export async function buildOwnerLanguagesAggregate(ctx: RequestContext, localeRa
     : languages.find((row) => row.locale_code === 'en')?.locale_code ?? languages[0]?.locale_code ?? 'en';
   const selectedModule = String(moduleRaw ?? 'clientOperations').trim() || 'clientOperations';
   const workspace = await languageWorkspace(selected, { languages });
+  const uiInventory = summarizeUiInventory();
   const localization_audit = buildModuleLocalizationAudit({
     locale: selected,
     direction: workspace.language.direction === 'rtl' ? 'rtl' : 'ltr',
@@ -560,6 +566,14 @@ export async function buildOwnerLanguagesAggregate(ctx: RequestContext, localeRa
       empty_explanation: entry.empty_explanation,
       placeholder_ok: entry.placeholder_ok,
     })),
+    hardcodedSurfaces: hardcodedSurfacesFromInventory(),
+    unverifiedSurfaces: CLIENT_OPERATIONS_UNVERIFIED_UI_STRINGS.map((row) => ({
+      tab: row.tab,
+      reason: row.reason,
+    })),
+    uiStringsInventoried: uiInventory.ui_strings_inventoried,
+    uiStringsVerified: uiInventory.ui_strings_verified,
+    uiStringsUnverified: uiInventory.ui_strings_unverified,
   });
   return {
     aggregate_key: 'owner_languages_aggregate',

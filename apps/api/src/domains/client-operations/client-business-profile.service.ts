@@ -42,7 +42,7 @@ export type ClientBusinessProfileSectionField = {
   editable: boolean;
   visible: boolean;
   max_length?: number;
-  validation?: Array<{ rule_key: string; message_he: string }>;
+  validation?: Array<{ rule_key: string; message_he: string; message_key?: string }>;
   group_key: 'business_scope' | 'address' | 'general_info';
   group_label: string;
   group_label_key?: string;
@@ -78,7 +78,7 @@ export type ClientBusinessProfileSaveInput = {
   has_business_vehicles?: boolean;
 };
 
-type FieldError = { key: ClientBusinessProfileSectionField['key']; message_he: string };
+type FieldError = { key: ClientBusinessProfileSectionField['key']; message_he: string; message_key?: string };
 
 export type ClientBusinessProfileSaveResponse = {
   ok: true;
@@ -87,6 +87,7 @@ export type ClientBusinessProfileSaveResponse = {
   ok: false;
   code: 'VERSION_CONFLICT' | 'VALIDATION_ERROR' | 'NOT_FOUND';
   message_he: string;
+  message_key?: string;
   field_errors?: FieldError[];
 };
 
@@ -353,6 +354,7 @@ export async function getClientBusinessProfileSection(
           {
             rule_key: 'peak_months_infers_seasonal',
             message_he: 'בחירת חודשי עומס הופכת את העסק לעונתי (לוגיקה בשרת).',
+            message_key: 'clientOperations.businessProfile.errors.peakMonthsSeasonal',
           },
         ],
         group_key: 'general_info',
@@ -385,6 +387,7 @@ export async function getClientBusinessProfileSection(
           {
             rule_key: 'close_after_open',
             message_he: 'תאריך סגירת העסק לא יכול להיות לפני תאריך פתיחת העסק.',
+            message_key: 'clientOperations.businessProfile.errors.closeBeforeOpen',
           },
         ],
         group_key: 'general_info',
@@ -439,7 +442,11 @@ export async function saveClientBusinessProfileSection(
   try {
     business_domain = normalizeTextOptional(body.business_domain, 200);
   } catch {
-    validationErrors.push({ key: 'business_domain', message_he: 'תחום עיסוק ארוך מדי (מקסימום 200 תווים)' });
+    validationErrors.push({
+      key: 'business_domain',
+      message_he: 'תחום עיסוק ארוך מדי (מקסימום 200 תווים)',
+      message_key: 'clientOperations.businessProfile.errors.domainTooLong',
+    });
   }
   try {
     business_activity_description = normalizeTextOptional(body.business_activity_description, 1000);
@@ -447,24 +454,37 @@ export async function saveClientBusinessProfileSection(
     validationErrors.push({
       key: 'business_activity_description',
       message_he: 'תיאור קצר ארוך מדי (מקסימום 1000 תווים)',
+      message_key: 'clientOperations.businessProfile.errors.activityTooLong',
     });
   }
 
   try {
     business_address = normalizeTextOptional(body.business_address, 500);
   } catch {
-    validationErrors.push({ key: 'business_address', message_he: 'כתובת עסקי ארוכה מדי (מקסימום 500 תווים)' });
+    validationErrors.push({
+      key: 'business_address',
+      message_he: 'כתובת עסקי ארוכה מדי (מקסימום 500 תווים)',
+      message_key: 'clientOperations.businessProfile.errors.businessAddressTooLong',
+    });
   }
   try {
     private_address = normalizeTextOptional(body.private_address, 500);
   } catch {
-    validationErrors.push({ key: 'private_address', message_he: 'כתובת פרטי ארוכה מדי (מקסימום 500 תווים)' });
+    validationErrors.push({
+      key: 'private_address',
+      message_he: 'כתובת פרטי ארוכה מדי (מקסימום 500 תווים)',
+      message_key: 'clientOperations.businessProfile.errors.privateAddressTooLong',
+    });
   }
 
   const allowedOpModes = new Set(BUSINESS_OPERATION_MODE_OPTIONS.map((o) => o.value));
   if (body.business_operation_mode !== null) {
     if (!allowedOpModes.has(body.business_operation_mode)) {
-      validationErrors.push({ key: 'business_operation_mode', message_he: 'אופן פעילות לא חוקי' });
+      validationErrors.push({
+        key: 'business_operation_mode',
+        message_he: 'אופן פעילות לא חוקי',
+        message_key: 'clientOperations.businessProfile.errors.invalidOperationMode',
+      });
     } else {
       business_operation_mode = body.business_operation_mode;
     }
@@ -473,7 +493,11 @@ export async function saveClientBusinessProfileSection(
   const allowedCustomerTypes = new Set(PRIMARY_CUSTOMER_TYPE_OPTIONS.map((o) => o.value));
   if (body.primary_customer_type !== null) {
     if (!allowedCustomerTypes.has(body.primary_customer_type)) {
-      validationErrors.push({ key: 'primary_customer_type', message_he: 'קהל עיקרי לא חוקי' });
+      validationErrors.push({
+        key: 'primary_customer_type',
+        message_he: 'קהל עיקרי לא חוקי',
+        message_key: 'clientOperations.businessProfile.errors.invalidCustomerType',
+      });
     } else {
       primary_customer_type = body.primary_customer_type;
     }
@@ -485,6 +509,7 @@ export async function saveClientBusinessProfileSection(
       ok: false,
       code: 'VALIDATION_ERROR',
       message_he: 'נא לתקן את השדות המסומנים',
+      message_key: 'clientOperations.businessProfile.errors.fixMarkedFields',
       field_errors: validationErrors,
     };
   }
@@ -534,6 +559,7 @@ export async function saveClientBusinessProfileSection(
         ok: false,
         code: 'VERSION_CONFLICT',
         message_he: 'המידע עודכן מאז שפתחת את הטופס. טען מחדש ונסה שוב.',
+        message_key: 'clientOperations.businessProfile.errors.staleForm',
       };
     }
 
@@ -595,6 +621,7 @@ export async function saveClientBusinessProfileSection(
       ok: false,
       code: 'VERSION_CONFLICT',
       message_he: 'המידע עודכן מאז שפתחת את הטופס. טען מחדש ונסה שוב.',
+      message_key: 'clientOperations.businessProfile.errors.staleForm',
     };
   }
 

@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   CLIENT_OPERATIONS_REGISTRY_COLUMNS,
   buildClientOperationsToolbarCapabilities,
@@ -95,4 +98,20 @@ test('toolbar capabilities expose label_key onto existing I18n keys', () => {
   const caps = buildClientOperationsToolbarCapabilities({ can_create_custom_column: true });
   assert.equal(caps.find((c) => c.id === 'undo')?.label_key, CO_UI.toolbar.undo);
   assert.equal(caps.find((c) => c.id === 'filter')?.label_key, CO_UI.toolbar.filter);
+});
+
+test('Accounting income and expense summaries emit label_key entries instead of raw Hebrew composites', () => {
+  const src = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '../../src/domains/client-operations/client-accounting-tab.service.ts'),
+    'utf8',
+  );
+  assert.match(src, /summary_primary_entries/);
+  assert.match(src, /summaryPrimaryEntry\(/);
+  assert.match(src, /ACCOUNTING_EXPENSE_LABEL_KEY\[r\.expense_type_code\]/);
+  assert.match(src, /ACCOUNTING_INCOME_LABEL_KEY\[s\.source_code\]/);
+  assert.match(src, /clientOperations\.accounting\.workplacesCount/);
+  assert.match(src, /clientOperations\.accounting\.additionalIncome/);
+  assert.doesNotMatch(src, /amountLines\.push\(`\$\{label\} ₪/);
+  assert.doesNotMatch(src, /extra\.push\(`\$\{Number\(parent\.number_of_workplaces\)\} מקומות עבודה`\)/);
+  assert.doesNotMatch(src, /extra\.push\('הכנסה נוספת'\)/);
 });

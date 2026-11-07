@@ -1,3 +1,5 @@
+import { useI18n } from '../i18n/I18nProvider';
+
 export type ReminderToastProps = {
   open: boolean;
   clientName: string;
@@ -21,25 +23,29 @@ export function ReminderToast({
   onDismiss: _onDismiss,
   onClose,
 }: ReminderToastProps) {
+  const { t } = useI18n();
   if (!open) return null;
 
   const showTypePill = !!reminderTypeLabel && reminderTypeLabel !== title;
+  const closeLabel = t('clientOperations.close');
 
   return (
     <div className="nx-reminder-toast" role="status" aria-live="polite">
       <div className="nx-reminder-toast-inner">
         <div className="nx-reminder-toast-top">
           <div className="nx-reminder-toast-meta">
-            <div className="nx-reminder-toast-label">תזכורת פעילה</div>
-            <div className="nx-reminder-toast-client">לקוח: {clientName}</div>
+            <div className="nx-reminder-toast-label">{t('clientOperations.reminders.active')}</div>
+            <div className="nx-reminder-toast-client">
+              {t('clientOperations.reminders.clientPrefix')} {clientName}
+            </div>
           </div>
 
           <button
             type="button"
             className="nx-reminder-toast-close"
             onClick={onClose}
-            aria-label="סגור"
-            title="סגור"
+            aria-label={closeLabel}
+            title={closeLabel}
           >
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
               <path

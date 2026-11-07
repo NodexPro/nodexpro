@@ -37,7 +37,7 @@ test('Accounting Settings tab still renders existing business-profile fields fro
   }
   assert.match(profileSrc, /save_accounting_business_profile/);
   assert.match(profileSrc, /onCaseUpdated\(fullCase\)/);
-  assert.match(profileSrc, /formatDisplayValue\(f, f\.value\)/);
+  assert.match(profileSrc, /formatDisplayValue\(f, f\.value/);
 });
 
 test('nested business-profile editor hides peak months and open/close dates but still posts stored values', () => {
@@ -51,8 +51,8 @@ test('nested business-profile editor hides peak months and open/close dates but 
 
 test('Business Profile card hides peak months via visible and formats dates like Client Details', () => {
   assert.match(profileSrc, /filter\(\(f\) => f\.visible\)/);
-  assert.match(profileSrc, /function formatDateHe/);
-  assert.match(profileSrc, /if \(f\.type === 'date'\) return formatDateHe/);
+  assert.match(profileSrc, /function formatDateForLang/);
+  assert.match(profileSrc, /if \(f\.type === 'date'\) return formatDateForLang/);
   const harness = readFileSync(join(dir, 'client-workspace-accounting-tab-harness.tsx'), 'utf8');
   assert.match(harness, /key: 'peak_months'[\s\S]*visible: false/);
   assert.match(harness, /key: 'business_open_date'[\s\S]*editable: false/);
@@ -76,6 +76,16 @@ test('Expense Management editor keeps named commands and a harness-seeded popula
   assert.match(harness, /dump=expense-editor|expense-editor/);
   assert.match(harness, /עריכת ניהול הוצאות/);
   assert.match(harness, /expense_software_password/);
+});
+
+test('Accounting income and expense summary rows render backend-owned summary_primary_entries', () => {
+  assert.match(accountingSrc, /summary_primary_entries/);
+  assert.match(accountingSrc, /formatAccountingSummaryPrimaryEntry/);
+  assert.match(accountingSrc, /accountingSummaryPrimaryDisplayRows/);
+  assert.doesNotMatch(
+    accountingSrc,
+    /\(b\.summary_primary_rows \?\? \[\]\)\.map\(\(row, idx\) =>/,
+  );
 });
 
 test('Accounting Settings blocks stay in existing order with named commands and full-case refresh', () => {
@@ -114,7 +124,7 @@ test('Accounting Settings premium skin is scoped to the workspace modal Accounti
 
 test('Accounting Settings empty fleet and split rows do not use a parent two-column subgrid', () => {
   assert.match(accountingSrc, /nx-ws-accounting-empty-fleet/);
-  assert.match(accountingSrc, /אין רכבים — השתמשו ב״הוסף רכב״/);
+  assert.match(accountingSrc, /t\('clientOperations\.accounting\.noVehicles'\)/);
   assert.match(accountingSrc, /vehicles_yes_no/);
   assert.match(accountingSrc, /add_vehicle/);
   assert.match(accountingCss, /nx-ws-accounting-empty-fleet__message/);

@@ -66,6 +66,11 @@ type LocalizationAudit = {
   tabs?: string[];
   issues?: IssueCard[];
   unverified_surfaces?: Array<{ tab?: string; reason?: string }>;
+  catalog_coverage?: { live?: number; catalog_size?: number };
+  ui_strings_inventoried?: number;
+  ui_strings_verified?: number;
+  ui_strings_unverified?: number;
+  coverage_is_complete?: boolean;
 };
 type LanguagesAggregate = {
   languages?: LanguageRow[];
@@ -247,7 +252,7 @@ export function PlatformOwnerLanguagesPage() {
       <p className="nx-owner-modules__subtitle">
         Localization control center. Confirmed Client Operations system-label issues can be edited, drafted, and
         published without a deploy. Client names, documents, legal values, and user data are not translated. AI generation is not available.
-        Empty catalog fields mean no Owner override — bundled text still shows live. Missing means no live translation (no bundled value and no Owner override). Draft is saved but not live; Publish replaces the live overlay. Red cards are confirmed problems, not merely a missing Owner override. Hardcoded chrome requires a code fix.
+        Empty catalog fields mean no Owner override — bundled text still shows live. Missing means no live translation (no bundled value and no Owner override). Draft is saved but not live; Publish replaces the live overlay. Red cards are confirmed problems, not merely a missing Owner override. Hardcoded chrome requires a code fix. Catalog key counts are not UI coverage. Zero confirmed issues is not complete localization while unverified UI strings remain.
       </p>
       {error ? <p className="nx-owner-languages-error">{error}</p> : null}
       {loading ? <p>Loading language catalog…</p> : null}
@@ -389,11 +394,40 @@ export function PlatformOwnerLanguagesPage() {
 
       {view === 'issues' ? (
         <div className="nx-owner-issue-list">
-          <p>
-            {moduleGroup} / {locale}: {audit?.confirmed_issue_count ?? 0} confirmed issues · live{' '}
-            {audit?.live_translated_count ?? 0}/{audit?.catalog_size ?? 0} · Owner overrides {audit?.owner_override_count ?? 0} ·
-            bundled-only {audit?.bundled_only_count ?? 0}
-          </p>
+          <dl className="nx-owner-coverage-strip">
+            <div>
+              <dt>Catalog coverage</dt>
+              <dd>
+                {audit?.catalog_coverage?.live ?? audit?.live_translated_count ?? 0}/
+                {audit?.catalog_coverage?.catalog_size ?? audit?.catalog_size ?? 0} keys live · Owner overrides{' '}
+                {audit?.owner_override_count ?? 0} · bundled-only {audit?.bundled_only_count ?? 0}
+              </dd>
+            </div>
+            <div>
+              <dt>UI strings inventoried</dt>
+              <dd>{audit?.ui_strings_inventoried ?? 0}</dd>
+            </div>
+            <div>
+              <dt>UI strings verified</dt>
+              <dd>{audit?.ui_strings_verified ?? 0}</dd>
+            </div>
+            <div>
+              <dt>Unverified UI strings</dt>
+              <dd>{audit?.ui_strings_unverified ?? 0}</dd>
+            </div>
+            <div>
+              <dt>Confirmed localization issues</dt>
+              <dd>
+                {moduleGroup} / {locale}: {audit?.confirmed_issue_count ?? 0}
+              </dd>
+            </div>
+          </dl>
+          {audit?.coverage_is_complete === false || (audit?.ui_strings_unverified ?? 0) > 0 ? (
+            <p className="nx-owner-coverage-warning">
+              Catalog coverage is not UI coverage. Zero confirmed issues is not complete Client Operations
+              localization while unverified or hardcoded UI strings remain.
+            </p>
+          ) : null}
           {issues.length === 0 && !loading ? (
             <p>No confirmed localization issues for this module and language.</p>
           ) : null}

@@ -128,7 +128,12 @@ export type FeesFinancialSummaryCardModel = FeesKeyValueCardModel & {
 export type FeesRenewalCardModel = {
   card_title_he: string;
   card_title_key?: string;
-  banner: { variant: 'neutral' | 'success' | 'warning' | 'danger'; text_he: string; text_key?: string } | null;
+  banner: {
+    variant: 'neutral' | 'success' | 'warning' | 'danger';
+    text_he: string;
+    text_key?: string;
+    text_params?: Record<string, string | number>;
+  } | null;
   lines: Array<{ label_he: string; label_key?: string; value_he: string; value_key?: string }>;
 };
 

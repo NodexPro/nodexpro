@@ -267,7 +267,7 @@ function RenewalSummaryDisplay({ renewal }: { renewal: FeesRenewalCardModel }) {
     <div className="nx-fees-workspace-readonly">
       {renewal.banner ? (
         <div className={`nx-fees-renewal-banner nx-fees-renewal-banner--${renewal.banner.variant}`}>
-          {localizeSystemLabel(t, renewal.banner.text_key, renewal.banner.text_he)}
+          {localizeFilledLabel(t, renewal.banner.text_key, renewal.banner.text_he, renewal.banner.text_params)}
         </div>
       ) : null}
       <ul className="nx-fees-summary-lines">

@@ -330,16 +330,18 @@ type ConflictPayload = {
   conflicts: Array<{
     client_display_name: string | null;
     body_preview: string;
+    type_code?: string;
     type_label_he: string;
+    type_label_key?: string | null;
     reminder_at: string;
   }>;
 };
 
 function operationalNoteTypeLabel(t: (key: string) => string, typeCode: string, fallbackHe: string): string {
-  if (typeCode === 'call' || typeCode === 'reminder' || typeCode === 'greeting') {
+  if (typeCode === 'call' || typeCode === 'reminder' || typeCode === 'greeting' || typeCode === 'text') {
     return localizeSystemLabel(t, `clientOperations.notes.${typeCode}`, fallbackHe);
   }
-  return fallbackHe;
+  return localizeSystemLabel(t, 'clientOperations.notes.text', fallbackHe);
 }
 
 type CellPresentation = {
@@ -2364,7 +2366,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       rows: [...printRows, ...printManualRows],
     });
     const printableCols = visibleColumns.filter((c) => printableKeys.includes(c.key));
-    const periodHeading = formatClientOperationsPeriodHeading(periodKey);
+    const periodHeading =
+      formatClientOperationsPeriodHeading(periodKey) || t('clientOperations.periodFallback');
 
     const tableHeaders = printableCols.map((col) => `<th>${escapeHtml(col.label)}</th>`).join('');
     const clientTableRows = rows
@@ -4389,7 +4392,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   <ul>
                     {conflict.conflicts.map((c, i) => (
                       <li key={i}>
-                        <strong>{c.client_display_name ?? t('clientOperations.client')}</strong> — {c.type_label_he}:{' '}
+                        <strong>{c.client_display_name ?? t('clientOperations.client')}</strong> —{' '}
+                        {operationalNoteTypeLabel(t, c.type_code ?? '', c.type_label_he)}:{' '}
                         {c.body_preview}
                       </li>
                     ))}

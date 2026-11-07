@@ -112,6 +112,11 @@ export type LocalizationAudit = {
   tabs: string[];
   issues: LocalizationIssueCard[];
   unverified_surfaces: Array<{ tab: string; reason: string }>;
+  catalog_coverage: { live: number; catalog_size: number };
+  ui_strings_inventoried: number;
+  ui_strings_verified: number;
+  ui_strings_unverified: number;
+  coverage_is_complete: boolean;
 };
 
 const CO_TAB_PREFIXES: Array<{ prefix: string; tab: string; location: string }> = [
@@ -269,6 +274,9 @@ export function buildModuleLocalizationAudit(input: {
   entries: LocalizationAuditEntry[];
   hardcodedSurfaces?: HardcodedSurface[];
   unverifiedSurfaces?: Array<{ tab: string; reason: string }>;
+  uiStringsInventoried?: number;
+  uiStringsVerified?: number;
+  uiStringsUnverified?: number;
 }): LocalizationAudit {
   const issues: LocalizationIssueCard[] = [];
   const byKind = emptyKindCounts();
@@ -452,6 +460,13 @@ export function buildModuleLocalizationAudit(input: {
   const ownerOverrideCount = moduleEntries.filter((entry) => entry.owner_value.trim()).length;
   const bundledOnlyCount = moduleEntries.filter((entry) => entry.value_origin === 'bundled').length;
   const emptyLiveCount = moduleEntries.filter((entry) => !entry.live_value.trim()).length;
+  const unverifiedSurfaces =
+    input.moduleGroup === 'clientOperations' || input.moduleGroup === 'all'
+      ? (input.unverifiedSurfaces ?? CLIENT_OPERATIONS_UNVERIFIED_SURFACES)
+      : [];
+  const uiStringsUnverified = input.uiStringsUnverified ?? unverifiedSurfaces.length;
+  const uiStringsInventoried = input.uiStringsInventoried ?? moduleEntries.length + hardcoded.length + uiStringsUnverified;
+  const uiStringsVerified = input.uiStringsVerified ?? Math.max(0, uiStringsInventoried - uiStringsUnverified);
 
   return {
     selected_module: input.moduleGroup,
@@ -466,9 +481,11 @@ export function buildModuleLocalizationAudit(input: {
     by_kind: byKind,
     tabs: [...tabs].sort((a, b) => a.localeCompare(b)),
     issues,
-    unverified_surfaces:
-      input.moduleGroup === 'clientOperations' || input.moduleGroup === 'all'
-        ? (input.unverifiedSurfaces ?? CLIENT_OPERATIONS_UNVERIFIED_SURFACES)
-        : [],
+    unverified_surfaces: unverifiedSurfaces,
+    catalog_coverage: { live: liveTranslatedCount, catalog_size: moduleEntries.length },
+    ui_strings_inventoried: uiStringsInventoried,
+    ui_strings_verified: uiStringsVerified,
+    ui_strings_unverified: uiStringsUnverified,
+    coverage_is_complete: issues.length === 0 && uiStringsUnverified === 0 && hardcoded.length === 0,
   };
 }

@@ -220,7 +220,12 @@ export type FeesFinancialSummaryCardDto = FeesKeyValueCardDto & {
 export type FeesRenewalCardDto = {
   card_title_he: string;
   card_title_key?: string;
-  banner: { variant: 'neutral' | 'success' | 'warning' | 'danger'; text_he: string; text_key?: string } | null;
+  banner: {
+    variant: 'neutral' | 'success' | 'warning' | 'danger';
+    text_he: string;
+    text_key?: string;
+    text_params?: Record<string, string | number>;
+  } | null;
   lines: Array<{ label_he: string; label_key?: string; value_he: string; value_key?: string }>;
 };
 
@@ -679,8 +684,8 @@ export const FEE_LINE_CURRENCY_OPTIONS: Array<{ value: string; label_he: string;
   { value: 'ILS', label_he: 'שקל', label_key: FEE_CURRENCY_LABEL_KEY.ILS },
   { value: 'USD', label_he: 'דולר', label_key: FEE_CURRENCY_LABEL_KEY.USD },
   { value: 'EUR', label_he: 'אירו', label_key: FEE_CURRENCY_LABEL_KEY.EUR },
-  { value: 'RUB', label_he: 'רובל' },
-  { value: 'AED', label_he: 'דירהם' },
+  { value: 'RUB', label_he: 'רובל', label_key: FEE_CURRENCY_LABEL_KEY.RUB },
+  { value: 'AED', label_he: 'דירהם', label_key: FEE_CURRENCY_LABEL_KEY.AED },
   { value: 'CAD', label_he: 'דולר קנדי', label_key: FEE_CURRENCY_LABEL_KEY.CAD },
   { value: 'CHF', label_he: 'פרנק שווייצרי', label_key: FEE_CURRENCY_LABEL_KEY.CHF },
   { value: 'JPY', label_he: 'ין יפני', label_key: FEE_CURRENCY_LABEL_KEY.JPY },
@@ -866,7 +871,12 @@ function renewalBanner(
   hasAgreement: boolean,
   endDate: string | null,
   reminderDays: number | null
-): { variant: 'neutral' | 'success' | 'warning' | 'danger'; text_he: string } | null {
+): {
+  variant: 'neutral' | 'success' | 'warning' | 'danger';
+  text_he: string;
+  text_key: string;
+  text_params?: Record<string, string | number>;
+} | null {
   if (!hasAgreement || !endDate) return null;
   const end = new Date(`${endDate}T00:00:00.000Z`);
   if (Number.isNaN(end.getTime())) return null;
@@ -874,9 +884,30 @@ function renewalBanner(
   const msPerDay = 86400000;
   const days = Math.ceil((end.getTime() - now.getTime()) / msPerDay);
   const remind = reminderDays ?? 30;
-  if (days < 0) return { variant: 'danger', text_he: `הסכם פג תוקף לפני ${Math.abs(days)} ימים` };
-  if (days <= remind) return { variant: 'warning', text_he: `הסכם יפוג בעוד ${days} ימים` };
-  return { variant: 'success', text_he: `הסכם פעיל; סיום ב-${formatDateHe(endDate)}` };
+  if (days < 0) {
+    const elapsed = Math.abs(days);
+    return {
+      variant: 'danger',
+      text_he: `הסכם פג תוקף לפני ${elapsed} ימים`,
+      text_key: 'clientOperations.fees.renewal.expiredDays',
+      text_params: { days: elapsed },
+    };
+  }
+  if (days <= remind) {
+    return {
+      variant: 'warning',
+      text_he: `הסכם יפוג בעוד ${days} ימים`,
+      text_key: 'clientOperations.fees.renewal.expiresInDays',
+      text_params: { days },
+    };
+  }
+  const date = formatDateHe(endDate);
+  return {
+    variant: 'success',
+    text_he: `הסכם פעיל; סיום ב-${date}`,
+    text_key: 'clientOperations.fees.renewal.activeUntil',
+    text_params: { date },
+  };
 }
 
 async function ensureAgreement(orgId: string, clientId: string, userId: string): Promise<AgreementRow> {

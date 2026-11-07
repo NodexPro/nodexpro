@@ -111,6 +111,83 @@ export type AccountingExcelGridRow = {
 
 const SUMMARY_EMPTY_STATE_HE = 'לא הוגדר';
 
+export type AccountingSummaryPrimaryEntry = {
+  text_he: string;
+  label_he?: string;
+  label_key?: string;
+  type_he?: string | null;
+  type_key?: string | null;
+  suffix?: string | null;
+  amount_display?: string | null;
+  fill_key?: string;
+  fill_params?: Record<string, string | number>;
+};
+
+function formatAmountIls(amount: number, round = true): string {
+  const n = round ? Math.round(amount) : Number(amount);
+  return `₪${n.toLocaleString('he-IL')}`;
+}
+
+function composeSummaryTextHe(input: {
+  labelHe: string;
+  typeHe?: string | null;
+  suffix?: string | null;
+  amountDisplay?: string | null;
+}): string {
+  const inner = [input.typeHe, input.suffix].filter((part) => part && String(part).trim()).join(' / ');
+  const core = inner ? `${input.labelHe} (${inner})` : input.labelHe;
+  return input.amountDisplay ? `${core} ${input.amountDisplay}` : core;
+}
+
+function summaryPrimaryEntry(input: {
+  labelHe: string;
+  labelKey?: string;
+  typeHe?: string | null;
+  typeKey?: string | null;
+  suffix?: string | null;
+  amount?: number | null;
+  roundAmount?: boolean;
+  fillKey?: string;
+  fillParams?: Record<string, string | number>;
+}): AccountingSummaryPrimaryEntry {
+  const amountDisplay =
+    input.amount != null && Number.isFinite(input.amount)
+      ? formatAmountIls(input.amount, input.roundAmount !== false)
+      : null;
+  const text_he = input.fillKey
+    ? composeSummaryTextHe({ labelHe: input.labelHe })
+    : composeSummaryTextHe({
+        labelHe: input.labelHe,
+        typeHe: input.typeHe,
+        suffix: input.suffix,
+        amountDisplay,
+      });
+  return {
+    text_he,
+    label_he: input.labelHe,
+    label_key: input.labelKey,
+    type_he: input.typeHe ?? null,
+    type_key: input.typeKey ?? null,
+    suffix: input.suffix ?? null,
+    amount_display: amountDisplay,
+    fill_key: input.fillKey,
+    fill_params: input.fillParams,
+  };
+}
+
+function clipSummaryEntries(entries: AccountingSummaryPrimaryEntry[], maxInline: number): AccountingSummaryPrimaryEntry[] {
+  if (entries.length <= maxInline) return entries;
+  const extra = entries.length - maxInline;
+  return [
+    ...entries.slice(0, maxInline),
+    summaryPrimaryEntry({
+      labelHe: `+${extra}`,
+      fillKey: 'clientOperations.accounting.moreCount',
+      fillParams: { n: extra },
+    }),
+  ];
+}
+
 function summaryLinesFromParts(parts: string[], maxInline: number): string[] {
   if (parts.length === 0) return [];
   if (parts.length <= maxInline) return [...parts];
@@ -125,6 +202,8 @@ export type AccountingBlockCard = {
   summary_text: string;
   /** Left column rows for income/expenses cards (server-built; never parse `|` in UI) */
   summary_primary_rows: string[];
+  /** Ready-to-localize system chrome for income/expense summary rows. Amounts and user data stay in params. */
+  summary_primary_entries?: AccountingSummaryPrimaryEntry[];
   /** When summary_primary_rows is empty, show this in the left column */
   summary_empty_state_text: string;
   /** When non-null, right column (expenses) is a single placeholder row */
@@ -144,6 +223,7 @@ export type AccountingBlockCard = {
   /** כרטיסיית ניהול הוצאות (מסלול מסמכים) — רשת דו-עמודתית מהשרת */
   excel_grid?: {
     column_headers: [string, string];
+    column_header_keys?: [string, string];
     rows: AccountingExcelGridRow[];
   };
   /** ניהול הוצאות: עמודת ליבה אנכית (4 שדות בסדר) + קבוצת גישה לתוכנה בנפרד */
@@ -177,12 +257,15 @@ export type AccountingBlockModalResponse = {
     custom_field_count: number;
     custom_field_type_default: string | null;
     custom_field_type_placeholder_he: string;
+    custom_field_type_placeholder_key?: string;
     custom_field_type_options: Option[];
     custom_field_types_requiring_options: string[];
     /** Max rows for רשימה / צ'קבוקס when defining options in הוספת שדה */
     custom_field_options_max_count?: number;
     custom_field_options_count_label_he?: string;
+    custom_field_options_count_label_key?: string;
     custom_field_option_value_label_he?: string;
+    custom_field_option_value_label_key?: string;
   };
 };
 
@@ -289,11 +372,13 @@ function additionalBusinessTypeOptionsByMain(mainBusinessType: string | null): O
   return [];
 }
 
-function additionalBusinessTypeLabel(code: string | null | undefined): string | null {
+function additionalBusinessType(code: string | null | undefined): { label: string; key: string } | null {
   if (!code) return null;
-  if (code === 'company') return 'חברה';
-  if (code === 'osek_murshe') return 'מורשה';
-  if (code === 'osek_patur') return 'פטור';
+  const key = ACCOUNTING_ADDITIONAL_BUSINESS_LABEL_KEY[code];
+  if (!key) return null;
+  if (code === 'company') return { label: 'חברה', key };
+  if (code === 'osek_murshe') return { label: 'מורשה', key };
+  if (code === 'osek_patur') return { label: 'פטור', key };
   return null;
 }
 
@@ -660,7 +745,7 @@ function buildExpensesCard(
   const dict = mapByCode(EXPENSE_TYPES);
   const allowedExpense = new Set(EXPENSE_TYPES.map((e) => e.code));
   /** מפת כרטיסייה כמו הכנסות: עמודת סכומים (שורות מחוברות ב־|) + עמודת אחוזים (summary_items). */
-  const amountLines: string[] = [];
+  const amountEntries: AccountingSummaryPrimaryEntry[] = [];
   const percentItems: BlockSummaryItem[] = [];
   for (const r of rows.filter((x) => allowedExpense.has(x.expense_type_code))) {
     const label = dict.get(r.expense_type_code) ?? r.expense_type_code;
@@ -668,7 +753,14 @@ function buildExpensesCard(
     if (kind === 'amount') {
       const a = r.monthly_amount_ils;
       if (a != null && Number.isFinite(Number(a))) {
-        amountLines.push(`${label} ₪${Number(a).toLocaleString('he-IL')}`);
+        amountEntries.push(
+          summaryPrimaryEntry({
+            labelHe: label,
+            labelKey: ACCOUNTING_EXPENSE_LABEL_KEY[r.expense_type_code],
+            amount: Number(a),
+            roundAmount: false,
+          }),
+        );
       }
     } else if (kind === 'percent') {
       const p = r.business_percent;
@@ -682,12 +774,14 @@ function buildExpensesCard(
     }
   }
   const empty = SUMMARY_EMPTY_STATE_HE;
+  const amountLines = amountEntries.map((entry) => entry.text_he);
   return {
     block_key: 'expenses',
     block_label: 'הוצאות קבועות',
     block_label_key: ACCOUNTING_BLOCK_LABEL_KEY.expenses,
     summary_text: amountLines.length ? amountLines.join(' | ') : empty,
     summary_primary_rows: amountLines,
+    summary_primary_entries: amountEntries,
     summary_empty_state_text: empty,
     summary_secondary_empty_message: percentItems.length === 0 ? empty : null,
     summary_items: percentItems.map((x) => ({ ...x, display: 'text' as const })),
@@ -704,37 +798,68 @@ function buildIncomeCard(
 ): AccountingBlockCard {
   const dict = mapByCode(INCOME_SOURCES);
   const sourceCodes = sources.map((s) => s.source_code);
-  const labels = sources.map((s) => {
+  const sourceEntries = sources.map((s) => {
     const base = dict.get(s.source_code) ?? s.source_code;
+    const labelKey = ACCOUNTING_INCOME_LABEL_KEY[s.source_code];
     const amt = s.monthly_amount;
     if (s.source_code === 'business') {
-      const addType = additionalBusinessTypeLabel(toStrOrNull(parent.additional_business_type));
+      const addType = additionalBusinessType(toStrOrNull(parent.additional_business_type));
       const addTax = toStrOrNull(parent.additional_business_tax_id);
-      const addMeta = [addType, addTax].filter(Boolean).join(' / ');
-      const withMeta = addMeta ? `${base} (${addMeta})` : base;
-      return amt != null ? `${withMeta} ₪${Math.round(amt).toLocaleString('he-IL')}` : withMeta;
+      return summaryPrimaryEntry({
+        labelHe: base,
+        labelKey,
+        typeHe: addType?.label,
+        typeKey: addType?.key,
+        suffix: addTax,
+        amount: amt,
+      });
     }
     if (s.source_code === 'salary') {
       const salaryMeta = [toStrOrNull(s.workplace_name), toStrOrNull(s.employment_scope)].filter(Boolean).join(' / ');
-      const withMeta = salaryMeta ? `${base} (${salaryMeta})` : base;
-      return amt != null ? `${withMeta} ₪${Math.round(amt).toLocaleString('he-IL')}` : withMeta;
+      return summaryPrimaryEntry({
+        labelHe: base,
+        labelKey,
+        suffix: salaryMeta || null,
+        amount: amt,
+      });
     }
     if (s.source_code === 'allowance' || s.source_code === 'other') {
-      const details = toStrOrNull(s.source_details);
-      const withMeta = details ? `${base} (${details})` : base;
-      return amt != null ? `${withMeta} ₪${Math.round(amt).toLocaleString('he-IL')}` : withMeta;
+      return summaryPrimaryEntry({
+        labelHe: base,
+        labelKey,
+        suffix: toStrOrNull(s.source_details),
+        amount: amt,
+      });
     }
-    return amt != null ? `${base} ₪${Math.round(amt).toLocaleString('he-IL')}` : base;
+    return summaryPrimaryEntry({
+      labelHe: base,
+      labelKey,
+      amount: amt,
+    });
   });
 
-  const extra: string[] = [];
+  const extraEntries: AccountingSummaryPrimaryEntry[] = [];
   if (sourceCodes.includes('salary') && Number(parent.number_of_workplaces ?? 0) > 0) {
-    extra.push(`${Number(parent.number_of_workplaces)} מקומות עבודה`);
+    const n = Number(parent.number_of_workplaces);
+    extraEntries.push(
+      summaryPrimaryEntry({
+        labelHe: `${n} מקומות עבודה`,
+        fillKey: 'clientOperations.accounting.workplacesCount',
+        fillParams: { n },
+      }),
+    );
   }
-  if (Boolean(parent.has_additional_income)) extra.push('הכנסה נוספת');
+  if (Boolean(parent.has_additional_income)) {
+    extraEntries.push(
+      summaryPrimaryEntry({
+        labelHe: 'הכנסה נוספת',
+        labelKey: 'clientOperations.accounting.additionalIncome',
+      }),
+    );
+  }
 
-  const summaryParts = [...labels, ...extra];
-  const leftRows = summaryLinesFromParts(summaryParts, 4);
+  const summaryEntries = clipSummaryEntries([...sourceEntries, ...extraEntries], 4);
+  const leftRows = summaryEntries.map((entry) => entry.text_he);
   const detailsItems: BlockSummaryItem[] = [];
   const incomeSystem = toStrOrNull(parent.income_management_system);
   const incomeUserCode = toStrOrNull(parent.income_user_code);
@@ -781,6 +906,7 @@ function buildIncomeCard(
     block_label_key: ACCOUNTING_BLOCK_LABEL_KEY.income,
     summary_text: leftRows.length ? leftRows.join(' | ') : empty,
     summary_primary_rows: leftRows,
+    summary_primary_entries: summaryEntries,
     summary_empty_state_text: empty,
     summary_secondary_empty_message: null,
     summary_items: detailsItems,
@@ -1041,6 +1167,10 @@ function buildVehiclesCard(parent: Record<string, unknown>, fleet: VehicleFleetR
     vehicle_block_actions,
     excel_grid: {
       column_headers: ['פרטי רכב', 'מס וניכויים'],
+      column_header_keys: [
+        'clientOperations.accounting.headings.vehicleDetails',
+        'clientOperations.accounting.headings.taxDeductions',
+      ],
       rows: fleet.length > 0 ? excelRows : [],
     },
     can_edit: canEdit,
@@ -1468,15 +1598,18 @@ export async function getAccountingBlockModal(
         custom_field_count: customFields.length,
         custom_field_type_default: null,
         custom_field_type_placeholder_he: 'בחר',
+        custom_field_type_placeholder_key: 'clientOperations.choose',
         custom_field_type_options: [
-          { value: 'text', label: 'שדה טקסט' },
-          { value: 'enum_single', label: 'רשימה' },
-          { value: 'enum_multi', label: "צ'קבוקס" },
+          { value: 'text', label: 'שדה טקסט', label_key: 'clientOperations.accounting.customFieldText' },
+          { value: 'enum_single', label: 'רשימה', label_key: 'clientOperations.accounting.customFieldList' },
+          { value: 'enum_multi', label: "צ'קבוקס", label_key: 'clientOperations.accounting.customFieldCheckbox' },
         ],
         custom_field_types_requiring_options: ['enum_single', 'enum_multi'],
         custom_field_options_max_count: EXPENSE_MGMT_CUSTOM_FIELD_OPTIONS_MAX,
         custom_field_options_count_label_he: 'מספר שורות / אפשרויות',
+        custom_field_options_count_label_key: 'clientOperations.accounting.optionsCount',
         custom_field_option_value_label_he: 'שם אפשרות',
+        custom_field_option_value_label_key: 'clientOperations.accounting.optionName',
       },
     };
   }
@@ -1538,6 +1671,7 @@ export async function getAccountingBlockModal(
   return {
     modal_key: 'accounting_settings_vehicles',
     modal_label: 'רכבים',
+    modal_label_key: ACCOUNTING_BLOCK_LABEL_KEY.vehicles,
     block_key: 'vehicles',
     version: Number(parent.vehicles_version ?? 0),
     can_edit: false,

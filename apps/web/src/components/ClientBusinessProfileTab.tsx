@@ -39,7 +39,7 @@ export type ClientBusinessProfileField = {
   editable: boolean;
   visible: boolean;
   max_length?: number;
-  validation?: Array<{ rule_key: string; message_he: string }>;
+  validation?: Array<{ rule_key: string; message_he: string; message_key?: string }>;
   group_key: string;
   group_label: string;
   group_label_key?: string;
@@ -229,12 +229,18 @@ export function ClientBusinessProfileTab({
       const raw = ae.details?.field_errors;
       if (Array.isArray(raw)) {
         const fe: Partial<Record<BusinessProfileSectionFieldKey, string>> = {};
-        for (const item of raw as Array<{ key?: string; message_he?: string }>) {
-          if (item.key && item.message_he) fe[item.key as BusinessProfileSectionFieldKey] = item.message_he;
+        for (const item of raw as Array<{ key?: string; message_he?: string; message_key?: string }>) {
+          if (!item.key) continue;
+          const text = item.message_key
+            ? localizeSystemLabel(t, item.message_key, item.message_he ?? '')
+            : item.message_he;
+          if (text) fe[item.key as BusinessProfileSectionFieldKey] = text;
         }
         setFieldErrors(fe);
       }
-      if (ae.message) setSaveErrorHe(ae.message);
+      const errKey = typeof ae.details?.message_key === 'string' ? ae.details.message_key : '';
+      if (errKey) setSaveErrorHe(localizeSystemLabel(t, errKey, ae.message ?? ''));
+      else if (ae.message) setSaveErrorHe(ae.message);
       else setSaveErrorHe(t('clientOperations.saveError'));
     } finally {
       setSaveBusy(false);

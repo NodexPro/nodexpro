@@ -841,6 +841,8 @@ export const FEE_CURRENCY_LABEL_KEY: Record<string, string> = {
   AUD: 'clientOperations.fees.currencies.aud',
   JPY: 'clientOperations.fees.currencies.jpy',
   CNY: 'clientOperations.fees.currencies.cny',
+  RUB: 'clientOperations.fees.currencies.rub',
+  AED: 'clientOperations.fees.currencies.aed',
 };
 
 export const FEE_COLUMN_LABEL_KEY: Record<string, string> = {

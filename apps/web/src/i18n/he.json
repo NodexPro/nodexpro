@@ -1014,8 +1014,11 @@
     "tabsAria": "לשוניות תיק",
     "loadFailed": "הטעינה נכשלה",
     "reminders": {
-      "dismissAll": "סגור הכל"
+      "dismissAll": "סגור הכל",
+      "active": "תזכורת פעילה",
+      "clientPrefix": "לקוח:"
     },
+    "periodFallback": "תקופה",
     "noFeesPermission": "אין הרשאת צפייה בשכ״ט או שהנתונים אינם זמינים.",
     "noPayrollPermission": "אין הרשאת צפייה בשכר או שהנתונים אינם זמינים.",
     "noAnnualPermission": "אין הרשאת צפייה בדוח השנתי או שהנתונים אינם זמינים.",
@@ -1056,6 +1059,18 @@
         "private": "פרטי",
         "business": "עסקי",
         "mixed": "מעורב"
+      },
+      "errors": {
+        "domainTooLong": "תחום עיסוק ארוך מדי (מקסימום 200 תווים)",
+        "activityTooLong": "תיאור קצר ארוך מדי (מקסימום 1000 תווים)",
+        "businessAddressTooLong": "כתובת עסקי ארוכה מדי (מקסימום 500 תווים)",
+        "privateAddressTooLong": "כתובת פרטי ארוכה מדי (מקסימום 500 תווים)",
+        "invalidOperationMode": "אופן פעילות לא חוקי",
+        "invalidCustomerType": "קהל עיקרי לא חוקי",
+        "fixMarkedFields": "נא לתקן את השדות המסומנים",
+        "peakMonthsSeasonal": "בחירת חודשי עומס הופכת את העסק לעונתי (לוגיקה בשרת).",
+        "closeBeforeOpen": "תאריך סגירת העסק לא יכול להיות לפני תאריך פתיחת העסק.",
+        "staleForm": "המידע עודכן מאז שפתחת את הטופס. טען מחדש ונסה שוב."
       }
     },
     "editBusinessProfile": "עריכת פרופיל עסקי",
@@ -1259,6 +1274,7 @@
     },
     "accounting": {
       "addVehicle": "הוספת רכב",
+      "editVehicle": "עריכת רכב",
       "editBlock": "עריכת {{label}}",
       "deleteVehicleConfirm": "האם למחוק את הרכב עם מספר רישוי \"{{plate}}\"?\nפעולה זו אינה הפיכה.",
       "deleteFieldConfirm": "למחוק את השדה?",
@@ -1295,6 +1311,9 @@
       "noVehiclesLabel": "אין רכבים",
       "workplaces": "מקומות עבודה",
       "additionalIncome": "הכנסה נוספת",
+      "namedAmount": "{{label}} {{amount}}",
+      "workplacesCount": "{{n}} מקומות עבודה",
+      "moreCount": "+{{n}}",
       "upToNPerMonth": "עד {{n}} בחודש",
       "authorizedShort": "מורשה",
       "exemptShort": "פטור",
@@ -1302,8 +1321,14 @@
         "incomeSystem": "מערכת הכנסות",
         "additionalIncome": "הכנסות נוספות",
         "monthlyAmounts": "סכומים חודשיים",
-        "recognizedExpensePercent": "אחוז הוצאה מוכר"
+        "recognizedExpensePercent": "אחוז הוצאה מוכר",
+        "vehicleDetails": "פרטי רכב",
+        "taxDeductions": "מס וניכויים"
       },
+      "vehicleCount": "{{n}} רכבים",
+      "customFieldText": "שדה טקסט",
+      "customFieldList": "רשימה",
+      "customFieldCheckbox": "צ'קבוקס",
       "blocks": {
         "fixedExpenses": "הוצאות קבועות",
         "income": "הכנסות",
@@ -1736,7 +1761,14 @@
         "cad": "דולר קנדי",
         "aud": "דולר אוסטרלי",
         "jpy": "ין",
-        "cny": "יואן"
+        "cny": "יואן",
+        "rub": "רובל",
+        "aed": "דירהם"
+      },
+      "renewal": {
+        "expiredDays": "הסכם פג תוקף לפני {{days}} ימים",
+        "expiresInDays": "הסכם יפוג בעוד {{days}} ימים",
+        "activeUntil": "הסכם פעיל; סיום ב-{{date}}"
       },
       "services": {
         "accountingSingleSided": "הנהלת חשבונות חד צדדית",

@@ -2,7 +2,12 @@ import type { ReactNode } from 'react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiJson, userFacingApiMessage } from '../api/client';
 import { useI18n } from '../i18n/I18nProvider';
-import { fillI18n, localizeSystemLabel } from '../lib/co-display-label.pure';
+import {
+  fillI18n,
+  formatAccountingSummaryPrimaryEntry,
+  localizeSystemLabel,
+  type AccountingSummaryPrimaryEntry,
+} from '../lib/co-display-label.pure';
 import {
   moduleClientOperationsAccountingCommands,
   moduleClientOperationsAccountingVehicleFleetFileOpen,
@@ -143,6 +148,7 @@ type VehicleBlockActionDto = {
 type VehicleFleetItemModalResponse = {
   modal_key: 'accounting_settings_vehicle_item';
   modal_label: string;
+  modal_label_key?: string;
   block_key: 'vehicles';
   vehicle_id: string | null;
   parent_vehicles_version: number;
@@ -173,6 +179,7 @@ type AccountingBlockCard = {
   block_label_key?: string;
   summary_text: string;
   summary_primary_rows: string[];
+  summary_primary_entries?: AccountingSummaryPrimaryEntry[];
   summary_empty_state_text: string;
   summary_secondary_empty_message: string | null;
   summary_items: Array<{
@@ -191,6 +198,7 @@ type AccountingBlockCard = {
   vehicle_block_actions?: VehicleBlockActionDto[];
   excel_grid?: {
     column_headers: [string, string];
+    column_header_keys?: [string, string];
     rows: AccountingExcelGridRow[];
   };
   expense_management_zones?: {
@@ -228,6 +236,14 @@ function ExcelGridCellValue({ cell }: { cell: AccountingExcelGridCell | undefine
 function excelCellLabel(t: (key: string) => string, c: AccountingExcelGridCell | undefined): string {
   if (!c || !c.visible) return t('clientOperations.accounting.notSet');
   return localizeSystemLabel(t, c.label_key, c.label);
+}
+
+function accountingSummaryPrimaryDisplayRows(t: (key: string) => string, block: AccountingBlockCard): string[] {
+  const entries = block.summary_primary_entries;
+  if (entries && entries.length > 0) {
+    return entries.map((entry) => formatAccountingSummaryPrimaryEntry(t, entry));
+  }
+  return block.summary_primary_rows ?? [];
 }
 
 function ExpenseManagementZonesPanel({
@@ -276,6 +292,7 @@ export type AccountingTabResponse = {
 type AccountingBlockModalResponse = {
   modal_key: string;
   modal_label: string;
+  modal_label_key?: string;
   block_key: BlockKey;
   version: number;
   can_edit: boolean;
@@ -286,11 +303,14 @@ type AccountingBlockModalResponse = {
     custom_field_count: number;
     custom_field_type_default: string | null;
     custom_field_type_placeholder_he: string;
+    custom_field_type_placeholder_key?: string;
     custom_field_type_options: Option[];
     custom_field_types_requiring_options: string[];
     custom_field_options_max_count?: number;
     custom_field_options_count_label_he?: string;
+    custom_field_options_count_label_key?: string;
     custom_field_option_value_label_he?: string;
+    custom_field_option_value_label_key?: string;
   };
 };
 
@@ -331,7 +351,10 @@ export function ClientAccountingSettingsTab({
   /** After accounting command — full case replace (NodexPro truth flow). */
   onAccountingCaseUpdated: (next: ClientOperationsCaseResponse) => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const editorDir = lang === 'he' ? 'rtl' : 'ltr';
+  const gridHeader = (grid: NonNullable<AccountingBlockCard['excel_grid']>, index: 0 | 1) =>
+    localizeSystemLabel(t, grid.column_header_keys?.[index], grid.column_headers[index]);
   const seededExpenseModal = harnessExpenseModalSeed();
   const autopenExpenseEditor = Boolean(seededExpenseModal) && harnessShouldAutopenExpenseEditor();
   const fieldLbl = (f: { label: string; label_key?: string }) => localizeSystemLabel(t, f.label_key, f.label);
@@ -1122,8 +1145,8 @@ export function ClientAccountingSettingsTab({
             ) : b.excel_grid && b.block_key !== 'vehicles' ? (
               <div className="nx-income-excel">
                 <div className="nx-income-excel-header-row">
-                  <div className="nx-income-excel-header-cell">{b.excel_grid.column_headers[0]}</div>
-                  <div className="nx-income-excel-header-cell">{b.excel_grid.column_headers[1]}</div>
+                  <div className="nx-income-excel-header-cell">{gridHeader(b.excel_grid, 0)}</div>
+                  <div className="nx-income-excel-header-cell">{gridHeader(b.excel_grid, 1)}</div>
                 </div>
                 <div className="nx-income-excel-body">
                   <div className="nx-income-table nx-income-table-stretch">
@@ -1160,8 +1183,8 @@ export function ClientAccountingSettingsTab({
                 <div className="nx-em-col nx-em-col-ops">
                   <div className="nx-income-table">
                     <div className="nx-fe-fixed-exp-colhead">{t('clientOperations.accounting.headings.additionalIncome')}</div>
-                    {(b.summary_primary_rows ?? []).length > 0
-                      ? (b.summary_primary_rows ?? []).map((row, idx) => (
+                    {accountingSummaryPrimaryDisplayRows(t, b).length > 0
+                      ? accountingSummaryPrimaryDisplayRows(t, b).map((row, idx) => (
                           <div key={`income-left-${idx}`} className="nx-income-table-row">
                             <span>{row}</span>
                           </div>
@@ -1179,8 +1202,8 @@ export function ClientAccountingSettingsTab({
                 <div className="nx-em-col nx-em-col-access">
                   <div className="nx-income-table">
                     <div className="nx-fe-fixed-exp-colhead">{t('clientOperations.accounting.headings.monthlyAmounts')}</div>
-                    {(b.summary_primary_rows ?? []).length > 0
-                      ? (b.summary_primary_rows ?? []).map((row, idx) => (
+                    {accountingSummaryPrimaryDisplayRows(t, b).length > 0
+                      ? accountingSummaryPrimaryDisplayRows(t, b).map((row, idx) => (
                           <div key={`exp-amt-${idx}`} className="nx-income-table-row">
                             <span>{row}</span>
                           </div>
@@ -1222,7 +1245,6 @@ export function ClientAccountingSettingsTab({
                     b.has_vehicles &&
                     b.excel_grid &&
                     (b.vehicle_items?.length ?? 0) === 0;
-                  const vehiclesSummaryText = b.summary_text || '';
                   return (
                     <>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 8 }}>
@@ -1286,9 +1308,9 @@ export function ClientAccountingSettingsTab({
                   ) : null}
                 </div>
 
-                {vehiclesSummaryText ? (
+                {(b.vehicle_items?.length ?? 0) > 0 ? (
                   <div className="nx-accounting-card-summary" style={{ marginBottom: 8 }}>
-                    {vehiclesSummaryText}
+                    {fillI18n(t('clientOperations.accounting.vehicleCount'), { n: b.vehicle_items?.length ?? 0 })}
                   </div>
                 ) : null}
 
@@ -1337,7 +1359,7 @@ export function ClientAccountingSettingsTab({
                           <div className="nx-em-two-col" style={{ marginTop: 0 }}>
                             <div className="nx-em-col nx-em-col-access">
                               <div className="nx-income-table">
-                                <div className="nx-fe-fixed-exp-colhead">{b.excel_grid!.column_headers[0]}</div>
+                                <div className="nx-fe-fixed-exp-colhead">{gridHeader(b.excel_grid!, 0)}</div>
                                 {secRows.map((r, rowIdx) => (
                                   <div
                                     key={`veh-${it.vehicle_id}-l-${rowIdx}`}
@@ -1351,7 +1373,7 @@ export function ClientAccountingSettingsTab({
                             </div>
                             <div className="nx-em-col nx-em-col-ops">
                               <div className="nx-income-table">
-                                <div className="nx-fe-fixed-exp-colhead">{b.excel_grid!.column_headers[1]}</div>
+                                <div className="nx-fe-fixed-exp-colhead">{gridHeader(b.excel_grid!, 1)}</div>
                                 {secRows.map((r, rowIdx) => (
                                   <div
                                     key={`veh-${it.vehicle_id}-r-${rowIdx}`}
@@ -1369,7 +1391,7 @@ export function ClientAccountingSettingsTab({
                     })
                   : vehiclesEmptyFleetShell && b.excel_grid ? (
                       <div className="nx-ws-accounting-empty-fleet" role="status">
-                        <div className="nx-fe-fixed-exp-colhead">{b.excel_grid.column_headers[0]}</div>
+                        <div className="nx-fe-fixed-exp-colhead">{gridHeader(b.excel_grid, 0)}</div>
                         <p className="nx-ws-accounting-empty-fleet__message">
                           {t('clientOperations.accounting.noVehicles')}
                         </p>
@@ -1404,7 +1426,7 @@ export function ClientAccountingSettingsTab({
             className="nx-modal nx-accounting-editor-modal"
             style={{
               maxWidth: modal?.block_key === 'expense_management' ? 880 : 760,
-              direction: 'rtl',
+              direction: editorDir,
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -2014,13 +2036,19 @@ export function ClientAccountingSettingsTab({
         >
           <div
             className="nx-modal nx-accounting-editor-modal"
-            style={{ maxWidth: 720, direction: 'rtl' }}
+            style={{ maxWidth: 720, direction: editorDir }}
             role="dialog"
             aria-modal="true"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="nx-modal-header">
-              <h3 className="nx-modal-title">{vehicleItemModal?.modal_label ?? t('clientOperations.accounting.addVehicle')}</h3>
+              <h3 className="nx-modal-title">
+                {localizeSystemLabel(
+                  t,
+                  vehicleItemModal?.modal_label_key,
+                  vehicleItemModal?.modal_label ?? t('clientOperations.accounting.addVehicle'),
+                )}
+              </h3>
               <WorkspaceNestedDialogClose onClick={() => setVehicleItemOpen(false)} />
             </div>
             <div className="nx-modal-body" style={{ flex: '0 1 auto' }}>
@@ -2310,7 +2338,7 @@ export function ClientAccountingSettingsTab({
         >
           <div
             className="nx-modal nx-accounting-editor-modal"
-            style={{ maxWidth: 520, direction: 'rtl' }}
+            style={{ maxWidth: 520, direction: editorDir }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="nx-modal-header">
@@ -2361,9 +2389,11 @@ export function ClientAccountingSettingsTab({
                   style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #dbe3ee', font: 'inherit' }}
                 >
                   <option value="">
-                    {modal?.expense_management_modal_meta?.custom_field_type_placeholder_he ??
-                      modal?.expense_management_modal_meta?.custom_field_type_default ??
-                      t('clientOperations.choose')}
+                    {localizeSystemLabel(
+                      t,
+                      modal?.expense_management_modal_meta?.custom_field_type_placeholder_key ?? 'clientOperations.choose',
+                      modal?.expense_management_modal_meta?.custom_field_type_placeholder_he ?? '',
+                    )}
                   </option>
                   {(modal?.expense_management_modal_meta?.custom_field_type_options ?? []).map((o) => (
                     <option key={String(o.value)} value={String(o.value)}>
@@ -2382,12 +2412,18 @@ export function ClientAccountingSettingsTab({
                   (emAddFieldType ? req.includes(emAddFieldType) : false);
                 const optCap =
                   modal?.expense_management_modal_meta?.custom_field_options_max_count ?? EM_ADD_OPTIONS_MAX_FALLBACK;
-                const countLbl =
-                  modal?.expense_management_modal_meta?.custom_field_options_count_label_he ??
-                  t('clientOperations.accounting.optionsCount');
-                const rowLbl =
-                  modal?.expense_management_modal_meta?.custom_field_option_value_label_he ??
-                  t('clientOperations.accounting.optionName');
+                const countLbl = localizeSystemLabel(
+                  t,
+                  modal?.expense_management_modal_meta?.custom_field_options_count_label_key ??
+                    'clientOperations.accounting.optionsCount',
+                  modal?.expense_management_modal_meta?.custom_field_options_count_label_he ?? '',
+                );
+                const rowLbl = localizeSystemLabel(
+                  t,
+                  modal?.expense_management_modal_meta?.custom_field_option_value_label_key ??
+                    'clientOperations.accounting.optionName',
+                  modal?.expense_management_modal_meta?.custom_field_option_value_label_he ?? '',
+                );
                 const n = Math.min(Math.max(1, emAddOptionRowCount), optCap);
                 return showOptions ? (
                   <div style={{ marginTop: 12 }}>

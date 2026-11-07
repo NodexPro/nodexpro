@@ -67,6 +67,13 @@ test('Owner Languages page shows module completeness, search, status filters and
   assert.match(page, /AI generation is not available/);
   assert.match(page, /Empty catalog fields mean no Owner override/);
   assert.match(page, /Red cards are confirmed problems/);
+  assert.match(page, /Catalog coverage is not UI coverage/);
+  assert.match(page, /UI strings inventoried/);
+  assert.match(page, /UI strings verified/);
+  assert.match(page, /Unverified UI strings/);
+  assert.match(page, /Confirmed localization issues/);
+  assert.match(page, /nx-owner-coverage-strip/);
+  assert.match(page, /coverage_is_complete/);
   assert.match(page, /entry\.bundled_value/);
 });
 
@@ -84,6 +91,13 @@ test('draft save snapshots published text and publish writes a rollback snapshot
   assert.match(service, /published_snapshot_preserved: true/);
   assert.match(service, /selectAllRows/);
   assert.match(service, /localization_audit/);
+  assert.match(service, /hardcodedSurfacesFromInventory/);
+  assert.match(service, /uiStringsInventoried/);
+  assert.doesNotMatch(service, /TEST_ONLY_HARDCODED_HE_SYSTEM_LABEL/);
+  const reminderToast = readFileSync(join(root, 'src/components/ReminderToast.tsx'), 'utf8');
+  assert.match(reminderToast, /clientOperations\.reminders\.active/);
+  assert.doesNotMatch(reminderToast, /תזכורת פעילה/);
+  assert.doesNotMatch(reminderToast, /aria-label=\"סגור\"/);
   assert.match(service, /POSTGREST_PAGE_SIZE/);
   assert.match(service, /isMissingSnapshotColumn/);
   assert.match(migration, /add column if not exists snapshot jsonb/);

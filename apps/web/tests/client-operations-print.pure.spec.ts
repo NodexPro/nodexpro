@@ -154,10 +154,10 @@ test('YYYY-MM format: month 01 pads correctly', () => {
   assert.equal(formatClientOperationsPeriodHeading('2025-01'), '01.25');
 });
 
-test('null or empty falls back to default', () => {
-  assert.equal(formatClientOperationsPeriodHeading(null), 'תקופה');
-  assert.equal(formatClientOperationsPeriodHeading(''), 'תקופה');
-  assert.equal(formatClientOperationsPeriodHeading(undefined), 'תקופה');
+test('null or empty falls back to empty — UI supplies the localized Period label', () => {
+  assert.equal(formatClientOperationsPeriodHeading(null), '');
+  assert.equal(formatClientOperationsPeriodHeading(''), '');
+  assert.equal(formatClientOperationsPeriodHeading(undefined), '');
 });
 
 test('non-standard key passes through as-is', () => {

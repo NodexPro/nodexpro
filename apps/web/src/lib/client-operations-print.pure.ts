@@ -141,7 +141,7 @@ export function selectPrintableColumnKeys(input: {
 
 export function formatClientOperationsPeriodHeading(periodKey: string | null | undefined): string {
   const key = String(periodKey ?? '').trim();
-  if (!/^\d{4}-\d{2}$/.test(key)) return key || 'תקופה';
+  if (!/^\d{4}-\d{2}$/.test(key)) return key || '';
   const year = key.slice(2, 4);
   const month = key.slice(5);
   return `${month}.${year}`;

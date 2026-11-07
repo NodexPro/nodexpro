@@ -1014,8 +1014,11 @@
     "tabsAria": "Workspace tabs",
     "loadFailed": "Failed to load",
     "reminders": {
-      "dismissAll": "Dismiss all"
+      "dismissAll": "Dismiss all",
+      "active": "Active reminder",
+      "clientPrefix": "Client:"
     },
+    "periodFallback": "Period",
     "noFeesPermission": "You do not have permission to view fees, or the data is unavailable.",
     "noPayrollPermission": "You do not have permission to view payroll, or the data is unavailable.",
     "noAnnualPermission": "You do not have permission to view the annual report, or the data is unavailable.",
@@ -1056,6 +1059,18 @@
         "private": "Private",
         "business": "Business",
         "mixed": "Mixed"
+      },
+      "errors": {
+        "domainTooLong": "Line of business is too long (maximum 200 characters)",
+        "activityTooLong": "Short description is too long (maximum 1000 characters)",
+        "businessAddressTooLong": "Business address is too long (maximum 500 characters)",
+        "privateAddressTooLong": "Private address is too long (maximum 500 characters)",
+        "invalidOperationMode": "Invalid operating mode",
+        "invalidCustomerType": "Invalid primary audience",
+        "fixMarkedFields": "Please correct the marked fields",
+        "peakMonthsSeasonal": "Selecting peak months makes the business seasonal (server logic).",
+        "closeBeforeOpen": "The close date cannot be before the open date.",
+        "staleForm": "The information changed since you opened the form. Reload and try again."
       }
     },
     "editBusinessProfile": "Edit business profile",
@@ -1259,6 +1274,7 @@
     },
     "accounting": {
       "addVehicle": "Add vehicle",
+      "editVehicle": "Edit vehicle",
       "editBlock": "Edit {{label}}",
       "deleteVehicleConfirm": "Delete the vehicle with plate \"{{plate}}\"?\nThis cannot be undone.",
       "deleteFieldConfirm": "Delete this field?",
@@ -1295,6 +1311,9 @@
       "noVehiclesLabel": "No vehicles",
       "workplaces": "Workplaces",
       "additionalIncome": "Additional income",
+      "namedAmount": "{{label}} {{amount}}",
+      "workplacesCount": "{{n}} workplaces",
+      "moreCount": "+{{n}}",
       "upToNPerMonth": "Up to {{n}} per month",
       "authorizedShort": "Authorized dealer",
       "exemptShort": "Exempt dealer",
@@ -1302,8 +1321,14 @@
         "incomeSystem": "Income system",
         "additionalIncome": "Additional income",
         "monthlyAmounts": "Monthly amounts",
-        "recognizedExpensePercent": "Recognized expense %"
+        "recognizedExpensePercent": "Recognized expense %",
+        "vehicleDetails": "Vehicle details",
+        "taxDeductions": "Tax and deductions"
       },
+      "vehicleCount": "{{n}} vehicles",
+      "customFieldText": "Text field",
+      "customFieldList": "List",
+      "customFieldCheckbox": "Checkbox",
       "blocks": {
         "fixedExpenses": "Fixed expenses",
         "income": "Income",
@@ -1736,7 +1761,14 @@
         "cad": "Canadian dollar",
         "aud": "Australian dollar",
         "jpy": "Yen",
-        "cny": "Yuan"
+        "cny": "Yuan",
+        "rub": "Ruble",
+        "aed": "Dirham"
+      },
+      "renewal": {
+        "expiredDays": "Agreement expired {{days}} days ago",
+        "expiresInDays": "Agreement expires in {{days}} days",
+        "activeUntil": "Agreement is active; ends {{date}}"
       },
       "services": {
         "accountingSingleSided": "Single-entry bookkeeping",

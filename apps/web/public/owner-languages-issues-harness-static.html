@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Owner Localization Issues harness</title>
+    <style>
+      body { margin: 0; background: #f7f8fa; color: #111827; font-family: 'Segoe UI', system-ui, sans-serif; }
+      .nx-owner-modules { padding: 24px; max-width: 960px; }
+      .nx-owner-modules__title { font-size: 22px; margin: 0 0 8px; }
+      .nx-owner-modules__subtitle { color: #4b5563; margin: 0 0 16px; }
+      .nx-owner-issue-card { border: 1px solid #fecaca; background: #fef2f2; border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
+      .nx-owner-issue-card__header { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+      .nx-owner-issue-card__code-fix { color: #991b1b; font-weight: 700; }
+      .nx-owner-issue-card__meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px 16px; margin: 0 0 8px; }
+      .nx-owner-issue-card__meta dt { font-size: 11px; font-weight: 700; color: #6b7280; }
+      .nx-owner-issue-card__meta dd { margin: 2px 0 0; unicode-bidi: isolate; }
+      .nx-owner-issue-unverified { border: 1px dashed #d1d5db; border-radius: 8px; padding: 12px; background: #fafafa; }
+      .nx-owner-coverage-strip { display: grid; gap: 8px 16px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin: 0 0 12px; }
+      .nx-owner-coverage-strip dt { font-size: 11px; font-weight: 700; color: #6b7280; }
+      .nx-owner-coverage-strip dd { margin: 2px 0 0; font-weight: 600; }
+      .nx-owner-coverage-warning { color: #92400e; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <div class="nx-owner-modules">
+      <h1 class="nx-owner-modules__title">Languages &amp; Translations — issues harness</h1>
+      <p class="nx-owner-modules__subtitle">TEST-ONLY Hebrew system chrome. User-entered Hebrew is not shown as an issue.</p>
+      <dl class="nx-owner-coverage-strip">
+        <div><dt>Catalog coverage</dt><dd>1092/1092 keys live</dd></div>
+        <div><dt>UI strings inventoried</dt><dd>446</dd></div>
+        <div><dt>UI strings verified</dt><dd>443</dd></div>
+        <div><dt>Unverified UI strings</dt><dd>3</dd></div>
+        <div><dt>Confirmed localization issues</dt><dd>clientOperations / en: test fixture only</dd></div>
+      </dl>
+      <p class="nx-owner-coverage-warning">Catalog coverage is not UI coverage. Zero confirmed issues is not complete Client Operations localization while unverified or hardcoded UI strings remain.</p>
+      <h2>Before code fix — test fixture</h2>
+      <article class="nx-owner-issue-card" data-issue-id="hardcoded:test-only:registry-toolbar-hebrew-chrome">
+        <header class="nx-owner-issue-card__header"><strong>Hardcoded / unconnected</strong><span>Registry · Toolbar test chrome</span></header>
+        <p class="nx-owner-issue-card__code-fix">Requires code fix. Editing a translation will not change this hardcoded label.</p>
+        <dl class="nx-owner-issue-card__meta">
+          <div><dt>Current displayed system text</dt><dd dir="rtl">כפתור מערכת לבדיקה</dd></div>
+          <div><dt>Source → target</dt><dd>he → en (LTR)</dd></div>
+          <div><dt>Localization key</dt><dd>Not connected</dd></div>
+        </dl>
+        <p>Permanent system chrome rendered in Hebrew with no localization key. User-entered Hebrew is not this issue.</p>
+      </article>
+      <h2>After code fix — same catalog, fixture removed</h2>
+      <p>No confirmed localization issues for this module and language.</p>
+      <h2>Remaining production code-fix cards</h2>
+      <p>Accounting income and expense summary rows are connected. No remaining production hardcoded cards in this inventory.</p>
+      <div class="nx-owner-issue-unverified">
+        <h4>Unverified surfaces</h4>
+        <ul>
+          <li><strong>Legacy Accounting tab:</strong> ClientAccountingTab is hardcoded Hebrew but is not mounted.</li>
+          <li><strong>DocFlow empty/error:</strong> keys are wired; live office case was not exercised.</li>
+          <li><strong>Office session:</strong> live Client Operations tabs were not clicked without an office login.</li>
+        </ul>
+      </div>
+    </div>
+  </body>
+</html>

@@ -34,6 +34,10 @@ const SCAN_FILES = [
   'src/components/ClientWorkspacePanel.tsx',
   'src/components/client-workspace-profile-autosave.pure.ts',
   'src/components/client-operations/ClientOperationsPeriodSheetTabs.tsx',
+  'src/components/ClientDocflowTab.tsx',
+  'src/components/ReminderToasts.tsx',
+  'src/components/ReminderToast.tsx',
+  'src/components/WorkspaceNestedDialogClose.tsx',
 ] as const;
 
 /** Remaining user-data field names — interpolations of these are not UI chrome. */
