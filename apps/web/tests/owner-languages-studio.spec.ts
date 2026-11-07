@@ -36,6 +36,20 @@ test('Owner catalog registers bundled UI keys, not a 48-key subset', () => {
   assert.ok(keyCount > 200, `expected hundreds of bundled keys, got ${keyCount}`);
 });
 
+test('Owner catalog includes formerly missing Client Operations system labels in EN and HE', () => {
+  assert.match(bundled, /"clientOperations\.registry\.columns\.clientName": "Client name"/);
+  assert.match(bundled, /"clientOperations\.registry\.columns\.clientName": "שם לקוח"/);
+  assert.match(bundled, /"clientOperations\.registry\.columns\.handler": "Case manager"/);
+  assert.match(bundled, /"clientOperations\.registry\.columns\.handler": "מטפל בתיק"/);
+  assert.match(bundled, /"clientOperations\.businessType\.osekPatur": "Exempt dealer"/);
+  assert.match(bundled, /"clientOperations\.businessType\.osekPatur": "עוסק פטור"/);
+  assert.match(bundled, /"clientOperations\.taxes\.cards\.vatRegistration": "VAT registration"/);
+  assert.match(bundled, /"clientOperations\.taxes\.cards\.incomeTaxAdvances": "Income tax advances"/);
+  assert.match(bundled, /"clientOperations\.fees\.tooltipWas": "Was: \{\{value\}\}"/);
+  assert.match(bundled, /"clientOperations\.history\.summaries\.feeAgreementUpdated": "Fee agreement updated"/);
+  assert.match(page, /Search key or source text/);
+});
+
 test('Owner Languages page shows module completeness, search, status filters and rollback', () => {
   assert.match(page, /module_completeness/);
   assert.match(page, /Filter by module/);

@@ -2,6 +2,8 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { apiJson } from '../api/client';
 import { moduleClientOperationsAccountingGeneral, moduleClientOperationsAccountingVehicles } from '../api/endpoints';
 
+/** Not mounted in the workspace; i18n for accounting settings lives in ClientAccountingSettingsTab. */
+
 export type VehicleKind = 'business' | 'private';
 export type EngineType = 'diesel' | 'gasoline' | 'electric';
 

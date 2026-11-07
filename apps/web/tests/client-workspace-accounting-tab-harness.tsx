@@ -489,7 +489,7 @@ function feesFixture(): FeesTabModel {
 function payrollSection(
   section_key: string,
   section_title_he: string,
-  lines: Array<{ label_he: string; value_he: string }>,
+  lines: Array<{ line_key: string; label_he: string; value_he: string }>,
 ): PayrollTabModel['sections'][number] {
   return { section_key, section_title_he, edit_action_key: null, lines, edit_fields: [] };
 }
@@ -502,18 +502,18 @@ function payrollFixture(): PayrollTabModel {
     permissions: { can_view: true, can_edit: true },
     status: { has_employees: true, has_employees_source: 'base' },
     sections: [
-      payrollSection('employer_details', 'פרטי מעסיק', [{ label_he: 'שם מעסיק', value_he: 'חברת בדיקה' }]),
+      payrollSection('employer_details', 'פרטי מעסיק', [{ line_key: 'company_name', label_he: 'שם מעסיק', value_he: 'חברת בדיקה' }]),
       payrollSection('reporting', 'דיווחים', [
-        { label_he: 'דיווח למס הכנסה', value_he: 'חודשי' },
-        { label_he: 'דיווח טופס 102', value_he: 'כן' },
+        { line_key: 'reporting_income_tax', label_he: 'דיווח למס הכנסה', value_he: 'חודשי' },
+        { line_key: 'form_102', label_he: 'דיווח טופס 102', value_he: 'כן' },
       ]),
-      payrollSection('bank', 'בנק', [{ label_he: 'חשבון', value_he: '12-345' }]),
-      payrollSection('process', 'תהליך', [{ label_he: 'באיזו תוכנה מחשבים שכר', value_he: 'Priority' }]),
+      payrollSection('bank', 'בנק', [{ line_key: 'bank_account', label_he: 'חשבון', value_he: '12-345' }]),
+      payrollSection('process', 'תהליך', [{ line_key: 'payroll_software', label_he: 'באיזו תוכנה מחשבים שכר', value_he: 'Priority' }]),
       payrollSection('employees', 'עובדים', [
-        { label_he: 'מספר עובדים', value_he: '4' },
-        { label_he: 'גרף שינוי עובדים', value_he: '—' },
+        { line_key: 'employees_count', label_he: 'מספר עובדים', value_he: '4' },
+        { line_key: 'employees_chart', label_he: 'גרף שינוי עובדים', value_he: '—' },
       ]),
-      payrollSection('complexity', 'מורכבות', [{ label_he: 'רמה', value_he: 'רגילה' }]),
+      payrollSection('complexity', 'מורכבות', [{ line_key: 'complexity_level', label_he: 'רמה', value_he: 'רגילה' }]),
     ],
   };
 }

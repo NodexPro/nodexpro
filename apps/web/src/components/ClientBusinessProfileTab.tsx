@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiJson, type ApiError } from '../api/client';
 import { moduleClientOperationsAccountingCommands } from '../api/endpoints';
+import { useI18n } from '../i18n/I18nProvider';
+import { localizeSystemLabel } from '../lib/co-display-label.pure';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
 import { WorkspaceNestedDialogClose } from './WorkspaceNestedDialogClose';
 import '../styles/nx-modal.css';
@@ -23,11 +25,13 @@ export type BusinessProfileFieldType = 'text' | 'textarea' | 'enum_single' | 'bo
 export type BusinessProfileOption = {
   value: string | number | boolean;
   label: string;
+  label_key?: string;
 };
 
 export type ClientBusinessProfileField = {
   key: BusinessProfileSectionFieldKey;
   label: string;
+  label_key?: string;
   type: BusinessProfileFieldType;
   value: string | boolean | number[] | null;
   options?: BusinessProfileOption[];
@@ -38,6 +42,7 @@ export type ClientBusinessProfileField = {
   validation?: Array<{ rule_key: string; message_he: string }>;
   group_key: string;
   group_label: string;
+  group_label_key?: string;
   group_order: number;
   row_order: number;
 };
@@ -45,6 +50,7 @@ export type ClientBusinessProfileField = {
 export type ClientBusinessProfileSectionResponse = {
   section_key: 'business_profile';
   section_label: string;
+  section_label_key?: string;
   permissions: {
     can_view_business_profile: boolean;
     can_edit_business_profile: boolean;
@@ -68,31 +74,44 @@ const BUSINESS_PROFILE_EDITOR_HIDDEN_KEYS = new Set<BusinessProfileSectionFieldK
   'business_close_date',
 ]);
 
-function formatDateHe(iso: string | null | undefined): string {
+function formatDateForLang(iso: string | null | undefined, lang: string): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('he-IL');
+  return d.toLocaleDateString(lang);
 }
 
-function formatDisplayValue(f: ClientBusinessProfileField, value: unknown): string {
+function optionLabel(t: (key: string) => string, o: BusinessProfileOption | undefined, fallback: string): string {
+  if (!o) return fallback;
+  return localizeSystemLabel(t, o.label_key, o.label);
+}
+
+function formatDisplayValue(
+  f: ClientBusinessProfileField,
+  value: unknown,
+  t: (key: string) => string,
+  lang: string,
+): string {
   if (value === null || value === undefined || value === '') return '—';
   if (f.type === 'boolean') {
     const o = (f.options ?? []).find((x) => x.value === value);
-    return o?.label ?? (value ? 'כן' : 'לא');
+    return optionLabel(t, o, value ? t('clientOperations.yes') : t('clientOperations.no'));
   }
   if (f.type === 'enum_single') {
     const o = (f.options ?? []).find((x) => String(x.value) === String(value));
-    return o?.label ?? String(value);
+    return optionLabel(t, o, String(value));
   }
   if (f.type === 'multi_enum') {
     const arr = Array.isArray(value) ? (value as number[]) : [];
     if (!arr.length) return '—';
     return arr
-      .map((n) => (f.options ?? []).find((o) => Number(o.value) === n)?.label ?? String(n))
+      .map((n) => {
+        const o = (f.options ?? []).find((opt) => Number(opt.value) === n);
+        return optionLabel(t, o, String(n));
+      })
       .join(', ');
   }
-  if (f.type === 'date') return formatDateHe(String(value));
+  if (f.type === 'date') return formatDateForLang(String(value), lang);
   return String(value);
 }
 
@@ -105,6 +124,7 @@ export function ClientBusinessProfileTab({
   section: ClientBusinessProfileSectionResponse;
   onCaseUpdated: (next: ClientOperationsCaseResponse) => void;
 }) {
+  const { t, lang } = useI18n();
   const [editOpen, setEditOpen] = useState(false);
   const [draft, setDraft] = useState<Record<BusinessProfileSectionFieldKey, unknown>>(() => {
     const init: Record<BusinessProfileSectionFieldKey, unknown> = {} as any;
@@ -134,7 +154,7 @@ export function ClientBusinessProfileTab({
           }
           acc.set(f.group_key, {
             key: f.group_key,
-            title: f.group_label,
+            title: localizeSystemLabel(t, f.group_label_key, f.group_label),
             order: f.group_order,
             fields: [f],
           });
@@ -149,7 +169,7 @@ export function ClientBusinessProfileTab({
         ...g,
         fields: g.fields.sort((a, b) => a.row_order - b.row_order || a.label.localeCompare(b.label)),
       }));
-  }, [section.fields]);
+  }, [section.fields, t]);
 
   const resetFromSection = () => {
     const init: Record<BusinessProfileSectionFieldKey, unknown> = {} as any;
@@ -202,7 +222,7 @@ export function ClientBusinessProfileTab({
         body: JSON.stringify({ type: 'save_accounting_business_profile', payload }),
       });
       onCaseUpdated(fullCase);
-      setSaveSuccessHe('נשמר בהצלחה');
+      setSaveSuccessHe(t('clientOperations.taxes.saveSuccess'));
       setEditOpen(false);
     } catch (e) {
       const ae = e as ApiError;
@@ -215,7 +235,7 @@ export function ClientBusinessProfileTab({
         setFieldErrors(fe);
       }
       if (ae.message) setSaveErrorHe(ae.message);
-      else setSaveErrorHe('שגיאת שמירה');
+      else setSaveErrorHe(t('clientOperations.saveError'));
     } finally {
       setSaveBusy(false);
     }
@@ -230,14 +250,14 @@ export function ClientBusinessProfileTab({
             {g.fields.map((f) => (
               <div key={f.key} className="nx-ws-accounting-row">
                 <dt className="nx-ws-accounting-row__label">
-                  {f.label}
+                  {localizeSystemLabel(t, f.label_key, f.label)}
                   {f.required ? ' *' : null}
                 </dt>
                 <dd
                   className="nx-ws-accounting-row__value"
                   style={f.type === 'textarea' ? { whiteSpace: 'pre-wrap' } : undefined}
                 >
-                  {formatDisplayValue(f, f.value)}
+                  {formatDisplayValue(f, f.value, t, lang)}
                 </dd>
               </div>
             ))}
@@ -252,9 +272,10 @@ export function ClientBusinessProfileTab({
       {fieldOrder.map((f) => {
           const fieldError = fieldErrors[f.key];
 
+          const fieldLabel = localizeSystemLabel(t, f.label_key, f.label);
           const commonLabel = (
             <div className="client-field-label">
-              {f.label}
+              {fieldLabel}
               {f.required ? ' *' : null}
             </div>
           );
@@ -273,7 +294,7 @@ export function ClientBusinessProfileTab({
                   <input
                     value={(draft[f.key] as string | null | undefined) ?? ''}
                     onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
-                    aria-label={f.label}
+                    aria-label={fieldLabel}
                     disabled={disabled}
                     maxLength={f.max_length}
                     style={{ border: 'none', background: 'transparent', boxShadow: 'none', padding: 0, width: '100%', outline: 'none', font: 'inherit' }}
@@ -292,7 +313,7 @@ export function ClientBusinessProfileTab({
                   <textarea
                     value={(draft[f.key] as string | null | undefined) ?? ''}
                     onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
-                    aria-label={f.label}
+                    aria-label={fieldLabel}
                     disabled={disabled}
                     maxLength={f.max_length}
                     rows={3}
@@ -318,15 +339,15 @@ export function ClientBusinessProfileTab({
                         [f.key]: e.target.value ? e.target.value : null,
                       }))
                     }
-                    aria-label={f.label}
+                    aria-label={fieldLabel}
                     disabled={disabled}
                     className={empty ? 'client-field-select-choose' : undefined}
                     style={{ border: 'none', background: 'transparent', padding: 0, width: '100%', outline: 'none', font: 'inherit', appearance: 'none' }}
                   >
-                    <option value="">{empty ? 'בחר' : '—'}</option>
+                    <option value="">{empty ? t('clientOperations.choose') : '—'}</option>
                     {(f.options ?? []).map((o) => (
                       <option key={String(o.value)} value={String(o.value)}>
-                        {o.label}
+                        {localizeSystemLabel(t, o.label_key, o.label)}
                       </option>
                     ))}
                   </select>
@@ -345,13 +366,13 @@ export function ClientBusinessProfileTab({
                   <select
                     value={boolVal ? 'true' : 'false'}
                     onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value === 'true' }))}
-                    aria-label={f.label}
+                    aria-label={fieldLabel}
                     disabled={disabled}
                     style={{ border: 'none', background: 'transparent', padding: 0, width: '100%', outline: 'none', font: 'inherit', appearance: 'none' }}
                   >
                     {(f.options ?? []).map((o) => (
                       <option key={String(o.value)} value={o.value ? 'true' : 'false'}>
-                        {o.label}
+                        {localizeSystemLabel(t, o.label_key, o.label)}
                       </option>
                     ))}
                   </select>
@@ -375,7 +396,7 @@ export function ClientBusinessProfileTab({
                         [f.key]: e.target.value ? e.target.value : null,
                       }))
                     }
-                    aria-label={f.label}
+                    aria-label={fieldLabel}
                     disabled={disabled}
                     style={{ border: 'none', background: 'transparent', boxShadow: 'none', padding: 0, width: '100%', outline: 'none', font: 'inherit' }}
                   />
@@ -409,7 +430,7 @@ export function ClientBusinessProfileTab({
                               setDraft((d) => ({ ...d, [f.key]: Array.from(next).sort((a, b) => a - b) }));
                             }}
                           />
-                          <span>{o.label}</span>
+                          <span>{localizeSystemLabel(t, o.label_key, o.label)}</span>
                         </label>
                       );
                     })}
@@ -429,14 +450,16 @@ export function ClientBusinessProfileTab({
     <>
       <section className="nx-ws-accounting-card" data-section-key="business_profile">
         <div className="nx-ws-accounting-card__head">
-          <h3 className="nx-ws-accounting-card__title">{section.section_label}</h3>
+          <h3 className="nx-ws-accounting-card__title">
+            {localizeSystemLabel(t, section.section_label_key, section.section_label)}
+          </h3>
           {canEdit ? (
             <button
               type="button"
               className="nx-taxes-section-edit-btn"
               onClick={openEditModal}
-              aria-label="עריכת פרופיל עסקי"
-              title="עריכת פרופיל עסקי"
+              aria-label={t('clientOperations.editBusinessProfile')}
+              title={t('clientOperations.editBusinessProfile')}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -475,7 +498,7 @@ export function ClientBusinessProfileTab({
         >
           <div className="nx-modal nx-accounting-editor-modal" role="dialog" aria-modal="true" style={{ maxWidth: 720 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
-              <h3 className="nx-modal-title">{section.section_label}</h3>
+              <h3 className="nx-modal-title">{localizeSystemLabel(t, section.section_label_key, section.section_label)}</h3>
               <WorkspaceNestedDialogClose disabled={saveBusy} onClick={closeEditModal} />
             </div>
             <div className="nx-modal-body" style={{ flex: '0 1 auto' }}>
@@ -488,10 +511,10 @@ export function ClientBusinessProfileTab({
               {canEdit ? (
                 <>
                   <button type="button" className="nx-btn nx-btn-primary nx-btn-taxes-compact" style={{ minWidth: 96 }} onClick={() => void handleSave()} disabled={saveBusy}>
-                    {saveBusy ? 'שומר…' : 'שמירה'}
+                    {saveBusy ? t('clientOperations.saving') : t('clientOperations.save')}
                   </button>
                   <button type="button" className="nx-btn nx-btn-secondary nx-btn-taxes-compact" style={{ minWidth: 96 }} onClick={closeEditModal} disabled={saveBusy}>
-                    ביטול
+                    {t('clientOperations.cancel')}
                   </button>
                 </>
               ) : null}

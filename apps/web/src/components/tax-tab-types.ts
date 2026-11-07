@@ -91,7 +91,9 @@ export type TaxTabDisplayTone = 'default' | 'muted' | 'warning' | 'not_relevant'
 export type TaxTabDisplayRow = {
   row_key: string;
   label_he: string;
+  label_key?: string;
   value_he: string;
+  value_key?: string;
   tone?: TaxTabDisplayTone;
 };
 
@@ -100,6 +102,7 @@ export type TaxTabSectionEditAffordance = {
   command: TaxTabCommandType;
   enabled: boolean;
   button_label_he: string;
+  button_label_key?: string;
 };
 
 export type TaxTabSectionKey =
@@ -127,6 +130,7 @@ export type TaxTabPaymentRowSecureState = {
 export type TaxTabPaymentPanelCopyControl = {
   show: boolean;
   aria_label_he: string;
+  aria_label_key?: string;
   disabled?: boolean;
   disabled_reason_he?: string | null;
 };
@@ -134,6 +138,7 @@ export type TaxTabPaymentPanelCopyControl = {
 export type TaxTabPaymentPanelRow = {
   row_key: string;
   label_he: string;
+  label_key?: string;
   value_display_he: string;
   card_brand: string | null;
   value_cell_layout: 'default' | 'card_with_brand';
@@ -149,6 +154,7 @@ export type TaxTabPaymentPanelModel = {
   payment_channel: 'vat' | 'income_tax';
   secure_session: { active: boolean; expires_at: string | null };
   cvv_footer_he: string;
+  cvv_footer_key?: string;
   card_expired_warning: boolean;
   rows: TaxTabPaymentPanelRow[];
 };
@@ -161,11 +167,12 @@ export type TaxTabEditFieldKind =
   | 'number'
   | 'payment_method_select';
 
-export type TaxTabEditFieldOption = { value: string; label_he: string };
+export type TaxTabEditFieldOption = { value: string; label_he: string; label_key?: string };
 
 export type TaxTabEditFieldDef = {
   field_key: string;
   label_he: string;
+  label_key?: string;
   kind: TaxTabEditFieldKind;
   disabled: boolean;
   readonly: boolean;
@@ -184,6 +191,7 @@ export type TaxTabSectionFormEditModel = {
 export type TaxTabSectionReadModel = {
   section_key: TaxTabSectionKey;
   title_he: string;
+  title_key?: string;
   visible: boolean;
   display_rows: TaxTabDisplayRow[];
   edit: TaxTabSectionEditAffordance;
@@ -193,6 +201,7 @@ export type TaxTabSectionReadModel = {
 
 export type TaxTabHeaderReadModel = {
   title_he: string;
+  title_key?: string;
   client_tax_id: string | null;
   client_display_name: string | null;
   summary_rows: TaxTabDisplayRow[];

@@ -3,6 +3,12 @@ import { AppError, badRequest, forbidden } from '../../shared/errors.js';
 import type { RequestContext } from '../../shared/context.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import { projectBusinessProfileCanonicalDates } from './client-business-profile.pure.js';
+import {
+  BUSINESS_PROFILE_FIELD_LABEL_KEY,
+  BUSINESS_PROFILE_GROUP_LABEL_KEY,
+  CO_UI,
+  businessProfileOptionLabelKey,
+} from './client-operations-ui-labels.pure.js';
 
 export type BusinessOperationMode = 'services' | 'trade' | 'online' | 'freelancer' | 'manufacturing' | 'mixed';
 export type PrimaryCustomerType = 'private' | 'business' | 'mixed';
@@ -10,6 +16,7 @@ export type PrimaryCustomerType = 'private' | 'business' | 'mixed';
 export type SectionFieldOption = {
   value: string | number | boolean;
   label: string;
+  label_key?: string;
 };
 
 export type BusinessProfileFieldType = 'text' | 'textarea' | 'enum_single' | 'boolean' | 'multi_enum' | 'date';
@@ -27,6 +34,7 @@ export type ClientBusinessProfileSectionField = {
     | 'business_open_date'
     | 'business_close_date';
   label: string;
+  label_key?: string;
   type: BusinessProfileFieldType;
   value: string | boolean | number[] | null;
   options?: SectionFieldOption[];
@@ -37,6 +45,7 @@ export type ClientBusinessProfileSectionField = {
   validation?: Array<{ rule_key: string; message_he: string }>;
   group_key: 'business_scope' | 'address' | 'general_info';
   group_label: string;
+  group_label_key?: string;
   group_order: number;
   row_order: number;
 };
@@ -44,6 +53,7 @@ export type ClientBusinessProfileSectionField = {
 export type ClientBusinessProfileSectionResponse = {
   section_key: 'business_profile';
   section_label: string;
+  section_label_key?: string;
   permissions: {
     can_view_business_profile: boolean;
     can_edit_business_profile: boolean;
@@ -80,19 +90,19 @@ export type ClientBusinessProfileSaveResponse = {
   field_errors?: FieldError[];
 };
 
-const BUSINESS_OPERATION_MODE_OPTIONS: Array<{ value: BusinessOperationMode; label: string }> = [
-  { value: 'services', label: 'שירותים' },
-  { value: 'trade', label: 'מסחר' },
-  { value: 'online', label: 'אונליין' },
-  { value: 'freelancer', label: 'פרילנס' },
-  { value: 'manufacturing', label: 'ייצור' },
-  { value: 'mixed', label: 'מעורב' },
+const BUSINESS_OPERATION_MODE_OPTIONS: Array<{ value: BusinessOperationMode; label: string; label_key: string }> = [
+  { value: 'services', label: 'שירותים', label_key: businessProfileOptionLabelKey('business_operation_mode', 'services')! },
+  { value: 'trade', label: 'מסחר', label_key: businessProfileOptionLabelKey('business_operation_mode', 'trade')! },
+  { value: 'online', label: 'אונליין', label_key: businessProfileOptionLabelKey('business_operation_mode', 'online')! },
+  { value: 'freelancer', label: 'פרילנס', label_key: businessProfileOptionLabelKey('business_operation_mode', 'freelancer')! },
+  { value: 'manufacturing', label: 'ייצור', label_key: businessProfileOptionLabelKey('business_operation_mode', 'manufacturing')! },
+  { value: 'mixed', label: 'מעורב', label_key: businessProfileOptionLabelKey('business_operation_mode', 'mixed')! },
 ];
 
-const PRIMARY_CUSTOMER_TYPE_OPTIONS: Array<{ value: PrimaryCustomerType; label: string }> = [
-  { value: 'private', label: 'פרטי' },
-  { value: 'business', label: 'עסקי' },
-  { value: 'mixed', label: 'מעורב' },
+const PRIMARY_CUSTOMER_TYPE_OPTIONS: Array<{ value: PrimaryCustomerType; label: string; label_key: string }> = [
+  { value: 'private', label: 'פרטי', label_key: businessProfileOptionLabelKey('primary_customer_type', 'private')! },
+  { value: 'business', label: 'עסקי', label_key: businessProfileOptionLabelKey('primary_customer_type', 'business')! },
+  { value: 'mixed', label: 'מעורב', label_key: businessProfileOptionLabelKey('primary_customer_type', 'mixed')! },
 ];
 
 const BUSINESS_PROFILE_DB_COMPARE_KEYS = [
@@ -109,30 +119,30 @@ const BUSINESS_PROFILE_DB_COMPARE_KEYS = [
   'has_business_vehicles',
 ] as const;
 
-const PEAK_MONTHS_OPTIONS: Array<{ value: number; label: string }> = [
-  { value: 1, label: 'ינואר' },
-  { value: 2, label: 'פברואר' },
-  { value: 3, label: 'מרץ' },
-  { value: 4, label: 'אפריל' },
-  { value: 5, label: 'מאי' },
-  { value: 6, label: 'יוני' },
-  { value: 7, label: 'יולי' },
-  { value: 8, label: 'אוגוסט' },
-  { value: 9, label: 'ספטמבר' },
-  { value: 10, label: 'אוקטובר' },
-  { value: 11, label: 'נובמבר' },
-  { value: 12, label: 'דצמבר' },
+const PEAK_MONTHS_OPTIONS: Array<{ value: number; label: string; label_key: string }> = [
+  { value: 1, label: 'ינואר', label_key: 'clientOperations.months.m1' },
+  { value: 2, label: 'פברואר', label_key: 'clientOperations.months.m2' },
+  { value: 3, label: 'מרץ', label_key: 'clientOperations.months.m3' },
+  { value: 4, label: 'אפריל', label_key: 'clientOperations.months.m4' },
+  { value: 5, label: 'מאי', label_key: 'clientOperations.months.m5' },
+  { value: 6, label: 'יוני', label_key: 'clientOperations.months.m6' },
+  { value: 7, label: 'יולי', label_key: 'clientOperations.months.m7' },
+  { value: 8, label: 'אוגוסט', label_key: 'clientOperations.months.m8' },
+  { value: 9, label: 'ספטמבר', label_key: 'clientOperations.months.m9' },
+  { value: 10, label: 'אוקטובר', label_key: 'clientOperations.months.m10' },
+  { value: 11, label: 'נובמבר', label_key: 'clientOperations.months.m11' },
+  { value: 12, label: 'דצמבר', label_key: 'clientOperations.months.m12' },
 ];
 
-const BOOL_OPTIONS: Array<{ value: boolean; label: string }> = [
-  { value: true, label: 'כן' },
-  { value: false, label: 'לא' },
+const BOOL_OPTIONS: Array<{ value: boolean; label: string; label_key: string }> = [
+  { value: true, label: 'כן', label_key: CO_UI.yes },
+  { value: false, label: 'לא', label_key: CO_UI.no },
 ];
 
 const BUSINESS_PROFILE_GROUPS = {
-  business_scope: { label: 'תחום העסק', order: 1 },
-  address: { label: 'כתובת', order: 2 },
-  general_info: { label: 'מידע כללי', order: 3 },
+  business_scope: { label: 'תחום העסק', order: 1, label_key: BUSINESS_PROFILE_GROUP_LABEL_KEY.business_scope },
+  address: { label: 'כתובת', order: 2, label_key: BUSINESS_PROFILE_GROUP_LABEL_KEY.address },
+  general_info: { label: 'מידע כללי', order: 3, label_key: BUSINESS_PROFILE_GROUP_LABEL_KEY.general_info },
 } as const;
 
 function assertOrg(ctx: RequestContext): string {
@@ -222,6 +232,7 @@ export async function getClientBusinessProfileSection(
   const section: ClientBusinessProfileSectionResponse = {
     section_key: 'business_profile',
     section_label: 'פרופיל עסקי',
+    section_label_key: CO_UI.businessProfile.section,
     permissions: {
       can_view_business_profile: canView,
       can_edit_business_profile: canEdit,
@@ -240,6 +251,7 @@ export async function getClientBusinessProfileSection(
         max_length: 200,
         group_key: 'business_scope',
         group_label: BUSINESS_PROFILE_GROUPS.business_scope.label,
+        group_label_key: BUSINESS_PROFILE_GROUPS.business_scope.label_key,
         group_order: BUSINESS_PROFILE_GROUPS.business_scope.order,
         row_order: 1,
       },
@@ -290,7 +302,7 @@ export async function getClientBusinessProfileSection(
         label: 'אופן פעילות עיקרי',
         type: 'enum_single',
         value: (r.business_operation_mode as BusinessOperationMode | null) ?? null,
-        options: BUSINESS_OPERATION_MODE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+        options: BUSINESS_OPERATION_MODE_OPTIONS.map((o) => ({ value: o.value, label: o.label, label_key: o.label_key })),
         required: false,
         editable: canEdit,
         visible: true,
@@ -304,7 +316,7 @@ export async function getClientBusinessProfileSection(
         label: 'קהל עיקרי',
         type: 'enum_single',
         value: (r.primary_customer_type as PrimaryCustomerType | null) ?? null,
-        options: PRIMARY_CUSTOMER_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+        options: PRIMARY_CUSTOMER_TYPE_OPTIONS.map((o) => ({ value: o.value, label: o.label, label_key: o.label_key })),
         required: false,
         editable: canEdit,
         visible: true,
@@ -318,7 +330,7 @@ export async function getClientBusinessProfileSection(
         label: 'עסק עונתי',
         type: 'boolean',
         value: Boolean((r.is_seasonal_business as boolean | null) ?? false),
-        options: BOOL_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+        options: BOOL_OPTIONS.map((o) => ({ value: o.value, label: o.label, label_key: o.label_key })),
         required: false,
         editable: canEdit,
         visible: seasonalToggleVisible,
@@ -332,7 +344,7 @@ export async function getClientBusinessProfileSection(
         label: 'חודשי עומס',
         type: 'multi_enum',
         value: peakMonths,
-        options: PEAK_MONTHS_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+        options: PEAK_MONTHS_OPTIONS.map((o) => ({ value: o.value, label: o.label, label_key: o.label_key })),
         required: false,
         // Hidden from UI; stored value is preserved on save (not cleared).
         editable: false,
@@ -382,6 +394,12 @@ export async function getClientBusinessProfileSection(
       },
     ],
   };
+
+  section.fields = section.fields.map((field) => ({
+    ...field,
+    label_key: BUSINESS_PROFILE_FIELD_LABEL_KEY[field.key],
+    group_label_key: BUSINESS_PROFILE_GROUP_LABEL_KEY[field.group_key] ?? field.group_label_key,
+  }));
 
   return section;
 }

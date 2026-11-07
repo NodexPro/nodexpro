@@ -1,6 +1,8 @@
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { apiJson, userFacingApiMessage } from '../api/client';
 import { moduleClientOperationsCase, moduleClientOperationsFeesCommands } from '../api/endpoints';
+import { useI18n } from '../i18n/I18nProvider';
+import { fillI18n, localizeFilledLabel, localizeSystemLabel } from '../lib/co-display-label.pure';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
 import type {
   FeesAgreementFieldModel,
@@ -9,6 +11,7 @@ import type {
   FeesPriceHistoryChartModel,
   FeesPriceHistoryChartViewMode,
   FeesRenewalCardModel,
+  FeesServiceRowModel,
   FeesTabModel,
   FeesTableSectionModel,
 } from './fees-tab-types';
@@ -36,6 +39,15 @@ function IconPencil() {
 }
 
 /** תצוגה בלבד — ערכים מהאגרגט; החיתוך ל-15/הכל בשרת */
+function feeOptLabel(
+  t: (key: string) => string,
+  o: { label_he: string; label_key?: string } | undefined,
+  fallback = '',
+): string {
+  if (!o) return fallback;
+  return localizeSystemLabel(t, o.label_key, o.label_he);
+}
+
 function FeesPriceHistoryChart({
   chart,
   onChartViewRequest,
@@ -43,40 +55,55 @@ function FeesPriceHistoryChart({
   chart: FeesPriceHistoryChartModel;
   onChartViewRequest: (mode: FeesPriceHistoryChartViewMode) => void | Promise<void>;
 }) {
+  const { t } = useI18n();
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
   if (chart.bars.length === 0) {
-    return <div className="nx-fees-empty">{chart.empty_state_he}</div>;
+    return <div className="nx-fees-empty">{localizeSystemLabel(t, chart.empty_state_key, chart.empty_state_he)}</div>;
   }
 
   const visibleBars = chart.bars;
 
   return (
     <div className="nx-fees-price-chart-block">
-      {chart.view_caption_he ? <p className="nx-fees-price-chart-view-caption">{chart.view_caption_he}</p> : null}
-      {chart.overflow_hint_he ? <p className="nx-fees-price-chart-overflow-hint">{chart.overflow_hint_he}</p> : null}
-      {chart.subtitle_he ? <p className="nx-fees-price-chart-sub">{chart.subtitle_he}</p> : null}
-      {chart.y_axis_hint_he ? <p className="nx-fees-price-chart-hint">{chart.y_axis_hint_he}</p> : null}
+      {chart.view_caption_he ? (
+        <p className="nx-fees-price-chart-view-caption">
+          {fillI18n(localizeSystemLabel(t, chart.view_caption_key, chart.view_caption_he), chart.view_caption_fill ?? {})}
+        </p>
+      ) : null}
+      {chart.overflow_hint_he ? (
+        <p className="nx-fees-price-chart-overflow-hint">
+          {localizeSystemLabel(t, chart.overflow_hint_key, chart.overflow_hint_he)}
+        </p>
+      ) : null}
+      {chart.subtitle_he ? (
+        <p className="nx-fees-price-chart-sub">
+          {fillI18n(localizeSystemLabel(t, chart.subtitle_key, chart.subtitle_he), chart.subtitle_fill ?? {})}
+        </p>
+      ) : null}
+      {chart.y_axis_hint_he ? (
+        <p className="nx-fees-price-chart-hint">{localizeSystemLabel(t, chart.y_axis_hint_key, chart.y_axis_hint_he)}</p>
+      ) : null}
 
-      <div className="nx-fees-price-chart-toolbar nx-fees-price-chart-toolbar--modes" dir="rtl">
+      <div className="nx-fees-price-chart-toolbar nx-fees-price-chart-toolbar--modes" >
         <button
           type="button"
           className={`nx-fees-price-chart-toggle ${chart.chart_view_mode === 'last_15' ? 'nx-fees-price-chart-toggle--active' : ''}`}
           onClick={() => void onChartViewRequest('last_15')}
         >
-          {chart.toggle_last_15_label_he}
+          {localizeSystemLabel(t, chart.toggle_last_15_label_key, chart.toggle_last_15_label_he)}
         </button>
         <button
           type="button"
           className={`nx-fees-price-chart-toggle ${chart.chart_view_mode === 'all' ? 'nx-fees-price-chart-toggle--active' : ''}`}
           onClick={() => void onChartViewRequest('all')}
         >
-          {chart.toggle_all_label_he}
+          {localizeSystemLabel(t, chart.toggle_all_label_key, chart.toggle_all_label_he)}
         </button>
       </div>
 
       <div className="nx-fees-price-chart-scroll">
-        <div className="nx-fees-price-chart" role="img" aria-label="היסטוריית שינויי מחיר">
+        <div className="nx-fees-price-chart" role="img" aria-label={t('clientOperations.fees.priceHistory')}>
           {visibleBars.map((b, i) => (
             <div
               key={`${b.x_label_he}-${i}-${b.snapshot_after_he}`}
@@ -85,8 +112,13 @@ function FeesPriceHistoryChart({
               onMouseLeave={() => setHoverIdx(null)}
             >
               {hoverIdx === i ? (
-                <div className="nx-fees-price-chart-tooltip" role="tooltip" dir="rtl">
-                  {b.tooltip_lines_he.map((line, li) => (
+                <div className="nx-fees-price-chart-tooltip" role="tooltip" >
+                  {(b.tooltip_lines?.length
+                    ? b.tooltip_lines.map((ln) =>
+                        localizeFilledLabel(t, ln.line_key, ln.line_he, ln.fill, ln.fill_keys),
+                      )
+                    : b.tooltip_lines_he
+                  ).map((line, li) => (
                     <p key={li} className="nx-fees-price-chart-tooltip-line">
                       {line}
                     </p>
@@ -114,25 +146,82 @@ function FeesPriceHistoryChart({
 }
 
 function AgreementSummaryDisplay({ feesTab }: { feesTab: FeesTabModel }) {
+  const { t } = useI18n();
   const s = feesTab.agreement_summary;
   if (s.no_agreement_summary_he) {
-    return <div className="nx-fees-empty">{s.no_agreement_summary_he}</div>;
+    return (
+      <div className="nx-fees-empty">
+        {localizeSystemLabel(t, s.no_agreement_summary_key, s.no_agreement_summary_he)}
+      </div>
+    );
   }
   return (
     <ul className="nx-fees-summary-lines nx-fees-workspace-readonly">
       {s.lines.map((ln, i) => (
         <li key={i} className="nx-fees-summary-line">
-          <span className="nx-fees-summary-label">{ln.label_he}</span>
-          <span className="nx-fees-summary-value">{ln.value_he}</span>
+          <span className="nx-fees-summary-label">{localizeSystemLabel(t, ln.label_key, ln.label_he)}</span>
+          <span className="nx-fees-summary-value">{localizeSystemLabel(t, ln.value_key, ln.value_he)}</span>
         </li>
       ))}
     </ul>
   );
 }
 
-function ServicesDisplayTable({ section }: { section: FeesTableSectionModel }) {
+function feeDisplayCell(
+  t: (key: string) => string,
+  feesTab: FeesTabModel,
+  kind: 'built_in' | 'custom',
+  row: FeesServiceRowModel,
+  ci: number,
+  cell: string,
+): string {
+  const line = row.persist_line ?? {};
+  const charging = feeOptLabel(
+    t,
+    feesTab.charging_type_options.find((o) => o.value === String(line.charging_type ?? '')),
+    cell,
+  );
+  const currencyCode = String(line.currency_code ?? '');
+  const active = Boolean(line.is_active) ? t('clientOperations.yes') : t('clientOperations.no');
+  if (kind === 'built_in') {
+    if (ci === 0) {
+      const cat = feesTab.built_in_catalog.find((x) => x.code === String(line.catalog_code ?? ''));
+      return cat ? feeOptLabel(t, cat) : cell;
+    }
+    if (ci === 1) return charging;
+    if (ci === 4) return currencyCode || cell;
+    if (ci === 5) {
+      return feeOptLabel(
+        t,
+        feesTab.vat_mode_options.find((o) => o.value === String(line.vat_mode ?? '')),
+        cell,
+      );
+    }
+    if (ci === 7) return active;
+  } else {
+    if (ci === 1) return charging;
+    if (ci === 4) return currencyCode || cell;
+    if (ci === 6) return active;
+  }
+  return cell;
+}
+
+function ServicesDisplayTable({
+  feesTab,
+  section,
+  kind,
+}: {
+  feesTab: FeesTabModel;
+  section: FeesTableSectionModel;
+  kind: 'built_in' | 'custom';
+}) {
+  const { t } = useI18n();
   if (section.rows.length === 0) {
-    return <div className="nx-fees-empty">{section.empty_state_he}</div>;
+    return (
+      <div className="nx-fees-empty">
+        {localizeSystemLabel(t, section.empty_state_key, section.empty_state_he)}
+      </div>
+    );
   }
   return (
     <div className="nx-fees-table-wrap">
@@ -140,7 +229,7 @@ function ServicesDisplayTable({ section }: { section: FeesTableSectionModel }) {
         <thead>
           <tr>
             {section.column_headers_he.map((h, i) => (
-              <th key={i}>{h}</th>
+              <th key={i}>{localizeSystemLabel(t, section.column_header_keys?.[i], h)}</th>
             ))}
           </tr>
         </thead>
@@ -148,7 +237,7 @@ function ServicesDisplayTable({ section }: { section: FeesTableSectionModel }) {
           {section.rows.map((row, ri) => (
             <tr key={row.line_id || ri}>
               {row.cells_he.map((cell, ci) => (
-                <td key={ci}>{cell}</td>
+                <td key={ci}>{feeDisplayCell(t, feesTab, kind, row, ci, cell)}</td>
               ))}
             </tr>
           ))}
@@ -159,12 +248,13 @@ function ServicesDisplayTable({ section }: { section: FeesTableSectionModel }) {
 }
 
 function DiscountCardDisplay({ card }: { card: FeesKeyValueCardModel }) {
+  const { t } = useI18n();
   return (
     <div className="nx-fees-kv-display nx-fees-workspace-readonly">
       {card.lines.map((ln, i) => (
         <div key={i} className="nx-fees-kv-row">
-          <span className="nx-fees-kv-label">{ln.label_he}</span>
-          <span className="nx-fees-kv-value">{ln.value_he}</span>
+          <span className="nx-fees-kv-label">{localizeSystemLabel(t, ln.label_key, ln.label_he)}</span>
+          <span className="nx-fees-kv-value">{localizeSystemLabel(t, ln.value_key, ln.value_he)}</span>
         </div>
       ))}
     </div>
@@ -172,16 +262,19 @@ function DiscountCardDisplay({ card }: { card: FeesKeyValueCardModel }) {
 }
 
 function RenewalSummaryDisplay({ renewal }: { renewal: FeesRenewalCardModel }) {
+  const { t } = useI18n();
   return (
     <div className="nx-fees-workspace-readonly">
       {renewal.banner ? (
-        <div className={`nx-fees-renewal-banner nx-fees-renewal-banner--${renewal.banner.variant}`}>{renewal.banner.text_he}</div>
+        <div className={`nx-fees-renewal-banner nx-fees-renewal-banner--${renewal.banner.variant}`}>
+          {localizeSystemLabel(t, renewal.banner.text_key, renewal.banner.text_he)}
+        </div>
       ) : null}
       <ul className="nx-fees-summary-lines">
         {renewal.lines.map((ln, i) => (
           <li key={i} className="nx-fees-summary-line">
-            <span className="nx-fees-summary-label">{ln.label_he}</span>
-            <span className="nx-fees-summary-value">{ln.value_he}</span>
+            <span className="nx-fees-summary-label">{localizeSystemLabel(t, ln.label_key, ln.label_he)}</span>
+            <span className="nx-fees-summary-value">{localizeSystemLabel(t, ln.value_key, ln.value_he)}</span>
           </li>
         ))}
       </ul>
@@ -200,6 +293,7 @@ function FeesWorkspaceBlockHeader({
   canEdit: boolean;
   onEdit?: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="nx-fees-workspace-card-head">
       <div className="nx-fees-workspace-card-head-main">
@@ -207,7 +301,7 @@ function FeesWorkspaceBlockHeader({
         {chip}
       </div>
       {canEdit && onEdit ? (
-        <button type="button" className="nx-fees-pencil-btn" onClick={onEdit} aria-label="עריכה" title="עריכה">
+        <button type="button" className="nx-fees-pencil-btn" onClick={onEdit} aria-label={t('clientOperations.edit')} title={t('clientOperations.edit')}>
           <IconPencil />
         </button>
       ) : null}
@@ -242,8 +336,13 @@ function sectionFields(tab: FeesTabModel, sectionKey: FeesEditModalSectionKey): 
   return tab.edit_modal.sections.find((s) => s.section_key === sectionKey)?.fields ?? [];
 }
 
-function editModalSectionTitle(tab: FeesTabModel, sectionKey: FeesEditModalSectionKey): string {
-  return tab.edit_modal.sections.find((s) => s.section_key === sectionKey)?.section_title_he ?? '';
+function editModalSectionTitle(
+  tab: FeesTabModel,
+  sectionKey: FeesEditModalSectionKey,
+  t: (key: string) => string,
+): string {
+  const sec = tab.edit_modal.sections.find((s) => s.section_key === sectionKey);
+  return localizeSystemLabel(t, sec?.section_title_key, sec?.section_title_he ?? '');
 }
 
 /** שורות grid לפי מפתחות — רק layout; אותם שדות מהאגרגט (fees_agreement) */
@@ -265,6 +364,7 @@ function AgreementSectionFields({
   canEdit: boolean;
   onDraftChange: (key: string, v: unknown) => void;
 }) {
+  const { t } = useI18n();
   const fields = sectionFields(feesTab, 'fees_agreement').filter((f) => f.visible && f.editable);
   const byKey = new Map(fields.map((f) => [f.key, f]));
   const used = new Set<string>();
@@ -285,7 +385,7 @@ function AgreementSectionFields({
           >
             {rowFields.map((f) => (
               <div key={f.key} className="client-field nx-fees-modal-agreement-field-cell">
-                <div className="client-field-label">{f.label_he}</div>
+                <div className="client-field-label">{localizeSystemLabel(t, f.label_key, f.label_he)}</div>
                 <FeeFieldInput f={f} value={draft[f.key]} disabled={!canEdit || !f.editable} onChange={onDraftChange} />
               </div>
             ))}
@@ -297,7 +397,7 @@ function AgreementSectionFields({
         .map((f) => (
           <div key={f.key} className="nx-fees-modal-agreement-row nx-fees-modal-agreement-row--single">
             <div className="client-field nx-fees-modal-agreement-field-cell">
-              <div className="client-field-label">{f.label_he}</div>
+              <div className="client-field-label">{localizeSystemLabel(t, f.label_key, f.label_he)}</div>
               <FeeFieldInput f={f} value={draft[f.key]} disabled={!canEdit || !f.editable} onChange={onDraftChange} />
             </div>
           </div>
@@ -318,6 +418,7 @@ function DiscountSectionFields({
   canEdit: boolean;
   onDraftChange: (key: string, v: unknown) => void;
 }) {
+  const { t } = useI18n();
   const fields = sectionFields(feesTab, 'fees_discount').filter((f) => feeModalFieldShown(f, draft, feesTab));
   const byKey = (k: string) => fields.find((f) => f.key === k);
   const hasDisc = byKey('discount_has');
@@ -330,18 +431,18 @@ function DiscountSectionFields({
     <>
       {hasDisc ? (
         <div key={hasDisc.key} className="client-field nx-fees-discount-field--full">
-          <div className="client-field-label">{hasDisc.label_he}</div>
+          <div className="client-field-label">{localizeSystemLabel(t, hasDisc.label_key, hasDisc.label_he)}</div>
           <FeeFieldInput f={hasDisc} value={draft[hasDisc.key]} disabled={!canEdit || !hasDisc.editable} onChange={onDraftChange} />
         </div>
       ) : null}
       {typ && amountOrPercent ? (
-        <div className="nx-fees-discount-inline-pair" dir="rtl">
+        <div className="nx-fees-discount-inline-pair" >
           <div key={typ.key} className="client-field nx-fees-discount-field--full">
-            <div className="client-field-label">{typ.label_he}</div>
+            <div className="client-field-label">{localizeSystemLabel(t, typ.label_key, typ.label_he)}</div>
             <FeeFieldInput f={typ} value={draft[typ.key]} disabled={!canEdit || !typ.editable} onChange={onDraftChange} />
           </div>
           <div key={amountOrPercent.key} className="client-field nx-fees-discount-field--full">
-            <div className="client-field-label">{amountOrPercent.label_he}</div>
+            <div className="client-field-label">{localizeSystemLabel(t, amountOrPercent.label_key, amountOrPercent.label_he)}</div>
             <FeeFieldInput
               f={amountOrPercent}
               value={draft[amountOrPercent.key]}
@@ -352,7 +453,7 @@ function DiscountSectionFields({
         </div>
       ) : typ ? (
         <div key={typ.key} className="client-field nx-fees-discount-field--full">
-          <div className="client-field-label">{typ.label_he}</div>
+          <div className="client-field-label">{localizeSystemLabel(t, typ.label_key, typ.label_he)}</div>
           <FeeFieldInput f={typ} value={draft[typ.key]} disabled={!canEdit || !typ.editable} onChange={onDraftChange} />
         </div>
       ) : null}
@@ -372,6 +473,7 @@ function RenewalSideFieldsRow({
   canEdit: boolean;
   onDraftChange: (key: string, v: unknown) => void;
 }) {
+  const { t } = useI18n();
   const fields = sectionFields(feesTab, 'fees_renewal').filter((f) => f.visible && f.editable);
   const gridTemplateColumns =
     fields.length === 0
@@ -388,7 +490,7 @@ function RenewalSideFieldsRow({
               : 'client-field nx-fees-renewal-field-cell'
           }
         >
-          <div className="client-field-label">{f.label_he}</div>
+          <div className="client-field-label">{localizeSystemLabel(t, f.label_key, f.label_he)}</div>
           <FeeFieldInput f={f} value={draft[f.key]} disabled={!canEdit || !f.editable} onChange={onDraftChange} />
         </div>
       ))}
@@ -430,6 +532,7 @@ function FeeFieldInput({
   disabled: boolean;
   onChange: (key: string, v: unknown) => void;
 }) {
+  const { t } = useI18n();
   const common = { disabled, id: `fee-f-${f.key}` };
   if (f.type === 'textarea') {
     return (
@@ -456,7 +559,7 @@ function FeeFieldInput({
               onChange={() => onChange(f.key, o.value)}
               {...common}
             />
-            <span>{o.label_he}</span>
+            <span>{feeOptLabel(t, o)}</span>
           </label>
         ))}
       </div>
@@ -473,7 +576,7 @@ function FeeFieldInput({
         <option value="">—</option>
         {f.options.map((o) => (
           <option key={o.value} value={o.value}>
-            {o.label_he}
+            {feeOptLabel(t, o)}
           </option>
         ))}
       </select>
@@ -513,7 +616,6 @@ function FeeFieldInput({
 }
 
 const FEES_HISTORY_PREVIEW_COUNT = 2;
-const FEES_HISTORY_SHOW_LESS_HE = 'הצג פחות';
 
 export function ClientFeesTab({
   clientId,
@@ -524,6 +626,7 @@ export function ClientFeesTab({
   feesTab: FeesTabModel;
   onCaseUpdated: (next: ClientOperationsCaseResponse) => void;
 }) {
+  const { t } = useI18n();
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [includedLines, setIncludedLines] = useState<Array<Record<string, unknown>>>([]);
   const [customLines, setCustomLines] = useState<Array<Record<string, unknown>>>([]);
@@ -537,9 +640,9 @@ export function ClientFeesTab({
   const v = feesTab.visibility;
   const canEdit = feesTab.permissions.can_edit;
 
-  const syncFromTab = useCallback((t: FeesTabModel) => {
+  const syncFromTab = useCallback((tab: FeesTabModel) => {
     const d: Record<string, unknown> = {};
-    for (const sec of t.edit_modal.sections) {
+    for (const sec of tab.edit_modal.sections) {
       for (const f of sec.fields) {
         if (f.type === 'radio') {
           d[f.key] = f.value === true || f.value === 'yes' ? 'yes' : f.value === false || f.value === 'no' ? 'no' : f.value;
@@ -547,8 +650,8 @@ export function ClientFeesTab({
       }
     }
     setDraft(d);
-    setIncludedLines(t.edit_modal.included_lines_editor.rows.map((r) => ({ ...r.persist_line })));
-    setCustomLines(t.edit_modal.custom_lines_editor.rows.map((r) => ({ ...r.persist_line })));
+    setIncludedLines(tab.edit_modal.included_lines_editor.rows.map((r) => ({ ...r.persist_line })));
+    setCustomLines(tab.edit_modal.custom_lines_editor.rows.map((r) => ({ ...r.persist_line })));
   }, []);
 
   useEffect(() => {
@@ -658,7 +761,6 @@ export function ClientFeesTab({
   const vatModeOptions = feesTab.vat_mode_options;
   const incHeaders = feesTab.included_services.column_headers_he;
   const custHeaders = feesTab.custom_services.column_headers_he;
-  const fxMeta = feesTab.fee_line_exchange_rate_modal;
   const curOpts = feesTab.fee_line_currency_options;
 
   const showLines = true;
@@ -793,25 +895,31 @@ export function ClientFeesTab({
         <div className="nx-fees-container">
           <p className="nx-fees-meta-strip">
             <span>
-              {feesTab.meta.updated_last_label_he} {feesTab.meta.updated_last_display_he}
+              {t('clientOperations.fees.lastUpdated')} {feesTab.meta.updated_last_display_he}
             </span>
             <span className="nx-fees-meta-sep" aria-hidden>
               {' · '}
             </span>
             <span>
-              {feesTab.meta.updated_by_label_he} {feesTab.meta.updated_by_display_he}
+              {t('clientOperations.fees.by')} {feesTab.meta.updated_by_display_he}
             </span>
           </p>
 
           <div className="nx-fees-grid">
-            <div className="nx-fees-main-col" dir="rtl">
+            <div className="nx-fees-main-col" >
               {v.show_agreement_details ? (
                 <div className="nx-fees-card">
                   <FeesWorkspaceBlockHeader
-                    title={feesTab.agreement_summary.card_title_he}
+                    title={localizeSystemLabel(t, feesTab.agreement_summary.card_title_key, feesTab.agreement_summary.card_title_he)}
                     chip={
                       feesTab.agreement_summary.status_chip ? (
-                        <span className="nx-fees-status-chip">{feesTab.agreement_summary.status_chip.label_he}</span>
+                        <span className="nx-fees-status-chip">
+                          {localizeSystemLabel(
+                            t,
+                            feesTab.agreement_summary.status_chip.label_key,
+                            feesTab.agreement_summary.status_chip.label_he,
+                          )}
+                        </span>
                       ) : null
                     }
                     canEdit={canEdit}
@@ -823,22 +931,30 @@ export function ClientFeesTab({
 
               {v.show_agreement_details && showLines ? (
                 <div className="nx-fees-card">
-                  <FeesWorkspaceBlockHeader title={incEd.section_title_he} canEdit={canEdit} onEdit={openFeesModal} />
-                  <ServicesDisplayTable section={feesTab.included_services} />
+                  <FeesWorkspaceBlockHeader
+                    title={localizeSystemLabel(t, incEd.section_title_key, incEd.section_title_he)}
+                    canEdit={canEdit}
+                    onEdit={openFeesModal}
+                  />
+                  <ServicesDisplayTable feesTab={feesTab} section={feesTab.included_services} kind="built_in" />
                 </div>
               ) : null}
 
               {v.show_agreement_details && showLines ? (
                 <div className="nx-fees-card">
-                  <FeesWorkspaceBlockHeader title={custEd.section_title_he} canEdit={canEdit} onEdit={openFeesModal} />
-                  <ServicesDisplayTable section={feesTab.custom_services} />
+                  <FeesWorkspaceBlockHeader
+                    title={localizeSystemLabel(t, custEd.section_title_key, custEd.section_title_he)}
+                    canEdit={canEdit}
+                    onEdit={openFeesModal}
+                  />
+                  <ServicesDisplayTable feesTab={feesTab} section={feesTab.custom_services} kind="custom" />
                 </div>
               ) : null}
 
               {v.show_agreement_details && v.show_price_history ? (
                 <div className="nx-fees-card" id={feesTab.price_history.section_anchor_id}>
                   <h3 className="nx-fees-card-title nx-fees-card-title--strict nx-fees-workspace-block-title-only">
-                    {feesTab.price_history.card_title_he}
+                    {localizeSystemLabel(t, feesTab.price_history.card_title_key, feesTab.price_history.card_title_he)}
                   </h3>
                   <FeesPriceHistoryChart
                     chart={feesTab.price_history.chart}
@@ -853,22 +969,24 @@ export function ClientFeesTab({
               ) : null}
             </div>
 
-            <aside className="nx-fees-side-col" dir="rtl">
+            <aside className="nx-fees-side-col" >
               {v.show_agreement_details && v.show_financial_summary ? (
                 <div className="nx-fees-card nx-fees-card--side nx-fees-rail--financial">
-                  <h3 className="nx-fees-card-title nx-fees-card-title--strict">{feesTab.financial_summary.card_title_he}</h3>
+                  <h3 className="nx-fees-card-title nx-fees-card-title--strict">
+                    {localizeSystemLabel(t, feesTab.financial_summary.card_title_key, feesTab.financial_summary.card_title_he)}
+                  </h3>
                   <div className="nx-fees-excel-summary">
                     <table className="nx-fees-excel-table">
                       <tbody>
                         {feesTab.financial_summary.primary_value_he ? (
                           <tr className="nx-fees-excel-row nx-fees-excel-row--total">
-                            <td className="nx-fees-excel-cell nx-fees-excel-cell--label">סה״כ לתשלום</td>
+                            <td className="nx-fees-excel-cell nx-fees-excel-cell--label">{t('clientOperations.fees.totalDue')}</td>
                             <td className="nx-fees-excel-cell nx-fees-excel-cell--amount">{feesTab.financial_summary.primary_value_he}</td>
                           </tr>
                         ) : null}
                         {feesTab.financial_summary.lines.map((ln, i) => (
                           <tr key={i} className={['nx-fees-excel-row', ln.emphasize ? 'nx-fees-excel-row--emph' : ''].filter(Boolean).join(' ')}>
-                            <td className="nx-fees-excel-cell nx-fees-excel-cell--label">{ln.label_he}</td>
+                            <td className="nx-fees-excel-cell nx-fees-excel-cell--label">{localizeSystemLabel(t, ln.label_key, ln.label_he)}</td>
                             <td className="nx-fees-excel-cell nx-fees-excel-cell--amount">{ln.value_he}</td>
                           </tr>
                         ))}
@@ -881,7 +999,7 @@ export function ClientFeesTab({
               {v.show_agreement_details && v.show_discount_block ? (
                 <div className="nx-fees-card nx-fees-card--side">
                   <FeesWorkspaceBlockHeader
-                    title={feesTab.discount_card.card_title_he || editModalSectionTitle(feesTab, 'fees_discount')}
+                    title={localizeSystemLabel(t, feesTab.discount_card.card_title_key, feesTab.discount_card.card_title_he) || editModalSectionTitle(feesTab, 'fees_discount', t)}
                     canEdit={canEdit}
                     onEdit={openFeesModal}
                   />
@@ -891,22 +1009,36 @@ export function ClientFeesTab({
 
               {v.show_agreement_details && v.show_renew_section ? (
                 <div className="nx-fees-card nx-fees-card--side">
-                  <FeesWorkspaceBlockHeader title={feesTab.renewal.card_title_he} canEdit={canEdit} onEdit={openFeesModal} />
+                  <FeesWorkspaceBlockHeader
+                    title={localizeSystemLabel(t, feesTab.renewal.card_title_key, feesTab.renewal.card_title_he)}
+                    canEdit={canEdit}
+                    onEdit={openFeesModal}
+                  />
                   <RenewalSummaryDisplay renewal={feesTab.renewal} />
                 </div>
               ) : null}
 
               {v.show_agreement_details && v.show_recent_history ? (
                 <div className="nx-fees-card nx-fees-card--side" id={feesTab.recent_history.view_full_link.anchor_element_id}>
-                  <h3 className="nx-fees-card-title nx-fees-card-title--strict">{feesTab.recent_history.card_title_he}</h3>
+                  <h3 className="nx-fees-card-title nx-fees-card-title--strict">{t('clientOperations.fees.changeHistory')}</h3>
                   {feesTab.recent_history.events.length === 0 ? (
-                    <div className="nx-fees-empty">{feesTab.recent_history.empty_state_he}</div>
+                    <div className="nx-fees-empty">
+                      {localizeSystemLabel(t, feesTab.recent_history.empty_state_key, feesTab.recent_history.empty_state_he)}
+                    </div>
                   ) : (
                     <ul className="nx-fees-recent-list">
                       {(recentHistoryExpanded ? feesTab.recent_history.events : feesTab.recent_history.events.slice(0, FEES_HISTORY_PREVIEW_COUNT)).map(
                         (ev, i) => (
                           <li key={i} className="nx-fees-recent-item">
-                            <div>{ev.summary_he}</div>
+                            <div>
+                              {localizeFilledLabel(
+                                t,
+                                ev.summary_key,
+                                ev.summary_he,
+                                ev.summary_params,
+                                ev.summary_param_keys,
+                              )}
+                            </div>
                             <time>{ev.occurred_at_he}</time>
                           </li>
                         )
@@ -915,7 +1047,9 @@ export function ClientFeesTab({
                   )}
                   {feesTab.recent_history.events.length > FEES_HISTORY_PREVIEW_COUNT ? (
                     <button type="button" className="nx-fees-link-like" onClick={() => setRecentHistoryExpanded((x) => !x)}>
-                      {recentHistoryExpanded ? FEES_HISTORY_SHOW_LESS_HE : feesTab.recent_history.view_full_link.label_he}
+                      {recentHistoryExpanded
+                        ? t('clientOperations.fees.showLess')
+                        : t('clientOperations.fees.viewFullHistory')}
                     </button>
                   ) : null}
                 </div>
@@ -939,18 +1073,22 @@ export function ClientFeesTab({
           <div className="nx-modal nx-fees-editor-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
               <div className="nx-modal-title-wrap">
-                <h2 className="nx-modal-title">{feesTab.edit_modal.modal_title_he}</h2>
+                <h2 className="nx-modal-title">{t('clientOperations.fees.editFees')}</h2>
               </div>
-              <button type="button" className="nx-modal-close" aria-label="סגירה" disabled={saveBusy} onClick={() => setFeesEditOpen(false)}>
+              <button type="button" className="nx-modal-close" aria-label={t('clientOperations.close')} disabled={saveBusy} onClick={() => setFeesEditOpen(false)}>
                 ×
               </button>
             </div>
             <div className="nx-modal-body nx-fees-editor-modal-body">
-              {feesTab.edit_modal.save_hint_he ? <p className="nx-fees-modal-hint">{feesTab.edit_modal.save_hint_he}</p> : null}
+              {feesTab.edit_modal.save_hint_he ? (
+                <p className="nx-fees-modal-hint">
+                  {localizeSystemLabel(t, feesTab.edit_modal.save_hint_key, feesTab.edit_modal.save_hint_he)}
+                </p>
+              ) : null}
 
               <section className="nx-fees-modal-section" aria-labelledby="fees-modal-agreement">
                 <h3 id="fees-modal-agreement" className="nx-fees-modal-section-title">
-                  {editModalSectionTitle(feesTab, 'fees_agreement')}
+                  {editModalSectionTitle(feesTab, 'fees_agreement', t)}
                 </h3>
                 <AgreementSectionFields feesTab={feesTab} draft={draft} canEdit={canEdit} onDraftChange={onDraftChange} />
               </section>
@@ -958,11 +1096,11 @@ export function ClientFeesTab({
               <section className="nx-fees-modal-section" aria-labelledby="fees-modal-inc">
                 <div className="nx-fees-modal-section-bar">
                   <h3 id="fees-modal-inc" className="nx-fees-modal-section-title">
-                    {incEd.section_title_he}
+                    {localizeSystemLabel(t, incEd.section_title_key, incEd.section_title_he)}
                   </h3>
                   {canAddInc && incEd.add_button ? (
                     <button type="button" className="nx-btn nx-btn-secondary nx-btn-taxes-compact" onClick={addIncluded}>
-                      {incEd.add_button.label_he}
+                      {localizeSystemLabel(t, incEd.add_button.label_key, incEd.add_button.label_he)}
                     </button>
                   ) : null}
                 </div>
@@ -971,8 +1109,11 @@ export function ClientFeesTab({
                     <thead>
                       <tr>
                         {incHeaders.map((h, hi) => (
-                          <th key={hi} {...(!String(h).trim() ? { 'aria-label': 'מחיקה' } : {})}>
-                            {h}
+                          <th
+                            key={hi}
+                            {...(!String(h).trim() ? { 'aria-label': t('clientOperations.delete') } : {})}
+                          >
+                            {localizeSystemLabel(t, feesTab.included_services.column_header_keys?.[hi], h)}
                           </th>
                         ))}
                       </tr>
@@ -981,13 +1122,17 @@ export function ClientFeesTab({
                       {includedLines.length === 0 ? (
                         <tr>
                           <td colSpan={incHeaders.length} className="nx-fees-empty">
-                            {feesTab.included_services.empty_state_he}
+                            {localizeSystemLabel(
+                              t,
+                              feesTab.included_services.empty_state_key,
+                              feesTab.included_services.empty_state_he,
+                            )}
                           </td>
                         </tr>
                       ) : (
                         includedLines.map((line, idx) => {
                           const rowM = feesTab.included_services.rows[idx];
-                          const delLbl = rowM?.deactivate_action?.label_he ?? 'מחיקה';
+                          const delLbl = rowM?.deactivate_action?.label_he || t('clientOperations.delete');
                           const isPayroll = String(line.catalog_code ?? '') === 'salary_by_payslips';
                           return (
                             <Fragment key={String(line.line_id ?? idx)}>
@@ -1010,7 +1155,7 @@ export function ClientFeesTab({
                                   >
                                     {feesTab.built_in_catalog.map((o) => (
                                       <option key={o.code} value={o.code}>
-                                        {o.label_he}
+                                        {feeOptLabel(t, o)}
                                       </option>
                                     ))}
                                   </select>
@@ -1027,7 +1172,7 @@ export function ClientFeesTab({
                                   >
                                     {feesTab.charging_type_options.map((o) => (
                                       <option key={o.value} value={o.value}>
-                                        {o.label_he}
+                                        {feeOptLabel(t, o)}
                                       </option>
                                     ))}
                                   </select>
@@ -1055,7 +1200,7 @@ export function ClientFeesTab({
                                     type="number"
                                     min={1}
                                     className="nx-fees-inp nx-fees-inp--table"
-                                    aria-label={L.quantity_label_he}
+                                    aria-label={t('clientOperations.fees.columns.qty')}
                                     disabled={!canEdit || isPayroll}
                                     value={line.quantity != null ? String(line.quantity) : '1'}
                                     onChange={(e) => patchIncludedLineDraft(idx, { quantity: e.target.value })}
@@ -1074,7 +1219,7 @@ export function ClientFeesTab({
                                   <div className="nx-fees-currency-cell">
                                     <select
                                       className="nx-fees-inp nx-fees-inp--table"
-                                      aria-label={L.currency_label_he}
+                                      aria-label={t('clientOperations.fees.columns.currency')}
                                       value={String(line.currency_code ?? 'ILS')}
                                       disabled={!canEdit || isPayroll}
                                     onChange={(e) => {
@@ -1084,7 +1229,7 @@ export function ClientFeesTab({
                                     >
                                       {curOpts.map((o) => (
                                         <option key={o.value} value={o.value}>
-                                          {o.label_he}
+                                          {o.value}
                                         </option>
                                       ))}
                                     </select>
@@ -1092,11 +1237,11 @@ export function ClientFeesTab({
                                       <button
                                         type="button"
                                         className="nx-fees-link-like nx-fees-rate-prompt-btn"
-                                        title={fxMeta.input_label_he}
+                                        title={t('clientOperations.fees.fxRate')}
                                         disabled={!canEdit || saveBusy}
                                         onClick={() => openFxDialog('inc', line, String(line.currency_code ?? 'ILS'))}
                                       >
-                                        {fxMeta.prompt_link_he}
+                                        {t('clientOperations.fees.fxRate')}
                                       </button>
                                     ) : null}
                                   </div>
@@ -1104,7 +1249,7 @@ export function ClientFeesTab({
                                 <td>
                                   <select
                                     className="nx-fees-inp nx-fees-inp--table"
-                                    aria-label={L.vat_mode_label_he ?? 'מצב מע"מ'}
+                                    aria-label={t('clientOperations.fees.vatMode')}
                                     value={String(line.vat_mode ?? 'before_vat')}
                                     disabled={!canEdit}
                                     onChange={(e) => {
@@ -1114,12 +1259,12 @@ export function ClientFeesTab({
                                   >
                                     {vatModeOptions.map((o) => (
                                       <option key={o.value} value={o.value}>
-                                        {o.label_he}
+                                        {feeOptLabel(t, o)}
                                       </option>
                                     ))}
                                   </select>
                                 </td>
-                                <td className="nx-fees-td-readonly" title={L.line_total_label_he}>
+                                <td className="nx-fees-td-readonly" title={t('clientOperations.fees.columns.total')}>
                                   {rowM?.line_total_display_he ?? '—'}
                                 </td>
                                 <td className="nx-fees-td-toggle">
@@ -1154,7 +1299,9 @@ export function ClientFeesTab({
                                   <td colSpan={incHeaders.length}>
                                     <div className="nx-fees-inline-pair">
                                       <div className="client-field" style={{ marginBottom: 0 }}>
-                                        <div className="client-field-label">{L.payslip_count_label_he}</div>
+                                        <div className="client-field-label">
+                                          {localizeSystemLabel(t, L.payslip_count_label_key, L.payslip_count_label_he)}
+                                        </div>
                                         <input
                                           type="number"
                                           className="nx-fees-inp nx-fees-inp--table"
@@ -1173,7 +1320,9 @@ export function ClientFeesTab({
                                         />
                                       </div>
                                       <div className="client-field" style={{ marginBottom: 0 }}>
-                                        <div className="client-field-label">{L.unit_price_label_he}</div>
+                                        <div className="client-field-label">
+                                          {localizeSystemLabel(t, L.unit_price_label_key, L.unit_price_label_he)}
+                                        </div>
                                         <input
                                           type="number"
                                           className="nx-fees-inp nx-fees-inp--table"
@@ -1207,11 +1356,11 @@ export function ClientFeesTab({
               <section className="nx-fees-modal-section" aria-labelledby="fees-modal-cust">
                 <div className="nx-fees-modal-section-bar">
                   <h3 id="fees-modal-cust" className="nx-fees-modal-section-title">
-                    {custEd.section_title_he}
+                    {localizeSystemLabel(t, custEd.section_title_key, custEd.section_title_he)}
                   </h3>
                   {canAddCust && custEd.add_button ? (
                     <button type="button" className="nx-btn nx-btn-secondary nx-btn-taxes-compact" onClick={addCustom}>
-                      {custEd.add_button.label_he}
+                      {localizeSystemLabel(t, custEd.add_button.label_key, custEd.add_button.label_he)}
                     </button>
                   ) : null}
                 </div>
@@ -1220,8 +1369,11 @@ export function ClientFeesTab({
                     <thead>
                       <tr>
                         {custHeaders.map((h, hi) => (
-                          <th key={hi} {...(!String(h).trim() ? { 'aria-label': 'מחיקה' } : {})}>
-                            {h}
+                          <th
+                            key={hi}
+                            {...(!String(h).trim() ? { 'aria-label': t('clientOperations.delete') } : {})}
+                          >
+                            {localizeSystemLabel(t, feesTab.custom_services.column_header_keys?.[hi], h)}
                           </th>
                         ))}
                       </tr>
@@ -1230,13 +1382,17 @@ export function ClientFeesTab({
                       {customLines.length === 0 ? (
                         <tr>
                           <td colSpan={custHeaders.length} className="nx-fees-empty">
-                            {feesTab.custom_services.empty_state_he}
+                            {localizeSystemLabel(
+                              t,
+                              feesTab.custom_services.empty_state_key,
+                              feesTab.custom_services.empty_state_he,
+                            )}
                           </td>
                         </tr>
                       ) : (
                         customLines.map((line, idx) => {
                           const rowM = feesTab.custom_services.rows[idx];
-                          const delLbl = rowM?.deactivate_action?.label_he ?? 'מחיקה';
+                          const delLbl = rowM?.deactivate_action?.label_he || t('clientOperations.delete');
                           return (
                             <tr key={String(line.line_id ?? idx)}>
                               <td>
@@ -1265,7 +1421,7 @@ export function ClientFeesTab({
                                 >
                                   {feesTab.charging_type_options.map((o) => (
                                     <option key={o.value} value={o.value}>
-                                      {o.label_he}
+                                      {feeOptLabel(t, o)}
                                     </option>
                                   ))}
                                 </select>
@@ -1293,7 +1449,7 @@ export function ClientFeesTab({
                                   type="number"
                                   min={1}
                                   className="nx-fees-inp nx-fees-inp--table"
-                                  aria-label={L.quantity_label_he}
+                                  aria-label={t('clientOperations.fees.columns.qty')}
                                   disabled={!canEdit}
                                   value={line.quantity != null ? String(line.quantity) : '1'}
                                   onChange={(e) => patchCustomLineDraft(idx, { quantity: e.target.value })}
@@ -1312,7 +1468,7 @@ export function ClientFeesTab({
                                 <div className="nx-fees-currency-cell">
                                   <select
                                     className="nx-fees-inp nx-fees-inp--table"
-                                    aria-label={L.currency_label_he}
+                                    aria-label={t('clientOperations.fees.columns.currency')}
                                     value={String(line.currency_code ?? 'ILS')}
                                     disabled={!canEdit}
                                     onChange={(e) => {
@@ -1322,7 +1478,7 @@ export function ClientFeesTab({
                                   >
                                     {curOpts.map((o) => (
                                       <option key={o.value} value={o.value}>
-                                        {o.label_he}
+                                        {o.value}
                                       </option>
                                     ))}
                                   </select>
@@ -1330,16 +1486,16 @@ export function ClientFeesTab({
                                     <button
                                       type="button"
                                       className="nx-fees-link-like nx-fees-rate-prompt-btn"
-                                      title={fxMeta.input_label_he}
+                                      title={t('clientOperations.fees.fxRate')}
                                       disabled={!canEdit || saveBusy}
                                       onClick={() => openFxDialog('cust', line, String(line.currency_code ?? 'ILS'))}
                                     >
-                                      {fxMeta.prompt_link_he}
+                                      {t('clientOperations.fees.fxRate')}
                                     </button>
                                   ) : null}
                                 </div>
                               </td>
-                              <td className="nx-fees-td-readonly" title={L.line_total_label_he}>
+                              <td className="nx-fees-td-readonly" title={t('clientOperations.fees.columns.total')}>
                                 {rowM?.line_total_display_he ?? '—'}
                               </td>
                               <td className="nx-fees-td-toggle">
@@ -1379,7 +1535,7 @@ export function ClientFeesTab({
 
               <section className="nx-fees-modal-section" aria-labelledby="fees-modal-discount">
                 <h3 id="fees-modal-discount" className="nx-fees-modal-section-title">
-                  {editModalSectionTitle(feesTab, 'fees_discount')}
+                  {editModalSectionTitle(feesTab, 'fees_discount', t)}
                 </h3>
                 <div className="nx-fees-side-fields nx-fees-discount-fields">
                   <DiscountSectionFields feesTab={feesTab} draft={draft} canEdit={canEdit} onDraftChange={onDraftChange} />
@@ -1388,7 +1544,7 @@ export function ClientFeesTab({
 
               <section className="nx-fees-modal-section" aria-labelledby="fees-modal-renewal">
                 <h3 id="fees-modal-renewal" className="nx-fees-modal-section-title">
-                  {feesTab.renewal.card_title_he}
+                  {localizeSystemLabel(t, feesTab.renewal.card_title_key, feesTab.renewal.card_title_he)}
                 </h3>
                 <RenewalSideFieldsRow feesTab={feesTab} draft={draft} canEdit={canEdit} onDraftChange={onDraftChange} />
               </section>
@@ -1397,7 +1553,7 @@ export function ClientFeesTab({
             </div>
             <div className="nx-modal-footer nx-tax-nested-modal-footer">
               <button type="button" className="nx-btn nx-btn-primary nx-btn-taxes-compact" disabled={saveBusy} onClick={() => void handleSave()}>
-                {saveBusy ? 'שומר…' : 'שמירה'}
+                {saveBusy ? t('clientOperations.saving') : t('clientOperations.save')}
               </button>
             </div>
           </div>
@@ -1420,16 +1576,13 @@ export function ClientFeesTab({
                 <div className="nx-modal-header">
                   <div className="nx-modal-title-wrap">
                     <h2 id="nx-fees-fx-title" className="nx-modal-title nx-fees-fx-dialog-title">
-                      {fxMeta.title_template_he.replace(
-                        '{currency}',
-                        curOpts.find((o) => o.value === fxDialog.currencyCode)?.label_he ?? fxDialog.currencyCode
-                      )}
+                      {`${t('clientOperations.fees.fxRate')} ${fxDialog.currencyCode}`}
                     </h2>
                   </div>
                   <button
                     type="button"
                     className="nx-modal-close"
-                    aria-label={fxMeta.cancel_he}
+                    aria-label={t('clientOperations.cancel')}
                     disabled={saveBusy}
                     onClick={() => setFxDialog(null)}
                   >
@@ -1438,7 +1591,7 @@ export function ClientFeesTab({
                 </div>
                 <div className="nx-modal-body">
                   <div className="client-field">
-                    <div className="client-field-label">{fxMeta.input_label_he}</div>
+                    <div className="client-field-label">{t('clientOperations.fees.fxRate')}</div>
                     <input
                       type="number"
                       className="nx-fees-inp"
@@ -1457,7 +1610,7 @@ export function ClientFeesTab({
                     disabled={saveBusy}
                     onClick={() => setFxDialog(null)}
                   >
-                    {fxMeta.cancel_he}
+                    {t('clientOperations.cancel')}
                   </button>
                   <button
                     type="button"
@@ -1465,7 +1618,7 @@ export function ClientFeesTab({
                     disabled={saveBusy}
                     onClick={() => void confirmFxRate()}
                   >
-                    {fxMeta.confirm_he}
+                    {t('clientOperations.confirm')}
                   </button>
                 </div>
               </div>

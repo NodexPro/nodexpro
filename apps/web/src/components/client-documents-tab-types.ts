@@ -5,6 +5,8 @@ export type ClientDocumentsBrandVariant = 'primary' | 'secondary' | 'neutral';
 export type ClientDocumentsTabFolderCardDto = {
   folder_id: string;
   name_he: string;
+  name_key?: string;
+  system_key?: string | null;
   document_count: number;
   last_updated_at: string | null;
   last_updated_display_he: string;
@@ -33,10 +35,15 @@ export type ClientDocumentsTabModel = {
   permissions: { can_view: boolean; can_edit: boolean };
   ui: {
     add_folder_label_he: string;
+    add_folder_label_key?: string;
     add_document_label_he: string;
+    add_document_label_key?: string;
     empty_folders_state_he: string;
+    empty_folders_state_key?: string;
     empty_documents_state_he: string;
+    empty_documents_state_key?: string;
     tab_title_he: string;
+    tab_title_key?: string;
   };
   folders_grid: {
     columns_per_row: 3;
@@ -45,6 +52,7 @@ export type ClientDocumentsTabModel = {
   open_folder: null | {
     folder_id: string;
     folder_name_he: string;
+    folder_name_key?: string;
     documents: ClientDocumentsTabDocumentRowDto[];
   };
   file_open_path_template: string;

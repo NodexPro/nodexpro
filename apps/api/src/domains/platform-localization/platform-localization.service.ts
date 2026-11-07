@@ -37,6 +37,7 @@ const LOCALIZATION_COMMANDS = new Set([
 ]);
 
 let catalogSeeded = false;
+let catalogSeedInFlight: Promise<void> | null = null;
 let catalogKeysCache: Array<{ key: string; source_en: string; module_group: string }> | null = null;
 let languagesCache: LanguageRow[] | null = null;
 
@@ -115,13 +116,21 @@ async function loadCatalogKeys(force = false): Promise<Array<{ key: string; sour
 
 async function ensureCatalogSeeded(): Promise<void> {
   if (catalogSeeded) return;
-  const existing = await loadCatalogKeys();
-  if (existing.length >= Object.keys(CANONICAL_SOURCE_EN).length) {
+  if (catalogSeedInFlight) return catalogSeedInFlight;
+  catalogSeedInFlight = (async () => {
+    const existing = await loadCatalogKeys();
+    if (existing.length >= Object.keys(CANONICAL_SOURCE_EN).length) {
+      catalogSeeded = true;
+      return;
+    }
+    await syncCanonicalCatalogInternal(null);
     catalogSeeded = true;
-    return;
+  })();
+  try {
+    await catalogSeedInFlight;
+  } finally {
+    catalogSeedInFlight = null;
   }
-  await syncCanonicalCatalogInternal(null);
-  catalogSeeded = true;
 }
 
 async function syncCanonicalCatalogInternal(actorUserId: string | null): Promise<number> {
@@ -322,13 +331,18 @@ async function languageWorkspace(locale: string, preloaded?: { languages?: Langu
   };
 }
 
-export async function buildPublishedLocalizationOptions() {
-  await ensureCatalogSeeded();
+/** Published language/currency options for session commands. Does not seed the translation catalog. */
+export async function loadPublishedLocalizationOptions() {
   const [currencies, languages] = await Promise.all([loadCurrencies(), loadLanguages()]);
   return {
     currencies: publishedCurrencyOptions(currencies),
     languages: publishedLanguageOptions(languages),
   };
+}
+
+export async function buildPublishedLocalizationOptions() {
+  await ensureCatalogSeeded();
+  return loadPublishedLocalizationOptions();
 }
 
 export async function buildUserLocalizationAggregate(

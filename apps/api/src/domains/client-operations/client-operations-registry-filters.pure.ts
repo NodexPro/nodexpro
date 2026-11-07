@@ -9,6 +9,10 @@
  */
 
 import type { MaterialCells } from './client-operations-operational-period.pure.js';
+import {
+  registryFilterLabelKey,
+  registryFilterOptionLabelKey,
+} from './client-operations-ui-labels.pure.js';
 
 /** Hebrew profile values — same as client-operations-client-core / ALLOWED_BUSINESS_TYPES. */
 const BUSINESS_TYPE_OSEK_PATUR = 'עוסק פטור';
@@ -96,6 +100,8 @@ export type ClientOperationsRegistryFilterId =
 export type ClientOperationsRegistryFilterOption = {
   id: string;
   label_he: string;
+  /** Present for system options. Handler display names are user data and omit this. */
+  label_key?: string;
   enabled: boolean;
 };
 
@@ -104,6 +110,7 @@ export type ClientOperationsRegistryFilterSelectionMode = 'single' | 'multi';
 export type ClientOperationsRegistryFilterDefinition = {
   id: ClientOperationsRegistryFilterId;
   label_he: string;
+  label_key?: string;
   /** Layout hint for FE strip (backend-owned presentation). */
   width_hint: 'default' | 'wide' | 'handler';
   /** `multi` = OR within the facet; `single` = one token. */
@@ -127,6 +134,7 @@ export type ClientOperationsRegistryFiltersContract = {
   clear_action: {
     id: 'clear_filters';
     label_he: 'נקה סינון';
+    label_key?: string;
     available: boolean;
   };
 };
@@ -548,12 +556,20 @@ export function buildClientOperationsRegistryFiltersContract(input: {
   ];
 
   return {
-    definitions,
+    definitions: definitions.map((definition) => ({
+      ...definition,
+      label_key: registryFilterLabelKey(definition.id),
+      options: definition.options.map((option) => {
+        const label_key = registryFilterOptionLabelKey(option.id);
+        return label_key ? { ...option, label_key } : option;
+      }),
+    })),
     active: input.active,
     any_business_filter_active: anyActive,
     clear_action: {
       id: 'clear_filters',
       label_he: 'נקה סינון',
+      label_key: registryFilterLabelKey('clear_filters'),
       available: anyActive,
     },
   };

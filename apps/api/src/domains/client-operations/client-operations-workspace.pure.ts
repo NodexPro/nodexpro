@@ -8,6 +8,7 @@ import {
   roleHasOfficeClientAccess,
   type OrganizationClientAccessScopeKind,
 } from './organization-client-access.pure.js';
+import { CO_UI } from './client-operations-ui-labels.pure.js';
 
 export type ClientOperationsWorkspaceScopeKind = 'OFFICE' | 'MY' | 'STAFF';
 
@@ -16,6 +17,7 @@ export type ClientOperationsWorkspaceOption = {
   /** Present for STAFF options and for MY when rendering as self subject. */
   subject_user_id: string | null;
   label_he: string;
+  label_key?: string;
   role_code: string | null;
 };
 
@@ -81,6 +83,7 @@ export function buildOfficeWorkspaceOption(): ClientOperationsWorkspaceOption {
     scope_kind: 'OFFICE',
     subject_user_id: null,
     label_he: 'כל המשרד',
+    label_key: CO_UI.workspace.office,
     role_code: null,
   };
 }
@@ -90,6 +93,7 @@ export function buildMyWorkspaceOption(): ClientOperationsWorkspaceOption {
     scope_kind: 'MY',
     subject_user_id: null,
     label_he: 'הלקוחות שלי',
+    label_key: CO_UI.workspace.myClients,
     role_code: null,
   };
 }
@@ -123,5 +127,9 @@ export function buildWorkspaceSelectorOptions(params: {
   const isOwner = String(params.roleCode ?? '').trim().toLowerCase() === 'owner';
   return params.allowedScopes
     .filter((o) => !(isOwner && o.scope_kind === 'MY' && params.selectedScopeKind !== 'MY'))
-    .map((o) => (isOwner && o.scope_kind === 'OFFICE' ? { ...o, label_he: WORKSPACE_SELECTOR_OFFICE_LABEL_HE } : o));
+    .map((o) =>
+      isOwner && o.scope_kind === 'OFFICE'
+        ? { ...o, label_he: WORKSPACE_SELECTOR_OFFICE_LABEL_HE, label_key: CO_UI.workspace.officeShort }
+        : o,
+    );
 }

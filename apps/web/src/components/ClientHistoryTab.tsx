@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { apiJson, apiPostDownload, userFacingApiMessage } from '../api/client';
 import { moduleClientOperationsHistoryCommands, moduleClientOperationsHistoryExport } from '../api/endpoints';
+import { useI18n } from '../i18n/I18nProvider';
+import { fillI18n, localizeFilledLabel, localizeSystemLabel } from '../lib/co-display-label.pure';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
 import type { ClientHistorySectionKey, ClientHistoryTabModel } from './client-history-tab-types';
 import '../styles/nx-fees-tab.css';
@@ -17,32 +19,65 @@ const HISTORY_SECTION_PAIR_ROWS: ClientHistorySectionKey[][] = [
   ['documents', 'history_system'],
 ];
 
+const HISTORY_RETENTION_MONTHS = 12;
+
+function formatHistoryOccurredAt(iso: string, lang: string, fallbackHe: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return fallbackHe || iso;
+  try {
+    return new Intl.DateTimeFormat(lang === 'he' ? 'he-IL' : 'en-GB', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    }).format(d);
+  } catch {
+    return fallbackHe || iso;
+  }
+}
+
+function historyEventSummary(
+  t: (key: string) => string,
+  ev: {
+    summary_he: string;
+    summary_key?: string;
+    summary_params?: Record<string, string | number>;
+    summary_param_keys?: Record<string, string>;
+  },
+): string {
+  if (!ev.summary_key) return ev.summary_he;
+  return localizeFilledLabel(t, ev.summary_key, ev.summary_he, ev.summary_params, ev.summary_param_keys);
+}
+
 function HistorySectionOverviewCard({
   sec,
-  emptyStateHe,
+  emptyState,
   busy,
   onOpenSection,
 }: {
   sec: ClientHistoryTabModel['sections'][number];
-  emptyStateHe: string;
+  emptyState: string;
   busy: boolean;
   onOpenSection: (key: ClientHistorySectionKey) => void;
 }) {
+  const { t, lang } = useI18n();
   return (
     <article className="nx-history-section-card">
       <div className="nx-history-section-head">
-        <h3 className="nx-fees-card-title nx-fees-card-title--strict">{sec.title_he}</h3>
-        <span className="nx-history-count-badge">{`${sec.total_events_in_last_12_months} אירועים`}</span>
+        <h3 className="nx-fees-card-title nx-fees-card-title--strict">
+          {localizeSystemLabel(t, sec.title_key, sec.title_he)}
+        </h3>
+        <span className="nx-history-count-badge">
+          {fillI18n(t('clientOperations.history.eventsCount'), { count: sec.total_events_in_last_12_months })}
+        </span>
       </div>
       {sec.latest_events.length === 0 ? (
-        <p className="nx-history-section-empty">{emptyStateHe}</p>
+        <p className="nx-history-section-empty">{emptyState}</p>
       ) : (
         <div className="nx-history-events">
           {sec.latest_events.map((ev) => (
             <div key={ev.event_id} className="nx-history-event">
-              <p className="nx-history-event-summary">{ev.summary_he}</p>
+              <p className="nx-history-event-summary">{historyEventSummary(t, ev)}</p>
               <p className="nx-history-event-meta">
-                {ev.occurred_display_he}
+                {formatHistoryOccurredAt(ev.occurred_at, lang, ev.occurred_display_he)}
                 {ev.actor_display_name ? ` · ${ev.actor_display_name}` : ''}
               </p>
             </div>
@@ -52,7 +87,7 @@ function HistorySectionOverviewCard({
       {sec.can_open ? (
         <div className="nx-history-section-foot">
           <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy} onClick={() => void onOpenSection(sec.section_key)}>
-            כל הפעולות בסקציה
+            {t('clientOperations.history.allInSection')}
           </button>
         </div>
       ) : null}
@@ -69,6 +104,7 @@ export function ClientHistoryTab({
   historyTab: ClientHistoryTabModel;
   onCaseUpdated: (next: ClientOperationsCaseResponse) => void;
 }) {
+  const { t, lang } = useI18n();
   const [busy, setBusy] = useState(false);
   const [exportBusy, setExportBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -126,9 +162,9 @@ export function ClientHistoryTab({
       const defaultName = format === 'excel' ? 'history-report.csv' : 'history-report.pdf';
       await apiPostDownload(moduleClientOperationsHistoryExport(clientId), body, defaultName);
       if (format === 'excel') {
-        setExportOkHe('הקובץ הורד — ניתן לפתוח אותו באקסל.');
+        setExportOkHe(t('clientOperations.history.excelDownloaded'));
       } else {
-        setExportOkHe('דוח ה-PDF הורד למחשב.');
+        setExportOkHe(t('clientOperations.history.pdfDownloaded'));
       }
     } catch (e) {
       setErr(userFacingApiMessage(e));
@@ -139,15 +175,22 @@ export function ClientHistoryTab({
 
   const pairedKeys = new Set(HISTORY_SECTION_PAIR_ROWS.flat());
   const restSections = historyTab.sections.filter((s) => !pairedKeys.has(s.section_key));
+  const emptyState = localizeSystemLabel(t, historyTab.ui.empty_state_key, historyTab.ui.empty_state_he);
 
   return (
     <div className="nx-history-root nx-ws-history">
       <header className="nx-history-hero">
         <div className="nx-history-hero-top">
           <div>
-            <h2 className="nx-history-title">{historyTab.ui.title_he}</h2>
-            <p className="nx-history-retention">{historyTab.ui.retention_notice_he}</p>
-            <p className="nx-history-todo">{historyTab.ui.retention_archival_todo_he}</p>
+            <h2 className="nx-history-title">{localizeSystemLabel(t, historyTab.ui.title_key, historyTab.ui.title_he)}</h2>
+            <p className="nx-history-retention">
+              {fillI18n(localizeSystemLabel(t, historyTab.ui.retention_notice_key, historyTab.ui.retention_notice_he), {
+                n: HISTORY_RETENTION_MONTHS,
+              })}
+            </p>
+            <p className="nx-history-todo">
+              {localizeSystemLabel(t, historyTab.ui.retention_archival_todo_key, historyTab.ui.retention_archival_todo_he)}
+            </p>
           </div>
           <div className="nx-history-hero-actions nx-history-hero-export-actions">
             {historyTab.permissions.can_export ? (
@@ -158,7 +201,7 @@ export function ClientHistoryTab({
                   disabled={exportBusy}
                   onClick={() => void downloadReport('excel', 'overview')}
                 >
-                  {exportBusy ? 'מכין קובץ…' : 'ייצוא לאקסל'}
+                  {exportBusy ? t('clientOperations.history.preparingFile') : t('clientOperations.history.exportExcel')}
                 </button>
                 <button
                   type="button"
@@ -166,19 +209,19 @@ export function ClientHistoryTab({
                   disabled={exportBusy}
                   onClick={() => void downloadReport('pdf', 'overview')}
                 >
-                  הפקת דוח PDF
+                  {t('clientOperations.history.pdfReport')}
                 </button>
               </>
             ) : null}
           </div>
         </div>
-        <div className="nx-history-period-bar" aria-label="סינון תקופה לפתיחת סקציה">
+        <div className="nx-history-period-bar" aria-label={t('clientOperations.history.periodFilter')}>
           <label className="nx-history-period-field">
-            <span>מ-</span>
+            <span>{t('clientOperations.history.from')}</span>
             <input type="date" className="nx-fees-inp" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
           </label>
           <label className="nx-history-period-field">
-            <span>עד</span>
+            <span>{t('clientOperations.history.to')}</span>
             <input type="date" className="nx-fees-inp" value={toDate} onChange={(e) => setToDate(e.target.value)} />
           </label>
         </div>
@@ -201,14 +244,16 @@ export function ClientHistoryTab({
                 <div className="nx-modal-header">
                   <div className="nx-modal-title-wrap">
                     <h2 id="nx-history-section-modal-title" className="nx-modal-title">
-                      {open.title_he}
+                      {localizeSystemLabel(t, open.title_key, open.title_he)}
                     </h2>
                     <p className="nx-history-modal-meta">
-                      {`סה\u05F4כ באירועים מסוננים: ${open.total_count}`}
-                      {open.events.length < open.total_count ? ` · מוצגות עד ${open.events.length}` : null}
+                      {fillI18n(t('clientOperations.history.filteredTotal'), { count: open.total_count })}
+                      {open.events.length < open.total_count
+                        ? fillI18n(t('clientOperations.history.showingUpTo'), { count: open.events.length })
+                        : null}
                     </p>
                   </div>
-                  <button type="button" className="nx-modal-close" aria-label="סגירה" disabled={busy} onClick={closeSectionModal}>
+                  <button type="button" className="nx-modal-close" aria-label={t('clientOperations.close')} disabled={busy} onClick={closeSectionModal}>
                     ×
                   </button>
                 </div>
@@ -225,9 +270,9 @@ export function ClientHistoryTab({
                   ) : null}
                   {open.events.map((ev) => (
                     <div key={ev.event_id} className="nx-history-event">
-                      <p className="nx-history-event-summary">{ev.summary_he}</p>
+                      <p className="nx-history-event-summary">{historyEventSummary(t, ev)}</p>
                       <p className="nx-history-event-meta">
-                        {ev.occurred_display_he}
+                        {formatHistoryOccurredAt(ev.occurred_at, lang, ev.occurred_display_he)}
                         {ev.actor_display_name ? ` · ${ev.actor_display_name}` : ''}
                       </p>
                     </div>
@@ -242,7 +287,7 @@ export function ClientHistoryTab({
                         disabled={exportBusy}
                         onClick={() => void downloadReport('excel', 'detail')}
                       >
-                        {exportBusy ? 'מכין קובץ…' : 'ייצוא לאקסל'}
+                        {exportBusy ? t('clientOperations.history.preparingFile') : t('clientOperations.history.exportExcel')}
                       </button>
                       <button
                         type="button"
@@ -250,7 +295,7 @@ export function ClientHistoryTab({
                         disabled={exportBusy}
                         onClick={() => void downloadReport('pdf', 'detail')}
                       >
-                        הפקת דוח PDF
+                        {t('clientOperations.history.pdfReport')}
                       </button>
                     </>
                   ) : null}
@@ -284,7 +329,7 @@ export function ClientHistoryTab({
                 <HistorySectionOverviewCard
                   key={sec.section_key}
                   sec={sec}
-                  emptyStateHe={historyTab.ui.empty_state_he}
+                  emptyState={emptyState}
                   busy={busy}
                   onOpenSection={(key) => void openSection(key)}
                 />
@@ -296,7 +341,7 @@ export function ClientHistoryTab({
           <HistorySectionOverviewCard
             key={sec.section_key}
             sec={sec}
-            emptyStateHe={historyTab.ui.empty_state_he}
+            emptyState={emptyState}
             busy={busy}
             onOpenSection={(key) => void openSection(key)}
           />

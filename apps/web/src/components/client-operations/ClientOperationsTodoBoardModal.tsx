@@ -36,6 +36,7 @@ import {
 } from '../../lib/client-operations-todo-progress-note-autosave.pure';
 import { ClientOperationsTodoClientPicker } from './ClientOperationsTodoClientPicker';
 import { useI18n } from '../../i18n/I18nProvider';
+import { localizeSystemLabel } from '../../lib/co-display-label.pure';
 import { ClientOperationsTodoCompleteModal } from './ClientOperationsTodoCompleteModal';
 import {
   ClientOperationsTodoNotePopover,
@@ -72,6 +73,7 @@ export type ClientOperationsTodoBoardAggregate = {
   workspace?: {
     scope_kind: string;
     label_he: string;
+    label_key?: string;
     workspace_subject_user_id: string | null;
     selector_visible?: boolean;
   };
@@ -102,7 +104,7 @@ export type ClientOperationsTodoBoardAggregate = {
 
 export type ClientOperationsTodoArchiveAggregate = {
   title_he?: string;
-  workspace?: { label_he: string };
+  workspace?: { label_he: string; label_key?: string };
   summary?: { archive_total: number; page_size: number };
   pagination?: {
     page: number;
@@ -126,6 +128,7 @@ type Props = {
   onClose: () => void;
   workspaceQuery: ClientOperationsTodoWorkspaceQuery;
   workspaceLabelHe: string | null;
+  workspaceLabelKey?: string | null;
   canEdit: boolean;
 };
 
@@ -141,6 +144,7 @@ export function ClientOperationsTodoBoardModal({
   onClose,
   workspaceQuery: workspaceQueryProp,
   workspaceLabelHe,
+  workspaceLabelKey,
   canEdit,
 }: Props) {
   const { t, lang } = useI18n();
@@ -433,7 +437,11 @@ export function ClientOperationsTodoBoardModal({
   const lanes = groupTodosByPriorityLane(board?.tasks ?? []);
   const allowed = board?.allowed_actions ?? [];
   const canCreate = canEdit && allowed.includes('create_client_operations_todo');
-  const label = board?.workspace?.label_he ?? workspaceLabelHe ?? '';
+  const label = localizeSystemLabel(
+    t,
+    board?.workspace?.label_key ?? workspaceLabelKey,
+    board?.workspace?.label_he ?? workspaceLabelHe ?? '',
+  );
   const totalPages = board?.pagination?.total_pages ?? 1;
   const activeTotal = board?.summary?.active_total ?? board?.tasks?.length ?? 0;
 
@@ -1191,7 +1199,7 @@ function TodoFormModal(props: {
             </label>
           )}
           <label className="nx-co-todo-form__field">
-            <span>ת.ז./ח.פ.</span>
+            <span>{t('clientOperations.todo.taxId')}</span>
             {/* Canonical client: read-only, shown from Core. One-time client: optional manual value. */}
             <input
               type="text"
@@ -1308,7 +1316,7 @@ function TodoFormModal(props: {
                 })();
               }}
             >
-              סמן כהושלם
+              {t('clientOperations.todo.markComplete')}
             </button>
           ) : null}
         </div>

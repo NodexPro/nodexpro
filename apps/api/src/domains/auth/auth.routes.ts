@@ -566,10 +566,10 @@ router.post('/commands/select_active_organization', authMiddleware, async (req, 
 router.post('/commands/set_ui_language', authMiddleware, async (req, res, next) => {
   try {
     const languageCode = String(req.body?.language_code ?? '').trim();
-    const { buildPublishedLocalizationOptions } = await import('../platform-localization/platform-localization.service.js');
+    const { loadPublishedLocalizationOptions } = await import('../platform-localization/platform-localization.service.js');
     let allowedLocales = ['en', 'he'];
     try {
-      const published = await buildPublishedLocalizationOptions();
+      const published = await loadPublishedLocalizationOptions();
       const publishedLocales = published.languages.map((row) => row.locale);
       if (publishedLocales.length) allowedLocales = publishedLocales;
     } catch {

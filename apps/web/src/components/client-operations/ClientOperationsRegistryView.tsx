@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from 'react-dom';
 import { apiFetch, apiJson, ApiError, userFacingApiMessage } from '../../api/client';
 import { localizeClientOperationsRegistryCommandError } from '../../lib/client-operations-registry-command-error.pure';
+import { localizeSystemLabel } from '../../lib/co-display-label.pure';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../i18n/I18nProvider';
 import {
@@ -241,6 +242,7 @@ export type ClientOperationsRegistryRow = {
   vat_due_registry_display_he: string | null;
   /** Ready-to-render display by column key (from aggregate). */
   cells?: Record<string, string>;
+  cell_label_keys?: Record<string, string>;
   /** Backend-owned manual paint status capabilities per column key. */
   manual_cell_statuses?: Record<
     string,
@@ -274,6 +276,7 @@ export type ClientOperationsNoteTypeRow = {
 export type ClientOperationsRegistryColumn = {
   key: string;
   label: string;
+  label_key?: string;
   cell_kind: 'folder' | 'text' | 'notes' | 'custom' | 'checkbox' | 'operational_date';
   value_field: string | null;
   data_type?: 'text' | 'number' | 'date' | 'boolean';
@@ -295,8 +298,10 @@ export type ClientOperationsRegistryColumn = {
 export type ClientOperationsToolbarCapability = {
   id: string;
   label_he: string;
+  label_key?: string;
   available: boolean;
   reason_he: string | null;
+  reason_key?: string | null;
   group: 'history' | 'query' | 'format' | 'structure' | 'more';
 };
 
@@ -312,7 +317,16 @@ type OperationalNoteRow = {
 
 type ConflictPayload = {
   code: string;
-  ui: { title_he: string; message_he: string; button_create_anyway_he: string; button_change_time_he: string };
+  ui: {
+    title_he: string;
+    title_key?: string;
+    message_he: string;
+    message_key?: string;
+    button_create_anyway_he: string;
+    button_create_anyway_key?: string;
+    button_change_time_he: string;
+    button_change_time_key?: string;
+  };
   conflicts: Array<{
     client_display_name: string | null;
     body_preview: string;
@@ -320,6 +334,13 @@ type ConflictPayload = {
     reminder_at: string;
   }>;
 };
+
+function operationalNoteTypeLabel(t: (key: string) => string, typeCode: string, fallbackHe: string): string {
+  if (typeCode === 'call' || typeCode === 'reminder' || typeCode === 'greeting') {
+    return localizeSystemLabel(t, `clientOperations.notes.${typeCode}`, fallbackHe);
+  }
+  return fallbackHe;
+}
 
 type CellPresentation = {
   align?: 'right' | 'center' | 'left';
@@ -419,7 +440,11 @@ function displayCustomColumnValue(r: ClientOperationsRegistryRow, col: ClientOpe
   return formatCustomExcelCellDisplay(r.cells?.[col.key]);
 }
 
-function displayForColumn(r: ClientOperationsRegistryRow, col: ClientOperationsRegistryColumn): string {
+function displayForColumn(
+  r: ClientOperationsRegistryRow,
+  col: ClientOperationsRegistryColumn,
+  t?: (key: string) => string,
+): string {
   const value = r.cells?.[col.key];
   // PCN: empty string means not PCN (must not coerce to em-dash).
   if (col.key === 'pcn') {
@@ -429,7 +454,18 @@ function displayForColumn(r: ClientOperationsRegistryRow, col: ClientOperationsR
   // User Excel columns must stay blank when empty — system columns keep dash semantics.
   if (col.cell_kind === 'custom') return displayCustomColumnValue(r, col);
   if (value == null || value === '') return '—';
+  if (t) {
+    return localizeSystemLabel(t, r.cell_label_keys?.[col.key], value);
+  }
   return value;
+}
+
+function systemColumnHeaderLabel(
+  column: ClientOperationsRegistryColumn,
+  t: (key: string) => string,
+): string {
+  if (!column.system) return column.label;
+  return localizeSystemLabel(t, column.label_key, column.label);
 }
 
 function fillI18n(template: string, vars: Record<string, string>): string {
@@ -494,6 +530,7 @@ export type ClientOperationsRegistryViewProps = {
   manualStatusPaintModes?: Array<{
     id: 'ready' | 'sent_for_approval' | 'completed' | 'clear';
     label_he: string;
+    label_key?: string;
     presentation_token: 'ready' | 'sent_for_approval' | 'completed' | 'clear';
   }>;
   /** Backend-owned filter bar contract — FE renders only. */
@@ -501,9 +538,10 @@ export type ClientOperationsRegistryViewProps = {
     definitions: Array<{
       id: string;
       label_he: string;
+      label_key?: string;
       width_hint?: 'default' | 'wide' | 'handler';
       selection_mode?: 'single' | 'multi';
-      options: Array<{ id: string; label_he: string; enabled: boolean }>;
+      options: Array<{ id: string; label_he: string; label_key?: string; enabled: boolean }>;
     }>;
     active: {
       operational_reporting: string;
@@ -514,7 +552,7 @@ export type ClientOperationsRegistryViewProps = {
       handler: string;
     };
     any_business_filter_active: boolean;
-    clear_action: { id: string; label_he: string; available: boolean };
+    clear_action: { id: string; label_he: string; label_key?: string; available: boolean };
   };
   /** Stage 4 — backend-owned workspace projection (selector from allowed_scopes only). */
   workspace?: {
@@ -523,10 +561,12 @@ export type ClientOperationsRegistryViewProps = {
     workspace_subject_user_id: string | null;
     access_scope_key: string;
     label_he: string;
+    label_key?: string;
     allowed_scopes: Array<{
       scope_kind: 'OFFICE' | 'MY' | 'STAFF';
       subject_user_id: string | null;
       label_he: string;
+      label_key?: string;
       role_code: string | null;
     }>;
     available_workspace_subjects: Array<{
@@ -539,6 +579,7 @@ export type ClientOperationsRegistryViewProps = {
       scope_kind: 'OFFICE' | 'MY' | 'STAFF';
       subject_user_id: string | null;
       label_he: string;
+      label_key?: string;
     }>;
     /** Backend presentation flag: assigned-handler column / filter is shown in the office workspace only. */
     show_handler?: boolean;
@@ -1391,7 +1432,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const capTitle = (id: string) => {
     const c = capById.get(id);
     if (!c) return undefined;
-    return c.available ? c.label_he : `${c.label_he}: ${c.reason_he ?? t('clientOperations.unavailable')}`;
+    const label = localizeSystemLabel(t, c.label_key, c.label_he);
+    if (c.available) return label;
+    const reason = localizeSystemLabel(t, c.reason_key, c.reason_he ?? t('clientOperations.unavailable'));
+    return `${label}: ${reason}`;
   };
   const widthForColumn = (col: ClientOperationsRegistryColumn) =>
     columnWidths[col.key] ?? col.default_width_px ?? (col.cell_kind === 'folder' ? 44 : col.cell_kind === 'custom' ? 140 : 110);
@@ -1612,7 +1656,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     if (!clientId) return '';
     const row = rowsRef.current.find((r) => r.client_id === clientId);
     if (!row) return '';
-    return displayForColumn(row, meta.column);
+    return displayForColumn(row, meta.column, t);
   };
 
   const clearCustomCellDebounce = (key: string) => {
@@ -1721,7 +1765,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               const aggregateRow = Array.isArray(data?.rows)
                 ? data.rows.find((r) => r.client_id === start.identity.clientId)
                 : undefined;
-              return aggregateRow ? displayForColumn(aggregateRow, meta.column) : start.value;
+              return aggregateRow ? displayForColumn(aggregateRow, meta.column, t) : start.value;
             })();
 
       const { startNext, applyAggregateRecommended } = completeCustomCellSaveSuccess(
@@ -2329,7 +2373,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           .map((col) => {
             const statusToken = r.manual_cell_statuses?.[col.key]?.presentation_token ?? null;
             const statusClass = statusToken ? ` is-manual-status-${statusToken}` : '';
-            const value = escapeHtml(displayForColumn(r, col));
+            const value = escapeHtml(displayForColumn(r, col, t));
             return `<td class="${statusClass}">${value}</td>`;
           })
           .join('');
@@ -2407,7 +2451,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
   const editCustomCell = async (row: ClientOperationsRegistryRow, column: ClientOperationsRegistryColumn) => {
     if (!canEdit || !column.editable || !column.custom_column_id || !onRegistryCommand) return;
-    const current = displayForColumn(row, column);
+    const current = displayForColumn(row, column, t);
     const value = window.prompt(column.label.trim() || t('clientOperations.value'), current);
     if (value === null) return;
     setCommandError('');
@@ -3006,8 +3050,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                         type="button"
                         className="nx-co-sheet__color-swatch"
                         style={{ background: swatch.hex }}
-                        title={swatch.label_he}
-                        aria-label={swatch.label_he}
+                        title={localizeSystemLabel(t, swatch.label_key, swatch.label_he)}
+                        aria-label={localizeSystemLabel(t, swatch.label_key, swatch.label_he)}
                         onMouseDown={preserveActiveCellOnToolbarMouseDown}
                         onClick={() => {
                           commitPresentationOrToolDefault({ color: swatch.hex });
@@ -3076,11 +3120,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 className={`nx-co-sheet__status-mode nx-co-sheet__status-mode--${mode.presentation_token}${statusPaintMode === mode.id ? ' is-active' : ''}`}
                 disabled={!canEdit}
                 aria-pressed={statusPaintMode === mode.id}
-                title={mode.label_he}
+                title={localizeSystemLabel(t, mode.label_key, mode.label_he)}
                 onClick={() => setStatusPaintMode((current) => (current === mode.id ? null : mode.id))}
               >
                 <span className="nx-co-sheet__status-mode-swatch" aria-hidden="true" />
-                <span>{mode.label_he}</span>
+                <span>{localizeSystemLabel(t, mode.label_key, mode.label_he)}</span>
               </button>
             ))}
           </div>
@@ -3143,12 +3187,12 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               aria-hidden="true"
               onClick={() => setMoreOpen((v) => !v)}
             >
-              עוד…
+              {t('clientOperations.more')}
             </button>
             {moreOpen ? (
               <div className="nx-co-sheet__more-menu">
                 <label className="nx-co-sheet__btn" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  צבע רקע
+                  {t('clientOperations.fillColor')}
                   <input
                     className="nx-co-sheet__color"
                     type="color"
@@ -3253,11 +3297,14 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             if (isMulti) {
               return (
                 <div key={def.id} className={controlClass} data-filter-id={def.id}>
-                  <span className="nx-co-sheet__filter-label">{def.label_he}</span>
+                  <span className="nx-co-sheet__filter-label">{localizeSystemLabel(t, def.label_key, def.label_he)}</span>
                   <ClientOperationsMultiSelectFilter
                     filterId={def.id}
-                    labelHe={def.label_he}
-                    options={def.options}
+                    labelHe={localizeSystemLabel(t, def.label_key, def.label_he)}
+                    options={def.options.map((opt) => ({
+                      ...opt,
+                      label_he: localizeSystemLabel(t, opt.label_key, opt.label_he),
+                    }))}
                     value={selected}
                     disabled={!onQueryChange}
                     onChange={(nextCsv: string) => applyBusinessFilterChange(def.id, nextCsv)}
@@ -3271,18 +3318,18 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 className={controlClass}
                 data-filter-id={def.id}
               >
-                <span className="nx-co-sheet__filter-label">{def.label_he}</span>
+                <span className="nx-co-sheet__filter-label">{localizeSystemLabel(t, def.label_key, def.label_he)}</span>
                 <select
                   className="nx-co-sheet__filter-select"
                   value={selected}
                   disabled={!onQueryChange}
-                  title={def.label_he}
-                  aria-label={def.label_he}
+                  title={localizeSystemLabel(t, def.label_key, def.label_he)}
+                  aria-label={localizeSystemLabel(t, def.label_key, def.label_he)}
                   onChange={(e) => applyBusinessFilterChange(def.id, e.target.value)}
                 >
                   {def.options.map((opt) => (
                     <option key={opt.id} value={opt.id} disabled={opt.enabled === false}>
-                      {opt.label_he}
+                      {localizeSystemLabel(t, opt.label_key, opt.label_he)}
                     </option>
                   ))}
                 </select>
@@ -3293,10 +3340,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             type="button"
             className="nx-co-sheet__filter-clear"
             disabled={!onQueryChange || !clearAvailable}
-            title={filters.clear_action?.label_he ?? t('clientOperations.clearFilter')}
+            title={localizeSystemLabel(t, filters.clear_action?.label_key, filters.clear_action?.label_he ?? t('clientOperations.clearFilter'))}
             onClick={clearBusinessFilters}
           >
-            {filters.clear_action?.label_he ?? t('clientOperations.clearFilter')}
+            {localizeSystemLabel(t, filters.clear_action?.label_key, filters.clear_action?.label_he ?? t('clientOperations.clearFilter'))}
           </button>
         </div>
       </div>
@@ -3329,7 +3376,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       );
     }
     if (col.cell_kind === 'notes') {
-      const text = displayForColumn(r, col);
+      const text = displayForColumn(r, col, t);
       return (
         <button
           type="button"
@@ -3405,7 +3452,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         );
       }
       const value = operationalCell.operational_target_date ?? '';
-      const displayValue = displayForColumn(r, col);
+      const displayValue = displayForColumn(r, col, t);
       const disabled = !canEdit || !col.editable || !operationalCell.editable || !onRegistryCommand;
       const dateInputId = `co-date-${col.key}-${r.client_id}`;
       const dateInputName = `co_${col.key}_operational_target_date`;
@@ -3485,17 +3532,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       }> = [
         {
           key: 'vat',
-          labelHe: 'מע״מ',
+          labelHe: t('clientOperations.registry.columns.vat'),
           cell: r.material_cells?.vat ?? r.material_brought_cell,
         },
         {
           key: 'income_tax_advance',
-          labelHe: 'מה״כ',
+          labelHe: t('clientOperations.registry.columns.incomeTaxAdvance'),
           cell: r.material_cells?.income_tax_advance,
         },
         {
           key: 'payroll',
-          labelHe: 'שכר',
+          labelHe: t('clientOperations.registry.columns.payroll'),
           cell: r.material_cells?.payroll,
         },
       ];
@@ -3578,7 +3625,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         { key: '126', labelHe: '126' },
       ];
       return (
-        <div className="nx-co-sheet__material" role="group" aria-label={`ב״ל ניכויים — ${clientLabel}`}>
+        <div className="nx-co-sheet__material" role="group" aria-label={`${t('clientOperations.niDeductionsShort')} — ${clientLabel}`}>
           {forms.map((form) => {
             const item = niCell!.items[form.key];
             const itemConfigured = Boolean(item?.configured ?? item?.applicable ?? niConfigured);
@@ -3588,7 +3635,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   key={form.key}
                   className="nx-co-sheet__material-slot is-na"
                   title={`${form.labelHe} ${t('clientOperations.notConfigured')}`}
-                  aria-label={`ב״ל ניכויים ${form.labelHe} — ${clientLabel} — ${periodLabel} — ${t('clientOperations.notConfigured')}`}
+                  aria-label={`${t('clientOperations.niDeductionsShort')} ${form.labelHe} — ${clientLabel} — ${periodLabel} — ${t('clientOperations.notConfigured')}`}
                 >
                   —
                 </span>
@@ -3610,7 +3657,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   checked={checked}
                   disabled={!editable || !canEdit || !col.editable || !onRegistryCommand || pendingMarkKeys.has(markKey)}
                   aria-busy={saving}
-                  aria-label={`ב״ל ניכויים ${form.labelHe} — ${clientLabel} — ${periodLabel}${editable ? '' : t('clientOperations.notRequiredThisMonth')}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
+                  aria-label={`${t('clientOperations.niDeductionsShort')} ${form.labelHe} — ${clientLabel} — ${periodLabel}${editable ? '' : t('clientOperations.notRequiredThisMonth')}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
                   onChange={() => {
                     if (statusPaintMode) return;
                     void toggleNiDeductionsItem(r, form.key);
@@ -3678,10 +3725,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       );
     }
     if (col.cell_kind === 'checkbox') {
-      return displayForColumn(r, col);
+      return displayForColumn(r, col, t);
     }
     if (col.key === 'client_name') {
-      const text = displayForColumn(r, col);
+      const text = displayForColumn(r, col, t);
       return (
         <button
           type="button"
@@ -3699,7 +3746,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     // Configuration / frequency text comes ready-made from the aggregate.
     // Period "not due this month" must NOT overwrite configured labels with —.
     // (CSS `is-not-applicable` may still dim filing-due semantics separately.)
-    return displayForColumn(r, col);
+    return displayForColumn(r, col, t);
   };
 
   const renderSpreadsheetTable = () => (
@@ -3720,14 +3767,14 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 <div className="nx-co-sheet__material-header">
                   <span className="nx-co-sheet__material-header-title">{t('clientOperations.material')}</span>
                   <div className="nx-co-sheet__material-header-subs" aria-hidden="true">
-                    <span>מע״מ</span>
-                    <span>מה״כ</span>
-                    <span>שכר</span>
+                    <span>{t('clientOperations.registry.columns.vat')}</span>
+                    <span>{t('clientOperations.registry.columns.incomeTaxAdvance')}</span>
+                    <span>{t('clientOperations.registry.columns.payroll')}</span>
                   </div>
                 </div>
               ) : column.key === 'national_insurance_deductions' ? (
                 <div className="nx-co-sheet__material-header">
-                  <span className="nx-co-sheet__material-header-title">ב״ל ניכויים</span>
+                  <span className="nx-co-sheet__material-header-title">{t('clientOperations.niDeductionsShort')}</span>
                   <div className="nx-co-sheet__material-header-subs" aria-hidden="true">
                     <span>102</span>
                     <span>100</span>
@@ -3803,9 +3850,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   <span className="nx-co-sheet__sr-only">{column.label}</span>
                 </span>
               ) : (
-                column.label
+                systemColumnHeaderLabel(column, t)
               )}
-              <span className="nx-co-sheet__resize-handle" role="separator" aria-label={`${t('clientOperations.resizeColumn')} ${column.label}`} onMouseDown={(event) => beginResize(event, column)} />
+              <span className="nx-co-sheet__resize-handle" role="separator" aria-label={`${t('clientOperations.resizeColumn')} ${systemColumnHeaderLabel(column, t)}`} onMouseDown={(event) => beginResize(event, column)} />
             </th>
           ))}
         </tr></thead>
@@ -4301,7 +4348,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     <div key={n.id} className="nx-note-card">
                       <div style={{ flex: 1, minWidth: 0, textAlign: 'start' }}>
                         <div className="nx-note-card-meta">
-                          {n.type_label_he}
+                          {operationalNoteTypeLabel(t, n.type_code, n.type_label_he)}
                           {n.reminder_at
                             ? ` · ${new Date(n.reminder_at).toLocaleString(lang === 'he' ? 'he-IL' : 'en-GB', {
                                 dateStyle: 'short',
@@ -4318,7 +4365,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                             className="nx-btn nx-btn-ghost"
                             onClick={() => startEditNote(n)}
                           >
-                            עריכה
+                            {t('clientOperations.edit')}
                           </button>
                           <button
                             type="button"
@@ -4326,7 +4373,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                             style={{ color: '#2563eb' }}
                             onClick={() => deleteNote(n.id)}
                           >
-                            מחיקה
+                            {t('clientOperations.delete')}
                           </button>
                         </div>
                       )}
@@ -4337,8 +4384,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
               {conflict && (
                 <div className="nx-conflict-panel">
-                  <h3>{conflict.ui.title_he}</h3>
-                  <p>{conflict.ui.message_he}</p>
+                  <h3>{localizeSystemLabel(t, conflict.ui.title_key ?? 'clientOperations.notes.conflictTitle', conflict.ui.title_he)}</h3>
+                  <p>{localizeSystemLabel(t, conflict.ui.message_key ?? 'clientOperations.notes.conflictMessage', conflict.ui.message_he)}</p>
                   <ul>
                     {conflict.conflicts.map((c, i) => (
                       <li key={i}>
@@ -4349,10 +4396,18 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   </ul>
                   <div className="nx-modal-footer" style={{ paddingTop: 0 }}>
                     <button type="button" className="nx-btn nx-btn-primary" onClick={() => runSave(true)}>
-                      {conflict.ui.button_create_anyway_he}
+                      {localizeSystemLabel(
+                        t,
+                        conflict.ui.button_create_anyway_key ?? 'clientOperations.notes.createAnyway',
+                        conflict.ui.button_create_anyway_he,
+                      )}
                     </button>
                     <button type="button" className="nx-btn nx-btn-secondary" onClick={() => setConflict(null)}>
-                      {conflict.ui.button_change_time_he}
+                      {localizeSystemLabel(
+                        t,
+                        conflict.ui.button_change_time_key ?? 'clientOperations.notes.changeTime',
+                        conflict.ui.button_change_time_he,
+                      )}
                     </button>
                   </div>
                 </div>
@@ -4377,7 +4432,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     const workspaceSelector = workspaceSelectorVisible ? (
       <div className="nx-co-app-header__workspace" data-testid="client-operations-workspace-selector">
         <label className="nx-co-sheet__sr-only" htmlFor="client-operations-workspace-select">
-          מרחב עבודה
+          {t('clientOperations.workspace')}
         </label>
         <select
           id="client-operations-workspace-select"
@@ -4394,7 +4449,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             });
             return (
               <option key={value} value={value}>
-                {opt.label_he}
+                {localizeSystemLabel(t, opt.label_key, opt.label_he)}
               </option>
             );
           })}
@@ -4410,7 +4465,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           data-testid="client-operations-todo-list-button"
           onClick={() => setTodoBoardOpen(true)}
         >
-          ToDo List
+          {t('clientOperations.todo.list')}
         </button>
         {workspaceSelector}
       </div>
@@ -4727,6 +4782,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             workspace_subject_user_id: query?.workspace_subject_user_id ?? null,
           }}
           workspaceLabelHe={workspace?.label_he ?? null}
+          workspaceLabelKey={workspace?.label_key ?? null}
           canEdit={canEdit}
         />
       </div>

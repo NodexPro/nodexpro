@@ -32,6 +32,8 @@ test('5-6. one shared switcher writes the language command and applies the retur
   assert.match(switcher, /refreshed\?\.sidebar_account_block\.language_selector\.current_value/);
   assert.doesNotMatch(switcher, /select\('ru'\)/);
   assert.doesNotMatch(switcher, /dashboard\.lang\.ruCompact/);
+  assert.match(switcher, /if \(auth.status !== 'authenticated'\) \{\s*setLang\(code\);/);
+  assert.doesNotMatch(switcher, /setLang\(code\);\s*if \(auth.status !== 'authenticated'\) return;/);
   assert.match(auth, /AUTH\.setUiLanguageCommand/);
   assert.doesNotMatch(auth.slice(auth.indexOf('const setUiLanguage'), auth.indexOf('const signOut')), /refetchMe|AUTH\.session|\/auth\/session/);
   assert.match(i18n, /document\.documentElement\.lang = lang/);

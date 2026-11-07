@@ -20,8 +20,10 @@ import type { ClientHistoryTabModel } from './client-history-tab-types';
 import { ClientObligationsTab, type ClientObligationsTabModel } from './ClientObligationsTab';
 import { ClientDocflowTab } from './ClientDocflowTab';
 import { useI18n } from '../i18n/I18nProvider';
+import { fillI18n, localizeSystemLabel } from '../lib/co-display-label.pure';
 import {
   CLIENT_PROFILE_AUTOSAVE_DEBOUNCE_MS,
+  CLIENT_PROFILE_BUSINESS_TYPE_LABEL_KEY,
   buildClientProfileUpdatePayload,
   clientProfileBusinessTypeSelectOptions,
   clientProfileNeedsLeaveGuard,
@@ -605,8 +607,20 @@ export function ClientWorkspacePanel({
   const handlerValue = localWorkspace.profile.assigned_handler_user_full_name ?? localWorkspace.profile.assigned_handler_user_id;
 
   const handlerOptions = localWorkspace.handler_user_options ?? [];
-  const saveError = profileSaveState.status === 'error' ? profileSaveState.error ?? '' : '';
-  const profileSaveLabel = clientProfileSaveStateLabelHe(profileSaveState);
+  const saveError =
+    profileSaveState.status === 'error'
+      ? profileSaveState.missingKeys?.length
+        ? fillI18n(t('clientOperations.profile.pleaseFill'), {
+            fields: profileSaveState.missingKeys.map((key) => t(key)).join(', '),
+          })
+        : profileSaveState.error ?? ''
+      : '';
+  const profileSaveLabel =
+    profileSaveState.status === 'pending' || profileSaveState.status === 'saving'
+      ? t('clientOperations.saving')
+      : profileSaveState.status === 'saved'
+        ? t('clientOperations.saved')
+        : clientProfileSaveStateLabelHe(profileSaveState);
 
   const clientProfileCard = (
     <div className="client-profile-card">
@@ -701,7 +715,7 @@ export function ClientWorkspacePanel({
                 </option>
                 {clientProfileBusinessTypeSelectOptions(draft.business_type).map((opt) => (
                   <option key={opt} value={opt}>
-                    {opt}
+                    {localizeSystemLabel(t, CLIENT_PROFILE_BUSINESS_TYPE_LABEL_KEY[opt], opt)}
                   </option>
                 ))}
               </select>
@@ -709,7 +723,11 @@ export function ClientWorkspacePanel({
           ) : (
             <div className="client-field-box">
               <ClientFieldDecorIcon kind="briefcase" />
-              {localWorkspace.profile.business_type ?? '—'}
+              {localizeSystemLabel(
+                t,
+                CLIENT_PROFILE_BUSINESS_TYPE_LABEL_KEY[localWorkspace.profile.business_type ?? ''],
+                localWorkspace.profile.business_type ?? '—',
+              )}
             </div>
           )}
         </div>

@@ -56,6 +56,15 @@ export const CLIENT_PROFILE_BUSINESS_TYPE_VALUES = [
   'אחר',
 ] as const;
 
+/** Display keys for stored Hebrew business-type codes. Values remain the stored tokens. */
+export const CLIENT_PROFILE_BUSINESS_TYPE_LABEL_KEY: Record<string, string> = {
+  'עוסק פטור': 'clientOperations.businessType.osekPatur',
+  'עוסק מורשה': 'clientOperations.businessType.osekMurshe',
+  חברה: 'clientOperations.businessType.company',
+  תאגיד: 'clientOperations.businessType.corporation',
+  אחר: 'clientOperations.businessType.other',
+};
+
 export type ClientProfileBusinessTypeValue = (typeof CLIENT_PROFILE_BUSINESS_TYPE_VALUES)[number];
 
 /**
@@ -113,16 +122,23 @@ export function clientProfileDraftsEqual(a: ClientProfileDraft, b: ClientProfile
 
 export function validateClientProfileDraft(
   draft: ClientProfileDraft,
-): { ok: true } | { ok: false; messageHe: string } {
+): { ok: true } | { ok: false; messageHe: string; missingKeys: string[] } {
   const phoneTrim = draft.phone.trim();
   const emailTrim = draft.email.trim();
   const businessOk = Boolean(draft.business_type.trim());
   const contactOk = phoneTrim.length > 0 || emailTrim.length > 0;
   const missingLabels: string[] = [];
-  if (!businessOk) missingLabels.push('סוג עסק');
-  if (!contactOk) missingLabels.push('טלפון או אימייל');
+  const missingKeys: string[] = [];
+  if (!businessOk) {
+    missingLabels.push('סוג עסק');
+    missingKeys.push('clientOperations.fields.businessType');
+  }
+  if (!contactOk) {
+    missingLabels.push('טלפון או אימייל');
+    missingKeys.push('clientOperations.profile.phoneOrEmail');
+  }
   if (missingLabels.length > 0) {
-    return { ok: false, messageHe: `נא למלא פרטים : ${missingLabels.join(', ')}` };
+    return { ok: false, messageHe: `נא למלא פרטים : ${missingLabels.join(', ')}`, missingKeys };
   }
   return { ok: true };
 }
@@ -163,7 +179,11 @@ export function shouldIgnoreStaleProfileResponse(sentForClientId: string, active
 
 export type ClientProfileSaveStatus = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
 
-export type ClientProfileSaveState = { status: ClientProfileSaveStatus; error: string | null };
+export type ClientProfileSaveState = {
+  status: ClientProfileSaveStatus;
+  error: string | null;
+  missingKeys?: string[];
+};
 
 function cloneDraft(d: ClientProfileDraft): ClientProfileDraft {
   return { ...d };
@@ -208,7 +228,7 @@ export function createClientProfileAutosaver(options: {
           const sent = cloneDraft(latest);
           const valid = validateClientProfileDraft(sent);
           if (!valid.ok) {
-            emit({ status: 'error', error: valid.messageHe });
+            emit({ status: 'error', error: valid.messageHe, missingKeys: valid.missingKeys });
             return false;
           }
           emit({ status: 'saving', error: null });

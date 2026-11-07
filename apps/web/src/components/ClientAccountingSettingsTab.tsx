@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiJson, userFacingApiMessage } from '../api/client';
+import { useI18n } from '../i18n/I18nProvider';
+import { fillI18n, localizeSystemLabel } from '../lib/co-display-label.pure';
 import {
   moduleClientOperationsAccountingCommands,
   moduleClientOperationsAccountingVehicleFleetFileOpen,
@@ -36,7 +38,7 @@ function emptyEmOptionRows(count: number): string[] {
   return Array.from({ length: Math.max(0, count) }, () => '');
 }
 
-type Option = { value: string | number | boolean; label: string };
+type Option = { value: string | number | boolean; label: string; label_key?: string };
 
 function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -60,6 +62,7 @@ function vehicleFileDisplayNameKey(assetFieldKey: string): string {
 type FieldSchema = {
   key: string;
   label: string;
+  label_key?: string;
   type:
     | 'text'
     | 'textarea'
@@ -118,19 +121,21 @@ type BlockSummaryDisplay = 'text' | 'link' | 'password_saved';
 type VehiclesYesNoFieldDto = {
   field_key: 'has_vehicles';
   label: string;
+  label_key?: string;
   value: 'yes' | 'no';
-  options: { value: 'yes' | 'no'; label: string }[];
+  options: { value: 'yes' | 'no'; label: string; label_key?: string }[];
 };
 
 type VehicleListItemDto = {
   vehicle_id: string;
   summary_lines: string[];
-  edit_action?: { label: string; enabled: boolean };
+  edit_action?: { label: string; label_key?: string; enabled: boolean };
 };
 
 type VehicleBlockActionDto = {
   action_key: 'add_vehicle' | 'edit_vehicle';
   label: string;
+  label_key?: string;
   enabled: boolean;
   vehicle_id?: string;
 };
@@ -149,7 +154,9 @@ type VehicleFleetItemModalResponse = {
 type AccountingExcelGridCell = {
   field_key: string;
   label: string;
+  label_key?: string;
   value: string;
+  value_key?: string;
   display?: BlockSummaryDisplay;
   visible: boolean;
 };
@@ -163,11 +170,18 @@ type AccountingExcelGridRow = {
 type AccountingBlockCard = {
   block_key: BlockKey;
   block_label: string;
+  block_label_key?: string;
   summary_text: string;
   summary_primary_rows: string[];
   summary_empty_state_text: string;
   summary_secondary_empty_message: string | null;
-  summary_items: Array<{ label: string; value: string; display?: BlockSummaryDisplay }>;
+  summary_items: Array<{
+    label: string;
+    label_key?: string;
+    value: string;
+    value_key?: string;
+    display?: BlockSummaryDisplay;
+  }>;
   can_edit: boolean;
   edit_action: { type: 'open_modal'; modal_key: string };
   version: number;
@@ -186,23 +200,34 @@ type AccountingBlockCard = {
 };
 
 function AccountingSummaryItemValue({ it }: { it: AccountingBlockCard['summary_items'][number] }) {
+  const { t } = useI18n();
   if (!it.value && it.display !== 'password_saved') return <span>—</span>;
   if (it.display === 'link') {
     return (
       <a href={String(it.value)} target="_blank" rel="noreferrer">
-        פתיחת תוכנה
+        {t('clientOperations.accounting.openSoftware')}
       </a>
     );
   }
   if (it.display === 'password_saved') {
-    return <span>{it.value || 'שמורה'}</span>;
+    return <span>{localizeSystemLabel(t, it.value_key, it.value || t('clientOperations.accounting.passwordSaved'))}</span>;
   }
-  return <span>{it.value}</span>;
+  return <span>{localizeSystemLabel(t, it.value_key, it.value)}</span>;
 }
 
 function ExcelGridCellValue({ cell }: { cell: AccountingExcelGridCell | undefined }) {
-  if (!cell || !cell.visible) return <span>לא הוגדר</span>;
-  return <AccountingSummaryItemValue it={{ label: '', value: cell.value, display: cell.display }} />;
+  const { t } = useI18n();
+  if (!cell || !cell.visible) return <span>{t('clientOperations.accounting.notSet')}</span>;
+  return (
+    <AccountingSummaryItemValue
+      it={{ label: '', label_key: cell.label_key, value: cell.value, value_key: cell.value_key, display: cell.display }}
+    />
+  );
+}
+
+function excelCellLabel(t: (key: string) => string, c: AccountingExcelGridCell | undefined): string {
+  if (!c || !c.visible) return t('clientOperations.accounting.notSet');
+  return localizeSystemLabel(t, c.label_key, c.label);
 }
 
 function ExpenseManagementZonesPanel({
@@ -210,27 +235,28 @@ function ExpenseManagementZonesPanel({
 }: {
   zones: NonNullable<AccountingBlockCard['expense_management_zones']>;
 }) {
+  const { t } = useI18n();
   const hasAccess = zones.access.length > 0;
 
   return (
     <div className={hasAccess ? 'nx-em-two-col' : 'nx-em-two-col nx-em-two-col--right-only'}>
       {hasAccess ? (
-        <div className="nx-em-col nx-em-col-access" dir="rtl">
+        <div className="nx-em-col nx-em-col-access">
           <div className="nx-income-table">
             {zones.access.map((c) => (
               <div key={c.field_key} className="nx-income-table-row nx-income-table-row-split">
-                <span>{c.visible ? c.label : 'לא הוגדר'}</span>
+                <span>{excelCellLabel(t, c)}</span>
                 <ExcelGridCellValue cell={c} />
               </div>
             ))}
           </div>
         </div>
       ) : null}
-      <div className="nx-em-col nx-em-col-ops" dir="rtl">
+      <div className="nx-em-col nx-em-col-ops">
         <div className="nx-income-table">
           {zones.main_column.map((c) => (
             <div key={c.field_key} className="nx-income-table-row nx-income-table-row-split">
-              <span>{c.visible ? c.label : 'לא הוגדר'}</span>
+              <span>{excelCellLabel(t, c)}</span>
               <ExcelGridCellValue cell={c} />
             </div>
           ))}
@@ -305,8 +331,13 @@ export function ClientAccountingSettingsTab({
   /** After accounting command — full case replace (NodexPro truth flow). */
   onAccountingCaseUpdated: (next: ClientOperationsCaseResponse) => void;
 }) {
+  const { t } = useI18n();
   const seededExpenseModal = harnessExpenseModalSeed();
   const autopenExpenseEditor = Boolean(seededExpenseModal) && harnessShouldAutopenExpenseEditor();
+  const fieldLbl = (f: { label: string; label_key?: string }) => localizeSystemLabel(t, f.label_key, f.label);
+  const optLbl = (o: { label: string; label_key?: string }) => localizeSystemLabel(t, o.label_key, o.label);
+  const blockLbl = (b: { block_label: string; block_label_key?: string }) =>
+    localizeSystemLabel(t, b.block_label_key, b.block_label);
   const [tab, setTab] = useState<AccountingTabResponse | null>(() => initialAccountingTab);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -318,7 +349,11 @@ export function ClientAccountingSettingsTab({
   );
   const [modalOpen, setModalOpen] = useState(autopenExpenseEditor);
   const [modalLoading, setModalLoading] = useState(false);
-  const [modalTitle, setModalTitle] = useState(autopenExpenseEditor ? seededExpenseModal?.modal_label ?? 'עריכה' : 'עריכה');
+  const [modalTitle, setModalTitle] = useState(
+    autopenExpenseEditor
+      ? seededExpenseModal?.modal_label ?? t('clientOperations.edit')
+      : t('clientOperations.edit')
+  );
   const [modalSaving, setModalSaving] = useState(false);
   const [modalError, setModalError] = useState('');
   const [fieldVisibility, setFieldVisibility] = useState<Record<string, boolean> | null>(() =>
@@ -509,10 +544,10 @@ export function ClientAccountingSettingsTab({
     const block = tab?.blocks?.find((x) => x.block_key === 'vehicles');
     if (!block || !tab) return;
     if (vehicleDeleteInFlightRef.current) return;
-    const plateForMsg = plateRaw && plateRaw !== '—' ? plateRaw : 'ללא מספר רישוי';
+    const plateForMsg = plateRaw && plateRaw !== '—' ? plateRaw : t('clientOperations.accounting.noPlate');
     if (
       !window.confirm(
-        `האם למחוק את הרכב עם מספר רישוי "${plateForMsg}"?\nפעולה זו אינה הפיכה.`
+        fillI18n(t('clientOperations.accounting.deleteVehicleConfirm'), { plate: plateForMsg })
       )
     ) {
       return;
@@ -661,7 +696,7 @@ export function ClientAccountingSettingsTab({
   const openModal = async (block: AccountingBlockCard) => {
     setError('');
     setModalError('');
-    setModalTitle(`עריכת ${block.block_label}`);
+    setModalTitle(fillI18n(t('clientOperations.accounting.editBlock'), { label: blockLbl(block) }));
     setModalOpen(true);
     setRevealedSecureFields({});
 
@@ -725,7 +760,7 @@ export function ClientAccountingSettingsTab({
   const deleteEmCustomField = async (fieldKey: string) => {
     const id = fieldKey.replace(/^em_cf_/, '');
     if (!id) return;
-    if (!window.confirm('למחוק את השדה?')) return;
+    if (!window.confirm(t('clientOperations.accounting.deleteFieldConfirm'))) return;
     setModalError('');
     try {
       const fullCase = await apiJson<ClientOperationsCaseResponse>(
@@ -765,7 +800,7 @@ export function ClientAccountingSettingsTab({
         const n = Math.min(Math.max(1, emAddOptionRowCount), optCap);
         const parts = emAddOptionRows.slice(0, n).map((s) => String(s).trim());
         if (parts.length !== n || parts.some((p) => !p)) {
-          setEmAddFieldError('נא למלא שם לכל האפשרויות (שורות) שבחרת.');
+          setEmAddFieldError(t('clientOperations.accounting.needOptionNames'));
           setEmAddSaving(false);
           return;
         }
@@ -814,7 +849,7 @@ export function ClientAccountingSettingsTab({
       const secureRevealed = Boolean(revealedSecureFields[f.key]);
       return (
         <div className="client-field">
-          <div className="client-field-label">{f.label}</div>
+          <div className="client-field-label">{fieldLbl(f)}</div>
           <div className="client-field-box">
             <div
               style={{
@@ -840,8 +875,8 @@ export function ClientAccountingSettingsTab({
                   className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
                   onClick={() => setRevealedSecureFields((s) => ({ ...s, [f.key]: !secureRevealed }))}
                   disabled={disabled}
-                  title={secureRevealed ? 'הסתר סיסמה' : 'הצג סיסמה'}
-                  aria-label={secureRevealed ? 'הסתר סיסמה' : 'הצג סיסמה'}
+                  title={secureRevealed ? t('clientOperations.accounting.hidePassword') : t('clientOperations.accounting.showPassword')}
+                  aria-label={secureRevealed ? t('clientOperations.accounting.hidePassword') : t('clientOperations.accounting.showPassword')}
                   style={{ minWidth: 36, paddingInline: 10 }}
                 >
                   {secureRevealed ? '🙈' : '👁'}
@@ -861,11 +896,11 @@ export function ClientAccountingSettingsTab({
                     }
                   }}
                   disabled={disabled || !((draft[f.key] as string | null | undefined) ?? '')}
-                  title="העתק סיסמה"
-                  aria-label="העתק סיסמה"
+                  title={t('clientOperations.accounting.copyPassword')}
+                  aria-label={t('clientOperations.accounting.copyPassword')}
                   style={{ minWidth: 44, paddingInline: 10 }}
                 >
-                  העתק
+                  {t('clientOperations.copy')}
                 </button>
               ) : null}
             </div>
@@ -877,7 +912,7 @@ export function ClientAccountingSettingsTab({
     if (f.type === 'textarea') {
       return (
         <div className="client-field client-field-full">
-          <div className="client-field-label">{f.label}</div>
+          <div className="client-field-label">{fieldLbl(f)}</div>
           <textarea
             value={(draft[f.key] as string | null | undefined) ?? ''}
             onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
@@ -893,7 +928,7 @@ export function ClientAccountingSettingsTab({
     if (f.type === 'enum_single') {
       return (
         <div className="client-field">
-          <div className="client-field-label">{f.label}</div>
+          <div className="client-field-label">{fieldLbl(f)}</div>
           <div className="client-field-box">
             <select
               value={(draft[f.key] as string | null | undefined) ?? ''}
@@ -927,10 +962,10 @@ export function ClientAccountingSettingsTab({
                 appearance: 'none',
               }}
             >
-              <option value="">בחר</option>
+              <option value="">{t('clientOperations.choose')}</option>
               {(f.options ?? []).map((o) => (
                 <option key={String(o.value)} value={String(o.value)}>
-                  {o.label}
+                  {optLbl(o)}
                 </option>
               ))}
             </select>
@@ -944,7 +979,7 @@ export function ClientAccountingSettingsTab({
       const selected = Array.isArray(raw) ? (raw as unknown[]).map(String) : [];
       return (
         <div className="client-field client-field-full">
-          <div className="client-field-label">{f.label}</div>
+          <div className="client-field-label">{fieldLbl(f)}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
             {(f.options ?? []).map((o) => {
               const checked = selected.includes(String(o.value));
@@ -961,7 +996,7 @@ export function ClientAccountingSettingsTab({
                       setDraft((d) => ({ ...d, [f.key]: Array.from(next) }));
                     }}
                   />
-                  <span>{o.label}</span>
+                  <span>{optLbl(o)}</span>
                 </label>
               );
             })}
@@ -977,7 +1012,7 @@ export function ClientAccountingSettingsTab({
       else if (raw === false || raw === 'false') sel = 'false';
       return (
         <div className="client-field">
-          <div className="client-field-label">{f.label}</div>
+          <div className="client-field-label">{fieldLbl(f)}</div>
           <div className="client-field-box">
             <select
               value={sel}
@@ -998,9 +1033,9 @@ export function ClientAccountingSettingsTab({
                 appearance: 'none',
               }}
             >
-              <option value="">בחר</option>
-              <option value="true">כן</option>
-              <option value="false">לא</option>
+              <option value="">{t('clientOperations.choose')}</option>
+              <option value="true">{t('clientOperations.yes')}</option>
+              <option value="false">{t('clientOperations.no')}</option>
             </select>
           </div>
         </div>
@@ -1010,11 +1045,11 @@ export function ClientAccountingSettingsTab({
     return null;
   };
 
-  if (loading) return <div className="nx-accounting-section-root">טוען…</div>;
+  if (loading) return <div className="nx-accounting-section-root">{t('clientOperations.loading')}</div>;
   if (!tab && initialAccountingTab === null) {
     return (
       <div className="nx-accounting-section-root" style={{ color: '#6b7280', fontWeight: 600 }}>
-        אין הרשאה לצפות בהגדרות הנה״ח (כרטיסיות).
+        {t('clientOperations.accounting.noPermission')}
       </div>
     );
   }
@@ -1047,7 +1082,7 @@ export function ClientAccountingSettingsTab({
             className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
             onClick={() => setError('')}
           >
-            סגירה
+            {t('clientOperations.close')}
           </button>
         </div>
       ) : null}
@@ -1055,14 +1090,14 @@ export function ClientAccountingSettingsTab({
         {blocks.map((b) => (
           <div key={b.block_key} className="nx-ws-accounting-card" data-block-key={b.block_key}>
             <div className="nx-ws-accounting-card__head">
-              <h3 className="nx-ws-accounting-card__title">{b.block_label}</h3>
+              <h3 className="nx-ws-accounting-card__title">{blockLbl(b)}</h3>
               {b.block_key !== 'vehicles' && b.can_edit ? (
                 <button
                   type="button"
                   className="nx-taxes-section-edit-btn"
                   onClick={() => void openModal(b)}
-                  aria-label={`עריכת ${b.block_label}`}
-                  title={`עריכת ${b.block_label}`}
+                  aria-label={fillI18n(t('clientOperations.accounting.editBlock'), { label: blockLbl(b) })}
+                  title={fillI18n(t('clientOperations.accounting.editBlock'), { label: blockLbl(b) })}
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -1094,7 +1129,7 @@ export function ClientAccountingSettingsTab({
                   <div className="nx-income-table nx-income-table-stretch">
                     {b.excel_grid.rows.map((r, idx) => (
                       <div key={`em-l-${idx}`} className="nx-income-table-row nx-income-table-row-split">
-                        <span>{r.left?.visible ? r.left.label : 'לא הוגדר'}</span>
+                        <span>{excelCellLabel(t, r.left)}</span>
                         <ExcelGridCellValue cell={r.left} />
                       </div>
                     ))}
@@ -1102,7 +1137,7 @@ export function ClientAccountingSettingsTab({
                   <div className="nx-income-table nx-income-table-stretch">
                     {b.excel_grid.rows.map((r, idx) => (
                       <div key={`em-r-${idx}`} className="nx-income-table-row nx-income-table-row-split">
-                        <span>{r.right?.visible ? r.right.label : 'לא הוגדר'}</span>
+                        <span>{excelCellLabel(t, r.right)}</span>
                         <ExcelGridCellValue cell={r.right} />
                       </div>
                     ))}
@@ -1111,20 +1146,20 @@ export function ClientAccountingSettingsTab({
               </div>
             ) : b.block_key === 'income' ? (
               <div className="nx-em-two-col">
-                <div className="nx-em-col nx-em-col-access" dir="rtl">
+                <div className="nx-em-col nx-em-col-access">
                   <div className="nx-income-table">
-                    <div className="nx-fe-fixed-exp-colhead">מערכת הכנסות</div>
+                    <div className="nx-fe-fixed-exp-colhead">{t('clientOperations.accounting.headings.incomeSystem')}</div>
                     {(b.summary_items ?? []).map((it, idx) => (
                       <div key={`income-right-${idx}`} className="nx-income-table-row nx-income-table-row-split">
-                        <span>{it.label}</span>
+                        <span>{localizeSystemLabel(t, it.label_key, it.label)}</span>
                         <AccountingSummaryItemValue it={it} />
                       </div>
                     ))}
                   </div>
                 </div>
-                <div className="nx-em-col nx-em-col-ops" dir="rtl">
+                <div className="nx-em-col nx-em-col-ops">
                   <div className="nx-income-table">
-                    <div className="nx-fe-fixed-exp-colhead">הכנסות נוספות</div>
+                    <div className="nx-fe-fixed-exp-colhead">{t('clientOperations.accounting.headings.additionalIncome')}</div>
                     {(b.summary_primary_rows ?? []).length > 0
                       ? (b.summary_primary_rows ?? []).map((row, idx) => (
                           <div key={`income-left-${idx}`} className="nx-income-table-row">
@@ -1133,7 +1168,7 @@ export function ClientAccountingSettingsTab({
                         ))
                       : (
                           <div className="nx-income-table-row">
-                            <span>{b.summary_empty_state_text}</span>
+                            <span>{t('clientOperations.accounting.notSet')}</span>
                           </div>
                         )}
                   </div>
@@ -1141,9 +1176,9 @@ export function ClientAccountingSettingsTab({
               </div>
             ) : b.block_key === 'expenses' ? (
               <div className="nx-em-two-col">
-                <div className="nx-em-col nx-em-col-access" dir="rtl">
+                <div className="nx-em-col nx-em-col-access">
                   <div className="nx-income-table">
-                    <div className="nx-fe-fixed-exp-colhead">סכומים חודשיים</div>
+                    <div className="nx-fe-fixed-exp-colhead">{t('clientOperations.accounting.headings.monthlyAmounts')}</div>
                     {(b.summary_primary_rows ?? []).length > 0
                       ? (b.summary_primary_rows ?? []).map((row, idx) => (
                           <div key={`exp-amt-${idx}`} className="nx-income-table-row">
@@ -1152,22 +1187,22 @@ export function ClientAccountingSettingsTab({
                         ))
                       : (
                           <div className="nx-income-table-row">
-                            <span>{b.summary_empty_state_text}</span>
+                            <span>{t('clientOperations.accounting.notSet')}</span>
                           </div>
                         )}
                   </div>
                 </div>
-                <div className="nx-em-col nx-em-col-ops" dir="rtl">
+                <div className="nx-em-col nx-em-col-ops">
                   <div className="nx-income-table">
-                    <div className="nx-fe-fixed-exp-colhead">אחוז הוצאה מוכר</div>
+                    <div className="nx-fe-fixed-exp-colhead">{t('clientOperations.accounting.headings.recognizedExpensePercent')}</div>
                     {b.summary_secondary_empty_message != null ? (
                       <div className="nx-income-table-row">
-                        <span>{b.summary_secondary_empty_message}</span>
+                        <span>{t('clientOperations.accounting.notSet')}</span>
                       </div>
                     ) : (
                       (b.summary_items ?? []).map((it, idx) => (
                         <div key={`exp-pct-${idx}`} className="nx-income-table-row nx-income-table-row-split">
-                          <span>{it.label}</span>
+                          <span>{localizeSystemLabel(t, it.label_key, it.label)}</span>
                           <span>{it.value || '—'}</span>
                         </div>
                       ))
@@ -1192,8 +1227,10 @@ export function ClientAccountingSettingsTab({
                     <>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 8 }}>
                   {b.vehicles_yes_no ? (
-                    <div role="radiogroup" aria-label={b.vehicles_yes_no.label}>
-                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{b.vehicles_yes_no.label}</div>
+                    <div role="radiogroup" aria-label={localizeSystemLabel(t, b.vehicles_yes_no.label_key, b.vehicles_yes_no.label)}>
+                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+                        {localizeSystemLabel(t, b.vehicles_yes_no.label_key, b.vehicles_yes_no.label)}
+                      </div>
                       {(() => {
                         const yesNoVal = b.vehicles_yes_no!.value;
                         const disabled = !b.can_edit || vehiclesYesNoBusy;
@@ -1223,7 +1260,7 @@ export function ClientAccountingSettingsTab({
                                     else void patchHasVehicles(false);
                                   }}
                                 />
-                                <span>{o.label}</span>
+                                <span>{optLbl(o)}</span>
                               </label>
                             ))}
                           </div>
@@ -1242,7 +1279,7 @@ export function ClientAccountingSettingsTab({
                             className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
                             onClick={() => void openVehicleItemModal(null)}
                           >
-                            {a.label}
+                            {localizeSystemLabel(t, a.label_key, a.label)}
                           </button>
                         ))}
                     </div>
@@ -1262,7 +1299,9 @@ export function ClientAccountingSettingsTab({
                       const r0 = secRows[0];
                       const plateRaw = r0?.left?.visible ? String(r0.left.value ?? '').trim() : '';
                       const sectionTitle =
-                        plateRaw && plateRaw !== '—' ? `רכב — ${plateRaw}` : `רכב ${vIdx + 1}`;
+                        plateRaw && plateRaw !== '—'
+                          ? fillI18n(t('clientOperations.quickProfile.vehicle'), { plate: plateRaw })
+                          : fillI18n(t('clientOperations.accounting.vehicleN'), { n: vIdx + 1 });
                       return (
                         <div key={it.vehicle_id} className="nx-vehicle-fleet-section">
                           <div className="nx-vehicle-fleet-section-head">
@@ -1281,7 +1320,7 @@ export function ClientAccountingSettingsTab({
                                   className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
                                   onClick={() => void openVehicleItemModal(it.vehicle_id)}
                                 >
-                                  {it.edit_action.label}
+                                  {localizeSystemLabel(t, it.edit_action.label_key, it.edit_action.label)}
                                 </button>
                                 <button
                                   type="button"
@@ -1289,14 +1328,14 @@ export function ClientAccountingSettingsTab({
                                   disabled={vehicleDeleteBusy}
                                   onClick={() => void requestDeleteVehicleItem(it.vehicle_id, plateRaw)}
                                 >
-                                  למחוק
+                                  {t('clientOperations.delete')}
                                 </button>
                               </div>
                             ) : null}
                           </div>
                           {/* אותה פריסת שני טורים כמו הכנסות / הוצאות קבועות — nx-em-two-col + מרווחים */}
                           <div className="nx-em-two-col" style={{ marginTop: 0 }}>
-                            <div className="nx-em-col nx-em-col-access" dir="rtl">
+                            <div className="nx-em-col nx-em-col-access">
                               <div className="nx-income-table">
                                 <div className="nx-fe-fixed-exp-colhead">{b.excel_grid!.column_headers[0]}</div>
                                 {secRows.map((r, rowIdx) => (
@@ -1304,13 +1343,13 @@ export function ClientAccountingSettingsTab({
                                     key={`veh-${it.vehicle_id}-l-${rowIdx}`}
                                     className="nx-income-table-row nx-income-table-row-split"
                                   >
-                                    <span>{r.left?.visible ? r.left.label : 'לא הוגדר'}</span>
+                                    <span>{excelCellLabel(t, r.left)}</span>
                                     <ExcelGridCellValue cell={r.left} />
                                   </div>
                                 ))}
                               </div>
                             </div>
-                            <div className="nx-em-col nx-em-col-ops" dir="rtl">
+                            <div className="nx-em-col nx-em-col-ops">
                               <div className="nx-income-table">
                                 <div className="nx-fe-fixed-exp-colhead">{b.excel_grid!.column_headers[1]}</div>
                                 {secRows.map((r, rowIdx) => (
@@ -1318,7 +1357,7 @@ export function ClientAccountingSettingsTab({
                                     key={`veh-${it.vehicle_id}-r-${rowIdx}`}
                                     className="nx-income-table-row nx-income-table-row-split"
                                   >
-                                    <span>{r.right?.visible ? r.right.label : 'לא הוגדר'}</span>
+                                    <span>{excelCellLabel(t, r.right)}</span>
                                     <ExcelGridCellValue cell={r.right} />
                                   </div>
                                 ))}
@@ -1332,7 +1371,7 @@ export function ClientAccountingSettingsTab({
                       <div className="nx-ws-accounting-empty-fleet" role="status">
                         <div className="nx-fe-fixed-exp-colhead">{b.excel_grid.column_headers[0]}</div>
                         <p className="nx-ws-accounting-empty-fleet__message">
-                          אין רכבים — השתמשו ב״הוסף רכב״
+                          {t('clientOperations.accounting.noVehicles')}
                         </p>
                       </div>
                     ) : null}
@@ -1370,13 +1409,13 @@ export function ClientAccountingSettingsTab({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="nx-modal-header">
-              <h3 className="nx-modal-title">{modal?.modal_label ?? modalTitle}</h3>
+              <h3 className="nx-modal-title">{modalTitle}</h3>
               <WorkspaceNestedDialogClose disabled={modalSaving} onClick={() => setModalOpen(false)} />
             </div>
             <div className="nx-modal-body">
               {modalLoading ? (
                 <div style={{ minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontWeight: 700 }}>
-                  טוען…
+                  {t('clientOperations.loading')}
                 </div>
               ) : modal ? (
                 modal.block_key === 'expense_management' ? (
@@ -1397,12 +1436,12 @@ export function ClientAccountingSettingsTab({
                       );
                       return (
                         <div className="nx-em-modal-2col">
-                          <div className="nx-em-modal-col nx-em-modal-col-left" dir="rtl">
+                          <div className="nx-em-modal-col nx-em-modal-col-left">
                             {leftFs.map((ff) => (
                               <Fragment key={ff.key}>{renderExpenseManagementModalField(ff)}</Fragment>
                             ))}
                           </div>
-                          <div className="nx-em-modal-col nx-em-modal-col-right" dir="rtl">
+                          <div className="nx-em-modal-col nx-em-modal-col-right">
                             {coreRight.map((ff) => (
                               <Fragment key={ff.key}>{renderExpenseManagementModalField(ff)}</Fragment>
                             ))}
@@ -1424,7 +1463,7 @@ export function ClientAccountingSettingsTab({
                                   }}
                                   disabled={modalSaving}
                                 >
-                                  + הוספת שדה
+                                  + {t('clientOperations.accounting.addField')}
                                 </button>
                               </div>
                             ) : null}
@@ -1438,7 +1477,7 @@ export function ClientAccountingSettingsTab({
                                       style={{ fontSize: 12, padding: '4px 10px' }}
                                       onClick={() => void deleteEmCustomField(ff.key)}
                                     >
-                                      מחיקה
+                                      {t('clientOperations.delete')}
                                     </button>
                                   ) : null}
                                 </div>
@@ -1461,7 +1500,7 @@ export function ClientAccountingSettingsTab({
                     const secureRevealed = Boolean(revealedSecureFields[f.key]);
                     return (
                       <div className="client-field" key={f.key}>
-                        <div className="client-field-label">{f.label}</div>
+                        <div className="client-field-label">{fieldLbl(f)}</div>
                         <div className="client-field-box">
                           <div style={{ display: 'grid', gridTemplateColumns: isSecure ? '1fr auto auto' : '1fr', gap: 8, width: '100%', alignItems: 'center' }}>
                             <input
@@ -1481,8 +1520,8 @@ export function ClientAccountingSettingsTab({
                                   setRevealedSecureFields((s) => ({ ...s, [f.key]: !secureRevealed }))
                                 }
                                 disabled={disabled}
-                                title={secureRevealed ? 'הסתר סיסמה' : 'הצג סיסמה'}
-                                aria-label={secureRevealed ? 'הסתר סיסמה' : 'הצג סיסמה'}
+                                title={secureRevealed ? t('clientOperations.accounting.hidePassword') : t('clientOperations.accounting.showPassword')}
+                                aria-label={secureRevealed ? t('clientOperations.accounting.hidePassword') : t('clientOperations.accounting.showPassword')}
                                 style={{ minWidth: 36, paddingInline: 10 }}
                               >
                                 {secureRevealed ? '🙈' : '👁'}
@@ -1502,11 +1541,11 @@ export function ClientAccountingSettingsTab({
                                   }
                                 }}
                                 disabled={disabled || !((draft[f.key] as string | null | undefined) ?? '')}
-                                title="העתק סיסמה"
-                                aria-label="העתק סיסמה"
+                                title={t('clientOperations.accounting.copyPassword')}
+                                aria-label={t('clientOperations.accounting.copyPassword')}
                                 style={{ minWidth: 44, paddingInline: 10 }}
                               >
-                                העתק
+                                {t('clientOperations.copy')}
                               </button>
                             ) : null}
                           </div>
@@ -1517,7 +1556,7 @@ export function ClientAccountingSettingsTab({
                   if (f.type === 'textarea') {
                     return (
                       <div className="client-field client-field-full" key={f.key}>
-                        <div className="client-field-label">{f.label}</div>
+                        <div className="client-field-label">{fieldLbl(f)}</div>
                         <textarea
                           value={(draft[f.key] as string | null | undefined) ?? ''}
                           onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
@@ -1532,7 +1571,7 @@ export function ClientAccountingSettingsTab({
                   if (f.type === 'enum_single') {
                     return (
                       <div className="client-field" key={f.key}>
-                        <div className="client-field-label">{f.label}</div>
+                        <div className="client-field-label">{fieldLbl(f)}</div>
                         <div className="client-field-box">
                           <select
                             value={(draft[f.key] as string | null | undefined) ?? ''}
@@ -1565,9 +1604,9 @@ export function ClientAccountingSettingsTab({
                             disabled={disabled}
                             style={{ border: 'none', background: 'transparent', width: '100%', outline: 'none', font: 'inherit', appearance: 'none' }}
                           >
-                            <option value="">בחר</option>
+                            <option value="">{t('clientOperations.choose')}</option>
                             {(f.options ?? []).map((o) => (
-                              <option key={String(o.value)} value={String(o.value)}>{o.label}</option>
+                              <option key={String(o.value)} value={String(o.value)}>{optLbl(o)}</option>
                             ))}
                           </select>
                         </div>
@@ -1577,7 +1616,7 @@ export function ClientAccountingSettingsTab({
                   if (f.type === 'boolean') {
                     return (
                       <div className="client-field" key={f.key}>
-                        <div className="client-field-label">{f.label}</div>
+                        <div className="client-field-label">{fieldLbl(f)}</div>
                         <div className="client-field-box">
                           <select
                             value={Boolean(draft[f.key]) ? 'true' : 'false'}
@@ -1589,7 +1628,7 @@ export function ClientAccountingSettingsTab({
                             style={{ border: 'none', background: 'transparent', width: '100%', outline: 'none', font: 'inherit', appearance: 'none' }}
                           >
                             {(f.options ?? []).map((o) => (
-                              <option key={String(o.value)} value={o.value ? 'true' : 'false'}>{o.label}</option>
+                              <option key={String(o.value)} value={o.value ? 'true' : 'false'}>{optLbl(o)}</option>
                             ))}
                           </select>
                         </div>
@@ -1599,7 +1638,7 @@ export function ClientAccountingSettingsTab({
                   if (f.type === 'integer' || f.type === 'numeric') {
                     return (
                       <div className="client-field" key={f.key}>
-                        <div className="client-field-label">{f.label}</div>
+                        <div className="client-field-label">{fieldLbl(f)}</div>
                         <div className="client-field-box">
                           <input
                             type="number"
@@ -1618,7 +1657,7 @@ export function ClientAccountingSettingsTab({
                   if (f.type === 'date') {
                     return (
                       <div className="client-field" key={f.key}>
-                        <div className="client-field-label">{f.label}</div>
+                        <div className="client-field-label">{fieldLbl(f)}</div>
                         <div className="client-field-box">
                           <input
                             type="date"
@@ -1640,7 +1679,7 @@ export function ClientAccountingSettingsTab({
                     if (f.key === 'expense_items' && Array.isArray(value)) {
                       return (
                         <div className="client-field client-field-full" key={f.key}>
-                          <div className="client-field-label">{f.label}</div>
+                          <div className="client-field-label">{fieldLbl(f)}</div>
                           <div style={{ display: 'grid', gap: 8 }}>
                             {(value as Array<any>).map((it, idx) => {
                               const isAmount = it.value_kind === 'amount';
@@ -1669,12 +1708,12 @@ export function ClientAccountingSettingsTab({
                                             setDraft((d) => ({ ...d, [f.key]: out.expense_items }));
                                             if (out.field_visibility) setFieldVisibility(out.field_visibility);
                                           } catch (err) {
-                                            setModalError(err instanceof Error ? err.message : 'שגיאה');
+                                            setModalError(err instanceof Error ? err.message : t('clientOperations.accounting.error'));
                                           }
                                         })();
                                       }}
                                     />
-                                    <span>{it.expense_type_label_he}</span>
+                                    <span>{localizeSystemLabel(t, it.expense_type_label_key, it.expense_type_label_he)}</span>
                                   </label>
                                   <div className="nx-expense-value-with-suffix" dir="ltr">
                                     {isAmount ? (
@@ -1737,7 +1776,7 @@ export function ClientAccountingSettingsTab({
                     if (f.key === 'income_source_items' && Array.isArray(value)) {
                       return (
                         <div className="client-field client-field-full" key={f.key}>
-                          <div className="client-field-label">{f.label}</div>
+                          <div className="client-field-label">{fieldLbl(f)}</div>
                           <div style={{ display: 'grid', gap: 8 }}>
                             {(value as Array<any>).map((it, idx) => (
                               <div key={`${it.source_code}-${idx}`} style={{ display: 'grid', gap: 8 }}>
@@ -1762,19 +1801,22 @@ export function ClientAccountingSettingsTab({
                                             setDraft((d) => ({ ...d, [f.key]: out.income_source_items }));
                                             if (out.field_visibility) setFieldVisibility(out.field_visibility);
                                           } catch (err) {
-                                            setModalError(err instanceof Error ? err.message : 'שגיאה');
+                                            setModalError(err instanceof Error ? err.message : t('clientOperations.accounting.error'));
                                           }
                                         })();
                                       }}
                                     />
-                                    <span>{it.source_label_he}</span>
+                                    <span>{localizeSystemLabel(t, it.source_label_key, it.source_label_he)}</span>
                                     {it.source_code === 'business' && it.selected ? (
                                       <span style={{ fontSize: 12, color: '#6b7280' }}>
                                         {[
                                           Array.isArray(it.additional_business_type_options)
-                                            ? (it.additional_business_type_options as Option[]).find(
-                                                (o) => String(o.value) === String(it.additional_business_type ?? '')
-                                              )?.label ?? null
+                                            ? (() => {
+                                                const found = (it.additional_business_type_options as Option[]).find(
+                                                  (o) => String(o.value) === String(it.additional_business_type ?? '')
+                                                );
+                                                return found ? optLbl(found) : null;
+                                              })()
                                             : null,
                                           it.additional_business_tax_id ? String(it.additional_business_tax_id) : null,
                                         ]
@@ -1801,7 +1843,7 @@ export function ClientAccountingSettingsTab({
                                     step="any"
                                     disabled={disabled || !it.selected}
                                     value={it.monthly_amount ?? ''}
-                                    placeholder="סכום"
+                                    placeholder={t('clientOperations.accounting.amount')}
                                     onChange={(e) => {
                                       const next = [...(value as Array<any>)];
                                       next[idx] = {
@@ -1829,7 +1871,7 @@ export function ClientAccountingSettingsTab({
                                       }}
                                       style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid #dbe3ee' }}
                                     >
-                                      <option value="">בחר סוג עסק נוסף</option>
+                                      <option value="">{t('clientOperations.accounting.chooseAdditionalBusiness')}</option>
                                       {Array.isArray(it.additional_business_type_options)
                                         ? it.additional_business_type_options.map((o: any) => (
                                             <option key={String(o.value)} value={String(o.value)}>
@@ -1842,7 +1884,7 @@ export function ClientAccountingSettingsTab({
                                       type="text"
                                       disabled={disabled}
                                       value={it.additional_business_tax_id ?? ''}
-                                      placeholder="ח.פ העסק"
+                                      placeholder={t('clientOperations.accounting.businessId')}
                                       onChange={(e) => {
                                         const next = [...(value as Array<any>)];
                                         next[idx] = {
@@ -1862,7 +1904,7 @@ export function ClientAccountingSettingsTab({
                                       type="text"
                                       disabled={disabled}
                                       value={it.workplace_name ?? ''}
-                                      placeholder="מקום עבודה"
+                                      placeholder={t('clientOperations.accounting.workplace')}
                                       onChange={(e) => {
                                         const next = [...(value as Array<any>)];
                                         next[idx] = {
@@ -1877,7 +1919,7 @@ export function ClientAccountingSettingsTab({
                                       type="text"
                                       disabled={disabled}
                                       value={it.employment_scope ?? ''}
-                                      placeholder="היקף המשרה"
+                                      placeholder={t('clientOperations.accounting.jobScope')}
                                       onChange={(e) => {
                                         const next = [...(value as Array<any>)];
                                         next[idx] = {
@@ -1897,7 +1939,7 @@ export function ClientAccountingSettingsTab({
                                       type="text"
                                       disabled={disabled}
                                       value={it.source_details ?? ''}
-                                      placeholder="איזו הכנסה בדיוק"
+                                      placeholder={t('clientOperations.accounting.whichIncome')}
                                       onChange={(e) => {
                                         const next = [...(value as Array<any>)];
                                         next[idx] = {
@@ -1920,7 +1962,7 @@ export function ClientAccountingSettingsTab({
                     const selected = Array.isArray(value) ? (value as Array<string | number>) : [];
                     return (
                       <div className="client-field client-field-full" key={f.key}>
-                        <div className="client-field-label">{f.label}</div>
+                        <div className="client-field-label">{fieldLbl(f)}</div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
                           {(f.options ?? []).map((o) => {
                             const checked = selected.map(String).includes(String(o.value));
@@ -1937,7 +1979,7 @@ export function ClientAccountingSettingsTab({
                                     setDraft((d) => ({ ...d, [f.key]: Array.from(next) }));
                                   }}
                                 />
-                                <span>{o.label}</span>
+                                <span>{optLbl(o)}</span>
                               </label>
                             );
                           })}
@@ -1955,7 +1997,7 @@ export function ClientAccountingSettingsTab({
             <div className="nx-modal-footer">
               {modal?.can_edit ? (
                 <button type="button" className="nx-btn nx-btn-primary" onClick={() => void saveModal()} disabled={modalSaving}>
-                  {modalSaving ? 'שומר…' : 'שמירה'}
+                  {modalSaving ? t('clientOperations.saving') : t('clientOperations.save')}
                 </button>
               ) : null}
             </div>
@@ -1978,7 +2020,7 @@ export function ClientAccountingSettingsTab({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="nx-modal-header">
-              <h3 className="nx-modal-title">{vehicleItemModal?.modal_label ?? 'הוספת רכב'}</h3>
+              <h3 className="nx-modal-title">{vehicleItemModal?.modal_label ?? t('clientOperations.accounting.addVehicle')}</h3>
               <WorkspaceNestedDialogClose onClick={() => setVehicleItemOpen(false)} />
             </div>
             <div className="nx-modal-body" style={{ flex: '0 1 auto' }}>
@@ -2007,7 +2049,7 @@ export function ClientAccountingSettingsTab({
                         if (f.type === 'textarea') {
                           return fieldWrap(
                             <div className="client-field client-field-full">
-                              <div className="client-field-label">{f.label}</div>
+                              <div className="client-field-label">{fieldLbl(f)}</div>
                               <textarea
                                 value={(v as string | null | undefined) ?? ''}
                                 disabled={dis}
@@ -2021,7 +2063,7 @@ export function ClientAccountingSettingsTab({
                         }
                         return fieldWrap(
                           <div className="client-field">
-                            <div className="client-field-label">{f.label}</div>
+                            <div className="client-field-label">{fieldLbl(f)}</div>
                             <div className="client-field-box">
                               <input
                                 type="text"
@@ -2040,8 +2082,8 @@ export function ClientAccountingSettingsTab({
                         if (f.display_as === 'radio') {
                           return fieldWrap(
                             <div className="client-field client-field-full">
-                              <div className="client-field-label">{f.label}</div>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }} role="radiogroup" aria-label={f.label}>
+                              <div className="client-field-label">{fieldLbl(f)}</div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }} role="radiogroup" aria-label={fieldLbl(f)}>
                                 {(f.options ?? []).map((o) => (
                                   <label key={String(o.value)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                                     <input
@@ -2051,7 +2093,7 @@ export function ClientAccountingSettingsTab({
                                       disabled={dis}
                                       onChange={() => patchVehicleItemDraft({ [f.key]: o.value })}
                                     />
-                                    <span>{o.label}</span>
+                                    <span>{optLbl(o)}</span>
                                   </label>
                                 ))}
                               </div>
@@ -2060,7 +2102,7 @@ export function ClientAccountingSettingsTab({
                         }
                         return fieldWrap(
                           <div className="client-field">
-                            <div className="client-field-label">{f.label}</div>
+                            <div className="client-field-label">{fieldLbl(f)}</div>
                             <div className="client-field-box">
                               <select
                                 value={(v as string | null | undefined) ?? ''}
@@ -2070,10 +2112,10 @@ export function ClientAccountingSettingsTab({
                                 }
                                 style={{ border: 'none', background: 'transparent', width: '100%', outline: 'none', font: 'inherit' }}
                               >
-                                <option value="">בחר</option>
+                                <option value="">{t('clientOperations.choose')}</option>
                                 {(f.options ?? []).map((o) => (
                                   <option key={String(o.value)} value={String(o.value)}>
-                                    {o.label}
+                                    {optLbl(o)}
                                   </option>
                                 ))}
                               </select>
@@ -2084,7 +2126,7 @@ export function ClientAccountingSettingsTab({
                       if (f.type === 'boolean') {
                         return fieldWrap(
                           <div className="client-field">
-                            <div className="client-field-label">{f.label}</div>
+                            <div className="client-field-label">{fieldLbl(f)}</div>
                             <div className="client-field-box">
                               <select
                                 value={Boolean(v) ? 'true' : 'false'}
@@ -2094,7 +2136,7 @@ export function ClientAccountingSettingsTab({
                               >
                                 {(f.options ?? []).map((o) => (
                                   <option key={String(o.value)} value={o.value ? 'true' : 'false'}>
-                                    {o.label}
+                                    {optLbl(o)}
                                   </option>
                                 ))}
                               </select>
@@ -2105,7 +2147,7 @@ export function ClientAccountingSettingsTab({
                       if (f.type === 'integer' || f.type === 'numeric') {
                         return fieldWrap(
                           <div className="client-field">
-                            <div className="client-field-label">{f.label}</div>
+                            <div className="client-field-label">{fieldLbl(f)}</div>
                             <div className="client-field-box">
                               <input
                                 type="number"
@@ -2128,7 +2170,7 @@ export function ClientAccountingSettingsTab({
                       if (f.type === 'date') {
                         return fieldWrap(
                           <div className="client-field">
-                            <div className="client-field-label">{f.label}</div>
+                            <div className="client-field-label">{fieldLbl(f)}</div>
                             <div className="client-field-box">
                               <input
                                 type="date"
@@ -2149,7 +2191,7 @@ export function ClientAccountingSettingsTab({
                           (vehicleItemDraft[nameKey] as string | null | undefined) ?? null;
                         return fieldWrap(
                           <div className="client-field client-field-full">
-                            <div className="client-field-label">{f.label}</div>
+                            <div className="client-field-label">{fieldLbl(f)}</div>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
                               <span style={{ fontSize: 13 }}>{displayName || '—'}</span>
                               {assetId && !dis ? (
@@ -2168,7 +2210,7 @@ export function ClientAccountingSettingsTab({
                                     }
                                   }}
                                 >
-                                  פתיחה
+                                  {t('clientOperations.accounting.open')}
                                 </button>
                               ) : null}
                               {!dis ? (
@@ -2215,7 +2257,9 @@ export function ClientAccountingSettingsTab({
                                     disabled={vehicleFileUploadKey === f.key}
                                     onClick={() => document.getElementById(`vf-file-${f.key}`)?.click()}
                                   >
-                                    {vehicleFileUploadKey === f.key ? 'מעלה…' : 'העלאת קובץ'}
+                                    {vehicleFileUploadKey === f.key
+                                      ? t('clientOperations.accounting.uploading')
+                                      : t('clientOperations.accounting.uploadFile')}
                                   </button>
                                 </>
                               ) : null}
@@ -2225,8 +2269,10 @@ export function ClientAccountingSettingsTab({
                       }
                       return fieldWrap(
                         <div className="client-field client-field-full" key={f.key}>
-                          <div className="client-field-label">{f.label}</div>
-                          <div style={{ fontSize: 12, color: '#9ca3af' }}>שדה לא נתמך: {f.type}</div>
+                          <div className="client-field-label">{fieldLbl(f)}</div>
+                          <div style={{ fontSize: 12, color: '#9ca3af' }}>
+                            {t('clientOperations.accounting.unsupportedField')}: {f.type}
+                          </div>
                         </div>
                       );
                     });
@@ -2243,7 +2289,7 @@ export function ClientAccountingSettingsTab({
                   style={{ minWidth: 96 }}
                   onClick={() => void saveVehicleItem()}
                 >
-                  שמירה
+                  {t('clientOperations.save')}
                 </button>
               ) : null}
             </div>
@@ -2268,7 +2314,7 @@ export function ClientAccountingSettingsTab({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="nx-modal-header">
-              <h3 className="nx-modal-title">הוספת שדה</h3>
+              <h3 className="nx-modal-title">{t('clientOperations.accounting.addField')}</h3>
               <WorkspaceNestedDialogClose
                 disabled={emAddSaving}
                 onClick={() => {
@@ -2282,7 +2328,7 @@ export function ClientAccountingSettingsTab({
               style={{ maxHeight: 'min(72vh, 560px)', overflowY: 'auto' }}
             >
               <div className="client-field">
-                <div className="client-field-label">שם שדה</div>
+                <div className="client-field-label">{t('clientOperations.accounting.fieldName')}</div>
                 <input
                   type="text"
                   value={emAddLabel}
@@ -2296,7 +2342,7 @@ export function ClientAccountingSettingsTab({
                 />
               </div>
               <div className="client-field" style={{ marginTop: 12 }}>
-                <div className="client-field-label">סוג שדה</div>
+                <div className="client-field-label">{t('clientOperations.accounting.fieldType')}</div>
                 <select
                   value={emAddFieldType}
                   onChange={(e) => {
@@ -2317,11 +2363,11 @@ export function ClientAccountingSettingsTab({
                   <option value="">
                     {modal?.expense_management_modal_meta?.custom_field_type_placeholder_he ??
                       modal?.expense_management_modal_meta?.custom_field_type_default ??
-                      'בחר'}
+                      t('clientOperations.choose')}
                   </option>
                   {(modal?.expense_management_modal_meta?.custom_field_type_options ?? []).map((o) => (
                     <option key={String(o.value)} value={String(o.value)}>
-                      {o.label}
+                      {optLbl(o)}
                     </option>
                   ))}
                 </select>
@@ -2338,14 +2384,15 @@ export function ClientAccountingSettingsTab({
                   modal?.expense_management_modal_meta?.custom_field_options_max_count ?? EM_ADD_OPTIONS_MAX_FALLBACK;
                 const countLbl =
                   modal?.expense_management_modal_meta?.custom_field_options_count_label_he ??
-                  'מספר שורות / אפשרויות';
+                  t('clientOperations.accounting.optionsCount');
                 const rowLbl =
-                  modal?.expense_management_modal_meta?.custom_field_option_value_label_he ?? 'שם אפשרות';
+                  modal?.expense_management_modal_meta?.custom_field_option_value_label_he ??
+                  t('clientOperations.accounting.optionName');
                 const n = Math.min(Math.max(1, emAddOptionRowCount), optCap);
                 return showOptions ? (
                   <div style={{ marginTop: 12 }}>
                     <div className="client-field">
-                      <div className="client-field-label">{countLbl} (עד {optCap})</div>
+                      <div className="client-field-label">{countLbl}</div>
                       <select
                         value={n}
                         onChange={(e) => {
@@ -2424,13 +2471,13 @@ export function ClientAccountingSettingsTab({
                 const incomplete = parts.some((p) => !p);
                 return incomplete ? (
                   <p style={{ color: '#6b7280', fontWeight: 600, fontSize: 13, marginTop: 10, marginBottom: 0 }}>
-                    מלאו שם לכל {n} האפשרויות (רשימה או תיבות סימון).
+                    {fillI18n(t('clientOperations.accounting.fillAllOptionNames'), { n })}
                   </p>
                 ) : null;
               })()}
               {!emAddSaving && emAddFieldType && !emAddLabel.trim() ? (
                 <p style={{ color: '#6b7280', fontWeight: 600, fontSize: 13, marginTop: 8, marginBottom: 0 }}>
-                  נא להזין שם שדה כדי לשמור.
+                  {t('clientOperations.accounting.needFieldName')}
                 </p>
               ) : null}
             </div>
@@ -2457,7 +2504,7 @@ export function ClientAccountingSettingsTab({
                 })()}
                 style={{ minWidth: 96 }}
               >
-                {emAddSaving ? 'שומר…' : 'שמירה'}
+                {emAddSaving ? t('clientOperations.saving') : t('clientOperations.save')}
               </button>
             </div>
           </div>

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useI18n } from '../i18n/I18nProvider';
+import { localizeSystemLabel } from '../lib/co-display-label.pure';
 import '../styles/nx-modal.css';
 import '../styles/nx-workspace-taxes-tab.css';
 import { ApiError, apiJson } from '../api/client';
@@ -75,7 +77,7 @@ function EditPencilIcon() {
 }
 
 /** Small scheme mark — geometric hints only; brand from server `payment_masked.brand` or live PAN heuristic in modal. */
-function PaymentCardBrandMark({ brand }: { brand: string | null | undefined }) {
+function PaymentCardBrandMark({ brand, t }: { brand: string | null | undefined; t: (key: string) => string }) {
   const b = (brand ?? 'unknown').toLowerCase();
   const common = {
     className: 'payment-card-brand-mark',
@@ -182,7 +184,7 @@ function PaymentCardBrandMark({ brand }: { brand: string | null | undefined }) {
     default:
       return (
         <svg {...common} role="img">
-          <title>לא זוהתה רשת אשראי — אמקס מתחיל ב־34 או 37, ויזה ב־4</title>
+          <title>{t('clientOperations.taxes.unknownCardNetwork')}</title>
           <rect x="1" y="3" width="32" height="16" rx="4" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1" />
           <rect x="5" y="6" width="10" height="7" rx="1.5" fill="#e2e8f0" />
           <text
@@ -206,11 +208,13 @@ function TaxTabPaymentPanelBlock({
   revealBusy,
   onPlainCopy,
   onSecureCopy,
+  t,
 }: {
   panel: TaxTabPaymentPanelModel;
   revealBusy: string | null;
   onPlainCopy: (raw: string | null | undefined) => void;
   onSecureCopy: (paymentType: PaymentType, secretKind: SecretKind) => void;
+  t: (key: string) => string;
 }) {
   return (
     <div style={{ marginTop: 12 }}>
@@ -223,7 +227,7 @@ function TaxTabPaymentPanelBlock({
             (row.interaction === 'secure_reveal_clipboard' && Boolean(row.secure_state?.disabled));
           return (
             <div className="payment-summary-row" key={row.row_key}>
-              <div className="payment-summary-label">{row.label_he}</div>
+              <div className="payment-summary-label">{localizeSystemLabel(t, row.label_key, row.label_he)}</div>
               <div
                 className={
                   row.value_cell_layout === 'card_with_brand'
@@ -234,7 +238,7 @@ function TaxTabPaymentPanelBlock({
                 {row.value_cell_layout === 'card_with_brand' ? (
                   <>
                     <span>{row.value_display_he}</span>
-                    <PaymentCardBrandMark brand={row.card_brand} />
+                    <PaymentCardBrandMark brand={row.card_brand} t={t} />
                   </>
                 ) : (
                   row.value_display_he
@@ -245,8 +249,8 @@ function TaxTabPaymentPanelBlock({
                   type="button"
                   className="payment-copy-btn"
                   disabled={copyDisabled}
-                  aria-label={row.copy_control.aria_label_he}
-                  title="העתקה"
+                  aria-label={localizeSystemLabel(t, row.copy_control.aria_label_key, row.copy_control.aria_label_he)}
+                  title={t('clientOperations.taxes.copy')}
                   onClick={() => {
                     if (row.interaction === 'plain_clipboard') {
                       void onPlainCopy(row.clipboard_plain_text);
@@ -263,12 +267,12 @@ function TaxTabPaymentPanelBlock({
         })}
         {panel.card_expired_warning ? (
           <div className="payment-summary-expired" role="alert">
-            כרטיס פג תוקף
+            {t('clientOperations.taxes.payment.cardExpired')}
           </div>
         ) : null}
       </div>
       <p style={{ fontSize: 11, color: '#94a3b8', margin: '8px 0 0', lineHeight: 1.4 }}>
-        {panel.cvv_footer_he}
+        {localizeSystemLabel(t, panel.cvv_footer_key, panel.cvv_footer_he)}
       </p>
     </div>
   );
@@ -342,6 +346,7 @@ function TaxWorkspaceSectionCard({
   revealBusy,
   onPlainCopy,
   onSecureCopy,
+  t,
 }: {
   sec: TaxTabSectionReadModel;
   isSaving: boolean;
@@ -349,19 +354,22 @@ function TaxWorkspaceSectionCard({
   revealBusy: string | null;
   onPlainCopy: (raw: string | null | undefined) => void;
   onSecureCopy: (paymentType: PaymentType, secretKind: SecretKind) => void;
+  t: (key: string) => string;
 }) {
+  const title = localizeSystemLabel(t, sec.title_key, sec.title_he);
+  const editLabel = localizeSystemLabel(t, sec.edit.button_label_key, sec.edit.button_label_he);
   return (
     <section className="nx-ws-taxes-card" data-section-key={sec.section_key}>
       <div className="nx-ws-taxes-card__head">
-        <h3 className="nx-ws-taxes-card__title">{sec.title_he}</h3>
+        <h3 className="nx-ws-taxes-card__title">{title}</h3>
         {sec.edit.enabled ? (
           <button
             type="button"
             className="nx-taxes-section-edit-btn"
             onClick={() => onOpenEditor(sec.section_key)}
             disabled={isSaving}
-            aria-label={sec.edit.button_label_he}
-            title={sec.edit.button_label_he}
+            aria-label={editLabel}
+            title={editLabel}
           >
             <EditPencilIcon />
           </button>
@@ -373,8 +381,8 @@ function TaxWorkspaceSectionCard({
             key={row.row_key}
             className={`nx-ws-taxes-row${row.tone ? ` nx-ws-taxes-row--${row.tone}` : ''}`}
           >
-            <dt className="nx-ws-taxes-row__label">{row.label_he}</dt>
-            <dd className="nx-ws-taxes-row__value">{row.value_he}</dd>
+            <dt className="nx-ws-taxes-row__label">{localizeSystemLabel(t, row.label_key, row.label_he)}</dt>
+            <dd className="nx-ws-taxes-row__value">{localizeSystemLabel(t, row.value_key, row.value_he)}</dd>
           </div>
         ))}
       </dl>
@@ -385,6 +393,7 @@ function TaxWorkspaceSectionCard({
             revealBusy={revealBusy}
             onPlainCopy={onPlainCopy}
             onSecureCopy={onSecureCopy}
+            t={t}
           />
         </div>
       ) : null}
@@ -406,6 +415,7 @@ export function ClientTaxesTab({
   /** Keeps fees chart slice stable when the full case is rebuilt (from workspace `fees_tab`). */
   feesPriceChartView?: 'last_15' | 'all';
 }) {
+  const { t } = useI18n();
   /** Edit-layer draft (modals) — synced from `tax_tab.baseline.settings` only. */
   const [modalDraft, setModalDraft] = useState<ClientTaxSettingsPublic>(() => createEmptyTaxSettingsPublic());
   const [activeSectionModal, setActiveSectionModal] = useState<TaxTabSectionKey | null>(null);
@@ -493,7 +503,7 @@ export function ClientTaxesTab({
         if (out.tax_tab?.baseline.settings) {
           setModalDraft(cloneSettings(out.tax_tab.baseline.settings));
         }
-        setSaveSuccess('נשמר בהצלחה');
+        setSaveSuccess(t('clientOperations.taxes.saveSuccess'));
         setVatCard({ card_number: '', expiry: '', card_holder_name: '' });
         setItCard({ card_number: '', expiry: '', card_holder_name: '' });
         setActiveSectionModal(null);
@@ -510,12 +520,12 @@ export function ClientTaxesTab({
           setItCreditServerModalDismissed(false);
           setIncomeTaxPaymentCreditModalOpen(true);
         }
-        setSaveError(e instanceof Error ? e.message : 'שמירה נכשלה');
+        setSaveError(e instanceof Error ? e.message : t('clientOperations.taxes.saveFailed'));
       } finally {
         setIsSaving(false);
       }
     },
-    [clientId, feesPriceChartView, onTaxSettingsUpdated]
+    [clientId, feesPriceChartView, onTaxSettingsUpdated, t]
   );
 
   const handleSaveVatRegistration = () => {
@@ -529,7 +539,7 @@ export function ClientTaxesTab({
   const handleSaveVatPaymentEditor = () => {
     const m = modalDraft;
     if (!m.vat_payment_method) {
-      setSaveError('נא לבחור שיטת תשלום מע״מ');
+      setSaveError(t('clientOperations.taxes.chooseVatPayment'));
       return;
     }
     if (m.vat_payment_method === 'other') {
@@ -559,7 +569,7 @@ export function ClientTaxesTab({
   const handleSaveIncomeTaxPaymentEditor = () => {
     const m = modalDraft;
     if (!m.income_tax_payment_method) {
-      setSaveError('נא לבחור שיטת תשלום מס הכנסה');
+      setSaveError(t('clientOperations.taxes.chooseIncomeTaxPayment'));
       return;
     }
     if (m.income_tax_payment_method === 'other') {
@@ -870,7 +880,7 @@ export function ClientTaxesTab({
       modalDraft.national_insurance_monthly_amount == null ||
       Number.isNaN(Number(modalDraft.national_insurance_monthly_amount))
     ) {
-      setSaveError('נא להזין סכום חודשי');
+      setSaveError(t('clientOperations.taxes.needMonthlyAmount'));
       return;
     }
     setSaveError('');
@@ -909,7 +919,7 @@ export function ClientTaxesTab({
     setSaveError('');
     try {
       await doRevealPaymentSecret(paymentType, secretKind);
-      setSaveSuccess('הועתק ללוח (גישה נרשמה ביומן)');
+      setSaveSuccess(t('clientOperations.taxes.copiedAudited'));
     } catch (e) {
       if (e instanceof ApiError && e.code === 'SECURE_SESSION_REQUIRED') {
         try {
@@ -923,13 +933,13 @@ export function ClientTaxesTab({
           setPendingVerify({ paymentType, secretKind, challengeId: challenge_id });
           setVerifyCodeInput('');
           setVerifyModalOpen(true);
-          setSaveSuccess('נשלח קוד אימות לטלפון הארגון');
+          setSaveSuccess(t('clientOperations.taxes.codeSent'));
         } catch (e2) {
-          setSaveError(e2 instanceof Error ? e2.message : 'שגיאה');
+          setSaveError(e2 instanceof Error ? e2.message : t('clientOperations.taxes.error'));
         }
         return;
       }
-      setSaveError(e instanceof Error ? e.message : 'שגיאה');
+      setSaveError(e instanceof Error ? e.message : t('clientOperations.taxes.error'));
     } finally {
       setRevealBusy(null);
     }
@@ -953,23 +963,23 @@ export function ClientTaxesTab({
       setPendingVerify(null);
       setVerifyCodeInput('');
       await doRevealPaymentSecret(pv.paymentType, pv.secretKind);
-      setSaveSuccess('הועתק ללוח (גישה נרשמה ביומן)');
+      setSaveSuccess(t('clientOperations.taxes.copiedAudited'));
     } catch (e) {
-      setSaveError(e instanceof Error ? e.message : 'שגיאה');
+      setSaveError(e instanceof Error ? e.message : t('clientOperations.taxes.error'));
     } finally {
       setVerifyBusy(false);
     }
   };
 
   const handlePlainFieldCopy = async (raw: string | null | undefined) => {
-    const t = (raw ?? '').trim();
-    if (!t) return;
+    const text = (raw ?? '').trim();
+    if (!text) return;
     setSaveError('');
     try {
-      await navigator.clipboard.writeText(t);
-      setSaveSuccess('הועתק ללוח');
+      await navigator.clipboard.writeText(text);
+      setSaveSuccess(t('clientOperations.taxes.copied'));
     } catch {
-      setSaveError('העתקה נכשלה');
+      setSaveError(t('clientOperations.taxes.copyFailed'));
     }
   };
 
@@ -1007,6 +1017,7 @@ export function ClientTaxesTab({
     revealBusy,
     onPlainCopy: handlePlainFieldCopy,
     onSecureCopy: handleSecureCopySecret,
+    t,
   } as const;
 
   /** שתי סעיפים בשורה (50%/50%); אם רק אחד קיים — רוחב מלא. */
@@ -1033,16 +1044,16 @@ export function ClientTaxesTab({
   return (
     <div className="client-profile-card nx-ws-taxes">
       {!taxTab ? (
-        <p className="nx-ws-taxes-loading">טוען תצוגת מיסים מהשרת…</p>
+        <p className="nx-ws-taxes-loading">{t('clientOperations.taxes.loading')}</p>
       ) : (
         <div className="nx-taxes-workspace nx-ws-taxes-body">
           <div className="nx-ws-taxes-summary">
-            <h2 className="nx-ws-taxes-summary__title">{taxTab.header.title_he}</h2>
+            <h2 className="nx-ws-taxes-summary__title">{localizeSystemLabel(t, taxTab.header.title_key, taxTab.header.title_he)}</h2>
             <dl className="nx-ws-taxes-summary__grid">
               {taxTab.header.summary_rows.map((row) => (
                 <div key={row.row_key} className="nx-ws-taxes-summary__cell">
-                  <dt className="nx-ws-taxes-summary__label">{row.label_he}</dt>
-                  <dd className="nx-ws-taxes-summary__value">{row.value_he}</dd>
+                  <dt className="nx-ws-taxes-summary__label">{localizeSystemLabel(t, row.label_key, row.label_he)}</dt>
+                  <dd className="nx-ws-taxes-summary__value">{localizeSystemLabel(t, row.value_key, row.value_he)}</dd>
                 </div>
               ))}
             </dl>
@@ -1069,13 +1080,13 @@ export function ClientTaxesTab({
         <div className="nx-modal-overlay" style={{ zIndex: 10000 }} role="presentation">
           <div className="nx-modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
-              <h3 className="nx-modal-title">רישום מע״מ</h3>
+              <h3 className="nx-modal-title">{t('clientOperations.taxes.cards.vatRegistration')}</h3>
               <WorkspaceNestedDialogClose disabled={isSaving} onClick={() => setActiveSectionModal(null)} />
             </div>
             <div className="nx-modal-body">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <label style={{ fontSize: 13, fontWeight: 600 }}>
-                  מע״מ
+                  {t('clientOperations.taxes.fields.vat')}
                   <select
                     value={modalDraft.vat_type ?? ''}
                     onChange={(e) =>
@@ -1084,14 +1095,14 @@ export function ClientTaxesTab({
                     className={!isOsekPaturBusiness && !modalDraft.vat_type ? 'client-field-select-choose' : undefined}
                     style={{ width: '100%', marginTop: 6, padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db' }}
                   >
-                    <option value="">{isOsekPaturBusiness ? '—' : 'בחר'}</option>
-                    <option value="yes">כן</option>
-                    <option value="no">לא</option>
-                    <option value="patur">פטור</option>
+                    <option value="">{isOsekPaturBusiness ? '—' : t('clientOperations.choose')}</option>
+                    <option value="yes">{t('clientOperations.yes')}</option>
+                    <option value="no">{t('clientOperations.no')}</option>
+                    <option value="patur">{t('clientOperations.enums.exempt')}</option>
                   </select>
                 </label>
                 <label style={{ fontSize: 13, fontWeight: 600 }}>
-                  תדירות מע״מ
+                  {t('clientOperations.taxes.fields.vatFrequency')}
                   <select
                     value={modalDraft.vat_frequency ?? ''}
                     onChange={(e) =>
@@ -1100,15 +1111,15 @@ export function ClientTaxesTab({
                     disabled={Boolean(ui?.vat_frequency_disabled)}
                     style={{ width: '100%', marginTop: 6, padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db' }}
                   >
-                    <option value="">{isOsekPaturBusiness ? '—' : 'בחר'}</option>
-                    <option value="monthly">חודשי</option>
-                    <option value="bi_monthly">דו-חודשי</option>
-                    <option value="not_relevant">לא רלוונטי</option>
+                    <option value="">{isOsekPaturBusiness ? '—' : t('clientOperations.choose')}</option>
+                    <option value="monthly">{t('clientOperations.enums.frequency.monthly')}</option>
+                    <option value="bi_monthly">{t('clientOperations.enums.frequency.biMonthly')}</option>
+                    <option value="not_relevant">{t('clientOperations.enums.notRelevant')}</option>
                   </select>
                 </label>
                 {!ui?.osek_patur_vat_due ? (
                   <label style={{ fontSize: 13, fontWeight: 600 }}>
-                    יום יעד למע״מ
+                    {t('clientOperations.taxes.fields.vatDueDay')}
                     <select
                       value={modalDraft.vat_due_type ?? ''}
                       onChange={(e) =>
@@ -1116,10 +1127,10 @@ export function ClientTaxesTab({
                       }
                       style={{ width: '100%', marginTop: 6, padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db' }}
                     >
-                      <option value="">{isOsekPaturBusiness ? '—' : 'בחר'}</option>
+                      <option value="">{isOsekPaturBusiness ? '—' : t('clientOperations.choose')}</option>
                       <option value="pcn">PCN</option>
-                      <option value="regular">רגיל</option>
-                      <option value="not_relevant">לא רלוונטי</option>
+                      <option value="regular">{t('clientOperations.enums.vatDue.regular')}</option>
+                      <option value="not_relevant">{t('clientOperations.enums.notRelevant')}</option>
                     </select>
                   </label>
                 ) : (
@@ -1136,7 +1147,7 @@ export function ClientTaxesTab({
                 onClick={() => void handleSaveVatRegistration()}
                 disabled={isSaving}
               >
-                שמירה
+                {isSaving ? t('clientOperations.saving') : t('clientOperations.save')}
               </button>
               <button
                 type="button"
@@ -1144,7 +1155,7 @@ export function ClientTaxesTab({
                 onClick={() => setActiveSectionModal(null)}
                 disabled={isSaving}
               >
-                ביטול
+                {t('clientOperations.cancel')}
               </button>
             </div>
           </div>
@@ -1155,7 +1166,7 @@ export function ClientTaxesTab({
         <div className="nx-modal-overlay" style={{ zIndex: 10000 }} role="presentation">
           <div className="nx-modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
-              <h3 className="nx-modal-title">הערות</h3>
+              <h3 className="nx-modal-title">{t('clientOperations.taxes.cards.notes')}</h3>
               <WorkspaceNestedDialogClose disabled={isSaving} onClick={() => setActiveSectionModal(null)} />
             </div>
             <div className="nx-modal-body">
@@ -1173,7 +1184,7 @@ export function ClientTaxesTab({
                 onClick={() => void handleSaveNotes()}
                 disabled={isSaving}
               >
-                שמירה
+                {isSaving ? t('clientOperations.saving') : t('clientOperations.save')}
               </button>
               <button
                 type="button"
@@ -1181,7 +1192,7 @@ export function ClientTaxesTab({
                 onClick={() => setActiveSectionModal(null)}
                 disabled={isSaving}
               >
-                ביטול
+                {t('clientOperations.cancel')}
               </button>
             </div>
           </div>
@@ -1192,7 +1203,7 @@ export function ClientTaxesTab({
         <div className="nx-modal-overlay" style={{ zIndex: 10000 }} role="presentation">
           <div className="nx-modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
-              <h3 className="nx-modal-title">תשלום מע״מ</h3>
+              <h3 className="nx-modal-title">{t('clientOperations.taxes.cards.vatPayment')}</h3>
               <WorkspaceNestedDialogClose
                 disabled={isSaving}
                 onClick={() => {
@@ -1203,17 +1214,17 @@ export function ClientTaxesTab({
             </div>
             <div className="nx-modal-body">
               <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 12 }}>
-                שיטת תשלום
+                {t('clientOperations.taxes.fields.paymentMethod')}
                 <select
                   value={modalDraft.vat_payment_method ?? ''}
                   onChange={(e) => handleVatPaymentMethodChange(e.target.value)}
                   style={{ width: '100%', marginTop: 6, padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db' }}
                 >
-                  <option value="">בחר</option>
-                  <option value="credit">אשראי</option>
-                  <option value="bank_order">הוראת קבע</option>
-                  <option value="voucher">שובר</option>
-                  <option value="other">אחר</option>
+                  <option value="">{t('clientOperations.choose')}</option>
+                  <option value="credit">{t('clientOperations.enums.payment.credit')}</option>
+                  <option value="bank_order">{t('clientOperations.enums.payment.standingOrder')}</option>
+                  <option value="voucher">{t('clientOperations.enums.payment.voucher')}</option>
+                  <option value="other">{t('clientOperations.enums.payment.other')}</option>
                 </select>
               </label>
               {modalDraft.vat_payment_method === 'other' ? (
@@ -1223,12 +1234,12 @@ export function ClientTaxesTab({
                     setModalDraft((s) => ({ ...s, vat_other_payment_text: e.target.value || null }))
                   }
                   rows={3}
-                  placeholder="תיאור"
+                  placeholder={t('clientOperations.taxes.description')}
                   style={{ width: '100%', marginTop: 8 }}
                 />
               ) : null}
               <p style={{ fontSize: 12, color: '#64748b', marginTop: 10 }}>
-                לאשראי: אחרי בחירה ייפתח חלון להזנת כרטיס (אם נדרש).
+                {t('clientOperations.taxes.creditHint')}
               </p>
             </div>
             <div className="nx-modal-footer nx-tax-nested-modal-footer">
@@ -1238,7 +1249,7 @@ export function ClientTaxesTab({
                 onClick={() => void handleSaveVatPaymentEditor()}
                 disabled={isSaving}
               >
-                שמירה
+                {isSaving ? t('clientOperations.saving') : t('clientOperations.save')}
               </button>
               <button
                 type="button"
@@ -1249,7 +1260,7 @@ export function ClientTaxesTab({
                 }}
                 disabled={isSaving}
               >
-                ביטול
+                {t('clientOperations.cancel')}
               </button>
             </div>
           </div>
@@ -1260,7 +1271,7 @@ export function ClientTaxesTab({
         <div className="nx-modal-overlay" style={{ zIndex: 10000 }} role="presentation">
           <div className="nx-modal" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
-              <h3 className="nx-modal-title">תשלום מס הכנסה</h3>
+              <h3 className="nx-modal-title">{t('clientOperations.taxes.cards.incomeTaxPayment')}</h3>
               <WorkspaceNestedDialogClose
                 disabled={isSaving}
                 onClick={() => {
@@ -1271,17 +1282,17 @@ export function ClientTaxesTab({
             </div>
             <div className="nx-modal-body">
               <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 12 }}>
-                שיטת תשלום
+                {t('clientOperations.taxes.fields.paymentMethod')}
                 <select
                   value={modalDraft.income_tax_payment_method ?? ''}
                   onChange={(e) => handleIncomeTaxPaymentMethodChange(e.target.value)}
                   style={{ width: '100%', marginTop: 6, padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db' }}
                 >
-                  <option value="">בחר</option>
-                  <option value="credit">אשראי</option>
-                  <option value="bank_order">הוראת קבע</option>
-                  <option value="voucher">שובר</option>
-                  <option value="other">אחר</option>
+                  <option value="">{t('clientOperations.choose')}</option>
+                  <option value="credit">{t('clientOperations.enums.payment.credit')}</option>
+                  <option value="bank_order">{t('clientOperations.enums.payment.standingOrder')}</option>
+                  <option value="voucher">{t('clientOperations.enums.payment.voucher')}</option>
+                  <option value="other">{t('clientOperations.enums.payment.other')}</option>
                 </select>
               </label>
               {modalDraft.income_tax_payment_method === 'other' ? (
@@ -1302,7 +1313,7 @@ export function ClientTaxesTab({
                 onClick={() => void handleSaveIncomeTaxPaymentEditor()}
                 disabled={isSaving}
               >
-                שמירה
+                {isSaving ? t('clientOperations.saving') : t('clientOperations.save')}
               </button>
               <button
                 type="button"
@@ -1313,7 +1324,7 @@ export function ClientTaxesTab({
                 }}
                 disabled={isSaving}
               >
-                ביטול
+                {t('clientOperations.cancel')}
               </button>
             </div>
           </div>
@@ -1356,7 +1367,7 @@ export function ClientTaxesTab({
                   margin: 0,
                 }}
               >
-                מקדמות מס הכנסה
+                {t('clientOperations.taxes.cards.incomeTaxAdvances')}
               </h3>
               <WorkspaceNestedDialogClose disabled={isSaving} onClick={handleAdvanceModalCancel} />
             </div>
@@ -1372,7 +1383,7 @@ export function ClientTaxesTab({
                   marginBottom: 12,
                 }}
               >
-                מקדמות
+                {t('clientOperations.taxes.fields.advances')}
                 <select
                   value={
                     modalDraft.income_tax_advance_ui_selection ??
@@ -1388,9 +1399,9 @@ export function ClientTaxesTab({
                     fontSize: 13.5,
                   }}
                 >
-                  <option value="choose">בחר</option>
-                  <option value="yes">כן</option>
-                  <option value="no">לא</option>
+                  <option value="choose">{t('clientOperations.choose')}</option>
+                  <option value="yes">{t('clientOperations.yes')}</option>
+                  <option value="no">{t('clientOperations.no')}</option>
                 </select>
               </label>
               <p
@@ -1402,7 +1413,7 @@ export function ClientTaxesTab({
                   fontWeight: 500,
                 }}
               >
-                יש להזין את האחוז שנקבע על ידי מס הכנסה
+                {t('clientOperations.taxes.advancePercentHint')}
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <label
@@ -1415,7 +1426,7 @@ export function ClientTaxesTab({
                     gap: 6,
                   }}
                 >
-                  אחוז
+                  {t('clientOperations.taxes.fields.percent')}
                   <input
                     type="number"
                     value={modalDraft.income_tax_advance_percent ?? ''}
@@ -1445,7 +1456,7 @@ export function ClientTaxesTab({
                     gap: 6,
                   }}
                 >
-                  תדירות דיווח
+                  {t('clientOperations.taxes.fields.reportingFrequency')}
                   <select
                     value={modalDraft.income_tax_advance_frequency ?? ''}
                     onChange={(e) =>
@@ -1464,8 +1475,8 @@ export function ClientTaxesTab({
                     }}
                   >
                     <option value="">—</option>
-                    <option value="monthly">חד חודשי</option>
-                    <option value="bi_monthly">דו חודשי</option>
+                    <option value="monthly">{t('clientOperations.enums.frequency.monthly')}</option>
+                    <option value="bi_monthly">{t('clientOperations.enums.frequency.biMonthly')}</option>
                   </select>
                 </label>
               </div>
@@ -1477,7 +1488,7 @@ export function ClientTaxesTab({
                 onClick={handleAdvanceModalSave}
                 disabled={isSaving}
               >
-                שמירה
+                {isSaving ? t('clientOperations.saving') : t('clientOperations.save')}
               </button>
               <button
                 type="button"
@@ -1485,7 +1496,7 @@ export function ClientTaxesTab({
                 onClick={handleAdvanceModalCancel}
                 disabled={isSaving}
               >
-                ביטול
+                {t('clientOperations.cancel')}
               </button>
             </div>
           </div>
@@ -1528,7 +1539,7 @@ export function ClientTaxesTab({
                   margin: 0,
                 }}
               >
-                מס הכנסה ניכויים
+                {t('clientOperations.taxes.cards.incomeTaxDeductions')}
               </h3>
               <WorkspaceNestedDialogClose disabled={isSaving} onClick={handleDeductionsModalCancel} />
             </div>
@@ -1544,7 +1555,7 @@ export function ClientTaxesTab({
                   marginBottom: 12,
                 }}
               >
-                מס הכנסה ניכויים
+                {t('clientOperations.taxes.cards.incomeTaxDeductions')}
                 <select
                   value={
                     modalDraft.income_tax_deductions_ui_selection ??
@@ -1560,9 +1571,9 @@ export function ClientTaxesTab({
                     fontSize: 13.5,
                   }}
                 >
-                  <option value="choose">בחר</option>
-                  <option value="yes">כן</option>
-                  <option value="no">לא</option>
+                  <option value="choose">{t('clientOperations.choose')}</option>
+                  <option value="yes">{t('clientOperations.yes')}</option>
+                  <option value="no">{t('clientOperations.no')}</option>
                 </select>
               </label>
               <p
@@ -1574,7 +1585,7 @@ export function ClientTaxesTab({
                   fontWeight: 500,
                 }}
               >
-                יש להזין את מספר תיק הניכויים ואת תדירות הדיווח
+                {t('clientOperations.taxes.deductionsHint')}
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 <label
@@ -1587,7 +1598,7 @@ export function ClientTaxesTab({
                     gap: 6,
                   }}
                 >
-                  תיק ניכויים
+                  {t('clientOperations.taxes.fields.deductionsFile')}
                   <input
                     value={modalDraft.income_tax_deductions_file_number ?? ''}
                     onChange={(e) =>
@@ -1601,7 +1612,7 @@ export function ClientTaxesTab({
                       fontWeight: 500,
                       color: '#111827',
                     }}
-                    aria-label="תיק ניכויים"
+                    aria-label={t('clientOperations.taxes.fields.deductionsFile')}
                   />
                 </label>
                 <label
@@ -1614,7 +1625,7 @@ export function ClientTaxesTab({
                     gap: 6,
                   }}
                 >
-                  תדירות דיווח
+                  {t('clientOperations.taxes.fields.reportingFrequency')}
                   <select
                     value={modalDraft.income_tax_deductions_frequency ?? ''}
                     onChange={(e) =>
@@ -1635,7 +1646,7 @@ export function ClientTaxesTab({
                     <option value="">—</option>
                     {(incomeTaxDeductionsFreqField?.options ?? []).map((opt) => (
                       <option key={opt.value} value={opt.value}>
-                        {opt.label_he}
+                        {localizeSystemLabel(t, opt.label_key, opt.label_he)}
                       </option>
                     ))}
                   </select>
@@ -1649,7 +1660,7 @@ export function ClientTaxesTab({
                 onClick={handleDeductionsModalSave}
                 disabled={isSaving}
               >
-                שמירה
+                {isSaving ? t('clientOperations.saving') : t('clientOperations.save')}
               </button>
               <button
                 type="button"
@@ -1657,7 +1668,7 @@ export function ClientTaxesTab({
                 onClick={handleDeductionsModalCancel}
                 disabled={isSaving}
               >
-                ביטול
+                {t('clientOperations.cancel')}
               </button>
             </div>
           </div>
@@ -1699,7 +1710,7 @@ export function ClientTaxesTab({
                   margin: 0,
                 }}
               >
-                ביטוח לאומי עצמאי
+                {t('clientOperations.taxes.cards.niSelfEmployed')}
               </h3>
               <WorkspaceNestedDialogClose disabled={isSaving} onClick={handleNationalInsuranceModalCancel} />
             </div>
@@ -1715,7 +1726,7 @@ export function ClientTaxesTab({
                   marginBottom: 12,
                 }}
               >
-                ביטוח לאומי עצמאי
+                {t('clientOperations.taxes.cards.niSelfEmployed')}
                 <select
                   value={modalDraft.national_insurance_type ?? ''}
                   onChange={(e) => handleNationalInsuranceSelectChange(e.target.value)}
@@ -1726,9 +1737,9 @@ export function ClientTaxesTab({
                     fontSize: 13.5,
                   }}
                 >
-                  <option value="">בחר</option>
-                  <option value="yes">כן</option>
-                  <option value="not_applicable">לא עונה להגדרות</option>
+                  <option value="">{t('clientOperations.choose')}</option>
+                  <option value="yes">{t('clientOperations.yes')}</option>
+                  <option value="not_applicable">{t('clientOperations.enums.notApplicable')}</option>
                 </select>
               </label>
               <p
@@ -1740,7 +1751,7 @@ export function ClientTaxesTab({
                   fontWeight: 500,
                 }}
               >
-                יש להזין את הסכום החודשי
+                {t('clientOperations.taxes.monthlyAmountHint')}
               </p>
               <label
                 style={{
@@ -1752,7 +1763,7 @@ export function ClientTaxesTab({
                   gap: 6,
                 }}
               >
-                סכום חודשי
+                {t('clientOperations.taxes.fields.monthlyAmount')}
                 <input
                   type="number"
                   value={modalDraft.national_insurance_monthly_amount ?? ''}
@@ -1780,7 +1791,7 @@ export function ClientTaxesTab({
                 onClick={handleNationalInsuranceModalSave}
                 disabled={isSaving}
               >
-                שמירה
+                {isSaving ? t('clientOperations.saving') : t('clientOperations.save')}
               </button>
               <button
                 type="button"
@@ -1788,7 +1799,7 @@ export function ClientTaxesTab({
                 onClick={handleNationalInsuranceModalCancel}
                 disabled={isSaving}
               >
-                ביטול
+                {t('clientOperations.cancel')}
               </button>
             </div>
           </div>
@@ -1799,17 +1810,17 @@ export function ClientTaxesTab({
         <div className="nx-modal-overlay" style={{ zIndex: 10000 }} role="presentation">
           <div className="nx-modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
-              <h3 className="nx-modal-title">פרטי אשראי — מע״מ</h3>
+              <h3 className="nx-modal-title">{t('clientOperations.taxes.modals.vatCreditTitle')}</h3>
               <WorkspaceNestedDialogClose disabled={isSaving} onClick={handleVatCreditModalCancel} />
             </div>
             <div className="nx-modal-body">
               <p style={{ fontSize: 12, color: '#374151', margin: '0 0 10px' }}>
-                ת.ז / ח.פ: <strong>{modalDraft.client_tax_id ?? '—'}</strong>
+                {t('clientOperations.fields.taxId')}: <strong>{modalDraft.client_tax_id ?? '—'}</strong>
               </p>
               <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>
-                שם בעל הכרטיס
+                {t('clientOperations.taxes.payment.cardholder')}
                 <input
-                  placeholder="שם כפי שמופיע על הכרטיס"
+                  placeholder={t('clientOperations.taxes.cardHolder')}
                   value={vatCard.card_holder_name ?? ''}
                   onChange={(e) => setVatCard((c) => ({ ...c, card_holder_name: e.target.value }))}
                   style={{ width: '100%', marginTop: 6, padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db' }}
@@ -1818,29 +1829,29 @@ export function ClientTaxesTab({
               </label>
               <div className="payment-modal-card-row">
                 <input
-                  placeholder="מספר כרטיס"
+                  placeholder={t('clientOperations.taxes.cardNumber')}
                   value={vatCard.card_number}
                   onChange={(e) => setVatCard((c) => ({ ...c, card_number: e.target.value }))}
                   style={{ flex: 1, minWidth: 0, marginBottom: 0, padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db' }}
                   autoComplete="off"
                 />
                 <div className="payment-modal-card-row-brand" aria-hidden="true">
-                  <PaymentCardBrandMark brand={inferCardBrandClient(vatCard.card_number)} />
+                  <PaymentCardBrandMark brand={inferCardBrandClient(vatCard.card_number)} t={t} />
                 </div>
               </div>
               <input
-                placeholder="תוקף MM/YY"
+                placeholder={t('clientOperations.taxes.expiry')}
                 value={vatCard.expiry}
                 onChange={(e) => setVatCard((c) => ({ ...c, expiry: e.target.value }))}
                 style={{ width: '100%', marginBottom: 4, marginTop: 8, padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db' }}
               />
               {isCardExpiryInPast(vatCard.expiry) ? (
                 <p className="payment-modal-expired-hint" role="alert">
-                  כרטיס פג תוקף
+                  {t('clientOperations.taxes.payment.cardExpired')}
                 </p>
               ) : null}
               <p style={{ fontSize: 12, color: '#6b7280', margin: '8px 0 0', lineHeight: 1.45 }}>
-                קוד CVV אינו נשמר במערכת ויש לבקשו מהלקוח בעת התשלום
+                {t('clientOperations.taxes.payment.cvvFooter')}
               </p>
             </div>
             <div className="nx-modal-footer nx-tax-nested-modal-footer">
@@ -1866,7 +1877,7 @@ export function ClientTaxesTab({
                 }}
                 disabled={isSaving}
               >
-                שמירה
+                {isSaving ? t('clientOperations.saving') : t('clientOperations.save')}
               </button>
               <button
                 type="button"
@@ -1874,7 +1885,7 @@ export function ClientTaxesTab({
                 onClick={handleVatCreditModalCancel}
                 disabled={isSaving}
               >
-                ביטול
+                {t('clientOperations.cancel')}
               </button>
             </div>
           </div>
@@ -1885,20 +1896,20 @@ export function ClientTaxesTab({
         <div className="nx-modal-overlay" style={{ zIndex: 10000 }} role="presentation">
           <div className="nx-modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
-              <h3 className="nx-modal-title">פרטי אשראי — מס הכנסה</h3>
+              <h3 className="nx-modal-title">{t('clientOperations.taxes.modals.incomeTaxCreditTitle')}</h3>
               <WorkspaceNestedDialogClose disabled={isSaving} onClick={handleItCreditModalCancel} />
             </div>
             <div className="nx-modal-body">
               <p style={{ fontSize: 12, color: '#374151', margin: '0 0 6px' }}>
-                ת.ז / ח.פ: <strong>{modalDraft.client_tax_id ?? '—'}</strong>
+                {t('clientOperations.fields.taxId')}: <strong>{modalDraft.client_tax_id ?? '—'}</strong>
               </p>
               <p style={{ fontSize: 12, color: '#374151', margin: '0 0 10px' }}>
-                תיק ניכויים: <strong>{modalDraft.income_tax_deductions_file_number ?? '—'}</strong>
+                {t('clientOperations.taxes.fields.deductionsFile')}: <strong>{modalDraft.income_tax_deductions_file_number ?? '—'}</strong>
               </p>
               <label style={{ fontSize: 13, fontWeight: 600, display: 'block', marginBottom: 6 }}>
-                שם בעל הכרטיס
+                {t('clientOperations.taxes.payment.cardholder')}
                 <input
-                  placeholder="שם כפי שמופיע על הכרטיס"
+                  placeholder={t('clientOperations.taxes.cardHolder')}
                   value={itCard.card_holder_name ?? ''}
                   onChange={(e) => setItCard((c) => ({ ...c, card_holder_name: e.target.value }))}
                   style={{ width: '100%', marginTop: 6, padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db' }}
@@ -1907,29 +1918,29 @@ export function ClientTaxesTab({
               </label>
               <div className="payment-modal-card-row">
                 <input
-                  placeholder="מספר כרטיס"
+                  placeholder={t('clientOperations.taxes.cardNumber')}
                   value={itCard.card_number}
                   onChange={(e) => setItCard((c) => ({ ...c, card_number: e.target.value }))}
                   style={{ flex: 1, minWidth: 0, marginBottom: 0, padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db' }}
                   autoComplete="off"
                 />
                 <div className="payment-modal-card-row-brand" aria-hidden="true">
-                  <PaymentCardBrandMark brand={inferCardBrandClient(itCard.card_number)} />
+                  <PaymentCardBrandMark brand={inferCardBrandClient(itCard.card_number)} t={t} />
                 </div>
               </div>
               <input
-                placeholder="תוקף MM/YY"
+                placeholder={t('clientOperations.taxes.expiry')}
                 value={itCard.expiry}
                 onChange={(e) => setItCard((c) => ({ ...c, expiry: e.target.value }))}
                 style={{ width: '100%', marginBottom: 4, marginTop: 8, padding: '8px 10px', borderRadius: 6, border: '1px solid #d1d5db' }}
               />
               {isCardExpiryInPast(itCard.expiry) ? (
                 <p className="payment-modal-expired-hint" role="alert">
-                  כרטיס פג תוקף
+                  {t('clientOperations.taxes.payment.cardExpired')}
                 </p>
               ) : null}
               <p style={{ fontSize: 12, color: '#6b7280', margin: '8px 0 0', lineHeight: 1.45 }}>
-                קוד CVV אינו נשמר במערכת ויש לבקשו מהלקוח בעת התשלום
+                {t('clientOperations.taxes.payment.cvvFooter')}
               </p>
             </div>
             <div className="nx-modal-footer nx-tax-nested-modal-footer">
@@ -1955,7 +1966,7 @@ export function ClientTaxesTab({
                 }}
                 disabled={isSaving}
               >
-                שמירה
+                {isSaving ? t('clientOperations.saving') : t('clientOperations.save')}
               </button>
               <button
                 type="button"
@@ -1963,7 +1974,7 @@ export function ClientTaxesTab({
                 onClick={handleItCreditModalCancel}
                 disabled={isSaving}
               >
-                ביטול
+                {t('clientOperations.cancel')}
               </button>
             </div>
           </div>
@@ -1974,7 +1985,7 @@ export function ClientTaxesTab({
         <div className="nx-modal-overlay" style={{ zIndex: 10000 }} role="presentation">
           <div className="nx-modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
-              <h3 className="nx-modal-title">תיאור תשלום מע״מ</h3>
+              <h3 className="nx-modal-title">{t('clientOperations.taxes.modals.vatOtherTitle')}</h3>
               <WorkspaceNestedDialogClose disabled={isSaving} onClick={handleVatOtherModalCancel} />
             </div>
             <div className="nx-modal-body">
@@ -1994,7 +2005,7 @@ export function ClientTaxesTab({
                 onClick={handleSaveVatOtherPayment}
                 disabled={isSaving}
               >
-                שמירה
+                {isSaving ? t('clientOperations.saving') : t('clientOperations.save')}
               </button>
               <button
                 type="button"
@@ -2002,7 +2013,7 @@ export function ClientTaxesTab({
                 onClick={handleVatOtherModalCancel}
                 disabled={isSaving}
               >
-                ביטול
+                {t('clientOperations.cancel')}
               </button>
             </div>
           </div>
@@ -2013,7 +2024,7 @@ export function ClientTaxesTab({
         <div className="nx-modal-overlay" style={{ zIndex: 10000 }} role="presentation">
           <div className="nx-modal" style={{ maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
-              <h3 className="nx-modal-title">תיאור תשלום מס הכנסה</h3>
+              <h3 className="nx-modal-title">{t('clientOperations.taxes.modals.incomeTaxOtherTitle')}</h3>
               <WorkspaceNestedDialogClose disabled={isSaving} onClick={handleItOtherModalCancel} />
             </div>
             <div className="nx-modal-body">
@@ -2036,7 +2047,7 @@ export function ClientTaxesTab({
                 onClick={handleSaveIncomeOtherPayment}
                 disabled={isSaving}
               >
-                שמירה
+                {isSaving ? t('clientOperations.saving') : t('clientOperations.save')}
               </button>
               <button
                 type="button"
@@ -2044,7 +2055,7 @@ export function ClientTaxesTab({
                 onClick={handleItOtherModalCancel}
                 disabled={isSaving}
               >
-                ביטול
+                {t('clientOperations.cancel')}
               </button>
             </div>
           </div>
@@ -2055,7 +2066,7 @@ export function ClientTaxesTab({
         <div className="nx-modal-overlay" style={{ zIndex: 10001 }} role="presentation">
           <div className="nx-modal" style={{ maxWidth: 400 }} onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
-              <h3 className="nx-modal-title">הזן קוד אימות</h3>
+              <h3 className="nx-modal-title">{t('clientOperations.taxes.modals.verifyTitle')}</h3>
               <WorkspaceNestedDialogClose
                 disabled={verifyBusy}
                 onClick={() => {
@@ -2067,12 +2078,12 @@ export function ClientTaxesTab({
             </div>
             <div className="nx-modal-body">
               <p style={{ fontSize: 13, color: '#374151', marginBottom: 12 }}>
-                נשלח קוד ב-SMS לטלפון הארגון הרשום בהגדרות.
+                {t('clientOperations.taxes.smsHint')}
               </p>
               <input
                 value={verifyCodeInput}
                 onChange={(e) => setVerifyCodeInput(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                placeholder="קוד"
+                placeholder={t('clientOperations.taxes.code')}
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #d1d5db' }}
@@ -2085,7 +2096,7 @@ export function ClientTaxesTab({
                 onClick={() => void handleVerifyCodeSubmit()}
                 disabled={verifyBusy || verifyCodeInput.trim().length < 4}
               >
-                {verifyBusy ? 'מאמת…' : 'אישור'}
+                {verifyBusy ? t('clientOperations.taxes.verifying') : t('clientOperations.confirm')}
               </button>
               <button
                 type="button"
@@ -2097,7 +2108,7 @@ export function ClientTaxesTab({
                 }}
                 disabled={verifyBusy}
               >
-                ביטול
+                {t('clientOperations.cancel')}
               </button>
             </div>
           </div>

@@ -4,6 +4,13 @@ import { AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import { AppError, badRequest, forbidden } from '../../shared/errors.js';
 import { assertCanAccessClientFromContext } from './organization-client-access.js';
 import { buildHistoryReportPdfBuffer } from './client-history-report-pdf.js';
+import {
+  CO_UI,
+  HISTORY_DOCUMENT_COMMAND_SUMMARY_KEY,
+  HISTORY_FEE_COMMAND_SUMMARY_KEY,
+  HISTORY_OBLIGATION_ACTION_KEYS,
+  HISTORY_TASK_ACTION_KEYS,
+} from './client-operations-ui-labels.pure.js';
 
 const MODULE_CODE = 'client-operations';
 const RETENTION_MONTHS = 12;
@@ -27,20 +34,28 @@ export type ClientHistoryTabResponse = {
   permissions: { can_view: boolean; can_export: boolean };
   ui: {
     title_he: string;
+    title_key?: string;
     empty_state_he: string;
+    empty_state_key?: string;
     retention_notice_he: string;
+    retention_notice_key?: string;
     /** Product: archival/cleanup job — not implemented in this repo. */
     retention_archival_todo_he: string;
+    retention_archival_todo_key?: string;
   };
   sections: Array<{
     section_key: HistorySectionKey;
     title_he: string;
+    title_key?: string;
     latest_events: Array<{
       event_id: string;
       occurred_at: string;
       occurred_display_he: string;
       actor_display_name: string | null;
       summary_he: string;
+      summary_key?: string;
+      summary_params?: Record<string, string | number>;
+      summary_param_keys?: Record<string, string>;
       action_type: string;
     }>;
     total_events_in_last_12_months: number;
@@ -49,6 +64,7 @@ export type ClientHistoryTabResponse = {
   open_section: null | {
     section_key: HistorySectionKey;
     title_he: string;
+    title_key?: string;
     range: { from_date: string | null; to_date: string | null };
     events: Array<{
       event_id: string;
@@ -56,6 +72,9 @@ export type ClientHistoryTabResponse = {
       occurred_display_he: string;
       actor_display_name: string | null;
       summary_he: string;
+      summary_key?: string;
+      summary_params?: Record<string, string | number>;
+      summary_param_keys?: Record<string, string>;
       action_type: string;
       metadata_preview: Record<string, unknown> | null;
     }>;
@@ -96,6 +115,9 @@ type AuditRow = {
 type MappedEvent = {
   section_key: HistorySectionKey;
   summary_he: string;
+  summary_key?: string;
+  summary_params?: Record<string, string | number>;
+  summary_param_keys?: Record<string, string>;
   action_type: string;
   metadata_preview: Record<string, unknown> | null;
 };
@@ -221,6 +243,10 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
       action_type: 'client_profile_update',
       summary_he:
         keys.length > 0 ? `עודכנו פרטי לקוח (${keys.length} שדות)` : 'עודכנו פרטי לקוח',
+      summary_key: keys.length
+        ? CO_UI.history.summaries.clientProfileUpdatedFields
+        : CO_UI.history.summaries.clientProfileUpdated,
+      summary_params: { count: keys.length },
       metadata_preview: { changes },
     };
   }
@@ -233,6 +259,7 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
       section_key: 'taxes',
       action_type: action,
       summary_he: 'פעולת גישה מאובטחת לכרטיס תשלום',
+      summary_key: CO_UI.history.summaries.secureCardAccess,
       metadata_preview: {},
     };
   }
@@ -245,6 +272,8 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
         section_key: 'taxes',
         action_type: 'tax_payment_secret_revealed',
         summary_he: sk ? `גילוי נתוני תשלום (${sk})` : 'גילוי נתוני תשלום',
+        summary_key: sk ? CO_UI.history.summaries.paymentRevealNamed : CO_UI.history.summaries.paymentReveal,
+        summary_params: sk ? { kind: sk } : undefined,
         metadata_preview: { secret_kind: sk || null },
       };
     }
@@ -252,6 +281,8 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
       section_key: 'taxes',
       action_type: 'tax_settings_update',
       summary_he: rule ? `עודכנו הגדרות מיסים — ${rule}` : 'עודכנו הגדרות מיסים',
+      summary_key: rule ? CO_UI.history.summaries.taxesUpdatedNamed : CO_UI.history.summaries.taxesUpdated,
+      summary_params: rule ? { rule } : undefined,
       metadata_preview: { rule: rule || null },
     };
   }
@@ -271,6 +302,7 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
       section_key: 'accounting',
       action_type: action,
       summary_he: `עודכנו הגדרות הנה\u05F4ח`,
+      summary_key: CO_UI.history.summaries.accountingUpdated,
       metadata_preview: { entity_type: entityType },
     };
   }
@@ -291,6 +323,8 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
       section_key: 'fees',
       action_type: cmd,
       summary_he: base,
+      summary_key: HISTORY_FEE_COMMAND_SUMMARY_KEY[cmd] ?? CO_UI.history.summaries.feeAction,
+      summary_params: HISTORY_FEE_COMMAND_SUMMARY_KEY[cmd] ? undefined : { cmd },
       metadata_preview: {
         command: cmd,
         agreement_id: payload.agreement_id ?? null,
@@ -307,6 +341,8 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
       section_key: 'payroll',
       action_type: cmd,
       summary_he: keys.length ? `עודכן שכר — ${cmd} (${keys.length} שדות)` : `עודכן שכר — ${cmd}`,
+      summary_key: keys.length ? CO_UI.history.summaries.payrollUpdatedFields : CO_UI.history.summaries.payrollUpdated,
+      summary_params: { cmd, count: keys.length },
       metadata_preview: { command: cmd, changed_keys: keys },
     };
   }
@@ -318,6 +354,8 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
       section_key: 'annual',
       action_type: cmd,
       summary_he: `דוח שנתי — ${cmd}`,
+      summary_key: CO_UI.history.summaries.annualCmd,
+      summary_params: { cmd },
       metadata_preview: { command: cmd },
     };
   }
@@ -332,10 +370,16 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
       upload_client_document: 'הועלה מסמך ללקוח',
       delete_client_document: 'נמחק מסמך',
     };
+    const documentsSummaryHe = labels[cmd] ?? (cmd ? `מסמכים — ${cmd}` : 'עודכנו מסמכי לקוח');
     return {
       section_key: 'documents',
       action_type: cmd || 'documents_workspace',
-      summary_he: labels[cmd] ?? (cmd ? `מסמכים — ${cmd}` : 'עודכנו מסמכי לקוח'),
+      summary_he: documentsSummaryHe,
+      ...(HISTORY_DOCUMENT_COMMAND_SUMMARY_KEY[cmd]
+        ? { summary_key: HISTORY_DOCUMENT_COMMAND_SUMMARY_KEY[cmd] }
+        : cmd
+          ? { summary_key: CO_UI.history.summaries.documentsCmd, summary_params: { cmd } }
+          : { summary_key: CO_UI.history.summaries.documentsUpdated }),
       metadata_preview: {
         workspace_command: cmd || null,
         folder_id: payload.folder_id ?? null,
@@ -353,6 +397,10 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
         section_key: 'annual',
         action_type: 'annual_file_uploaded',
         summary_he: fileName ? `הועלה קובץ לדוח שנתי — ${fileName}` : 'הועלה קובץ לדוח שנתי',
+        summary_key: fileName
+          ? CO_UI.history.summaries.annualFileUploadedNamed
+          : CO_UI.history.summaries.annualFileUploaded,
+        summary_params: fileName ? { file: fileName } : undefined,
         metadata_preview: { file_asset_id: payload.file_asset_id ?? null, file_name: fileName || null },
       };
     }
@@ -361,6 +409,10 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
         section_key: 'documents',
         action_type: 'document_file_staged',
         summary_he: fileName ? `קובץ הועלה (לפני קישור למסמך) — ${fileName}` : 'קובץ הועלה (לפני קישור למסמך)',
+        summary_key: fileName
+          ? CO_UI.history.summaries.fileUploadedBeforeLinkNamed
+          : CO_UI.history.summaries.fileUploadedBeforeLink,
+        summary_params: fileName ? { file: fileName } : undefined,
         metadata_preview: { file_asset_id: payload.file_asset_id ?? null },
       };
     }
@@ -368,6 +420,7 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
       section_key: 'documents',
       action_type: 'file_attached',
       summary_he: 'קובץ צורף ללקוח',
+      summary_key: CO_UI.history.summaries.fileAttached,
       metadata_preview: { context: ctxLabel || null },
     };
   }
@@ -378,6 +431,7 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
         section_key: 'annual',
         action_type: 'annual_file_opened',
         summary_he: 'נפתח קובץ דוח שנתי (קישור חתום)',
+        summary_key: CO_UI.history.summaries.annualFileOpened,
         metadata_preview: { file_asset_id: payload.file_asset_id ?? null },
       };
     }
@@ -386,6 +440,7 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
         section_key: 'documents',
         action_type: 'document_file_opened',
         summary_he: 'נפתח קובץ מסמך (קישור חתום)',
+        summary_key: CO_UI.history.summaries.documentFileOpened,
         metadata_preview: { file_asset_id: payload.file_asset_id ?? null },
       };
     }
@@ -393,6 +448,7 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
       section_key: 'history_system',
       action_type: 'file_opened',
       summary_he: 'נפתח קובץ',
+      summary_key: CO_UI.history.summaries.fileOpened,
       metadata_preview: { entity_type: entityType },
     };
   }
@@ -418,6 +474,19 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
             : obligationType === 'payroll_data'
               ? 'שכר'
               : 'התחייבויות';
+    const subjectKey = payrollPeriodCmd
+      ? CO_UI.history.subjects.payrollPeriod
+      : niDeductionsCmd
+        ? CO_UI.history.subjects.niDeductions
+        : obligationType === 'national_insurance_self_employed_payment'
+          ? CO_UI.history.subjects.niSelfEmployed
+          : obligationType === 'vat_report'
+            ? CO_UI.history.subjects.vat
+            : obligationType === 'income_tax_advance'
+              ? CO_UI.history.subjects.incomeTaxAdvances
+              : obligationType === 'payroll_data'
+                ? CO_UI.history.subjects.payroll
+                : CO_UI.history.subjects.obligations;
 
     const cmdToHuman: Record<string, { button_he: string; result_he: string }> = {
       mark_ni_paid: { button_he: 'שולם', result_he: 'סומן כשולם' },
@@ -470,11 +539,23 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
     };
     const canonical = cmdToHuman[cmd] ? cmd : (aliases[cmd] ?? cmd);
     const human = cmdToHuman[canonical] ?? { button_he: cmd, result_he: 'בוצעה פעולה' };
+    const actionKeys = HISTORY_OBLIGATION_ACTION_KEYS[canonical];
     const scopeHe = periodKey ? ` (${periodKey})` : '';
     return {
       section_key: 'history_system',
       action_type: canonical,
       summary_he: `לחץ "${human.button_he}" → ${human.result_he} (${subjectHe}${scopeHe})`,
+      summary_key: CO_UI.history.summaries.obligationClick,
+      summary_params: {
+        button: human.button_he,
+        result: human.result_he,
+        subject: subjectHe,
+        scope: scopeHe,
+      },
+      summary_param_keys: {
+        ...(actionKeys ? { button: actionKeys.button, result: actionKeys.result } : { result: CO_UI.history.results.actionCompleted }),
+        subject: subjectKey,
+      },
       metadata_preview: {
         command: cmd,
         canonical_command: canonical,
@@ -495,10 +576,16 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
     };
     const human = cmdToHuman[cmd] ?? { button_he: cmd, result_he: 'בוצעה פעולה' };
     const idHe = taskId ? ` (task: ${taskId})` : '';
+    const taskKeys = HISTORY_TASK_ACTION_KEYS[cmd];
     return {
       section_key: 'history_system',
       action_type: cmd,
       summary_he: `משימות — לחץ "${human.button_he}" → ${human.result_he}${idHe}`,
+      summary_key: CO_UI.history.summaries.tasksClick,
+      summary_params: { button: human.button_he, result: human.result_he, id: idHe },
+      summary_param_keys: taskKeys
+        ? { button: taskKeys.button, result: taskKeys.result }
+        : { result: CO_UI.history.results.actionCompleted },
       metadata_preview: { command: cmd, task_id: taskId || null },
     };
   }
@@ -510,6 +597,8 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
       section_key: 'history_system',
       action_type: 'night_pass',
       summary_he: `מערכת — ריצת לילה בוצעה${processed != null ? ` (${processed} לקוחות)` : ''}${asOf ? ` · תאריך: ${asOf}` : ''}`,
+      summary_key: processed != null ? CO_UI.history.summaries.nightRunClients : CO_UI.history.summaries.nightRun,
+      summary_params: processed != null ? { count: processed } : undefined,
       metadata_preview: { processed_clients: processed, as_of_date: asOf },
     };
   }
@@ -518,6 +607,8 @@ export function mapAuditRowToHistoryEvent(row: AuditRow): MappedEvent | null {
     section_key: 'history_system',
     action_type: action || 'unknown',
     summary_he: `אירוע: ${action || '—'}`,
+    summary_key: CO_UI.history.summaries.event,
+    summary_params: { action: action || '—' },
     metadata_preview: { entity_type: entityType },
   };
 }
@@ -553,6 +644,9 @@ function rowToEnvelope(
   occurred_display_he: string;
   actor_display_name: string | null;
   summary_he: string;
+  summary_key?: string;
+  summary_params?: Record<string, string | number>;
+  summary_param_keys?: Record<string, string>;
   action_type: string;
   metadata_preview: Record<string, unknown> | null;
   section_key: HistorySectionKey;
@@ -563,6 +657,9 @@ function rowToEnvelope(
     occurred_display_he: formatDateTimeHe(row.created_at),
     actor_display_name: actorLabel,
     summary_he: mapped.summary_he,
+    summary_key: mapped.summary_key,
+    summary_params: mapped.summary_params,
+    summary_param_keys: mapped.summary_param_keys,
     action_type: mapped.action_type,
     metadata_preview: mapped.metadata_preview,
     section_key: mapped.section_key,
@@ -617,11 +714,15 @@ export async function getClientHistoryTabReadModel(
       occurred_display_he: e.occurred_display_he,
       actor_display_name: e.actor_display_name,
       summary_he: e.summary_he,
+      summary_key: e.summary_key,
+      summary_params: e.summary_params,
+      summary_param_keys: e.summary_param_keys,
       action_type: e.action_type,
     }));
     return {
       section_key: key,
       title_he: title_he,
+      title_key: CO_UI.history.sections[key],
       latest_events,
       total_events_in_last_12_months: list.length,
       can_open: list.length > 0,
@@ -646,12 +747,16 @@ export async function getClientHistoryTabReadModel(
       occurred_display_he: e.occurred_display_he,
       actor_display_name: e.actor_display_name,
       summary_he: e.summary_he,
+      summary_key: e.summary_key,
+      summary_params: e.summary_params,
+      summary_param_keys: e.summary_param_keys,
       action_type: e.action_type,
       metadata_preview: e.metadata_preview,
     }));
     open_section = {
       section_key: openSection.section_key,
       title_he: sectionTitleHe(openSection.section_key),
+      title_key: CO_UI.history.sections[openSection.section_key],
       range: { from_date: fromD, to_date: toD },
       events: detail,
       total_count: filtered.length,
@@ -665,9 +770,13 @@ export async function getClientHistoryTabReadModel(
     permissions: { can_view: true, can_export: true },
     ui: {
       title_he: 'היסטוריית פעולות',
+      title_key: CO_UI.history.title,
       empty_state_he: 'אין אירועים בטווח הזמן המוצג.',
+      empty_state_key: CO_UI.history.emptyRange,
       retention_notice_he: `מוצגות פעולות מ-${RETENTION_MONTHS} החודשים האחרונים בלבד.`,
+      retention_notice_key: CO_UI.history.retentionNotice,
       retention_archival_todo_he: 'TODO: ארכוב / מחיקה פיזית של אירועים ישנים — אינה ממומשת במערכת כרגע.',
+      retention_archival_todo_key: CO_UI.history.archivalTodo,
     },
     sections,
     open_section,

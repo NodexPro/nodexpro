@@ -46,6 +46,7 @@ export type ClientOperationsWorkspaceResolution = {
   /** Null = unrestricted ids for this projection; empty = fail closed; else allow-list. */
   authorized_client_ids: string[] | null;
   label_he: string;
+  label_key?: string;
   allowed_scopes: ClientOperationsWorkspaceOption[];
   available_workspace_subjects: Array<{
     user_id: string;
@@ -162,6 +163,7 @@ export async function resolveClientOperationsWorkspaceScope(params: {
   let workspace_subject_user_id: string | null = null;
   let selectedSubjectRole: string | null = null;
   let label_he = '';
+  let label_key: string | undefined;
 
   if (!canInspect) {
     // Staff/Viewer: MY only — reject broadening attempts. Subject is always the actor.
@@ -171,12 +173,15 @@ export async function resolveClientOperationsWorkspaceScope(params: {
     scope_kind = 'MY';
     workspace_subject_user_id = viewerUserId;
     label_he = 'הלקוחות שלי';
+    label_key = 'clientOperations.workspaceMyClients';
   } else if (scope_kind === 'OFFICE') {
     workspace_subject_user_id = null;
     label_he = 'כל המשרד';
+    label_key = 'clientOperations.workspaceOffice';
   } else if (scope_kind === 'MY') {
     workspace_subject_user_id = viewerUserId;
     label_he = 'הלקוחות שלי';
+    label_key = 'clientOperations.workspaceMyClients';
   } else {
     // STAFF — active admin/staff in this organization only. Actor stays the viewer.
     if (!requestedSubjectRaw) {
@@ -247,6 +252,7 @@ export async function resolveClientOperationsWorkspaceScope(params: {
     access_scope_key,
     authorized_client_ids,
     label_he,
+    label_key,
     allowed_scopes,
     available_workspace_subjects,
     viewer_role_code: roleCode,
@@ -290,6 +296,7 @@ export function workspaceAggregateContract(workspace: ClientOperationsWorkspaceR
   workspace_subject_user_id: string | null;
   access_scope_key: string;
   label_he: string;
+  label_key?: string;
   allowed_scopes: ClientOperationsWorkspaceOption[];
   available_workspace_subjects: ClientOperationsWorkspaceResolution['available_workspace_subjects'];
   selector_visible: boolean;
@@ -312,6 +319,7 @@ export function workspaceAggregateContract(workspace: ClientOperationsWorkspaceR
     workspace_subject_user_id: workspace.workspace_subject_user_id,
     access_scope_key: workspace.access_scope_key,
     label_he: workspace.label_he,
+    label_key: workspace.label_key,
     allowed_scopes: workspace.allowed_scopes,
     available_workspace_subjects: workspace.available_workspace_subjects,
     selector_visible: selector_options.length > 1 || selector_options.some((o) => o.scope_kind === 'OFFICE'),

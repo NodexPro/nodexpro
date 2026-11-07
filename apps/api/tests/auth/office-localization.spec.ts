@@ -64,6 +64,8 @@ test('12. set_ui_language updates only ui_language and returns the refreshed ses
   assert.doesNotMatch(body, /country_code|display_currency_code|timezone|date_format/);
   assert.match(body, /buildMeResponse\(freshCtx\)/);
   assert.match(body, /toAuthSessionAggregate\(me\)/);
+  assert.match(body, /loadPublishedLocalizationOptions/);
+  assert.doesNotMatch(body, /buildPublishedLocalizationOptions|ensureCatalogSeeded/);
   assert.doesNotMatch(body, /\/auth\/session|getSession|refetchMe/);
 });
 

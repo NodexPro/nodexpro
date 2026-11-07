@@ -5,6 +5,7 @@ import {
   parseClientOperationsMultiSelectCsv,
   toggleClientOperationsMultiSelectCsv,
 } from '../../lib/client-operations-filter-multi-select.pure';
+import { useI18n } from '../../i18n/I18nProvider';
 
 export type ClientOperationsMultiSelectFilterOption = {
   id: string;
@@ -29,6 +30,7 @@ export function ClientOperationsMultiSelectFilter({
   disabled = false,
   onChange,
 }: Props) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -38,7 +40,7 @@ export function ClientOperationsMultiSelectFilter({
   const selectedIds = parseClientOperationsMultiSelectCsv(value);
   const allSelected = isClientOperationsMultiSelectAll(value);
   const allOption = options.find((o) => o.id === 'all');
-  const allLabel = allOption?.label_he ?? 'הכל';
+  const allLabel = allOption?.label_he ?? t('clientOperations.all');
   const triggerLabel = clientOperationsMultiSelectTriggerLabel(labelHe, allLabel, selectedIds);
 
   useEffect(() => {

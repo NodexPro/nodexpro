@@ -87,6 +87,73 @@ test('workspace tabs and registry search render through clientOperations keys', 
   assert.match(registry, /clientOperations\.configuredNoReportThisMonth/);
 });
 
+test('registry columns, filters, business types and tax cards have EN/HE dictionary keys', () => {
+  const enCo = en.clientOperations as Record<string, any>;
+  const heCo = he.clientOperations as Record<string, any>;
+  assert.equal(enCo.registry.columns.clientName, 'Client name');
+  assert.equal(heCo.registry.columns.clientName, 'שם לקוח');
+  assert.equal(enCo.registry.columns.handler, 'Case manager');
+  assert.equal(heCo.registry.columns.handler, 'מטפל בתיק');
+  assert.equal(enCo.registry.columns.annualReport, 'Annual report');
+  assert.equal(heCo.registry.columns.annualReport, 'דוח שנתי');
+  assert.equal(enCo.businessType.osekPatur, 'Exempt dealer');
+  assert.equal(heCo.businessType.osekPatur, 'עוסק פטור');
+  assert.equal(enCo.businessType.osekMurshe, 'VAT-registered dealer');
+  assert.equal(heCo.businessType.osekMurshe, 'עוסק מורשה');
+  assert.equal(enCo.businessType.company, 'Company');
+  assert.equal(heCo.businessType.company, 'חברה');
+  assert.equal(enCo.yes, 'Yes');
+  assert.equal(enCo.no, 'No');
+  assert.equal(heCo.yes, 'כן');
+  assert.equal(heCo.no, 'לא');
+  assert.equal(enCo.enums.frequency.biMonthly, 'Bimonthly');
+  assert.equal(heCo.enums.frequency.biMonthly, 'דו-חודשי');
+  assert.equal(enCo.taxes.cards.vatRegistration, 'VAT registration');
+  assert.equal(heCo.taxes.cards.vatRegistration, 'רישום מע״מ');
+  assert.equal(enCo.taxes.cards.incomeTaxAdvances, 'Income tax advances');
+  assert.equal(heCo.taxes.cards.incomeTaxAdvances, 'מקדמות מס הכנסה');
+});
+
+test('Client Operations registry and taxes render via label_key, not raw Hebrew', () => {
+  const taxes = readFileSync(join(root, 'src/components/ClientTaxesTab.tsx'), 'utf8');
+  assert.match(registry, /localizeSystemLabel/);
+  assert.match(registry, /column\.label_key/);
+  assert.match(registry, /cell_label_keys/);
+  assert.match(registry, /def\.label_key/);
+  assert.match(panel, /CLIENT_PROFILE_BUSINESS_TYPE_LABEL_KEY/);
+  assert.match(taxes, /sec\.title_key/);
+  assert.match(taxes, /clientOperations\.taxes\.cards\.vatRegistration/);
+  assert.match(taxes, /clientOperations\.businessType|clientOperations\.enums|clientOperations\.yes/);
+  assert.doesNotMatch(registry, /שם לקוח/);
+  assert.doesNotMatch(taxes, /<h3 className="nx-modal-title">רישום מע״מ<\/h3>/);
+});
+
+test('payroll, business profile and taxes leftover chrome use clientOperations keys', () => {
+  const payroll = readFileSync(join(root, 'src/components/ClientPayrollTab.tsx'), 'utf8');
+  const profile = readFileSync(join(root, 'src/components/ClientBusinessProfileTab.tsx'), 'utf8');
+  const taxes = readFileSync(join(root, 'src/components/ClientTaxesTab.tsx'), 'utf8');
+  const todoBoard = readFileSync(
+    join(root, 'src/components/client-operations/ClientOperationsTodoBoardModal.tsx'),
+    'utf8',
+  );
+  const quick = readFileSync(
+    join(root, 'src/components/client-operations/ClientOperationsClientQuickProfilePopover.tsx'),
+    'utf8',
+  );
+  assert.match(payroll, /localizeSystemLabel/);
+  assert.match(payroll, /ln\.line_key/);
+  assert.doesNotMatch(payroll, /label_he === '/);
+  assert.doesNotMatch(payroll, /style=\{\{ direction: 'rtl' \}\}/);
+  assert.match(profile, /clientOperations\.editBusinessProfile/);
+  assert.match(profile, /clientOperations\.save/);
+  assert.match(taxes, /clientOperations\.taxes\.saveSuccess/);
+  assert.match(taxes, /clientOperations\.taxes\.modals\.verifyTitle/);
+  assert.match(todoBoard, /clientOperations\.todo\.taxId/);
+  assert.match(todoBoard, /clientOperations\.todo\.markComplete/);
+  assert.match(quick, /localizeSystemLabel/);
+  assert.match(quick, /fillI18n/);
+});
+
 test('ToDo, notes and quick profile chrome use the same clientOperations dictionary', () => {
   const todoBoard = readFileSync(
     join(root, 'src/components/client-operations/ClientOperationsTodoBoardModal.tsx'),

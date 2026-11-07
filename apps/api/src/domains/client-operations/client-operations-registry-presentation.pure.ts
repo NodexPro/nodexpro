@@ -4,6 +4,12 @@
  */
 
 import { businessMonthKey } from '../../shared/business-time.js';
+import {
+  buildRegistryRowCellLabelKeys,
+  registryColumnLabelKey,
+  toolbarCapabilityLabelKey,
+  CO_UI,
+} from './client-operations-ui-labels.pure.js';
 
 export type RegistryColumnCellKind = 'folder' | 'text' | 'notes' | 'custom' | 'checkbox' | 'operational_date';
 export type ClientOperationsCustomColumnDataType = 'text' | 'number' | 'date' | 'boolean';
@@ -11,6 +17,8 @@ export type ClientOperationsCustomColumnDataType = 'text' | 'number' | 'date' | 
 export type ClientOperationsRegistryColumn = {
   key: string;
   label: string;
+  /** Owner Languages / I18nProvider key. Custom/user columns omit this. */
+  label_key?: string;
   cell_kind: RegistryColumnCellKind;
   /** Field on the row used for legacy/WE compatibility; null for action columns. */
   value_field: string | null;
@@ -34,8 +42,10 @@ export type ClientOperationsRegistryColumn = {
 export type ClientOperationsToolbarCapability = {
   id: string;
   label_he: string;
+  label_key?: string;
   available: boolean;
   reason_he: string | null;
+  reason_key?: string | null;
   group: 'history' | 'query' | 'format' | 'structure' | 'more';
 };
 
@@ -240,6 +250,11 @@ export const CLIENT_OPERATIONS_REGISTRY_COLUMNS: ClientOperationsRegistryColumn[
   },
 ];
 
+for (const column of CLIENT_OPERATIONS_REGISTRY_COLUMNS) {
+  const labelKey = registryColumnLabelKey(column.key);
+  if (labelKey) column.label_key = labelKey;
+}
+
 const SYSTEM_COLUMN_KEYS = new Set(CLIENT_OPERATIONS_REGISTRY_COLUMNS.map((c) => c.key));
 export const CLIENT_OPERATIONS_CUSTOM_COLUMNS_MAX = 10;
 
@@ -436,11 +451,13 @@ export function buildRegistryRowCells(input: {
   };
 }
 
+export { buildRegistryRowCellLabelKeys };
+
 export function buildClientOperationsToolbarCapabilities(opts: {
   can_create_custom_column?: boolean;
   can_create_reason_he?: string | null;
 } = {}): ClientOperationsToolbarCapability[] {
-  return [
+  const capabilities: ClientOperationsToolbarCapability[] = [
     {
       id: 'undo',
       label_he: 'בטל',
@@ -592,6 +609,16 @@ export function buildClientOperationsToolbarCapabilities(opts: {
       group: 'structure',
     },
   ];
+  return capabilities.map((capability) => ({
+    ...capability,
+    label_key: toolbarCapabilityLabelKey(capability.id),
+    reason_key:
+      capability.id === 'filter'
+        ? CO_UI.toolbar.filterUnavailable
+        : capability.id === 'add_column' && capability.available !== true
+          ? CO_UI.toolbar.addColumnUnavailable
+          : null,
+  }));
 }
 
 export type RegistryQueryInput = {

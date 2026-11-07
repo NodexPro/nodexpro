@@ -10,8 +10,10 @@ export function UiLanguageSwitch({ ariaLabel, compact }: { ariaLabel?: string; c
 
   const select = async (code: 'en' | 'he' | 'ru') => {
     if (code === lang || busy) return;
-    setLang(code);
-    if (auth.status !== 'authenticated') return;
+    if (auth.status !== 'authenticated') {
+      setLang(code);
+      return;
+    }
     setBusy(true);
     try {
       const refreshed = await auth.setUiLanguage(code);

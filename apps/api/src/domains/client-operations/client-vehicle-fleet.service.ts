@@ -59,12 +59,13 @@ export type VehicleListItemDto = {
   vehicle_id: string;
   /** Ready-to-render lines (Hebrew), top to bottom */
   summary_lines: string[];
-  edit_action?: { label: string; enabled: boolean };
+  edit_action?: { label: string; label_key?: string; enabled: boolean };
 };
 
 export type VehicleBlockActionDto = {
   action_key: 'add_vehicle' | 'edit_vehicle';
   label: string;
+  label_key?: string;
   enabled: boolean;
 /** For edit_vehicle — target row */
   vehicle_id?: string;
@@ -73,8 +74,9 @@ export type VehicleBlockActionDto = {
 export type VehiclesYesNoFieldDto = {
   field_key: 'has_vehicles';
   label: string;
+  label_key?: string;
   value: 'yes' | 'no';
-  options: { value: 'yes' | 'no'; label: string }[];
+  options: { value: 'yes' | 'no'; label: string; label_key?: string }[];
 };
 
 /** Modal field shape aligned with accounting FieldSchema (+ optional grouping / presentation). */

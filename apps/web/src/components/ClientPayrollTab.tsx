@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { apiJson, userFacingApiMessage } from '../api/client';
 import { moduleClientOperationsPayrollCommands } from '../api/endpoints';
+import { useI18n } from '../i18n/I18nProvider';
+import { localizeSystemLabel } from '../lib/co-display-label.pure';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
-import type { PayrollFieldModel, PayrollSectionModel, PayrollTabModel } from './payroll-tab-types';
+import type { PayrollFieldModel, PayrollLineModel, PayrollSectionModel, PayrollTabModel } from './payroll-tab-types';
 import '../styles/nx-payroll-tab.css';
 import '../styles/nx-workspace-payroll-tab.css';
 
@@ -25,14 +27,42 @@ function sectionIconHe(sectionKey: string): string {
   return '•';
 }
 
-function lineIconHe(label: string): string {
-  if (label.includes('דואר')) return '✉️';
-  if (label.includes('טלפון')) return '☎️';
-  if (label.includes('תאריך') || label.includes('מועד') || label.includes('טופס')) return '📅';
-  if (label.includes('בנק') || label.includes('חשבון') || label.includes('סניף')) return '🏦';
-  if (label.includes('עובדים')) return '👥';
-  if (label.includes('מס')) return '🔢';
+function lineIconHe(lineKey: string): string {
+  if (lineKey === 'email' || lineKey === 'contact_email') return '✉️';
+  if (lineKey === 'phone' || lineKey === 'contact_phone') return '☎️';
+  if (
+    lineKey === 'form_102' ||
+    lineKey === 'form_100' ||
+    lineKey === 'form_126' ||
+    lineKey === 'data_received_day' ||
+    lineKey === 'salary_payment_day' ||
+    lineKey === 'reporting_income_tax' ||
+    lineKey === 'founded_year'
+  ) {
+    return '📅';
+  }
+  if (lineKey === 'bank_number' || lineKey === 'bank_branch' || lineKey === 'bank_account') return '🏦';
+  if (
+    lineKey === 'has_employees' ||
+    lineKey === 'employees_count' ||
+    lineKey === 'employees_chart' ||
+    lineKey === 'special_arrangements'
+  ) {
+    return '👥';
+  }
+  if (
+    lineKey === 'income_tax_deductions' ||
+    lineKey === 'ni_deductions' ||
+    lineKey === 'employer_id_bl' ||
+    lineKey === 'postal_code'
+  ) {
+    return '🔢';
+  }
   return '▫';
+}
+
+function findLine(section: PayrollSectionModel | null | undefined, lineKey: string): PayrollLineModel | undefined {
+  return section?.lines.find((ln) => ln.line_key === lineKey);
 }
 
 function chartBarsFromTrend(raw: string | null | undefined): { heights: number[]; hasData: boolean } {
@@ -54,11 +84,13 @@ function PayrollFieldInput({
   value,
   onChange,
   disabled,
+  t,
 }: {
   field: PayrollFieldModel;
   value: unknown;
   onChange: (v: unknown) => void;
   disabled: boolean;
+  t: (key: string) => string;
 }) {
   if (field.type === 'textarea') {
     return (
@@ -77,7 +109,7 @@ function PayrollFieldInput({
         <option value="">—</option>
         {field.options.map((o) => (
           <option key={o.value} value={o.value}>
-            {o.label_he}
+            {localizeSystemLabel(t, o.label_key, o.label_he)}
           </option>
         ))}
       </select>
@@ -89,7 +121,7 @@ function PayrollFieldInput({
         {field.options.map((o) => (
           <label key={o.value} style={{ display: 'inline-flex', gap: 6 }}>
             <input type="radio" checked={String(value ?? '') === o.value} disabled={disabled} onChange={() => onChange(o.value)} />
-            <span>{o.label_he}</span>
+            <span>{localizeSystemLabel(t, o.label_key, o.label_he)}</span>
           </label>
         ))}
       </div>
@@ -115,6 +147,7 @@ export function ClientPayrollTab({
   payrollTab: PayrollTabModel;
   onCaseUpdated: (next: ClientOperationsCaseResponse) => void;
 }) {
+  const { t } = useI18n();
   const [editSection, setEditSection] = useState<PayrollSectionModel | null>(null);
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [busy, setBusy] = useState(false);
@@ -166,27 +199,31 @@ export function ClientPayrollTab({
   const sectionsForColumn = (keys: string[]) =>
     keys.map((k) => sectionByKey.get(k)).filter((s): s is PayrollSectionModel => Boolean(s));
 
-  const employeesCountDisplay =
-    employeesSection?.lines.find((ln) => ln.label_he === 'מספר עובדים')?.value_he ?? '—';
-  const payrollSoftwareDisplay =
-    processSection?.lines.find((ln) => ln.label_he === 'באיזו תוכנה מחשבים שכר')?.value_he ?? '—';
-  const employeesTrendDisplay =
-    employeesSection?.lines.find((ln) => ln.label_he === 'גרף שינוי עובדים')?.value_he ?? '—';
+  const employeesCountLine = findLine(employeesSection, 'employees_count');
+  const payrollSoftwareLine = findLine(processSection, 'payroll_software');
+  const employeesTrendLine = findLine(employeesSection, 'employees_chart');
+  const employeesCountDisplay = employeesCountLine?.value_he ?? '—';
+  const payrollSoftwareDisplay = payrollSoftwareLine?.value_he ?? '—';
+  const employeesTrendDisplay = employeesTrendLine?.value_he ?? '—';
+  const editLabel = t('clientOperations.edit');
 
   const renderReportingBody = (s: PayrollSectionModel) => {
-    const frequencyLine = s.lines.find((ln) => ln.label_he === 'דיווח למס הכנסה');
-    const formLines = s.lines.filter((ln) => ln.label_he.startsWith('דיווח טופס'));
+    const frequencyLine = findLine(s, 'reporting_income_tax');
+    const formLines = s.lines.filter(
+      (ln) => ln.line_key === 'form_102' || ln.line_key === 'form_100' || ln.line_key === 'form_126',
+    );
     return (
       <div className="nx-payroll-reminders">
         {frequencyLine ? (
           <div className="nx-payroll-reminders-frequency">
-            דיווח למס הכנסה: {frequencyLine.value_he ?? '—'}
+            {localizeSystemLabel(t, frequencyLine.label_key, t('clientOperations.payroll.incomeTaxReporting'))}:{' '}
+            {localizeSystemLabel(t, frequencyLine.value_key, frequencyLine.value_he ?? '—')}
           </div>
         ) : null}
         {formLines.map((ln) => (
-          <div key={ln.label_he} className="nx-payroll-reminder-row">
-            <span className="nx-payroll-reminder-form">{ln.label_he.replace('דיווח ', '')}</span>
-            <span className="nx-payroll-reminder-value">{ln.value_he}</span>
+          <div key={ln.line_key} className="nx-payroll-reminder-row">
+            <span className="nx-payroll-reminder-form">{localizeSystemLabel(t, ln.label_key, ln.label_he)}</span>
+            <span className="nx-payroll-reminder-value">{localizeSystemLabel(t, ln.value_key, ln.value_he)}</span>
           </div>
         ))}
       </div>
@@ -194,11 +231,13 @@ export function ClientPayrollTab({
   };
 
   const renderEmployeesBody = (s: PayrollSectionModel) => {
-    const countLine = s.lines.find((ln) => ln.label_he === 'מספר עובדים');
+    const countLine = findLine(s, 'employees_count');
     return (
       <div className="nx-payroll-employees">
         <div className="nx-payroll-employees-count-wrap">
-          <div className="nx-payroll-employees-count-label">מספר עובדים</div>
+          <div className="nx-payroll-employees-count-label">
+            {localizeSystemLabel(t, countLine?.label_key, t('clientOperations.payroll.employeeCount'))}
+          </div>
           <div className="nx-payroll-employees-count-value">{countLine?.value_he ?? '—'}</div>
         </div>
       </div>
@@ -207,6 +246,7 @@ export function ClientPayrollTab({
 
   const renderCard = (s: PayrollSectionModel) => {
     const allowEdit = canEdit && s.edit_action_key;
+    const title = localizeSystemLabel(t, s.section_title_key, s.section_title_he);
     return (
       <section
         key={s.section_key}
@@ -217,10 +257,10 @@ export function ClientPayrollTab({
             <span className="nx-payroll-card-title-icon" aria-hidden>
               {sectionIconHe(s.section_key)}
             </span>
-            {s.section_title_he}
+            {title}
           </h3>
           {allowEdit ? (
-            <button type="button" className="nx-fees-pencil-btn" onClick={() => openSection(s)} aria-label="עריכה" title="עריכה">
+            <button type="button" className="nx-fees-pencil-btn" onClick={() => openSection(s)} aria-label={editLabel} title={editLabel}>
               <IconPencil />
             </button>
           ) : null}
@@ -232,15 +272,15 @@ export function ClientPayrollTab({
               ? renderEmployeesBody(s)
               : (
                 <div className="nx-payroll-kv">
-                  {s.lines.map((ln, i) => (
-                    <div key={i} className="nx-payroll-kv-row">
+                  {s.lines.map((ln) => (
+                    <div key={ln.line_key} className="nx-payroll-kv-row">
                       <span className="nx-payroll-kv-label">
                         <span className="nx-payroll-kv-icon" aria-hidden>
-                          {lineIconHe(ln.label_he)}
+                          {lineIconHe(ln.line_key)}
                         </span>
-                        {ln.label_he}
+                        {localizeSystemLabel(t, ln.label_key, ln.label_he)}
                       </span>
-                      <span className="nx-payroll-kv-value">{ln.value_he}</span>
+                      <span className="nx-payroll-kv-value">{localizeSystemLabel(t, ln.value_key, ln.value_he)}</span>
                     </div>
                   ))}
                 </div>
@@ -259,7 +299,7 @@ export function ClientPayrollTab({
             <span className="nx-payroll-card-title-icon" aria-hidden>
               📊
             </span>
-            גרף תחלופת עובדים
+            {t('clientOperations.payroll.turnoverChart')}
           </h3>
         </div>
         <div className="nx-payroll-turnover-chart">
@@ -272,33 +312,37 @@ export function ClientPayrollTab({
             </div>
           ))}
         </div>
-        {!bars.hasData ? <div className="nx-payroll-turnover-empty">גרף תחלופת עובדים יוצג כאן</div> : null}
+        {!bars.hasData ? <div className="nx-payroll-turnover-empty">{t('clientOperations.payroll.turnoverEmpty')}</div> : null}
       </section>
     );
   };
 
   return (
-    <div className="nx-payroll-tab-root nx-ws-payroll" style={{ direction: 'rtl' }}>
+    <div className="nx-payroll-tab-root nx-ws-payroll">
       <div className="nx-payroll-tab-shell">
         <div className="nx-payroll-root">
           <div className="nx-payroll-meta-strip">
             <div className="nx-payroll-meta-item">
-              <span className="nx-payroll-meta-label">סטטוס שכר</span>
-              <span className="nx-payroll-meta-value">{payrollTab.status.has_employees ? 'פעיל' : 'לא פעיל'}</span>
+              <span className="nx-payroll-meta-label">{t('clientOperations.payroll.payrollStatus')}</span>
+              <span className="nx-payroll-meta-value">
+                {payrollTab.status.has_employees ? t('clientOperations.payroll.active') : t('clientOperations.payroll.inactive')}
+              </span>
             </div>
             <div className="nx-payroll-meta-item">
-              <span className="nx-payroll-meta-label">מספר עובדים</span>
+              <span className="nx-payroll-meta-label">{t('clientOperations.payroll.employeeCount')}</span>
               <span className="nx-payroll-meta-value">{employeesCountDisplay}</span>
             </div>
             <div className="nx-payroll-meta-item">
-              <span className="nx-payroll-meta-label">תוכנת שכר</span>
+              <span className="nx-payroll-meta-label">{t('clientOperations.payroll.payrollSoftware')}</span>
               <span className="nx-payroll-meta-value">{payrollSoftwareDisplay}</span>
             </div>
             <div className="nx-payroll-meta-item">
-              <span className="nx-payroll-meta-label">עודכן לאחרונה</span>
+              <span className="nx-payroll-meta-label">{t('clientOperations.payroll.lastUpdated')}</span>
               <span className="nx-payroll-meta-value">—</span>
             </div>
-            {!payrollTab.status.has_employees ? <span className="nx-payroll-status-badge">לא פעיל</span> : null}
+            {!payrollTab.status.has_employees ? (
+              <span className="nx-payroll-status-badge">{t('clientOperations.payroll.inactive')}</span>
+            ) : null}
           </div>
 
           <div className="nx-payroll-grid">
@@ -334,7 +378,7 @@ export function ClientPayrollTab({
           <div className="nx-modal nx-fees-editor-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
               <div className="nx-modal-title-wrap">
-                <h2 className="nx-modal-title">{editSection.section_title_he}</h2>
+                <h2 className="nx-modal-title">{localizeSystemLabel(t, editSection.section_title_key, editSection.section_title_he)}</h2>
               </div>
               <button type="button" className="nx-modal-close" onClick={() => setEditSection(null)} disabled={busy}>
                 ×
@@ -343,15 +387,21 @@ export function ClientPayrollTab({
             <div className="nx-modal-body nx-fees-editor-modal-body">
               {editSection.edit_fields.map((f) => (
                 <div key={f.key} className="client-field">
-                  <div className="client-field-label">{f.label_he}</div>
-                  <PayrollFieldInput field={f} value={draft[f.key]} disabled={busy} onChange={(v) => setDraft((x) => ({ ...x, [f.key]: v }))} />
+                  <div className="client-field-label">{localizeSystemLabel(t, f.label_key, f.label_he)}</div>
+                  <PayrollFieldInput
+                    field={f}
+                    value={draft[f.key]}
+                    disabled={busy}
+                    t={t}
+                    onChange={(v) => setDraft((x) => ({ ...x, [f.key]: v }))}
+                  />
                 </div>
               ))}
               {err ? <p className="nx-fees-save-error">{err}</p> : null}
             </div>
             <div className="nx-modal-footer nx-tax-nested-modal-footer">
               <button type="button" className="nx-btn nx-btn-primary nx-btn-taxes-compact" disabled={busy} onClick={() => void saveSection()}>
-                {busy ? 'שומר…' : 'שמירה'}
+                {busy ? t('clientOperations.saving') : t('clientOperations.save')}
               </button>
             </div>
           </div>

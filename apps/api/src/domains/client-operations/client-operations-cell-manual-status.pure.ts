@@ -13,12 +13,18 @@ export type ClientOperationsManualStatusPaintMode = ClientOperationsManualCellSt
 export const CLIENT_OPERATIONS_MANUAL_STATUS_PAINT_MODES: Array<{
   id: ClientOperationsManualStatusPaintMode;
   label_he: string;
+  label_key: string;
   presentation_token: ClientOperationsManualStatusPaintMode;
 }> = [
-  { id: 'ready', label_he: 'מוכן', presentation_token: 'ready' },
-  { id: 'sent_for_approval', label_he: 'נשלח לאישור', presentation_token: 'sent_for_approval' },
-  { id: 'completed', label_he: 'הושלם', presentation_token: 'completed' },
-  { id: 'clear', label_he: 'נקה', presentation_token: 'clear' },
+  { id: 'ready', label_he: 'מוכן', label_key: 'clientOperations.statusPaintModes.ready', presentation_token: 'ready' },
+  {
+    id: 'sent_for_approval',
+    label_he: 'נשלח לאישור',
+    label_key: 'clientOperations.statusPaintModes.sentForApproval',
+    presentation_token: 'sent_for_approval',
+  },
+  { id: 'completed', label_he: 'הושלם', label_key: 'clientOperations.statusPaintModes.completed', presentation_token: 'completed' },
+  { id: 'clear', label_he: 'נקה', label_key: 'clientOperations.statusPaintModes.clear', presentation_token: 'clear' },
 ];
 
 /** Structural / identity columns — never receive manual paint markers. */

@@ -25,12 +25,24 @@ import {
   type CreateExpenseMgmtCustomFieldInput,
   type ExpenseMgmtCustomFieldRow,
 } from './client-expense-mgmt-custom-fields.service.js';
+import {
+  ACCOUNTING_ADDITIONAL_BUSINESS_LABEL_KEY,
+  ACCOUNTING_BLOCK_LABEL_KEY,
+  ACCOUNTING_DOC_DELIVERY_LABEL_KEY,
+  ACCOUNTING_EXPENSE_DELIVERY_LABEL_KEY,
+  ACCOUNTING_EXPENSE_LABEL_KEY,
+  ACCOUNTING_FIELD_LABEL_KEY,
+  ACCOUNTING_INCOME_LABEL_KEY,
+  ACCOUNTING_ORDER_LABEL_KEY,
+  ACCOUNTING_UPLOADED_BY_LABEL_KEY,
+  CO_UI,
+} from './client-operations-ui-labels.pure.js';
 
 export type { CreateExpenseMgmtCustomFieldInput } from './client-expense-mgmt-custom-fields.service.js';
 
 type BlockKey = 'expenses' | 'income' | 'expense_management' | 'documents' | 'vehicles';
 
-type Option = { value: string | number | boolean; label: string };
+type Option = { value: string | number | boolean; label: string; label_key?: string };
 type FieldType =
   | 'text'
   | 'textarea'
@@ -45,6 +57,7 @@ type FieldType =
 type FieldSchema = {
   key: string;
   label: string;
+  label_key?: string;
   type: FieldType;
   value: unknown;
   options?: Option[];
@@ -70,13 +83,21 @@ type FieldSchema = {
 
 type BlockSummaryDisplay = 'text' | 'link' | 'password_saved';
 
-type BlockSummaryItem = { label: string; value: string; display?: BlockSummaryDisplay };
+type BlockSummaryItem = {
+  label: string;
+  label_key?: string;
+  value: string;
+  value_key?: string;
+  display?: BlockSummaryDisplay;
+};
 
 /** Server-built 2-column excel-style grid for expense_management summary card */
 export type AccountingExcelGridCell = {
   field_key: string;
   label: string;
+  label_key?: string;
   value: string;
+  value_key?: string;
   display?: BlockSummaryDisplay;
   visible: boolean;
 };
@@ -99,6 +120,7 @@ function summaryLinesFromParts(parts: string[], maxInline: number): string[] {
 export type AccountingBlockCard = {
   block_key: BlockKey;
   block_label: string;
+  block_label_key?: string;
   /** Legacy one-line join; prefer summary_primary_rows for display */
   summary_text: string;
   /** Left column rows for income/expenses cards (server-built; never parse `|` in UI) */
@@ -134,6 +156,7 @@ export type AccountingBlockCard = {
 export type AccountingTabResponse = {
   tab_key: 'accounting_settings';
   tab_label: string;
+  tab_label_key?: string;
   layout: { type: 'grid'; columns: 2 };
   blocks: AccountingBlockCard[];
 };
@@ -141,6 +164,7 @@ export type AccountingTabResponse = {
 export type AccountingBlockModalResponse = {
   modal_key: string;
   modal_label: string;
+  modal_label_key?: string;
   block_key: BlockKey;
   version: number;
   can_edit: boolean;
@@ -164,59 +188,67 @@ export type AccountingBlockModalResponse = {
 
 type ExpenseValueKind = 'percent' | 'amount';
 
-const EXPENSE_TYPES: Array<{ code: string; label: string; value_kind: ExpenseValueKind }> = [
-  { code: 'rent', label: 'שכירות', value_kind: 'amount' },
-  { code: 'electricity', label: 'חשמל', value_kind: 'percent' },
-  { code: 'water', label: 'מים', value_kind: 'percent' },
-  { code: 'arnona', label: 'ארנונה', value_kind: 'percent' },
-  { code: 'internet', label: 'אינטרנט', value_kind: 'percent' },
-  { code: 'phone', label: 'טלפון', value_kind: 'amount' },
-  { code: 'insurance', label: 'ביטוחים', value_kind: 'amount' },
-  { code: 'software_subscriptions', label: 'תוכנות / מנויים', value_kind: 'amount' },
-  { code: 'bank_fees', label: 'עמלות בנק', value_kind: 'amount' },
-  { code: 'clearing_fees', label: 'עמלות סליקה', value_kind: 'amount' },
+const EXPENSE_TYPES: Array<{ code: string; label: string; label_key: string; value_kind: ExpenseValueKind }> = [
+  { code: 'rent', label: 'שכירות', label_key: ACCOUNTING_EXPENSE_LABEL_KEY.rent, value_kind: 'amount' },
+  { code: 'electricity', label: 'חשמל', label_key: ACCOUNTING_EXPENSE_LABEL_KEY.electricity, value_kind: 'percent' },
+  { code: 'water', label: 'מים', label_key: ACCOUNTING_EXPENSE_LABEL_KEY.water, value_kind: 'percent' },
+  { code: 'arnona', label: 'ארנונה', label_key: ACCOUNTING_EXPENSE_LABEL_KEY.arnona, value_kind: 'percent' },
+  { code: 'internet', label: 'אינטרנט', label_key: ACCOUNTING_EXPENSE_LABEL_KEY.internet, value_kind: 'percent' },
+  { code: 'phone', label: 'טלפון', label_key: ACCOUNTING_EXPENSE_LABEL_KEY.phone, value_kind: 'amount' },
+  { code: 'insurance', label: 'ביטוחים', label_key: ACCOUNTING_EXPENSE_LABEL_KEY.insurance, value_kind: 'amount' },
+  { code: 'software_subscriptions', label: 'תוכנות / מנויים', label_key: ACCOUNTING_EXPENSE_LABEL_KEY.software_subscriptions, value_kind: 'amount' },
+  { code: 'bank_fees', label: 'עמלות בנק', label_key: ACCOUNTING_EXPENSE_LABEL_KEY.bank_fees, value_kind: 'amount' },
+  { code: 'clearing_fees', label: 'עמלות סליקה', label_key: ACCOUNTING_EXPENSE_LABEL_KEY.clearing_fees, value_kind: 'amount' },
 ];
 
-const INCOME_SOURCES: Array<{ code: string; label: string }> = [
-  { code: 'business', label: 'עסק' },
-  { code: 'salary', label: 'משכורת' },
-  { code: 'pension', label: 'פנסיה' },
-  { code: 'allowance', label: 'קצבה' },
-  { code: 'other', label: 'אחר' },
+const INCOME_SOURCES: Array<{ code: string; label: string; label_key: string }> = [
+  { code: 'business', label: 'עסק', label_key: ACCOUNTING_INCOME_LABEL_KEY.business },
+  { code: 'salary', label: 'משכורת', label_key: ACCOUNTING_INCOME_LABEL_KEY.salary },
+  { code: 'pension', label: 'פנסיה', label_key: ACCOUNTING_INCOME_LABEL_KEY.pension },
+  { code: 'allowance', label: 'קצבה', label_key: ACCOUNTING_INCOME_LABEL_KEY.allowance },
+  { code: 'other', label: 'אחר', label_key: ACCOUNTING_INCOME_LABEL_KEY.other },
 ];
 
-const DOC_DELIVERY: Array<{ code: string; label: string }> = [
-  { code: 'email', label: 'מייל' },
-  { code: 'whatsapp', label: 'וואטסאפ' },
-  { code: 'upload', label: 'העלאה למערכת' },
-  { code: 'manual', label: 'ידני' },
-  { code: 'mixed', label: 'מעורב' },
+const DOC_DELIVERY: Array<{ code: string; label: string; label_key: string }> = [
+  { code: 'email', label: 'מייל', label_key: ACCOUNTING_DOC_DELIVERY_LABEL_KEY.email },
+  { code: 'whatsapp', label: 'וואטסאפ', label_key: ACCOUNTING_DOC_DELIVERY_LABEL_KEY.whatsapp },
+  { code: 'upload', label: 'העלאה למערכת', label_key: ACCOUNTING_DOC_DELIVERY_LABEL_KEY.upload },
+  { code: 'manual', label: 'ידני', label_key: ACCOUNTING_DOC_DELIVERY_LABEL_KEY.manual },
+  { code: 'mixed', label: 'מעורב', label_key: ACCOUNTING_DOC_DELIVERY_LABEL_KEY.mixed },
 ];
 
 /** קבלת הוצאות — סקציית ניהול הוצאות (מסלול aggregate בלבד; לא מסמכי מס הכנסה כללית) */
-const EXPENSE_DELIVERY_METHODS: Array<{ code: string; label: string }> = [
-  { code: 'external_software', label: 'תוכנה חיצונית' },
-  { code: 'email', label: 'מייל' },
-  { code: 'whatsapp', label: 'וואטסאפ' },
-  { code: 'nodex_inbox', label: 'Nodex Inbox' },
-  { code: 'nodexpro_upload', label: 'העלאה ל־NodexPro' },
-  { code: 'physical_manual', label: 'פיזי / ידני' },
-  { code: 'mixed', label: 'מעורב' },
+const EXPENSE_DELIVERY_METHODS: Array<{ code: string; label: string; label_key: string }> = [
+  { code: 'external_software', label: 'תוכנה חיצונית', label_key: ACCOUNTING_EXPENSE_DELIVERY_LABEL_KEY.external_software },
+  { code: 'email', label: 'מייל', label_key: ACCOUNTING_EXPENSE_DELIVERY_LABEL_KEY.email },
+  { code: 'whatsapp', label: 'וואטסאפ', label_key: ACCOUNTING_EXPENSE_DELIVERY_LABEL_KEY.whatsapp },
+  { code: 'nodex_inbox', label: 'Nodex Inbox', label_key: ACCOUNTING_EXPENSE_DELIVERY_LABEL_KEY.nodex_inbox },
+  { code: 'nodexpro_upload', label: 'העלאה ל־NodexPro', label_key: ACCOUNTING_EXPENSE_DELIVERY_LABEL_KEY.nodexpro_upload },
+  { code: 'physical_manual', label: 'פיזי / ידני', label_key: ACCOUNTING_EXPENSE_DELIVERY_LABEL_KEY.physical_manual },
+  { code: 'mixed', label: 'מעורב', label_key: ACCOUNTING_EXPENSE_DELIVERY_LABEL_KEY.mixed },
 ];
 
-const EXPENSE_UPLOADED_BY_OPTS: Array<{ code: string; label: string }> = [
-  { code: 'client', label: 'הלקוח' },
-  { code: 'office', label: 'המשרד' },
-  { code: 'both', label: 'גם הלקוח וגם המשרד' },
-  { code: 'system_auto', label: 'אוטומטי ממערכת' },
-  { code: 'unknown', label: 'לא ידוע' },
+const EXPENSE_UPLOADED_BY_OPTS: Array<{ code: string; label: string; label_key: string }> = [
+  { code: 'client', label: 'הלקוח', label_key: ACCOUNTING_UPLOADED_BY_LABEL_KEY.client },
+  { code: 'office', label: 'המשרד', label_key: ACCOUNTING_UPLOADED_BY_LABEL_KEY.office },
+  { code: 'both', label: 'גם הלקוח וגם המשרד', label_key: ACCOUNTING_UPLOADED_BY_LABEL_KEY.both },
+  { code: 'system_auto', label: 'אוטומטי ממערכת', label_key: ACCOUNTING_UPLOADED_BY_LABEL_KEY.system_auto },
+  { code: 'unknown', label: 'לא ידוע', label_key: ACCOUNTING_UPLOADED_BY_LABEL_KEY.unknown },
 ];
 
-const EXPENSE_DOCS_ORDER_OPTS: Array<{ code: string; label: string }> = [
-  { code: 'organized', label: 'מסודר' },
-  { code: 'partial', label: 'חלקית מסודר' },
-  { code: 'messy', label: 'לא מסודר' },
+const EXPENSE_DOCS_ORDER_OPTS: Array<{ code: string; label: string; label_key: string }> = [
+  { code: 'organized', label: 'מסודר', label_key: ACCOUNTING_ORDER_LABEL_KEY.organized },
+  { code: 'partial', label: 'חלקית מסודר', label_key: ACCOUNTING_ORDER_LABEL_KEY.partial },
+  { code: 'messy', label: 'לא מסודר', label_key: ACCOUNTING_ORDER_LABEL_KEY.messy },
 ];
+
+const YES_NO_OPTIONS: Option[] = [
+  { value: true, label: 'כן', label_key: CO_UI.yes },
+  { value: false, label: 'לא', label_key: CO_UI.no },
+];
+
+const EMPTY_STATE_KEY = 'clientOperations.accounting.notSet';
+const PASSWORD_SAVED_KEY = 'clientOperations.accounting.passwordSaved';
 
 /** When a percent-type expense is newly selected, server applies this default (single source of truth). */
 const DEFAULT_SELECTED_BUSINESS_PERCENT = 100;
@@ -247,12 +279,12 @@ function additionalBusinessTypeOptionsByMain(mainBusinessType: string | null): O
   const t = (mainBusinessType ?? '').trim();
   if (t === 'חברה') {
     return [
-      { value: 'osek_murshe', label: 'מורשה' },
-      { value: 'osek_patur', label: 'פטור' },
+      { value: 'osek_murshe', label: 'מורשה', label_key: ACCOUNTING_ADDITIONAL_BUSINESS_LABEL_KEY.osek_murshe },
+      { value: 'osek_patur', label: 'פטור', label_key: ACCOUNTING_ADDITIONAL_BUSINESS_LABEL_KEY.osek_patur },
     ];
   }
   if (t === 'עוסק מורשה' || t === 'עוסק פטור') {
-    return [{ value: 'company', label: 'חברה' }];
+    return [{ value: 'company', label: 'חברה', label_key: ACCOUNTING_ADDITIONAL_BUSINESS_LABEL_KEY.company }];
   }
   return [];
 }
@@ -280,6 +312,7 @@ function normalizeExpenseItemsForClientDraft(items: unknown[]): Array<Record<str
       return {
         expense_type_code: meta.code,
         expense_type_label_he: meta.label,
+        expense_type_label_key: meta.label_key,
         value_kind: meta.value_kind,
         selected: false,
         business_percent: null,
@@ -292,6 +325,7 @@ function normalizeExpenseItemsForClientDraft(items: unknown[]): Array<Record<str
       return {
         expense_type_code: meta.code,
         expense_type_label_he: meta.label,
+        expense_type_label_key: meta.label_key,
         value_kind: meta.value_kind,
         selected: true,
         monthly_amount_ils: null,
@@ -301,6 +335,7 @@ function normalizeExpenseItemsForClientDraft(items: unknown[]): Array<Record<str
     return {
       expense_type_code: meta.code,
       expense_type_label_he: meta.label,
+      expense_type_label_key: meta.label_key,
       value_kind: meta.value_kind,
       selected: true,
       business_percent: null,
@@ -329,6 +364,7 @@ function normalizeIncomeSourceItemsForClientDraft(
       return {
         source_code: src.code,
         source_label_he: src.label,
+        source_label_key: src.label_key,
         selected: false,
         monthly_amount: null,
         additional_business_type: null,
@@ -342,6 +378,7 @@ function normalizeIncomeSourceItemsForClientDraft(
     return {
       source_code: src.code,
       source_label_he: src.label,
+      source_label_key: src.label_key,
       selected: true,
       monthly_amount: it.monthly_amount ?? null,
       additional_business_type: src.code === 'business' ? toStrOrNull(it.additional_business_type) : null,
@@ -635,13 +672,20 @@ function buildExpensesCard(
       }
     } else if (kind === 'percent') {
       const p = r.business_percent;
-      if (p != null) percentItems.push({ label, value: `${p}%` });
+      if (p != null) {
+        percentItems.push({
+          label,
+          label_key: ACCOUNTING_EXPENSE_LABEL_KEY[r.expense_type_code],
+          value: `${p}%`,
+        });
+      }
     }
   }
   const empty = SUMMARY_EMPTY_STATE_HE;
   return {
     block_key: 'expenses',
     block_label: 'הוצאות קבועות',
+    block_label_key: ACCOUNTING_BLOCK_LABEL_KEY.expenses,
     summary_text: amountLines.length ? amountLines.join(' | ') : empty,
     summary_primary_rows: amountLines,
     summary_empty_state_text: empty,
@@ -695,18 +739,46 @@ function buildIncomeCard(
   const incomeSystem = toStrOrNull(parent.income_management_system);
   const incomeUserCode = toStrOrNull(parent.income_user_code);
   const incomeLink = toStrOrNull(parent.income_software_open_link);
-  if (incomeSystem) detailsItems.push({ label: 'תוכנה', value: incomeSystem, display: 'text' });
-  if (incomeUserCode) detailsItems.push({ label: 'קוד משתמש', value: incomeUserCode, display: 'text' });
-  if (incomeLink) detailsItems.push({ label: 'לינק', value: incomeLink, display: 'link' });
+  if (incomeSystem) {
+    detailsItems.push({
+      label: 'תוכנה',
+      label_key: ACCOUNTING_FIELD_LABEL_KEY.income_management_system,
+      value: incomeSystem,
+      display: 'text',
+    });
+  }
+  if (incomeUserCode) {
+    detailsItems.push({
+      label: 'קוד משתמש',
+      label_key: ACCOUNTING_FIELD_LABEL_KEY.income_user_code,
+      value: incomeUserCode,
+      display: 'text',
+    });
+  }
+  if (incomeLink) {
+    detailsItems.push({
+      label: 'לינק',
+      label_key: ACCOUNTING_FIELD_LABEL_KEY.income_software_open_link,
+      value: incomeLink,
+      display: 'link',
+    });
+  }
 
   if (canEdit && toStrOrNull(parent.income_password_encrypted)) {
-    detailsItems.push({ label: 'סיסמה', value: 'שמורה', display: 'password_saved' });
+    detailsItems.push({
+      label: 'סיסמה',
+      label_key: ACCOUNTING_FIELD_LABEL_KEY.income_password,
+      value: 'שמורה',
+      value_key: PASSWORD_SAVED_KEY,
+      display: 'password_saved',
+    });
   }
 
   const empty = SUMMARY_EMPTY_STATE_HE;
   return {
     block_key: 'income',
     block_label: 'הכנסות',
+    block_label_key: ACCOUNTING_BLOCK_LABEL_KEY.income,
     summary_text: leftRows.length ? leftRows.join(' | ') : empty,
     summary_primary_rows: leftRows,
     summary_empty_state_text: empty,
@@ -748,44 +820,91 @@ function buildExpenseManagementCard(
     labelHe: string,
     val: string,
     display: BlockSummaryDisplay | undefined,
-    visible: boolean
+    visible: boolean,
+    value_key?: string
   ): AccountingExcelGridCell => ({
     field_key,
     label: labelHe,
+    label_key: ACCOUNTING_FIELD_LABEL_KEY[field_key],
     value: val,
+    value_key,
     display,
     visible,
   });
 
   /** תמיד מציגים עמודת גישה בכרטיס (אותו layout דו-עמודתי) */
   const access: AccountingExcelGridCell[] = [
-    cell('expense_software_name', 'שם תוכנת הוצאות', nameVal ?? empty, 'text', true),
-    cell('expense_software_username', 'קוד משתמש למערכת הוצאות', userVal ?? empty, 'text', true),
+    cell(
+      'expense_software_name',
+      'שם תוכנת הוצאות',
+      nameVal ?? empty,
+      'text',
+      true,
+      nameVal ? undefined : EMPTY_STATE_KEY
+    ),
+    cell(
+      'expense_software_username',
+      'קוד משתמש למערכת הוצאות',
+      userVal ?? empty,
+      'text',
+      true,
+      userVal ? undefined : EMPTY_STATE_KEY
+    ),
     cell(
       'expense_software_password',
       'סיסמה למערכת הוצאות',
       passSaved ? 'שמורה' : empty,
       passSaved ? 'password_saved' : 'text',
-      true
+      true,
+      passSaved ? PASSWORD_SAVED_KEY : EMPTY_STATE_KEY
     ),
-    cell('expense_software_url', 'קישור למערכת הוצאות', urlVal ?? empty, urlVal ? 'link' : 'text', true),
+    cell(
+      'expense_software_url',
+      'קישור למערכת הוצאות',
+      urlVal ?? empty,
+      urlVal ? 'link' : 'text',
+      true,
+      urlVal ? undefined : EMPTY_STATE_KEY
+    ),
   ];
 
+  const methodValueKey = methodCode ? ACCOUNTING_EXPENSE_DELIVERY_LABEL_KEY[methodCode] : EMPTY_STATE_KEY;
+  const uploadedCode = toStrOrNull(parent.expense_uploaded_by);
+  const uploadedValueKey = uploadedCode ? ACCOUNTING_UPLOADED_BY_LABEL_KEY[uploadedCode] : EMPTY_STATE_KEY;
+  const orderCode = toStrOrNull(parent.expense_documents_order_level);
+  const orderValueKey = orderCode ? ACCOUNTING_ORDER_LABEL_KEY[orderCode] : EMPTY_STATE_KEY;
+
   const mainColumn: AccountingExcelGridCell[] = [
-    cell('expense_delivery_method', 'קבלת הוצאות', methodLabel, 'text', true),
-    cell('expense_uploaded_by', 'מי מעלה את ההוצאות', uploadedLabel, 'text', true),
-    cell('expense_documents_order_level', 'רמת סדר של מסמכי הוצאות', orderLabel, 'text', true),
-    cell('expense_management_notes', 'הערות על ניהול הוצאות', notesVal ?? empty, 'text', true),
+    cell('expense_delivery_method', 'קבלת הוצאות', methodLabel, 'text', true, methodValueKey),
+    cell('expense_uploaded_by', 'מי מעלה את ההוצאות', uploadedLabel, 'text', true, uploadedValueKey),
+    cell('expense_documents_order_level', 'רמת סדר של מסמכי הוצאות', orderLabel, 'text', true, orderValueKey),
+    cell(
+      'expense_management_notes',
+      'הערות על ניהול הוצאות',
+      notesVal ?? empty,
+      'text',
+      true,
+      notesVal ? undefined : EMPTY_STATE_KEY
+    ),
     ...[...emCustomFields]
       .sort((a, b) => a.sort_order - b.sort_order)
-      .map((cf) =>
-        cell(cf.field_key, cf.label_he, formatExpenseMgmtCustomFieldSummary(cf, empty), 'text', true)
-      ),
+      .map((cf) => {
+        const summary = formatExpenseMgmtCustomFieldSummary(cf, empty);
+        return {
+          field_key: cf.field_key,
+          label: cf.label_he,
+          value: summary,
+          value_key: summary === empty ? EMPTY_STATE_KEY : undefined,
+          display: 'text' as const,
+          visible: true,
+        };
+      }),
   ];
 
   return {
     block_key: 'expense_management',
     block_label: 'הוצאות',
+    block_label_key: ACCOUNTING_BLOCK_LABEL_KEY.expense_management,
     summary_text: '',
     summary_primary_rows: [],
     summary_empty_state_text: empty,
@@ -819,6 +938,7 @@ function buildDocumentsCard(parent: Record<string, unknown>, canEdit: boolean): 
   return {
     block_key: 'documents',
     block_label: 'מסמכים',
+    block_label_key: ACCOUNTING_BLOCK_LABEL_KEY.documents,
     summary_text: parts.length ? parts.join(' | ') : empty,
     summary_primary_rows: [],
     summary_empty_state_text: empty,
@@ -837,16 +957,18 @@ function buildVehiclesCard(parent: Record<string, unknown>, fleet: VehicleFleetR
   const vehicles_yes_no: VehiclesYesNoFieldDto = {
     field_key: 'has_vehicles',
     label: 'יש רכבים?',
+    label_key: 'clientOperations.accounting.hasVehicles',
     value: hasVehicles ? 'yes' : 'no',
     options: [
-      { value: 'no', label: 'לא' },
-      { value: 'yes', label: 'כן' },
+      { value: 'no', label: 'לא', label_key: CO_UI.no },
+      { value: 'yes', label: 'כן', label_key: CO_UI.yes },
     ],
   };
   if (!hasVehicles) {
     return {
       block_key: 'vehicles',
       block_label: 'רכבים',
+      block_label_key: ACCOUNTING_BLOCK_LABEL_KEY.vehicles,
       summary_text: 'אין רכבים',
       summary_primary_rows: [],
       summary_empty_state_text: empty,
@@ -869,6 +991,7 @@ function buildVehiclesCard(parent: Record<string, unknown>, fleet: VehicleFleetR
   ): AccountingExcelGridCell => ({
     field_key,
     label: labelHe,
+    label_key: ACCOUNTING_FIELD_LABEL_KEY[field_key],
     value: val,
     visible,
   });
@@ -889,18 +1012,24 @@ function buildVehiclesCard(parent: Record<string, unknown>, fleet: VehicleFleetR
     vehicle_items.push({
       vehicle_id: r.id,
       summary_lines: [],
-      edit_action: { label: 'עריכה', enabled: canEdit },
+      edit_action: { label: 'עריכה', label_key: CO_UI.edit, enabled: canEdit },
     });
   }
 
   const vehicle_block_actions: VehicleBlockActionDto[] = [];
   if (canEdit) {
-    vehicle_block_actions.push({ action_key: 'add_vehicle', label: 'הוסף רכב', enabled: true });
+    vehicle_block_actions.push({
+      action_key: 'add_vehicle',
+      label: 'הוסף רכב',
+      label_key: 'clientOperations.accounting.addVehicle',
+      enabled: true,
+    });
   }
   const summary_text = fleet.length === 0 ? '' : `${fleet.length} רכבים`;
   return {
     block_key: 'vehicles',
     block_label: 'רכבים',
+    block_label_key: ACCOUNTING_BLOCK_LABEL_KEY.vehicles,
     summary_text,
     summary_primary_rows: [],
     summary_empty_state_text: empty,
@@ -931,6 +1060,7 @@ function buildAccountingTabResponse(
   return {
     tab_key: 'accounting_settings',
     tab_label: 'הגדרות הנה״ח',
+    tab_label_key: 'clientOperations.tabs.accounting',
     layout: { type: 'grid', columns: 2 },
     blocks: [
       buildIncomeCard(parent, incomeSources, canEditBlock(ctx, 'income')),
@@ -993,6 +1123,7 @@ export async function getAccountingBlockModal(
       return {
         expense_type_code: e.code,
         expense_type_label_he: e.label,
+        expense_type_label_key: e.label_key,
         value_kind: e.value_kind,
         selected,
         business_percent: selected && e.value_kind === 'percent' ? row!.business_percent : null,
@@ -1033,6 +1164,7 @@ export async function getAccountingBlockModal(
     const sourceItems = INCOME_SOURCES.map((x) => ({
       source_code: x.code,
       source_label_he: x.label,
+      source_label_key: x.label_key,
       selected: selectedCodes.includes(x.code),
       monthly_amount: selectedMap.get(x.code)?.monthly_amount ?? null,
       additional_business_type:
@@ -1084,7 +1216,7 @@ export async function getAccountingBlockModal(
             label: 'יש הכנסה נוספת',
             type: 'boolean',
             value: false,
-            options: [{ value: true, label: 'כן' }, { value: false, label: 'לא' }],
+            options: YES_NO_OPTIONS,
             required: false,
             visible: false,
             editable: false,
@@ -1112,6 +1244,7 @@ export async function getAccountingBlockModal(
           {
             key: 'income_management_system',
             label: 'מערכת ניהול הכנסה',
+            label_key: ACCOUNTING_FIELD_LABEL_KEY.income_management_system,
             type: 'text',
             value: toStrOrNull(parent.income_management_system),
             required: false,
@@ -1122,6 +1255,7 @@ export async function getAccountingBlockModal(
           {
             key: 'income_user_code',
             label: 'קוד משתמש',
+            label_key: ACCOUNTING_FIELD_LABEL_KEY.income_user_code,
             type: 'text',
             value: toStrOrNull(parent.income_user_code),
             required: false,
@@ -1132,6 +1266,7 @@ export async function getAccountingBlockModal(
           {
             key: 'income_password',
             label: 'סיסמה',
+            label_key: ACCOUNTING_FIELD_LABEL_KEY.income_password,
             type: 'secure_text',
             value: null,
             required: false,
@@ -1142,6 +1277,7 @@ export async function getAccountingBlockModal(
           {
             key: 'income_software_open_link',
             label: 'לינק לפתיחת תוכנה',
+            label_key: ACCOUNTING_FIELD_LABEL_KEY.income_software_open_link,
             type: 'text',
             value: toStrOrNull(parent.income_software_open_link),
             required: false,
@@ -1180,9 +1316,10 @@ export async function getAccountingBlockModal(
       {
         key: 'expense_delivery_method',
         label: 'קבלת הוצאות',
+        label_key: ACCOUNTING_FIELD_LABEL_KEY.expense_delivery_method,
         type: 'enum_single',
         value: toStrOrNull(parent.expense_delivery_method),
-        options: EXPENSE_DELIVERY_METHODS.map((x) => ({ value: x.code, label: x.label })),
+        options: EXPENSE_DELIVERY_METHODS.map((x) => ({ value: x.code, label: x.label, label_key: x.label_key })),
         required: false,
         visible: true,
         editable: canEdit,
@@ -1190,6 +1327,7 @@ export async function getAccountingBlockModal(
       {
         key: 'expense_software_name',
         label: 'שם תוכנת הוצאות',
+        label_key: ACCOUNTING_FIELD_LABEL_KEY.expense_software_name,
         type: 'text',
         value: toStrOrNull(parent.expense_software_name),
         required: false,
@@ -1200,6 +1338,7 @@ export async function getAccountingBlockModal(
       {
         key: 'expense_software_username',
         label: 'קוד משתמש למערכת הוצאות',
+        label_key: ACCOUNTING_FIELD_LABEL_KEY.expense_software_username,
         type: 'text',
         value: toStrOrNull(parent.expense_software_username),
         required: false,
@@ -1210,6 +1349,7 @@ export async function getAccountingBlockModal(
       {
         key: 'expense_software_password',
         label: 'סיסמה למערכת הוצאות',
+        label_key: ACCOUNTING_FIELD_LABEL_KEY.expense_software_password,
         type: 'secure_text',
         value: null,
         required: false,
@@ -1220,6 +1360,7 @@ export async function getAccountingBlockModal(
       {
         key: 'expense_software_url',
         label: 'קישור למערכת הוצאות',
+        label_key: ACCOUNTING_FIELD_LABEL_KEY.expense_software_url,
         type: 'text',
         value: toStrOrNull(parent.expense_software_url),
         required: false,
@@ -1230,9 +1371,10 @@ export async function getAccountingBlockModal(
       {
         key: 'expense_uploaded_by',
         label: 'מי מעלה את ההוצאות',
+        label_key: ACCOUNTING_FIELD_LABEL_KEY.expense_uploaded_by,
         type: 'enum_single',
         value: toStrOrNull(parent.expense_uploaded_by),
-        options: EXPENSE_UPLOADED_BY_OPTS.map((x) => ({ value: x.code, label: x.label })),
+        options: EXPENSE_UPLOADED_BY_OPTS.map((x) => ({ value: x.code, label: x.label, label_key: x.label_key })),
         required: false,
         visible: true,
         editable: canEdit,
@@ -1240,9 +1382,10 @@ export async function getAccountingBlockModal(
       {
         key: 'expense_documents_order_level',
         label: 'רמת סדר של מסמכי הוצאות',
+        label_key: ACCOUNTING_FIELD_LABEL_KEY.expense_documents_order_level,
         type: 'enum_single',
         value: toStrOrNull(parent.expense_documents_order_level),
-        options: EXPENSE_DOCS_ORDER_OPTS.map((x) => ({ value: x.code, label: x.label })),
+        options: EXPENSE_DOCS_ORDER_OPTS.map((x) => ({ value: x.code, label: x.label, label_key: x.label_key })),
         required: false,
         visible: true,
         editable: canEdit,
@@ -1250,6 +1393,7 @@ export async function getAccountingBlockModal(
       {
         key: 'expense_management_notes',
         label: 'הערות על ניהול הוצאות',
+        label_key: ACCOUNTING_FIELD_LABEL_KEY.expense_management_notes,
         type: 'textarea',
         value: toStrOrNull(parent.expense_management_notes),
         required: false,
@@ -1304,10 +1448,7 @@ export async function getAccountingBlockModal(
         label: cf.label_he,
         type: 'boolean',
         value: cf.value_bool,
-        options: [
-          { value: true, label: 'כן' },
-          { value: false, label: 'לא' },
-        ],
+        options: YES_NO_OPTIONS,
         required: false,
         visible: true,
         editable: canEdit,
@@ -1365,7 +1506,7 @@ export async function getAccountingBlockModal(
             label: 'שיטת מסירת מסמכים',
             type: 'enum_single',
             value: toStrOrNull(parent.document_delivery_method),
-            options: DOC_DELIVERY.map((x) => ({ value: x.code, label: x.label })),
+            options: DOC_DELIVERY.map((x) => ({ value: x.code, label: x.label, label_key: x.label_key })),
             required: false,
             visible: true,
             editable: canEdit,

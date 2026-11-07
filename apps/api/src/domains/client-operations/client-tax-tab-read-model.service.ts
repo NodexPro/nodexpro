@@ -3,6 +3,7 @@
  * UI reads only `tax_tab` (including `baseline.settings` mirror for drafts); case may still ship `tax_settings` for other consumers.
  */
 import type { TaxTabCommandType } from './client-tax-commands.service.js';
+import { CO_UI, knownSystemDisplayLabelKey } from './client-operations-ui-labels.pure.js';
 import type {
   ClientTaxSettingsPublic,
   ClientTaxSettingsResponse,
@@ -16,7 +17,9 @@ export type TaxTabDisplayTone = 'default' | 'muted' | 'warning' | 'not_relevant'
 export type TaxTabDisplayRow = {
   row_key: string;
   label_he: string;
+  label_key?: string;
   value_he: string;
+  value_key?: string;
   tone?: TaxTabDisplayTone;
 };
 
@@ -26,6 +29,7 @@ export type TaxTabSectionEditAffordance = {
   /** Whether the workspace should show an edit affordance for this section. */
   enabled: boolean;
   button_label_he: string;
+  button_label_key?: string;
 };
 
 export type TaxTabEditFieldKind =
@@ -36,11 +40,12 @@ export type TaxTabEditFieldKind =
   | 'number'
   | 'payment_method_select';
 
-export type TaxTabEditFieldOption = { value: string; label_he: string };
+export type TaxTabEditFieldOption = { value: string; label_he: string; label_key?: string };
 
 export type TaxTabEditFieldDef = {
   field_key: string;
   label_he: string;
+  label_key?: string;
   kind: TaxTabEditFieldKind;
   disabled: boolean;
   readonly: boolean;
@@ -91,6 +96,7 @@ export type TaxTabPaymentRowSecureState = {
 export type TaxTabPaymentPanelCopyControl = {
   show: boolean;
   aria_label_he: string;
+  aria_label_key?: string;
   /** Plain rows only — secure rows use `secure_state`. */
   disabled?: boolean;
   disabled_reason_he?: string | null;
@@ -99,6 +105,7 @@ export type TaxTabPaymentPanelCopyControl = {
 export type TaxTabPaymentPanelRow = {
   row_key: string;
   label_he: string;
+  label_key?: string;
   value_display_he: string;
   card_brand: string | null;
   value_cell_layout: 'default' | 'card_with_brand';
@@ -115,6 +122,7 @@ export type TaxTabPaymentPanelModel = {
   payment_channel: 'vat' | 'income_tax';
   secure_session: { active: boolean; expires_at: string | null };
   cvv_footer_he: string;
+  cvv_footer_key?: string;
   card_expired_warning: boolean;
   rows: TaxTabPaymentPanelRow[];
 };
@@ -122,6 +130,7 @@ export type TaxTabPaymentPanelModel = {
 export type TaxTabSectionReadModel = {
   section_key: TaxTabSectionKey;
   title_he: string;
+  title_key?: string;
   visible: boolean;
   display_rows: TaxTabDisplayRow[];
   edit: TaxTabSectionEditAffordance;
@@ -131,6 +140,7 @@ export type TaxTabSectionReadModel = {
 
 export type TaxTabHeaderReadModel = {
   title_he: string;
+  title_key?: string;
   client_tax_id: string | null;
   client_display_name: string | null;
   summary_rows: TaxTabDisplayRow[];
@@ -149,6 +159,89 @@ export type TaxTabWorkspaceResponse = {
 function dash(v: string | null | undefined): string {
   const t = (v ?? '').trim();
   return t ? t : '—';
+}
+
+const TAX_SECTION_TITLE_KEY: Record<string, string> = {
+  vat_registration: CO_UI.taxes.vatRegistration,
+  income_tax_advances: CO_UI.taxes.incomeTaxAdvances,
+  income_tax_deductions: CO_UI.taxes.incomeTaxDeductions,
+  national_insurance: CO_UI.taxes.nationalInsurance,
+  vat_payment: CO_UI.taxes.vatPayment,
+  income_tax_payment: CO_UI.taxes.incomeTaxPayment,
+  notes: CO_UI.taxes.notes,
+};
+
+const TAX_HE_LABEL_KEY: Record<string, string> = {
+  מיסים: CO_UI.taxes.title,
+  'רישום מע״מ': CO_UI.taxes.vatRegistration,
+  'מקדמות מס הכנסה': CO_UI.taxes.incomeTaxAdvances,
+  'מס הכנסה ניכויים': CO_UI.taxes.incomeTaxDeductions,
+  'ביטוח לאומי': CO_UI.taxes.nationalInsurance,
+  'ביטוח לאומי עצמאי': CO_UI.taxes.niSelfEmployed,
+  'תשלום מע״מ': CO_UI.taxes.vatPayment,
+  'תשלום מס הכנסה': CO_UI.taxes.incomeTaxPayment,
+  הערות: CO_UI.taxes.notes,
+  'מע״מ': CO_UI.taxes.fields.vat,
+  'תדירות מע״מ': CO_UI.taxes.fields.vatFrequency,
+  'יום יעד למע״מ': CO_UI.taxes.fields.vatDueDay,
+  מקדמות: CO_UI.taxes.fields.advances,
+  אחוז: CO_UI.taxes.fields.percent,
+  'תדירות דיווח': CO_UI.taxes.fields.reportingFrequency,
+  'תיק ניכויים': CO_UI.taxes.fields.deductionsFile,
+  'סכום חודשי': CO_UI.taxes.fields.monthlyAmount,
+  'איך משלם מע״מ': CO_UI.taxes.fields.howPaysVat,
+  'איך משלם מס הכנסה': CO_UI.taxes.fields.howPaysIncomeTax,
+  'תיאור תשלום': CO_UI.taxes.fields.paymentDescription,
+  'בעל הכרטיס': CO_UI.taxes.payment.cardholder,
+  'כרטיס אשראי': CO_UI.taxes.payment.card,
+  תוקף: CO_UI.taxes.payment.expiry,
+  'שם לקוח': CO_UI.columns.clientName,
+  'ח.פ / ת.ז': CO_UI.columns.taxId,
+  עריכה: CO_UI.edit,
+};
+
+function taxLabelKey(hebrew: string | null | undefined): string | undefined {
+  const normalized = String(hebrew ?? '')
+    .replace(/\u00a0/g, ' ')
+    .trim();
+  return TAX_HE_LABEL_KEY[normalized] ?? knownSystemDisplayLabelKey(normalized);
+}
+
+function withDisplayRowKeys(row: TaxTabDisplayRow): TaxTabDisplayRow {
+  return {
+    ...row,
+    label_key: row.label_key ?? taxLabelKey(row.label_he),
+    value_key: row.value_key ?? knownSystemDisplayLabelKey(row.value_he),
+  };
+}
+
+function withSectionKeys(section: TaxTabSectionReadModel): TaxTabSectionReadModel {
+  return {
+    ...section,
+    title_key: TAX_SECTION_TITLE_KEY[section.section_key] ?? taxLabelKey(section.title_he),
+    display_rows: section.display_rows.map(withDisplayRowKeys),
+    edit: { ...section.edit, button_label_key: CO_UI.edit },
+    edit_model: {
+      ...section.edit_model,
+      fields: section.edit_model.fields.map((field) => ({
+        ...field,
+        label_key: taxLabelKey(field.label_he),
+        options: field.options?.map((option) => ({
+          ...option,
+          label_key: knownSystemDisplayLabelKey(option.label_he),
+        })),
+      })),
+    },
+    payment_panel: section.payment_panel
+      ? {
+          ...section.payment_panel,
+          rows: section.payment_panel.rows.map((row) => ({
+            ...row,
+            label_key: taxLabelKey(row.label_he),
+          })),
+        }
+      : section.payment_panel,
+  };
 }
 
 function heVatType(v: string | null): string {
@@ -596,6 +689,7 @@ function buildCreditPaymentPanel(
         disabled: !holderTrim,
         disabled_reason_he: !holderTrim ? 'אין ערך להעתקה' : null,
         aria_label_he: 'העתקת שם בעל הכרטיס',
+        aria_label_key: CO_UI.taxes.copyAria.cardholder,
       },
       secure_state: null,
     },
@@ -613,6 +707,7 @@ function buildCreditPaymentPanel(
         disabled: !taxIdTrim,
         disabled_reason_he: !taxIdTrim ? 'אין ערך להעתקה' : null,
         aria_label_he: 'העתקת ח.פ / ת.ז',
+        aria_label_key: CO_UI.taxes.copyAria.taxId,
       },
       secure_state: null,
     },
@@ -630,6 +725,7 @@ function buildCreditPaymentPanel(
         disabled: !dedTrim,
         disabled_reason_he: !dedTrim ? 'אין ערך להעתקה' : null,
         aria_label_he: 'העתקת מספר תיק ניכויים',
+        aria_label_key: CO_UI.taxes.copyAria.deductionsFile,
       },
       secure_state: null,
     },
@@ -645,6 +741,7 @@ function buildCreditPaymentPanel(
       copy_control: {
         show: true,
         aria_label_he: 'העתקת מספר כרטיס מאובטחת',
+        aria_label_key: CO_UI.taxes.copyAria.card,
       },
       secure_state: {
         in_flight: false,
@@ -664,6 +761,7 @@ function buildCreditPaymentPanel(
       copy_control: {
         show: true,
         aria_label_he: 'העתקת תוקף מאובטחת',
+        aria_label_key: CO_UI.taxes.copyAria.expiry,
       },
       secure_state: {
         in_flight: false,
@@ -678,6 +776,7 @@ function buildCreditPaymentPanel(
     payment_channel: channel,
     secure_session: { active: sess.active, expires_at: sess.expires_at },
     cvv_footer_he: 'קוד CVV אינו נשמר במערכת ויש לבקשו מהלקוח בעת התשלום',
+    cvv_footer_key: CO_UI.taxes.cvvFooter,
     card_expired_warning: isMaskedExpiryDisplayInPast(masked.expiry),
     rows,
   };
@@ -689,6 +788,7 @@ export function buildTaxTabWorkspaceReadModel(bundle: ClientTaxSettingsResponse)
 
   const header: TaxTabHeaderReadModel = {
     title_he: 'מיסים',
+    title_key: CO_UI.taxes.title,
     client_tax_id: s.client_tax_id,
     client_display_name: s.client_display_name,
     summary_rows: [
@@ -819,6 +919,7 @@ export function buildTaxTabWorkspaceReadModel(bundle: ClientTaxSettingsResponse)
       row_key: 'vat_credit_hint',
       label_he: 'אשראי',
       value_he: 'מוגדר — פעולות העתקה מוצגות מתחת לכרטיס',
+      value_key: CO_UI.taxes.creditConfigured,
       tone: 'muted',
     });
   }
@@ -842,6 +943,7 @@ export function buildTaxTabWorkspaceReadModel(bundle: ClientTaxSettingsResponse)
       row_key: 'it_credit_hint',
       label_he: 'אשראי',
       value_he: 'מוגדר — פעולות העתקה מוצגות מתחת לכרטיס',
+      value_key: CO_UI.taxes.creditConfigured,
       tone: 'muted',
     });
   }
@@ -933,7 +1035,10 @@ export function buildTaxTabWorkspaceReadModel(bundle: ClientTaxSettingsResponse)
     read_model_version: TAX_TAB_READ_MODEL_VERSION,
     ui,
     baseline: { settings: s },
-    header,
-    sections,
+    header: {
+      ...header,
+      summary_rows: header.summary_rows.map(withDisplayRowKeys),
+    },
+    sections: sections.map(withSectionKeys),
   };
 }

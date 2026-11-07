@@ -59,8 +59,8 @@ test('Fees, payroll and history premium skins are scoped to the workspace modal 
 test('Fees editor keeps named save and replaces redundant סגירה with the existing X', () => {
   assert.match(feesSrc, /moduleClientOperationsFeesCommands/);
   assert.match(feesSrc, /className="nx-modal-close"/);
-  assert.match(feesSrc, /שמירה/);
-  assert.match(feesSrc, /fxMeta\.cancel_he/);
+  assert.match(feesSrc, /clientOperations\.save/);
+  assert.match(feesSrc, /clientOperations\.cancel/);
   assert.doesNotMatch(feesSrc, /nx-modal-footer[\s\S]*סגירה[\s\S]*שמירה/);
 });
 

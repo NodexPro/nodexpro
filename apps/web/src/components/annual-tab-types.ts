@@ -16,12 +16,15 @@ export type AnnualDocumentRowDto = {
   code: string | null;
   label_he: string;
   description_he: string | null;
+  description_key?: string;
   required: boolean;
   document_name_he: string;
+  document_name_key?: string;
   received: boolean;
   row_note: string | null;
   status: AnnualDocumentRowStatus;
   status_label_he: string;
+  status_label_key?: string;
   row_style: AnnualDocumentRowStyle;
   file: AnnualDocumentFileDto;
   actions: {
@@ -40,6 +43,7 @@ export type AnnualSubmissionRowDto = {
   submitted_on: string;
   status: string;
   status_label_he: string;
+  status_label_key?: string;
   note: string | null;
   file: AnnualDocumentFileDto;
   actions: { can_edit: boolean; can_remove: boolean; can_attach_file: boolean; can_open_file: boolean };
@@ -51,6 +55,7 @@ export type AnnualControlColor = 'green' | 'yellow' | 'red';
 export type AnnualControlStatusDto = {
   code: AnnualControlStatusCode;
   label_he: string;
+  label_key?: string;
   color: AnnualControlColor;
 };
 
@@ -59,20 +64,24 @@ export type AnnualDeadlineInfoDto = {
   days_left: number;
   is_overdue: boolean;
   label_he: string;
+  label_key?: string;
 };
 
 export type AnnualTabModel = {
   tab_key: 'annual_report' | 'capital_declaration';
   tab_title_he: string;
+  title_key?: string;
   read_model_version: number;
   permissions: { can_view: boolean; can_edit: boolean };
   status: AnnualControlStatusDto;
   missing_documents: string[];
   completion_percent: number;
   deadline_info: AnnualDeadlineInfoDto;
-  risk_indicator: { label_he: string };
+  risk_indicator: { label_he: string; label_key?: string };
   missing_documents_section_title_he: string;
+  missing_documents_section_title_key?: string;
   status_card_title_he: string;
+  status_card_title_key?: string;
   meta: {
     updated_last_label_he: string;
     updated_last_display_he: string;
@@ -82,9 +91,13 @@ export type AnnualTabModel = {
   visibility: { show_documents: boolean; show_submissions: boolean; show_notes: boolean };
   documents_table: {
     card_title_he: string;
+    card_title_key?: string;
+    empty_state_key?: string;
     column_headers_he: string[];
+    column_header_keys?: Array<string | null>;
     empty_state_he: string;
     add_custom_label_he: string;
+    add_custom_label_key?: string;
     add_custom_enabled: boolean;
     /** מסופק מהאגרגט בלבד; אם חסר (גרסה ישנה של API) — לא להציג פס סיכום */
     summary?: {
@@ -101,17 +114,24 @@ export type AnnualTabModel = {
   };
   submissions_table: {
     card_title_he: string;
+    card_title_key?: string;
+    empty_state_key?: string;
     column_headers_he: string[];
+    column_header_keys?: Array<string | null>;
     empty_state_he: string;
     add_row_label_he: string;
+    add_row_label_key?: string;
     add_row_enabled: boolean;
     rows: AnnualSubmissionRowDto[];
   };
   notes_card: {
     card_title_he: string;
+    card_title_key?: string;
     notes: string | null;
     placeholder_he: string;
+    placeholder_key?: string;
     save_label_he: string;
+    save_label_key?: string;
     edit_enabled: boolean;
   };
   workspace_actions?: Array<{

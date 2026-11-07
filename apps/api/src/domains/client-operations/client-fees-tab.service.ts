@@ -15,6 +15,22 @@ import {
   BILLING_DAY_RANGE_ORDER,
   isAllowedBillingDayRange,
 } from './client-fees-catalog.js';
+import {
+  CO_UI,
+  FEE_CHARGING_LABEL_KEY,
+  FEE_CHANGE_REASON_LABEL_KEY,
+  FEE_COLUMN_LABEL_KEY,
+  FEE_CURRENCY_LABEL_KEY,
+  FEE_END_ACTION_LABEL_KEY,
+  FEE_SERVICE_LABEL_KEY,
+  FEE_STATUS_LABEL_KEY,
+  FEE_VAT_MODE_LABEL_KEY,
+  FEE_FIELD_LABEL_KEY,
+} from './client-operations-ui-labels.pure.js';
+
+function withFeeFieldKey(field: FeesAgreementFieldDto): FeesAgreementFieldDto {
+  return { ...field, label_key: field.label_key ?? FEE_FIELD_LABEL_KEY[field.key] };
+}
 
 function assertOrg(ctx: RequestContext): string {
   const orgId = ctx.organizationId;
@@ -73,9 +89,10 @@ export type FeesModalFieldVisibleWhenClause = {
 export type FeesAgreementFieldDto = {
   key: string;
   label_he: string;
+  label_key?: string;
   type: 'text' | 'textarea' | 'date' | 'radio' | 'select' | 'number';
   value: string | boolean | null;
-  options?: Array<{ value: string; label_he: string }>;
+  options?: Array<{ value: string; label_he: string; label_key?: string }>;
   visible: boolean;
   editable: boolean;
   /** מיפוי ל-PATCH / מודאל — מגיע מהשרת בלבד */
@@ -89,9 +106,11 @@ export type FeesAgreementFieldDto = {
 
 export type FeesAgreementSummaryDto = {
   card_title_he: string;
+  card_title_key?: string;
   no_agreement_summary_he: string | null;
-  status_chip: { label_he: string; token: string } | null;
-  lines: Array<{ label_he: string; value_he: string }>;
+  no_agreement_summary_key?: string;
+  status_chip: { label_he: string; label_key?: string; token: string } | null;
+  lines: Array<{ label_he: string; label_key?: string; value_he: string; value_key?: string }>;
 };
 
 /** מפתח יציב ללוגיקת UI — לא מבוסס על מחרוזת כותרת */
@@ -100,20 +119,25 @@ export type FeesEditModalSectionKey = 'fees_agreement' | 'fees_discount' | 'fees
 export type FeesEditModalSectionDto = {
   section_key: FeesEditModalSectionKey;
   section_title_he: string;
+  section_title_key?: string;
   fields: FeesAgreementFieldDto[];
 };
 
 export type FeesModalLinesEditorDto = {
   section_title_he: string;
+  section_title_key?: string;
   section_subtitle_he: string;
+  section_subtitle_key?: string;
+  section_subtitle_fill?: Record<string, string | number>;
   max_lines: number;
-  add_button: { label_he: string; enabled: boolean; action_key: string } | null;
+  add_button: { label_he: string; label_key?: string; enabled: boolean; action_key: string } | null;
   rows: Array<{ persist_line: Record<string, unknown> }>;
 };
 
 export type FeesEditModalDto = {
   modal_title_he: string;
   save_hint_he: string;
+  save_hint_key?: string;
   sections: FeesEditModalSectionDto[];
   /** עריכת שורות שירות כלולים — רק במודאל; הלשונית מציגה תאים מסכם בלבד */
   included_lines_editor: FeesModalLinesEditorDto;
@@ -129,7 +153,9 @@ export type FeesLineEditorLabelsDto = {
   /** שורות כלולים — בחירת מצב מע"מ */
   vat_mode_label_he: string;
   payslip_count_label_he: string;
+  payslip_count_label_key?: string;
   unit_price_label_he: string;
+  unit_price_label_key?: string;
   quantity_label_he: string;
   currency_label_he: string;
   line_total_label_he: string;
@@ -165,16 +191,22 @@ export type FeesLineExchangeRateModalDto = {
 
 export type FeesTableSectionDto = {
   section_title_he: string;
+  section_title_key?: string;
   section_subtitle_he: string;
+  section_subtitle_key?: string;
+  section_subtitle_fill?: Record<string, string | number>;
   column_headers_he: string[];
-  add_button: { label_he: string; enabled: boolean; action_key: string } | null;
+  column_header_keys?: Array<string | null>;
+  add_button: { label_he: string; label_key?: string; enabled: boolean; action_key: string } | null;
   rows: FeesServiceRowDto[];
   empty_state_he: string;
+  empty_state_key?: string;
 };
 
 export type FeesKeyValueCardDto = {
   card_title_he: string;
-  lines: Array<{ label_he: string; value_he: string; emphasize?: boolean }>;
+  card_title_key?: string;
+  lines: Array<{ label_he: string; label_key?: string; value_he: string; value_key?: string; emphasize?: boolean }>;
   primary_value_he: string | null;
 };
 
@@ -187,30 +219,45 @@ export type FeesFinancialSummaryCardDto = FeesKeyValueCardDto & {
 
 export type FeesRenewalCardDto = {
   card_title_he: string;
-  banner: { variant: 'neutral' | 'success' | 'warning' | 'danger'; text_he: string } | null;
-  lines: Array<{ label_he: string; value_he: string }>;
+  card_title_key?: string;
+  banner: { variant: 'neutral' | 'success' | 'warning' | 'danger'; text_he: string; text_key?: string } | null;
+  lines: Array<{ label_he: string; label_key?: string; value_he: string; value_key?: string }>;
+};
+
+export type FeesTooltipLineDto = {
+  line_he: string;
+  line_key?: string;
+  fill?: Record<string, string | number>;
+  fill_keys?: Record<string, string>;
 };
 
 export type FeesRecentEventDto = {
   occurred_at_he: string;
   actor_he: string;
   summary_he: string;
+  summary_key?: string;
+  summary_params?: Record<string, string | number>;
+  summary_param_keys?: Record<string, string>;
 };
 
 export type FeesRecentHistoryCardDto = {
   card_title_he: string;
-  view_full_link: { label_he: string; anchor_element_id: string };
+  card_title_key?: string;
+  view_full_link: { label_he: string; label_key?: string; anchor_element_id: string };
   events: FeesRecentEventDto[];
   empty_state_he: string;
+  empty_state_key?: string;
 };
 
 export type FeesPriceHistoryRowDto = {
   service_he: string;
+  service_label_key?: string;
   old_price_he: string;
   new_price_he: string;
   valid_from_he: string;
   valid_to_he: string;
   reason_he: string;
+  reason_key?: string;
   updated_by_he: string;
   changed_at_he: string;
 };
@@ -228,6 +275,7 @@ export type FeesPriceHistoryBarDto = {
   snapshot_after_he: string;
   /** שורות ל-tooltip — טקסט מוכן מהשרת */
   tooltip_lines_he: string[];
+  tooltip_lines?: FeesTooltipLineDto[];
 };
 
 export type FeesPriceChartViewMode = 'last_15' | 'all';
@@ -237,21 +285,33 @@ export type FeesPriceHistoryChartDto = {
   y_axis_hint_he: string;
   bars: FeesPriceHistoryBarDto[];
   empty_state_he: string;
+  empty_state_key?: string;
   /** מצב תצוגה שהאגרגט החזיר (לריענון ולפקודות) */
   chart_view_mode: FeesPriceChartViewMode;
   /** שורה ראשונה מעל הגרף — טקסט מוכן מהשרת */
   view_caption_he: string;
+  view_caption_key?: string;
+  view_caption_fill?: Record<string, string | number>;
   /** כשיש עוד אירועים מעבר לחלון — null כשלא רלוונטי */
   overflow_hint_he: string | null;
+  overflow_hint_key?: string;
+  subtitle_key?: string;
+  subtitle_fill?: Record<string, string | number>;
+  y_axis_hint_key?: string;
   toggle_last_15_label_he: string;
+  toggle_last_15_label_key?: string;
   toggle_all_label_he: string;
+  toggle_all_label_key?: string;
 };
 
 export type FeesPriceHistoryTableDto = {
   card_title_he: string;
+  card_title_key?: string;
   column_headers_he: string[];
+  column_header_keys?: Array<string | null>;
   rows: FeesPriceHistoryRowDto[];
   empty_state_he: string;
+  empty_state_key?: string;
   /** גרף עמודות — נתונים מוכנים לתצוגה */
   chart: FeesPriceHistoryChartDto;
   /** עוגן לקישור "היסטוריה מלאה" של מחירים */
@@ -261,6 +321,7 @@ export type FeesPriceHistoryTableDto = {
 export type FeesTabResponse = {
   tab_key: 'fees';
   tab_title_he: string;
+  tab_title_key?: string;
   read_model_version: number;
   agreement_id: string;
   /** ערך נבחר לאחסון — מחרוזת enum בשרת בלבד */
@@ -272,13 +333,13 @@ export type FeesTabResponse = {
   agreement_summary: FeesAgreementSummaryDto;
   /** מבנה המודאל לעריכה — כל השדות המאושרים, מקובצים */
   edit_modal: FeesEditModalDto;
-  built_in_catalog: Array<{ code: string; label_he: string }>;
-  charging_type_options: Array<{ value: string; label_he: string }>;
+  built_in_catalog: Array<{ code: string; label_he: string; label_key?: string }>;
+  charging_type_options: Array<{ value: string; label_he: string; label_key?: string }>;
   line_editor_labels: FeesLineEditorLabelsDto;
   /** ערכי select למצב מע"מ בשורות כלולים */
-  vat_mode_options: Array<{ value: string; label_he: string }>;
+  vat_mode_options: Array<{ value: string; label_he: string; label_key?: string }>;
   /** מטבעות לשורות שירות — מקור יחיד */
-  fee_line_currency_options: Array<{ value: string; label_he: string }>;
+  fee_line_currency_options: Array<{ value: string; label_he: string; label_key?: string }>;
   fee_line_exchange_rate_modal: FeesLineExchangeRateModalDto;
   included_services: FeesTableSectionDto;
   custom_services: FeesTableSectionDto;
@@ -445,27 +506,58 @@ function buildPriceHistoryChart(
     const snapshot_before_he = formatIls(effOld);
     const snapshot_after_he = formatIls(effNew);
 
-    const tooltip_lines_he: string[] = chartUsesTotalsOnly
+    const reasonCode = String(h.change_reason ?? '');
+    const catalogCode = String(h.catalog_code ?? '');
+    const tooltip_lines: FeesTooltipLineDto[] = chartUsesTotalsOnly
       ? [
-          'סה״כ אחרי הנחה לפני מע״מ',
-          `היה: ${snapshot_before_he}`,
-          `נהיה: ${snapshot_after_he}`,
-          `השינוי: ${delta_tooltip_he}`,
-          `תאריך: ${formatDateTimeHe(String(h.changed_at ?? ''))}`,
+          { line_he: 'סה״כ אחרי הנחה לפני מע״מ', line_key: 'clientOperations.fees.tooltipTotalAfterDiscount' },
+          { line_he: `היה: ${snapshot_before_he}`, line_key: 'clientOperations.fees.tooltipWas', fill: { value: snapshot_before_he } },
+          { line_he: `נהיה: ${snapshot_after_he}`, line_key: 'clientOperations.fees.tooltipBecame', fill: { value: snapshot_after_he } },
+          { line_he: `השינוי: ${delta_tooltip_he}`, line_key: 'clientOperations.fees.tooltipChange', fill: { value: delta_tooltip_he } },
+          {
+            line_he: `תאריך: ${formatDateTimeHe(String(h.changed_at ?? ''))}`,
+            line_key: 'clientOperations.fees.tooltipDate',
+            fill: { value: formatDateTimeHe(String(h.changed_at ?? '')) },
+          },
         ]
       : [
-          `שירות: ${service}`,
-          `היה: ${snapshot_before_he}`,
-          `נהיה: ${snapshot_after_he}`,
-          `השינוי: ${delta_tooltip_he} (ברוטו שורה בהיסטוריה)`,
-          `תאריך: ${formatDateTimeHe(String(h.changed_at ?? ''))}`,
+          {
+            line_he: `שירות: ${service}`,
+            line_key: 'clientOperations.fees.tooltipService',
+            fill: { value: service },
+            ...(FEE_SERVICE_LABEL_KEY[catalogCode] ? { fill_keys: { value: FEE_SERVICE_LABEL_KEY[catalogCode] } } : {}),
+          },
+          { line_he: `היה: ${snapshot_before_he}`, line_key: 'clientOperations.fees.tooltipWas', fill: { value: snapshot_before_he } },
+          { line_he: `נהיה: ${snapshot_after_he}`, line_key: 'clientOperations.fees.tooltipBecame', fill: { value: snapshot_after_he } },
+          {
+            line_he: `השינוי: ${delta_tooltip_he} (ברוטו שורה בהיסטוריה)`,
+            line_key: 'clientOperations.fees.tooltipChangeGross',
+            fill: { value: delta_tooltip_he },
+          },
+          {
+            line_he: `תאריך: ${formatDateTimeHe(String(h.changed_at ?? ''))}`,
+            line_key: 'clientOperations.fees.tooltipDate',
+            fill: { value: formatDateTimeHe(String(h.changed_at ?? '')) },
+          },
         ];
     if (reasonRaw && reasonRaw !== '—') {
-      tooltip_lines_he.push(`סיבה: ${reasonRaw}`);
+      tooltip_lines.push({
+        line_he: `סיבה: ${reasonRaw}`,
+        line_key: 'clientOperations.fees.tooltipReason',
+        fill: { value: reasonRaw },
+        ...(FEE_CHANGE_REASON_LABEL_KEY[reasonCode]
+          ? { fill_keys: { value: FEE_CHANGE_REASON_LABEL_KEY[reasonCode] } }
+          : {}),
+      });
     }
     if (updater && updater !== '—') {
-      tooltip_lines_he.push(`עודכן ע״י: ${updater}`);
+      tooltip_lines.push({
+        line_he: `עודכן ע״י: ${updater}`,
+        line_key: 'clientOperations.fees.updatedByPrefix',
+        fill: { name: updater },
+      });
     }
+    const tooltip_lines_he = tooltip_lines.map((ln) => ln.line_he);
 
     partialBars.push({
       x_label_he,
@@ -474,6 +566,7 @@ function buildPriceHistoryChart(
       snapshot_before_he,
       snapshot_after_he,
       tooltip_lines_he,
+      tooltip_lines,
     });
     effNewsFull.push(effNew);
   }
@@ -504,6 +597,16 @@ function buildPriceHistoryChart(
         : totalBarEvents === 0
           ? ''
           : `מוצגים ${shownCount} שינויים אחרונים`;
+  const view_caption_key =
+    totalBarEvents === 0
+      ? undefined
+      : chartView === 'all'
+        ? 'clientOperations.fees.showingAllChanges'
+        : 'clientOperations.fees.showingLastN';
+  const view_caption_fill =
+    totalBarEvents === 0
+      ? undefined
+      : { n: chartView === 'all' ? totalBarEvents : isTruncated ? PRICE_HISTORY_CHART_DEFAULT_LIMIT : shownCount };
 
   const overflow_hint_he = isTruncated ? 'יש עוד היסטוריה להצגה' : null;
 
@@ -516,19 +619,30 @@ function buildPriceHistoryChart(
 
   const empty_state_he =
     sortedAll.length === 0 ? 'אין היסטוריית מחירים' : 'אין שינוי בסכום ברשומות (הפרש 0)';
+  const empty_state_key =
+    sortedAll.length === 0 ? 'clientOperations.fees.noHistory' : 'clientOperations.fees.noAmountChange';
 
   return {
     subtitle_he,
+    subtitle_key: bars.length === 0 ? undefined : chartUsesTotalsOnly ? 'clientOperations.fees.chartSubtitleTotals' : 'clientOperations.fees.chartSubtitleLegacy',
+    subtitle_fill: bars.length === 0 ? undefined : { n: shownCount },
     y_axis_hint_he: chartUsesTotalsOnly
       ? 'גובה העמודה = מחיר אחרי הנחה לפני מע״מ (יחסי למחיר המקסימלי בגרף); ההפרש רק ב-tooltip'
       : 'גובה העמודה = מחיר אחרי האירוע (יחסי למקסימום בגרף); ייתכן מחיר שורה — שמירה חדשה מסנכרנת סה״כ',
+    y_axis_hint_key: chartUsesTotalsOnly ? 'clientOperations.fees.yAxisTotals' : 'clientOperations.fees.yAxisLegacy',
     bars,
     empty_state_he,
+    empty_state_key,
     chart_view_mode: chartView,
     view_caption_he,
+    view_caption_key,
+    view_caption_fill,
     overflow_hint_he,
+    overflow_hint_key: isTruncated ? 'clientOperations.fees.moreHistory' : undefined,
     toggle_last_15_label_he: '15 אחרונים',
+    toggle_last_15_label_key: 'clientOperations.fees.last15',
     toggle_all_label_he: 'הצג הכל',
+    toggle_all_label_key: 'clientOperations.fees.showAll',
   };
 }
 
@@ -561,16 +675,16 @@ const VAT_MODE_LABEL_HE: Record<FeeVatMode, string> = {
 };
 
 /** אפשרויות מטבע לשורות — מקור יחיד לאגרגט ול-UI */
-export const FEE_LINE_CURRENCY_OPTIONS: Array<{ value: string; label_he: string }> = [
-  { value: 'ILS', label_he: 'שקל' },
-  { value: 'USD', label_he: 'דולר' },
-  { value: 'EUR', label_he: 'אירו' },
+export const FEE_LINE_CURRENCY_OPTIONS: Array<{ value: string; label_he: string; label_key?: string }> = [
+  { value: 'ILS', label_he: 'שקל', label_key: FEE_CURRENCY_LABEL_KEY.ILS },
+  { value: 'USD', label_he: 'דולר', label_key: FEE_CURRENCY_LABEL_KEY.USD },
+  { value: 'EUR', label_he: 'אירו', label_key: FEE_CURRENCY_LABEL_KEY.EUR },
   { value: 'RUB', label_he: 'רובל' },
   { value: 'AED', label_he: 'דירהם' },
-  { value: 'CAD', label_he: 'דולר קנדי' },
-  { value: 'CHF', label_he: 'פרנק שווייצרי' },
-  { value: 'JPY', label_he: 'ין יפני' },
-  { value: 'CNY', label_he: 'יואן סיני' },
+  { value: 'CAD', label_he: 'דולר קנדי', label_key: FEE_CURRENCY_LABEL_KEY.CAD },
+  { value: 'CHF', label_he: 'פרנק שווייצרי', label_key: FEE_CURRENCY_LABEL_KEY.CHF },
+  { value: 'JPY', label_he: 'ין יפני', label_key: FEE_CURRENCY_LABEL_KEY.JPY },
+  { value: 'CNY', label_he: 'יואן סיני', label_key: FEE_CURRENCY_LABEL_KEY.CNY },
 ];
 
 const FEE_CURRENCY_CODES = new Set(FEE_LINE_CURRENCY_OPTIONS.map((o) => o.value));
@@ -731,13 +845,13 @@ function computeFinancialSummary(
   const totalWithVat = adjBase + adjVat;
 
   /** פירוט לכרטיס: לפני מע"מ = בסיס לפני הנחה; הנחה = סכום בשקלים (גם כשאחוזים — מחושב מסכום הנטו לפני מע"מ); מע"מ = אחרי הנחה */
-  const line_breakdown: Array<{ label_he: string; value_he: string }> = [
-    { label_he: 'לפני מע"מ', value_he: formatIls(sumBase) },
+  const line_breakdown: Array<{ label_he: string; label_key?: string; value_he: string }> = [
+    { label_he: 'לפני מע"מ', label_key: 'clientOperations.fees.beforeVat', value_he: formatIls(sumBase) },
   ];
   if (discountHas && discountAmt > 0) {
-    line_breakdown.push({ label_he: 'הנחה', value_he: formatIls(-discountAmt) });
+    line_breakdown.push({ label_he: 'הנחה', label_key: 'clientOperations.fees.discount', value_he: formatIls(-discountAmt) });
   }
-  line_breakdown.push({ label_he: 'מע"מ', value_he: formatIls(adjVat) });
+  line_breakdown.push({ label_he: 'מע"מ', label_key: 'clientOperations.fees.vat', value_he: formatIls(adjVat) });
 
   return {
     total_before_vat: adjBase,
@@ -797,22 +911,47 @@ function buildAgreementSummary(a: AgreementRow): FeesAgreementSummaryDto {
       : !st || String(st).trim() === ''
         ? AGREEMENT_STATUS_LABELS.active
         : '—';
-  const lines: Array<{ label_he: string; value_he: string }> = [];
+  const lines: Array<{ label_he: string; label_key?: string; value_he: string; value_key?: string }> = [];
   if (hasAgreement) {
-    lines.push({ label_he: 'סטטוס הסכם', value_he: statusLabel });
-    lines.push({ label_he: 'תאריך תחילת ההסכם', value_he: formatDateHe((a.agreement_start_date as string | null) ?? null) });
-    lines.push({ label_he: 'תאריך סיום ההסכם', value_he: formatDateHe((a.agreement_end_date as string | null) ?? null) });
-    lines.push({ label_he: 'חידוש אוטומטי', value_he: readDbBool(a.auto_renewal) ? 'כן' : 'לא' });
+    lines.push({
+      label_he: 'סטטוס הסכם',
+      label_key: FEE_FIELD_LABEL_KEY.agreement_status,
+      value_he: statusLabel,
+      value_key: FEE_STATUS_LABEL_KEY[st && AGREEMENT_STATUS_LABELS[st] ? st : 'active'],
+    });
+    lines.push({
+      label_he: 'תאריך תחילת ההסכם',
+      label_key: FEE_FIELD_LABEL_KEY.agreement_start_date,
+      value_he: formatDateHe((a.agreement_start_date as string | null) ?? null),
+    });
+    lines.push({
+      label_he: 'תאריך סיום ההסכם',
+      label_key: FEE_FIELD_LABEL_KEY.agreement_end_date,
+      value_he: formatDateHe((a.agreement_end_date as string | null) ?? null),
+    });
+    lines.push({
+      label_he: 'חידוש אוטומטי',
+      label_key: FEE_FIELD_LABEL_KEY.auto_renewal,
+      value_he: readDbBool(a.auto_renewal) ? 'כן' : 'לא',
+      value_key: readDbBool(a.auto_renewal) ? CO_UI.yes : CO_UI.no,
+    });
     const brLab =
       billingRange && BILLING_DAY_RANGE_LABELS[billingRange] ? BILLING_DAY_RANGE_LABELS[billingRange] : '—';
-    lines.push({ label_he: 'תאריך חיוב', value_he: brLab });
+    lines.push({ label_he: 'תאריך חיוב', label_key: FEE_FIELD_LABEL_KEY.billing_day_range, value_he: brLab });
   }
+  const statusToken = st && AGREEMENT_STATUS_LABELS[st] ? st : 'active';
   return {
     card_title_he: 'הסכם שכ"ט',
+    card_title_key: 'clientOperations.fees.agreement',
     no_agreement_summary_he: hasAgreement ? null : 'לא הוגדר הסכם שכ"ט',
+    no_agreement_summary_key: hasAgreement ? undefined : 'clientOperations.fees.noAgreement',
     status_chip:
       hasAgreement && statusLabel && statusLabel !== '—'
-        ? { label_he: statusLabel, token: st && AGREEMENT_STATUS_LABELS[st] ? st : 'active' }
+        ? {
+            label_he: statusLabel,
+            label_key: FEE_STATUS_LABEL_KEY[statusToken],
+            token: statusToken,
+          }
         : null,
     lines,
   };
@@ -826,6 +965,7 @@ function buildFeesTabAgreementUi(
   visibility: FeesTabVisibility;
   modal_title_he: string;
   save_hint_he: string;
+  save_hint_key?: string;
   sections: FeesEditModalSectionDto[];
 } {
   const hasAgreement = readDbBool(a.has_agreement);
@@ -842,8 +982,8 @@ function buildFeesTabAgreementUi(
       type: 'radio',
       value: hasAgreement ? 'yes' : 'no',
       options: [
-        { value: 'yes', label_he: 'כן' },
-        { value: 'no', label_he: 'לא' },
+        { value: 'yes', label_he: 'כן', label_key: CO_UI.yes },
+        { value: 'no', label_he: 'לא', label_key: CO_UI.no },
       ],
       visible: true,
       editable: canEdit,
@@ -873,8 +1013,8 @@ function buildFeesTabAgreementUi(
       type: 'radio',
       value: readDbBool(a.auto_renewal) ? 'yes' : 'no',
       options: [
-        { value: 'yes', label_he: 'כן' },
-        { value: 'no', label_he: 'לא' },
+        { value: 'yes', label_he: 'כן', label_key: CO_UI.yes },
+        { value: 'no', label_he: 'לא', label_key: CO_UI.no },
       ],
       visible: hasAgreement,
       editable: canEdit,
@@ -895,7 +1035,11 @@ function buildFeesTabAgreementUi(
       label_he: 'סטטוס הסכם',
       type: 'select',
       value: (a.agreement_status as string | null) ?? null,
-      options: Object.entries(AGREEMENT_STATUS_LABELS).map(([value, label_he]) => ({ value, label_he })),
+      options: Object.entries(AGREEMENT_STATUS_LABELS).map(([value, label_he]) => ({
+        value,
+        label_he,
+        label_key: FEE_STATUS_LABEL_KEY[value],
+      })),
       visible: hasAgreement,
       editable: canEdit,
       modal_group: 'agreement',
@@ -922,10 +1066,26 @@ function buildFeesTabAgreementUi(
     visibility,
     modal_title_he: 'עריכת שכ"ט',
     save_hint_he: 'שמירה מעדכנת את הלשונית לפי הנתונים מהשרת.',
+    save_hint_key: 'clientOperations.fees.saveHint',
     sections: [
-      { section_key: 'fees_agreement', section_title_he: 'הסכם שכ"ט', fields },
-      { section_key: 'fees_discount', section_title_he: 'הנחות', fields: discountFields },
-      { section_key: 'fees_renewal', section_title_he: 'חידוש והתראות', fields: renewalFields },
+      {
+        section_key: 'fees_agreement',
+        section_title_he: 'הסכם שכ"ט',
+        section_title_key: 'clientOperations.fees.agreement',
+        fields: fields.map(withFeeFieldKey),
+      },
+      {
+        section_key: 'fees_discount',
+        section_title_he: 'הנחות',
+        section_title_key: 'clientOperations.fees.discounts',
+        fields: discountFields.map(withFeeFieldKey),
+      },
+      {
+        section_key: 'fees_renewal',
+        section_title_he: 'חידוש והתראות',
+        section_title_key: 'clientOperations.fees.renewal',
+        fields: renewalFields.map(withFeeFieldKey),
+      },
     ],
   };
 }
@@ -944,8 +1104,8 @@ function buildDiscountSection(
       type: 'radio',
       value: discountHas ? 'yes' : 'no',
       options: [
-        { value: 'no', label_he: 'לא' },
-        { value: 'yes', label_he: 'כן' },
+        { value: 'no', label_he: 'לא', label_key: CO_UI.no },
+        { value: 'yes', label_he: 'כן', label_key: CO_UI.yes },
       ],
       visible: hasAgreement,
       editable: canEdit,
@@ -956,8 +1116,8 @@ function buildDiscountSection(
       type: 'select',
       value: discountType,
       options: [
-        { value: 'percent', label_he: 'אחוז' },
-        { value: 'amount', label_he: 'סכום' },
+        { value: 'percent', label_he: 'אחוז', label_key: 'clientOperations.fees.percentType' },
+        { value: 'amount', label_he: 'סכום', label_key: 'clientOperations.fees.amountType' },
       ],
       visible: hasAgreement && discountHas,
       editable: canEdit,
@@ -992,16 +1152,21 @@ function buildDiscountSection(
     .filter((f) => f.visible)
     .map((f) => {
       let v = '—';
-      if (f.type === 'radio') v = f.value === 'yes' ? 'כן' : f.value === 'no' ? 'לא' : '—';
-      else if (f.type === 'select') {
+      let value_key: string | undefined;
+      if (f.type === 'radio') {
+        v = f.value === 'yes' ? 'כן' : f.value === 'no' ? 'לא' : '—';
+        value_key = f.value === 'yes' ? CO_UI.yes : f.value === 'no' ? CO_UI.no : undefined;
+      } else if (f.type === 'select') {
         const opt = f.options?.find((o) => o.value === f.value);
         v = opt?.label_he ?? '—';
+        value_key = opt?.label_key;
       } else v = f.value != null && f.value !== '' ? String(f.value) : '—';
-      return { label_he: f.label_he, value_he: v };
+      return { label_he: f.label_he, label_key: f.label_key, value_he: v, value_key };
     });
   return {
     card: {
       card_title_he: 'הנחות',
+      card_title_key: 'clientOperations.fees.discounts',
       lines,
       primary_value_he: discountHas
         ? discountType === 'percent'
@@ -1034,7 +1199,11 @@ function buildRenewalSection(
       label_he: 'פעולה בסיום',
       type: 'select',
       value: defEnd,
-      options: Object.entries(DEFAULT_END_ACTION_LABELS).map(([value, label_he]) => ({ value, label_he })),
+      options: Object.entries(DEFAULT_END_ACTION_LABELS).map(([value, label_he]) => ({
+        value,
+        label_he,
+        label_key: FEE_END_ACTION_LABEL_KEY[value],
+      })),
       visible: hasAgreement,
       editable: canEdit,
     },
@@ -1073,7 +1242,7 @@ function buildRenewalSection(
   );
 
   return {
-    card: { card_title_he: 'מעקב חידוש', banner, lines },
+    card: { card_title_he: 'מעקב חידוש', card_title_key: 'clientOperations.fees.renewal', banner, lines },
     fields,
   };
 }
@@ -1232,15 +1401,33 @@ export async function getFeesTabReadModel(
   const userLabels = await loadUserLabels([...histUserIds, metaUserId]);
 
   const agreementUi = buildFeesTabAgreementUi(a, canEdit);
-  const { agreement_summary, visibility, modal_title_he, save_hint_he, sections } = agreementUi;
+  const { agreement_summary, visibility, modal_title_he, save_hint_he, save_hint_key, sections } = agreementUi;
   const hasAgreement = visibility.show_service_sections;
 
-  const charging_type_options = Object.entries(CHARGING_TYPE_LABELS).map(([value, label_he]) => ({ value, label_he }));
+  const charging_type_options = Object.entries(CHARGING_TYPE_LABELS).map(([value, label_he]) => ({
+    value,
+    label_he,
+    label_key: FEE_CHARGING_LABEL_KEY[value],
+  }));
 
   const included: FeesTableSectionDto = {
     section_title_he: 'שירותים כלולים',
+    section_title_key: 'clientOperations.fees.includedServices',
     section_subtitle_he: `עד ${MAX_BUILT_IN_LINES} שורות`,
+    section_subtitle_key: 'clientOperations.fees.upToNRows',
+    section_subtitle_fill: { n: MAX_BUILT_IN_LINES },
     column_headers_he: ['שירות', 'סוג חיוב', 'מחיר', 'כמות', 'מטבע', 'מצב מע"מ', 'סה״כ', 'פעיל', ''],
+    column_header_keys: [
+      FEE_COLUMN_LABEL_KEY.service,
+      FEE_COLUMN_LABEL_KEY.charging_type,
+      FEE_COLUMN_LABEL_KEY.price,
+      FEE_COLUMN_LABEL_KEY.qty,
+      FEE_COLUMN_LABEL_KEY.currency,
+      FEE_COLUMN_LABEL_KEY.vat_mode,
+      FEE_COLUMN_LABEL_KEY.total,
+      FEE_COLUMN_LABEL_KEY.active,
+      null,
+    ],
     add_button: null,
     rows: builtInLines.map((r) => {
       const code = (r.catalog_code as string | null) ?? '';
@@ -1248,28 +1435,48 @@ export async function getFeesTabReadModel(
       return tabServiceRowDto(r, cat?.label_he ?? String(r.display_name_he ?? ''), 'built_in');
     }),
     empty_state_he: 'אין שורות שירות כלולים',
+    empty_state_key: 'clientOperations.fees.noIncludedServices',
   };
 
   const custom: FeesTableSectionDto = {
     section_title_he: 'שדות נוספים',
+    section_title_key: 'clientOperations.fees.extraFields',
     section_subtitle_he: `עד ${MAX_CUSTOM_LINES} שורות`,
+    section_subtitle_key: 'clientOperations.fees.upToNRows',
+    section_subtitle_fill: { n: MAX_CUSTOM_LINES },
     column_headers_he: ['שם השירות', 'סוג חיוב', 'מחיר', 'כמות', 'מטבע', 'סה״כ', 'פעיל', ''],
+    column_header_keys: [
+      FEE_COLUMN_LABEL_KEY.service_name,
+      FEE_COLUMN_LABEL_KEY.charging_type,
+      FEE_COLUMN_LABEL_KEY.price,
+      FEE_COLUMN_LABEL_KEY.qty,
+      FEE_COLUMN_LABEL_KEY.currency,
+      FEE_COLUMN_LABEL_KEY.total,
+      FEE_COLUMN_LABEL_KEY.active,
+      null,
+    ],
     add_button: null,
     rows: customLines.map((r) => tabServiceRowDto(r, String(r.display_name_he ?? ''), 'custom')),
     empty_state_he: 'אין שדות נוספים',
+    empty_state_key: 'clientOperations.fees.noExtraFields',
   };
 
   const edit_modal: FeesEditModalDto = {
     modal_title_he,
     save_hint_he,
+    save_hint_key,
     sections,
     included_lines_editor: {
       section_title_he: 'שירותים כלולים',
+      section_title_key: 'clientOperations.fees.includedServices',
       section_subtitle_he: `עד ${MAX_BUILT_IN_LINES} שורות`,
+      section_subtitle_key: 'clientOperations.fees.upToNRows',
+      section_subtitle_fill: { n: MAX_BUILT_IN_LINES },
       max_lines: MAX_BUILT_IN_LINES,
       add_button: canEdit
         ? {
             label_he: 'הוסף שירות',
+            label_key: 'clientOperations.fees.addService',
             enabled: builtInLines.length < MAX_BUILT_IN_LINES,
             action_key: 'add_built_in',
           }
@@ -1278,11 +1485,15 @@ export async function getFeesTabReadModel(
     },
     custom_lines_editor: {
       section_title_he: 'שדות נוספים',
+      section_title_key: 'clientOperations.fees.extraFields',
       section_subtitle_he: `עד ${MAX_CUSTOM_LINES} שורות`,
+      section_subtitle_key: 'clientOperations.fees.upToNRows',
+      section_subtitle_fill: { n: MAX_CUSTOM_LINES },
       max_lines: MAX_CUSTOM_LINES,
       add_button: canEdit
         ? {
             label_he: 'הוסף שדה',
+            label_key: 'clientOperations.fees.addField',
             enabled: customLines.length < MAX_CUSTOM_LINES,
             action_key: 'add_custom',
           }
@@ -1301,6 +1512,7 @@ export async function getFeesTabReadModel(
 
   const financial_summary: FeesFinancialSummaryCardDto = {
     card_title_he: 'סיכום כספי',
+    card_title_key: 'clientOperations.fees.financialSummary',
     primary_value_he: fin.primary_display_he,
     lines: fin.line_breakdown,
     total_before_vat: fin.total_before_vat,
@@ -1313,29 +1525,65 @@ export async function getFeesTabReadModel(
 
   const recent_history: FeesRecentHistoryCardDto = {
     card_title_he: 'היסטוריית שינויים',
-    view_full_link: { label_he: 'צפה בהיסטוריה מלאה', anchor_element_id: 'fees-recent-history-anchor' },
-    events: history.map((h) => ({
-      occurred_at_he: formatDateTimeHe(h.changed_at as string),
-      actor_he: userLabels.get(String(h.changed_by ?? '')) ?? '—',
-      summary_he: buildHistorySummaryHe(h),
-    })),
+    card_title_key: 'clientOperations.fees.changeHistory',
+    view_full_link: {
+      label_he: 'צפה בהיסטוריה מלאה',
+      label_key: 'clientOperations.fees.viewFullHistory',
+      anchor_element_id: 'fees-recent-history-anchor',
+    },
+    events: history.map((h) => {
+      const reason = String(h.change_reason ?? '');
+      const reasonHe = CHANGE_REASON_LABELS[reason] ?? reason;
+      const svc = String(h.service_display_name ?? '').trim();
+      const catalogCode = String(h.catalog_code ?? '');
+      return {
+        occurred_at_he: formatDateTimeHe(h.changed_at as string),
+        actor_he: userLabels.get(String(h.changed_by ?? '')) ?? '—',
+        summary_he: buildHistorySummaryHe(h),
+        summary_key: svc ? 'clientOperations.fees.recentSummary' : 'clientOperations.fees.recentSummaryReasonOnly',
+        summary_params: { reason: reasonHe, service: svc },
+        summary_param_keys: {
+          ...(FEE_CHANGE_REASON_LABEL_KEY[reason] ? { reason: FEE_CHANGE_REASON_LABEL_KEY[reason] } : {}),
+          ...(FEE_SERVICE_LABEL_KEY[catalogCode] ? { service: FEE_SERVICE_LABEL_KEY[catalogCode] } : {}),
+        },
+      };
+    }),
     empty_state_he: 'אין אירועים אחרונים',
+    empty_state_key: 'clientOperations.fees.noRecentEvents',
   };
 
   const price_history: FeesPriceHistoryTableDto = {
     card_title_he: 'היסטוריית מחירים',
+    card_title_key: 'clientOperations.fees.priceHistory',
     column_headers_he: ['שירות', 'מחיר קודם', 'מחיר חדש', 'תוקף מ-', 'תוקף עד', 'סיבה', 'עודכן ע״י', 'תאריך שינוי'],
-    rows: history.map((h) => ({
-      service_he: String(h.service_display_name ?? '—'),
-      old_price_he: h.old_price_ils != null ? formatIls(Number(h.old_price_ils)) : '—',
-      new_price_he: h.new_price_ils != null ? formatIls(Number(h.new_price_ils)) : '—',
-      valid_from_he: formatDateHe(h.effective_from as string | null),
-      valid_to_he: formatDateHe(h.effective_to as string | null),
-      reason_he: CHANGE_REASON_LABELS[String(h.change_reason)] ?? String(h.change_reason ?? '—'),
-      updated_by_he: userLabels.get(String(h.changed_by ?? '')) ?? '—',
-      changed_at_he: formatDateTimeHe(h.changed_at as string),
-    })),
+    column_header_keys: [
+      FEE_COLUMN_LABEL_KEY.service,
+      FEE_COLUMN_LABEL_KEY.previous_price,
+      FEE_COLUMN_LABEL_KEY.new_price,
+      FEE_COLUMN_LABEL_KEY.valid_from,
+      FEE_COLUMN_LABEL_KEY.valid_to,
+      FEE_COLUMN_LABEL_KEY.reason,
+      FEE_COLUMN_LABEL_KEY.updated_by,
+      FEE_COLUMN_LABEL_KEY.changed_at,
+    ],
+    rows: history.map((h) => {
+      const reasonCode = String(h.change_reason ?? '');
+      const catalogCode = String(h.catalog_code ?? '');
+      return {
+        service_he: String(h.service_display_name ?? '—'),
+        service_label_key: FEE_SERVICE_LABEL_KEY[catalogCode],
+        old_price_he: h.old_price_ils != null ? formatIls(Number(h.old_price_ils)) : '—',
+        new_price_he: h.new_price_ils != null ? formatIls(Number(h.new_price_ils)) : '—',
+        valid_from_he: formatDateHe(h.effective_from as string | null),
+        valid_to_he: formatDateHe(h.effective_to as string | null),
+        reason_he: CHANGE_REASON_LABELS[reasonCode] ?? String(h.change_reason ?? '—'),
+        reason_key: FEE_CHANGE_REASON_LABEL_KEY[reasonCode],
+        updated_by_he: userLabels.get(String(h.changed_by ?? '')) ?? '—',
+        changed_at_he: formatDateTimeHe(h.changed_at as string),
+      };
+    }),
     empty_state_he: 'אין היסטוריית מחירים',
+    empty_state_key: 'clientOperations.fees.noHistory',
     chart: buildPriceHistoryChart(history, userLabels, feesPriceChartView),
     section_anchor_id: 'fees-price-history-chart',
   };
@@ -1345,6 +1593,7 @@ export async function getFeesTabReadModel(
   return {
     tab_key: 'fees',
     tab_title_he: 'שכ״ט',
+    tab_title_key: 'clientOperations.fees.feesTitle',
     read_model_version: Number(a.read_model_version ?? 1),
     agreement_id: agreementId,
     billing_day_range: (a.billing_day_range as string | null) ?? null,
@@ -1358,12 +1607,16 @@ export async function getFeesTabReadModel(
     visibility,
     agreement_summary,
     edit_modal,
-    built_in_catalog: BUILT_IN_FEE_SERVICES.map((s) => ({ code: s.code, label_he: s.label_he })),
+    built_in_catalog: BUILT_IN_FEE_SERVICES.map((s) => ({
+      code: s.code,
+      label_he: s.label_he,
+      label_key: s.label_key,
+    })),
     charging_type_options,
     vat_mode_options: [
-      { value: 'before_vat', label_he: 'לפני מע"מ' },
-      { value: 'incl_vat', label_he: 'כולל מע"מ' },
-      { value: 'vat_exempt', label_he: 'מע"מ פטור' },
+      { value: 'before_vat', label_he: 'לפני מע"מ', label_key: FEE_VAT_MODE_LABEL_KEY.before_vat },
+      { value: 'incl_vat', label_he: 'כולל מע"מ', label_key: FEE_VAT_MODE_LABEL_KEY.incl_vat },
+      { value: 'vat_exempt', label_he: 'מע"מ פטור', label_key: FEE_VAT_MODE_LABEL_KEY.vat_exempt },
     ],
     fee_line_currency_options: FEE_LINE_CURRENCY_OPTIONS,
     fee_line_exchange_rate_modal: {
@@ -1381,7 +1634,9 @@ export async function getFeesTabReadModel(
       price_label_he: 'מחיר',
       vat_mode_label_he: 'מצב מע"מ',
       payslip_count_label_he: 'מספר תלושים',
+      payslip_count_label_key: 'clientOperations.fees.payslipCount',
       unit_price_label_he: 'מחיר ליחידה',
+      unit_price_label_key: 'clientOperations.fees.unitPrice',
       quantity_label_he: 'כמות',
       currency_label_he: 'מטבע',
       line_total_label_he: 'סה״כ',

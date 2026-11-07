@@ -4,6 +4,7 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError, badRequest, conflict, forbidden } from '../../shared/errors.js';
 import { requireGuardedUpload } from '../../shared/file-content-guard.js';
 import { assertFileAssetDownloadable } from '../../shared/document-download-guard.js';
+import { CO_UI, documentFolderLabelKey } from './client-operations-ui-labels.pure.js';
 
 const BUCKET = 'client-files';
 const MAX_B64 = 12_000_000;
@@ -27,6 +28,8 @@ export type ClientDocumentsBrandVariant = 'primary' | 'secondary' | 'neutral';
 export type ClientDocumentsTabFolderCardDto = {
   folder_id: string;
   name_he: string;
+  name_key?: string;
+  system_key?: string | null;
   document_count: number;
   last_updated_at: string | null;
   last_updated_display_he: string;
@@ -56,10 +59,15 @@ export type ClientDocumentsTabResponse = {
   permissions: { can_view: boolean; can_edit: boolean };
   ui: {
     add_folder_label_he: string;
+    add_folder_label_key?: string;
     add_document_label_he: string;
+    add_document_label_key?: string;
     empty_folders_state_he: string;
+    empty_folders_state_key?: string;
     empty_documents_state_he: string;
+    empty_documents_state_key?: string;
     tab_title_he: string;
+    tab_title_key?: string;
   };
   folders_grid: {
     columns_per_row: 3;
@@ -68,6 +76,7 @@ export type ClientDocumentsTabResponse = {
   open_folder: null | {
     folder_id: string;
     folder_name_he: string;
+    folder_name_key?: string;
     documents: ClientDocumentsTabDocumentRowDto[];
   };
   file_open_path_template: string;
@@ -252,10 +261,15 @@ export async function getClientDocumentsTabReadModel(
         permissions: { can_view: true, can_edit: canEdit },
         ui: {
           tab_title_he: 'מסמכים',
+          tab_title_key: CO_UI.documents.tabTitle,
           add_folder_label_he: 'הוסף תיקייה',
+          add_folder_label_key: CO_UI.documents.addFolder,
           add_document_label_he: 'הוסף מסמך',
+          add_document_label_key: CO_UI.documents.addDocument,
           empty_folders_state_he: 'אין תיקיות',
+          empty_folders_state_key: CO_UI.documents.emptyFolders,
           empty_documents_state_he: 'אין מסמכים בתיקייה',
+          empty_documents_state_key: CO_UI.documents.emptyDocuments,
         },
         folders_grid: { columns_per_row: 3, folders: [] },
         open_folder: null,
@@ -333,9 +347,13 @@ export async function getClientDocumentsTabReadModel(
     const lastIso = docTs >= folderTs && agg.lastDoc ? agg.lastDoc : f.updated_at || null;
     const is_system = Boolean(f.system_key);
     const canArchive = canEdit && !is_system && agg.n === 0;
+    const defaultName = CLIENT_DOCUMENT_DEFAULT_FOLDERS.find((d) => d.system_key === f.system_key)?.name_he;
+    const renamed = Boolean(f.system_key && defaultName && f.name_he !== defaultName);
     return {
       folder_id: f.id,
       name_he: f.name_he,
+      name_key: renamed ? undefined : documentFolderLabelKey(f.system_key),
+      system_key: f.system_key,
       document_count: agg.n,
       last_updated_at: lastIso,
       last_updated_display_he: formatDateTimeHe(lastIso),
@@ -385,9 +403,12 @@ export async function getClientDocumentsTabReadModel(
         };
       });
 
+      const defaultOpenName = CLIENT_DOCUMENT_DEFAULT_FOLDERS.find((d) => d.system_key === folderMeta.system_key)?.name_he;
+      const openRenamed = Boolean(folderMeta.system_key && defaultOpenName && folderMeta.name_he !== defaultOpenName);
       open_folder = {
         folder_id: openFolderId,
         folder_name_he: folderMeta.name_he,
+        folder_name_key: openRenamed ? undefined : documentFolderLabelKey(folderMeta.system_key),
         documents,
       };
     }
@@ -399,10 +420,15 @@ export async function getClientDocumentsTabReadModel(
     permissions: { can_view: true, can_edit: canEdit },
     ui: {
       tab_title_he: 'מסמכים',
+      tab_title_key: CO_UI.documents.tabTitle,
       add_folder_label_he: 'הוסף תיקייה',
+      add_folder_label_key: CO_UI.documents.addFolder,
       add_document_label_he: 'הוסף מסמך',
+      add_document_label_key: CO_UI.documents.addDocument,
       empty_folders_state_he: 'אין תיקיות',
+      empty_folders_state_key: CO_UI.documents.emptyFolders,
       empty_documents_state_he: 'אין מסמכים בתיקייה',
+      empty_documents_state_key: CO_UI.documents.emptyDocuments,
     },
     folders_grid: { columns_per_row: 3, folders: folderCards },
     open_folder,

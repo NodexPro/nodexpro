@@ -1,7 +1,9 @@
-/** Built-in fee service catalog — backend-owned; codes stable for storage. */
-export type BuiltInFeeService = { code: string; label_he: string };
+import { FEE_SERVICE_LABEL_KEY } from './client-operations-ui-labels.pure.js';
 
-export const BUILT_IN_FEE_SERVICES: BuiltInFeeService[] = [
+/** Built-in fee service catalog — backend-owned; codes stable for storage. */
+export type BuiltInFeeService = { code: string; label_he: string; label_key?: string };
+
+const BUILT_IN_FEE_SERVICES_BASE: Array<{ code: string; label_he: string }> = [
   { code: 'accounting_single_sided', label_he: 'הנהלת חשבונות חד צדדית' },
   { code: 'accounting_double_sided', label_he: 'הנהלת חשבונות דו צדדית' },
   { code: 'bank_reconciliations', label_he: 'התאמות בנקים' },
@@ -35,6 +37,11 @@ export const BUILT_IN_FEE_SERVICES: BuiltInFeeService[] = [
   { code: 'misc_reports', label_he: 'דוחות שונים' },
   { code: 'business_planning', label_he: 'תכנון עסקי' },
 ];
+
+export const BUILT_IN_FEE_SERVICES: BuiltInFeeService[] = BUILT_IN_FEE_SERVICES_BASE.map((s) => ({
+  ...s,
+  label_key: FEE_SERVICE_LABEL_KEY[s.code],
+}));
 
 export const BUILT_IN_BY_CODE = new Map(BUILT_IN_FEE_SERVICES.map((s) => [s.code, s]));
 

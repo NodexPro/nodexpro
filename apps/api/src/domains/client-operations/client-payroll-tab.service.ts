@@ -3,6 +3,13 @@ import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError, badRequest, conflict, forbidden } from '../../shared/errors.js';
 import { syncNiDeductionsReportingFromPayrollProfile } from './client-obligations-tasks-core.service.js';
+import {
+  CO_UI,
+  PAYROLL_SECTION_TITLE_KEY,
+  payrollFieldLabelKey,
+  payrollLineLabelKey,
+  payrollOptionLabelKey,
+} from './client-operations-ui-labels.pure.js';
 
 type PayrollCommandType =
   | 'update_payroll_status'
@@ -22,25 +29,38 @@ export type PayrollTabCommandBody = {
 
 type PayrollFieldType = 'text' | 'number' | 'select' | 'radio' | 'textarea';
 
+type PayrollOptionDto = { value: string; label_he: string; label_key?: string };
+
 type PayrollFieldDto = {
   key: string;
   label_he: string;
+  label_key?: string;
   type: PayrollFieldType;
   value: unknown;
-  options?: Array<{ value: string; label_he: string }>;
+  options?: PayrollOptionDto[];
+};
+
+type PayrollLineDto = {
+  line_key: string;
+  label_he: string;
+  label_key?: string;
+  value_he: string;
+  value_key?: string;
 };
 
 type PayrollSectionDto = {
   section_key: string;
   section_title_he: string;
+  section_title_key?: string;
   edit_action_key: PayrollCommandType | null;
-  lines: Array<{ label_he: string; value_he: string }>;
+  lines: PayrollLineDto[];
   edit_fields: PayrollFieldDto[];
 };
 
 export type PayrollTabResponse = {
   tab_key: 'payroll';
   tab_title_he: string;
+  tab_title_key?: string;
   /** Incremented on each successful payroll command write; client sends as `expected_version` on the next command. */
   read_model_version: number;
   permissions: { can_view: boolean; can_edit: boolean };
@@ -120,31 +140,90 @@ function asObj(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 }
 
-const REPORTING_OPTIONS = [
+function withOptionKeys(options: Array<{ value: string; label_he: string }>): PayrollOptionDto[] {
+  return options.map((o) => {
+    const label_key = payrollOptionLabelKey(o.value);
+    return label_key ? { ...o, label_key } : o;
+  });
+}
+
+const YES_NO_OPTIONS = withOptionKeys([
+  { value: 'yes', label_he: 'כן' },
+  { value: 'no', label_he: 'לא' },
+]);
+
+const REPORTING_OPTIONS = withOptionKeys([
   { value: 'monthly', label_he: 'חד חודשי' },
   { value: 'bi_monthly', label_he: 'דו חודשי' },
   { value: 'semi_annual', label_he: 'חצי שנתי' },
-];
+]);
 
-const PROCESS_TIMELINESS_OPTIONS = [
+const PROCESS_TIMELINESS_OPTIONS = withOptionKeys([
   { value: 'always', label_he: 'תמיד' },
   { value: 'usually', label_he: 'בדרך כלל' },
   { value: 'fixed_delay', label_he: 'באיחור קבוע' },
-];
+]);
 
-const COMPLEXITY_OPTIONS = [
+const COMPLEXITY_OPTIONS = withOptionKeys([
   { value: 'low', label_he: 'נמוכה' },
   { value: 'medium', label_he: 'בינונית' },
   { value: 'high', label_he: 'גבוהה' },
-];
+]);
 
-const SPECIAL_ARRANGEMENTS_OPTIONS = [
+const SPECIAL_ARRANGEMENTS_OPTIONS: PayrollOptionDto[] = [
   { value: 'foreign_workers', label_he: 'foreign workers' },
   { value: 'pension_edge_cases', label_he: 'pension edge cases' },
   { value: 'youth', label_he: 'youth' },
   { value: 'hourly_mix', label_he: 'hourly mix' },
   { value: 'commissions', label_he: 'commissions' },
 ];
+
+function payrollLine(
+  lineKey: string,
+  labelHe: string,
+  valueHe: string,
+  valueKey?: string,
+): PayrollLineDto {
+  return {
+    line_key: lineKey,
+    label_he: labelHe,
+    label_key: payrollLineLabelKey(lineKey),
+    value_he: valueHe,
+    ...(valueKey ? { value_key: valueKey } : {}),
+  };
+}
+
+function boolLine(lineKey: string, labelHe: string, v: boolean | null | undefined): PayrollLineDto {
+  const valueKey = v == null ? undefined : v ? CO_UI.yes : CO_UI.no;
+  return payrollLine(lineKey, labelHe, boolHe(v), valueKey);
+}
+
+function optionValueLine(
+  lineKey: string,
+  labelHe: string,
+  raw: unknown,
+  options: PayrollOptionDto[],
+): PayrollLineDto {
+  const found = options.find((o) => o.value === String(raw ?? ''));
+  return payrollLine(lineKey, labelHe, found?.label_he ?? '—', found?.label_key);
+}
+
+function payrollField(
+  key: string,
+  labelHe: string,
+  type: PayrollFieldType,
+  value: unknown,
+  options?: PayrollOptionDto[],
+): PayrollFieldDto {
+  return {
+    key,
+    label_he: labelHe,
+    label_key: payrollFieldLabelKey(key),
+    type,
+    value,
+    ...(options ? { options } : {}),
+  };
+}
 
 function pickOverride(overrideValue: unknown, baseValue: unknown): string | null {
   const o = overrideValue == null ? '' : String(overrideValue).trim();
@@ -225,6 +304,7 @@ export async function getPayrollTabReadModel(
   return {
     tab_key: 'payroll',
     tab_title_he: 'שכר',
+    tab_title_key: CO_UI.payroll.title,
     read_model_version: readModelVersion,
     permissions: { can_view: true, can_edit: canEdit },
     status: {
@@ -235,191 +315,180 @@ export async function getPayrollTabReadModel(
       {
         section_key: 'status',
         section_title_he: 'סטטוס שכר',
+        section_title_key: PAYROLL_SECTION_TITLE_KEY.status,
         edit_action_key: 'update_payroll_status',
-        lines: [{ label_he: 'יש עובדים', value_he: boolHe(hasEmployees) }],
+        lines: [boolLine('has_employees', 'יש עובדים', hasEmployees)],
         edit_fields: [
-          {
-            key: 'has_employees',
-            label_he: 'יש עובדים',
-            type: 'radio',
-            value: hasEmployees ? 'yes' : 'no',
-            options: [
-              { value: 'yes', label_he: 'כן' },
-              { value: 'no', label_he: 'לא' },
-            ],
-          },
+          payrollField('has_employees', 'יש עובדים', 'radio', hasEmployees ? 'yes' : 'no', YES_NO_OPTIONS),
         ],
       },
       {
         section_key: 'employer_details',
         section_title_he: 'פרטי מעסיק',
+        section_title_key: PAYROLL_SECTION_TITLE_KEY.employer_details,
         edit_action_key: 'update_payroll_employer_details',
         lines: [
-          { label_he: 'שם חברה', value_he: textHe(employer.company_name) },
-          { label_he: 'שנת הקמת חברה', value_he: textHe(employer.company_founded_year) },
-          { label_he: 'ישוב', value_he: textHe(employer.city) },
-          { label_he: 'רחוב', value_he: textHe(employer.street) },
-          { label_he: 'מיקוד', value_he: textHe(employer.postal_code) },
-          { label_he: 'מס טלפון', value_he: textHe(employer.phone) },
-          { label_he: 'דואר אלקטרוני', value_he: textHe(employer.email) },
+          payrollLine('company_name', 'שם חברה', textHe(employer.company_name)),
+          payrollLine('founded_year', 'שנת הקמת חברה', textHe(employer.company_founded_year)),
+          payrollLine('city', 'ישוב', textHe(employer.city)),
+          payrollLine('street', 'רחוב', textHe(employer.street)),
+          payrollLine('postal_code', 'מיקוד', textHe(employer.postal_code)),
+          payrollLine('phone', 'מס טלפון', textHe(employer.phone)),
+          payrollLine('email', 'דואר אלקטרוני', textHe(employer.email)),
         ],
         edit_fields: [
-          { key: 'employer_company_name_override', label_he: 'שם חברה', type: 'text', value: r.employer_company_name_override ?? '' },
-          { key: 'employer_company_founded_year_override', label_he: 'שנת הקמת חברה', type: 'number', value: r.employer_company_founded_year_override ?? '' },
-          { key: 'employer_city_override', label_he: 'ישוב', type: 'text', value: r.employer_city_override ?? '' },
-          { key: 'employer_street_override', label_he: 'רחוב', type: 'text', value: r.employer_street_override ?? '' },
-          { key: 'employer_postal_code_override', label_he: 'מיקוד', type: 'text', value: r.employer_postal_code_override ?? '' },
-          { key: 'employer_phone_override', label_he: 'מס טלפון', type: 'text', value: r.employer_phone_override ?? '' },
-          { key: 'employer_email_override', label_he: 'דואר אלקטרוני', type: 'text', value: r.employer_email_override ?? '' },
+          payrollField('employer_company_name_override', 'שם חברה', 'text', r.employer_company_name_override ?? ''),
+          payrollField('employer_company_founded_year_override', 'שנת הקמת חברה', 'number', r.employer_company_founded_year_override ?? ''),
+          payrollField('employer_city_override', 'ישוב', 'text', r.employer_city_override ?? ''),
+          payrollField('employer_street_override', 'רחוב', 'text', r.employer_street_override ?? ''),
+          payrollField('employer_postal_code_override', 'מיקוד', 'text', r.employer_postal_code_override ?? ''),
+          payrollField('employer_phone_override', 'מס טלפון', 'text', r.employer_phone_override ?? ''),
+          payrollField('employer_email_override', 'דואר אלקטרוני', 'text', r.employer_email_override ?? ''),
         ],
       },
       {
         section_key: 'deductions',
         section_title_he: 'פרטי ניכויים',
+        section_title_key: PAYROLL_SECTION_TITLE_KEY.deductions,
         edit_action_key: 'update_payroll_employer_details',
         lines: [
-          { label_he: 'מס הכנסה ניכויים', value_he: textHe(baseIncomeTaxDeductions) },
-          { label_he: 'ביטוח לאומי ניכויים', value_he: textHe(baseNiDeductions) },
-          { label_he: 'מזהה מעסיק ב.ל', value_he: textHe(r.employer_id_bl) },
+          payrollLine('income_tax_deductions', 'מס הכנסה ניכויים', textHe(baseIncomeTaxDeductions)),
+          payrollLine('ni_deductions', 'ביטוח לאומי ניכויים', textHe(baseNiDeductions)),
+          payrollLine('employer_id_bl', 'מזהה מעסיק ב.ל', textHe(r.employer_id_bl)),
         ],
-        edit_fields: [{ key: 'employer_id_bl', label_he: 'מזהה מעסיק ב.ל', type: 'text', value: r.employer_id_bl ?? '' }],
+        edit_fields: [payrollField('employer_id_bl', 'מזהה מעסיק ב.ל', 'text', r.employer_id_bl ?? '')],
       },
       {
         section_key: 'bank',
         section_title_he: 'פרטי בנק',
+        section_title_key: PAYROLL_SECTION_TITLE_KEY.bank,
         edit_action_key: 'update_payroll_bank_details',
         lines: [
-          { label_he: 'מס בנק', value_he: textHe(r.bank_number) },
-          { label_he: 'מס סניף', value_he: textHe(r.bank_branch) },
-          { label_he: 'מס חשבון', value_he: textHe(r.bank_account) },
+          payrollLine('bank_number', 'מס בנק', textHe(r.bank_number)),
+          payrollLine('bank_branch', 'מס סניף', textHe(r.bank_branch)),
+          payrollLine('bank_account', 'מס חשבון', textHe(r.bank_account)),
         ],
         edit_fields: [
-          { key: 'bank_number', label_he: 'מס בנק', type: 'text', value: r.bank_number ?? '' },
-          { key: 'bank_branch', label_he: 'מס סניף', type: 'text', value: r.bank_branch ?? '' },
-          { key: 'bank_account', label_he: 'מס חשבון', type: 'text', value: r.bank_account ?? '' },
+          payrollField('bank_number', 'מס בנק', 'text', r.bank_number ?? ''),
+          payrollField('bank_branch', 'מס סניף', 'text', r.bank_branch ?? ''),
+          payrollField('bank_account', 'מס חשבון', 'text', r.bank_account ?? ''),
         ],
       },
       {
         section_key: 'reporting',
         section_title_he: 'דיווחים',
+        section_title_key: PAYROLL_SECTION_TITLE_KEY.reporting,
         edit_action_key: 'update_payroll_reporting',
         lines: [
-          {
-            label_he: 'דיווח למס הכנסה',
-            value_he: REPORTING_OPTIONS.find((o) => o.value === String(r.reporting_income_tax_frequency ?? ''))?.label_he ?? '—',
-          },
-          { label_he: 'דיווח טופס 102', value_he: boolHe(r.form_102_reported as boolean | null) },
-          { label_he: 'דיווח טופס 100', value_he: boolHe(r.form_100_reported as boolean | null) },
-          { label_he: 'דיווח טופס 126', value_he: '18 ביולי (ינואר–יוני), 18 בינואר (שנתי)' },
+          optionValueLine('reporting_income_tax', 'דיווח למס הכנסה', r.reporting_income_tax_frequency, REPORTING_OPTIONS),
+          boolLine('form_102', 'דיווח טופס 102', r.form_102_reported as boolean | null),
+          boolLine('form_100', 'דיווח טופס 100', r.form_100_reported as boolean | null),
+          payrollLine(
+            'form_126',
+            'דיווח טופס 126',
+            '18 ביולי (ינואר–יוני), 18 בינואר (שנתי)',
+            CO_UI.payroll.form126Schedule,
+          ),
         ],
         edit_fields: [
-          {
-            key: 'reporting_income_tax_frequency',
-            label_he: 'דיווח למס הכנסה',
-            type: 'select',
-            value: r.reporting_income_tax_frequency ?? null,
-            options: REPORTING_OPTIONS,
-          },
-          {
-            key: 'form_102_reported',
-            label_he: 'טופס 102 דווח',
-            type: 'radio',
-            value: r.form_102_reported ? 'yes' : 'no',
-            options: [
-              { value: 'yes', label_he: 'כן' },
-              { value: 'no', label_he: 'לא' },
-            ],
-          },
-          {
-            key: 'form_100_reported',
-            label_he: 'טופס 100 דווח',
-            type: 'radio',
-            value: r.form_100_reported ? 'yes' : 'no',
-            options: [
-              { value: 'yes', label_he: 'כן' },
-              { value: 'no', label_he: 'לא' },
-            ],
-          },
+          payrollField(
+            'reporting_income_tax_frequency',
+            'דיווח למס הכנסה',
+            'select',
+            r.reporting_income_tax_frequency ?? null,
+            REPORTING_OPTIONS,
+          ),
+          payrollField('form_102_reported', 'טופס 102 דווח', 'radio', r.form_102_reported ? 'yes' : 'no', YES_NO_OPTIONS),
+          payrollField('form_100_reported', 'טופס 100 דווח', 'radio', r.form_100_reported ? 'yes' : 'no', YES_NO_OPTIONS),
         ],
       },
       {
         section_key: 'process',
         section_title_he: 'תהליך שכר',
+        section_title_key: PAYROLL_SECTION_TITLE_KEY.process,
         edit_action_key: 'update_payroll_process',
         lines: [
-          { label_he: 'תחום עיסוק', value_he: textHe(employer.business_domain) },
-          { label_he: 'באיזו תוכנה מחשבים שכר', value_he: textHe(r.process_payroll_software) },
-          { label_he: 'איך נשלחים נתונים', value_he: textHe(r.process_data_delivery_method) },
-          { label_he: 'מי שולח נתונים', value_he: textHe(r.process_data_sender) },
-          { label_he: 'מועד קבלת נתונים', value_he: textHe(r.process_data_received_day) },
-          { label_he: 'מועד תשלום שכר', value_he: textHe(r.process_salary_payment_day) },
-          {
-            label_he: 'נתונים מתקבלים בזמן',
-            value_he: PROCESS_TIMELINESS_OPTIONS.find((o) => o.value === String(r.process_data_received_timeliness ?? ''))?.label_he ?? '—',
-          },
-          { label_he: 'שם איש קשר לשכר', value_he: textHe(r.process_payroll_contact_name) },
-          { label_he: 'טלפון איש קשר לשכר', value_he: textHe(r.process_payroll_contact_phone) },
-          { label_he: 'דוא"ל לשכר', value_he: textHe(r.process_payroll_contact_email) },
+          payrollLine('domain', 'תחום עיסוק', textHe(employer.business_domain)),
+          payrollLine('payroll_software', 'באיזו תוכנה מחשבים שכר', textHe(r.process_payroll_software)),
+          payrollLine('data_delivery', 'איך נשלחים נתונים', textHe(r.process_data_delivery_method)),
+          payrollLine('data_sender', 'מי שולח נתונים', textHe(r.process_data_sender)),
+          payrollLine('data_received_day', 'מועד קבלת נתונים', textHe(r.process_data_received_day)),
+          payrollLine('salary_payment_day', 'מועד תשלום שכר', textHe(r.process_salary_payment_day)),
+          optionValueLine(
+            'data_on_time',
+            'נתונים מתקבלים בזמן',
+            r.process_data_received_timeliness,
+            PROCESS_TIMELINESS_OPTIONS,
+          ),
+          payrollLine('contact_name', 'שם איש קשר לשכר', textHe(r.process_payroll_contact_name)),
+          payrollLine('contact_phone', 'טלפון איש קשר לשכר', textHe(r.process_payroll_contact_phone)),
+          payrollLine('contact_email', 'דוא"ל לשכר', textHe(r.process_payroll_contact_email)),
         ],
         edit_fields: [
-          { key: 'process_payroll_software', label_he: 'באיזו תוכנה מחשבים שכר', type: 'text', value: r.process_payroll_software ?? '' },
-          { key: 'process_data_delivery_method', label_he: 'איך נשלחים נתונים', type: 'text', value: r.process_data_delivery_method ?? '' },
-          { key: 'process_data_sender', label_he: 'מי שולח נתונים', type: 'text', value: r.process_data_sender ?? '' },
-          { key: 'process_data_received_day', label_he: 'מועד קבלת נתונים', type: 'text', value: r.process_data_received_day ?? '' },
-          { key: 'process_salary_payment_day', label_he: 'מועד תשלום שכר', type: 'text', value: r.process_salary_payment_day ?? '' },
-          {
-            key: 'process_data_received_timeliness',
-            label_he: 'נתונים מתקבלים בזמן',
-            type: 'select',
-            value: r.process_data_received_timeliness ?? null,
-            options: PROCESS_TIMELINESS_OPTIONS,
-          },
-          { key: 'process_payroll_contact_name', label_he: 'שם איש קשר לשכר', type: 'text', value: r.process_payroll_contact_name ?? '' },
-          { key: 'process_payroll_contact_phone', label_he: 'טלפון איש קשר לשכר', type: 'text', value: r.process_payroll_contact_phone ?? '' },
-          { key: 'process_payroll_contact_email', label_he: 'דוא"ל לשכר', type: 'text', value: r.process_payroll_contact_email ?? '' },
+          payrollField('process_payroll_software', 'באיזו תוכנה מחשבים שכר', 'text', r.process_payroll_software ?? ''),
+          payrollField('process_data_delivery_method', 'איך נשלחים נתונים', 'text', r.process_data_delivery_method ?? ''),
+          payrollField('process_data_sender', 'מי שולח נתונים', 'text', r.process_data_sender ?? ''),
+          payrollField('process_data_received_day', 'מועד קבלת נתונים', 'text', r.process_data_received_day ?? ''),
+          payrollField('process_salary_payment_day', 'מועד תשלום שכר', 'text', r.process_salary_payment_day ?? ''),
+          payrollField(
+            'process_data_received_timeliness',
+            'נתונים מתקבלים בזמן',
+            'select',
+            r.process_data_received_timeliness ?? null,
+            PROCESS_TIMELINESS_OPTIONS,
+          ),
+          payrollField('process_payroll_contact_name', 'שם איש קשר לשכר', 'text', r.process_payroll_contact_name ?? ''),
+          payrollField('process_payroll_contact_phone', 'טלפון איש קשר לשכר', 'text', r.process_payroll_contact_phone ?? ''),
+          payrollField('process_payroll_contact_email', 'דוא"ל לשכר', 'text', r.process_payroll_contact_email ?? ''),
         ],
       },
       {
         section_key: 'complexity',
         section_title_he: 'מורכבות',
+        section_title_key: PAYROLL_SECTION_TITLE_KEY.complexity,
         edit_action_key: 'update_payroll_complexity',
         lines: [
-          {
-            label_he: 'רמת מורכבות',
-            value_he: COMPLEXITY_OPTIONS.find((o) => o.value === String(r.complexity_level ?? ''))?.label_he ?? '—',
-          },
-          { label_he: 'דורש תיקונים', value_he: boolHe(r.complexity_requires_fixes as boolean | null) },
-          {
-            label_he: 'יש עובדים עם הסדרים מיוחדים',
-            value_he:
-              SPECIAL_ARRANGEMENTS_OPTIONS.find((o) => o.value === String(r.complexity_special_arrangements ?? ''))?.label_he ?? '—',
-          },
-          { label_he: 'הערות', value_he: textHe(r.complexity_notes) },
+          optionValueLine('complexity_level', 'רמת מורכבות', r.complexity_level, COMPLEXITY_OPTIONS),
+          boolLine('requires_fixes', 'דורש תיקונים', r.complexity_requires_fixes as boolean | null),
+          optionValueLine(
+            'special_arrangements',
+            'יש עובדים עם הסדרים מיוחדים',
+            r.complexity_special_arrangements,
+            SPECIAL_ARRANGEMENTS_OPTIONS,
+          ),
+          payrollLine('notes', 'הערות', textHe(r.complexity_notes)),
         ],
         edit_fields: [
-          { key: 'complexity_level', label_he: 'רמת מורכבות', type: 'select', value: r.complexity_level ?? null, options: COMPLEXITY_OPTIONS },
-          { key: 'complexity_requires_fixes', label_he: 'דורש תיקונים', type: 'radio', value: r.complexity_requires_fixes ? 'yes' : 'no', options: [{ value: 'yes', label_he: 'כן' }, { value: 'no', label_he: 'לא' }] },
-          {
-            key: 'complexity_special_arrangements',
-            label_he: 'יש עובדים עם הסדרים מיוחדים',
-            type: 'select',
-            value: r.complexity_special_arrangements ?? null,
-            options: SPECIAL_ARRANGEMENTS_OPTIONS,
-          },
-          { key: 'complexity_notes', label_he: 'הערות', type: 'textarea', value: r.complexity_notes ?? '' },
+          payrollField('complexity_level', 'רמת מורכבות', 'select', r.complexity_level ?? null, COMPLEXITY_OPTIONS),
+          payrollField(
+            'complexity_requires_fixes',
+            'דורש תיקונים',
+            'radio',
+            r.complexity_requires_fixes ? 'yes' : 'no',
+            YES_NO_OPTIONS,
+          ),
+          payrollField(
+            'complexity_special_arrangements',
+            'יש עובדים עם הסדרים מיוחדים',
+            'select',
+            r.complexity_special_arrangements ?? null,
+            SPECIAL_ARRANGEMENTS_OPTIONS,
+          ),
+          payrollField('complexity_notes', 'הערות', 'textarea', r.complexity_notes ?? ''),
         ],
       },
       {
         section_key: 'employees',
         section_title_he: 'עובדים',
+        section_title_key: PAYROLL_SECTION_TITLE_KEY.employees,
         edit_action_key: 'update_payroll_employees',
         lines: [
-          { label_he: 'מספר עובדים', value_he: textHe(r.employees_count ?? null) },
-          { label_he: 'גרף שינוי עובדים', value_he: textHe(r.employees_graph_json ?? null) },
+          payrollLine('employees_count', 'מספר עובדים', textHe(r.employees_count ?? null)),
+          payrollLine('employees_chart', 'גרף שינוי עובדים', textHe(r.employees_graph_json ?? null)),
         ],
         edit_fields: [
-          { key: 'employees_count', label_he: 'מספר עובדים', type: 'number', value: r.employees_count ?? null },
-          { key: 'employees_trend', label_he: 'גרף שינוי עובדים', type: 'textarea', value: r.employees_graph_json ?? '' },
+          payrollField('employees_count', 'מספר עובדים', 'number', r.employees_count ?? null),
+          payrollField('employees_trend', 'גרף שינוי עובדים', 'textarea', r.employees_graph_json ?? ''),
         ],
       },
     ],

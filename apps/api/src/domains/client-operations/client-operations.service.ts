@@ -44,6 +44,7 @@ import {
   buildCustomColumnsCapability,
   buildClientOperationsToolbarCapabilities,
   buildRegistryRowCells,
+  buildRegistryRowCellLabelKeys,
   CLIENT_OPERATIONS_REGISTRY_COLUMNS,
   formatIncomeTaxAdvanceRegistryFrequencyDisplayHe,
   formatPcnRegistryDisplay,
@@ -200,6 +201,8 @@ export type ClientOperationsRegistryRow = {
   vat_due_registry_display_he: string | null;
   /** Ready-to-render cell text by column key (excludes folder action). */
   cells: Record<string, string>;
+  /** Translation keys for system enum/token cells. User-entered cells are omitted. */
+  cell_label_keys?: Record<string, string>;
   /** Backend-owned manual paint status per paintable column key. */
   manual_cell_statuses?: Record<
     string,
@@ -1638,7 +1641,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       operational_notes_count: noteAgg.count,
       vat_due_registry_display_he,
     };
-    return [mergeUserCustomCellsIntoRowPeriodAware({
+    const mergedRow = mergeUserCustomCellsIntoRowPeriodAware({
       ...base,
       cells: buildRegistryRowCells({
         ...base,
@@ -1652,7 +1655,11 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       }),
       manual_cell_statuses,
       filter_facets: seed.filter_facets,
-    }, visibleCustomColumns, customValuesByClientAndColumn)];
+    }, visibleCustomColumns, customValuesByClientAndColumn);
+    return [{
+      ...mergedRow,
+      cell_label_keys: buildRegistryRowCellLabelKeys(mergedRow.cells),
+    }];
   });
   markStage('presentation_row_build', presentationMs);
 

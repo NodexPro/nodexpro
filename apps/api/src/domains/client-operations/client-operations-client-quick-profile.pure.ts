@@ -3,7 +3,11 @@
  * Domain decisions live here / in the aggregate service — not in React.
  */
 
-import { formatIncomeTaxAdvanceRegistryFrequencyDisplayHe } from './client-operations-registry-presentation.pure.js';
+import {
+  ACCOUNTING_EXPENSE_LABEL_KEY,
+  CO_UI,
+  QUICK_PROFILE_ROW_LABEL_KEY,
+} from './client-operations-ui-labels.pure.js';
 
 export const CLIENT_OPERATIONS_CLIENT_QUICK_PROFILE_AGGREGATE_KEY =
   'client_operations_client_quick_profile_aggregate' as const;
@@ -31,6 +35,7 @@ export const QUICK_PROFILE_EXPENSE_TYPE_META: ReadonlyArray<{
 export type ClientQuickProfileRow = {
   key: string;
   label_he: string;
+  label_key?: string;
   display_value: string;
   visible: boolean;
   copy_enabled: boolean;
@@ -40,6 +45,8 @@ export type ClientQuickProfileRow = {
 export type ClientQuickProfileExpenseRow = {
   key: string;
   label_he: string;
+  label_key?: string;
+  label_fill?: Record<string, string | number>;
   display_value: string;
   visible: boolean;
 };
@@ -54,6 +61,7 @@ export type ClientOperationsClientQuickProfileAggregate = {
   reporting_rows: ClientQuickProfileRow[];
   recurring_expense_rows: ClientQuickProfileExpenseRow[];
   expense_section_title_he: string;
+  expense_section_title_key?: string;
   expense_section_visible: boolean;
   /** Canonical מיסים — מס הכנסה ניכויים (file + frequency). */
   income_tax_deductions: {
@@ -247,6 +255,7 @@ export function buildQuickProfileIdentityRow(input: {
   return {
     key: input.key,
     label_he: input.label_he,
+    label_key: QUICK_PROFILE_ROW_LABEL_KEY[input.key],
     display_value: raw ?? QUICK_PROFILE_EMPTY_DISPLAY,
     visible: true,
     copy_enabled: Boolean(input.copyable && raw),
@@ -268,6 +277,7 @@ export function buildQuickProfileInfoRow(input: {
   return {
     key: input.key,
     label_he: input.label_he,
+    label_key: QUICK_PROFILE_ROW_LABEL_KEY[input.key],
     display_value: display,
     visible: input.visible,
     copy_enabled: copyEnabled,
@@ -297,6 +307,7 @@ export function buildQuickProfileRecurringExpenseRows(
         rows.push({
           key: `expense_${meta.code}`,
           label_he: meta.label_he,
+          label_key: ACCOUNTING_EXPENSE_LABEL_KEY[meta.code],
           display_value: '',
           visible: true,
         });
@@ -304,6 +315,7 @@ export function buildQuickProfileRecurringExpenseRows(
         rows.push({
           key: `expense_${meta.code}`,
           label_he: meta.label_he,
+          label_key: ACCOUNTING_EXPENSE_LABEL_KEY[meta.code],
           display_value: `${Number(item.business_percent)}%`,
           visible: true,
         });
@@ -314,6 +326,7 @@ export function buildQuickProfileRecurringExpenseRows(
     rows.push({
       key: `expense_${meta.code}`,
       label_he: meta.label_he,
+      label_key: ACCOUNTING_EXPENSE_LABEL_KEY[meta.code],
       display_value: '',
       visible: true,
     });
@@ -343,10 +356,13 @@ export function buildQuickProfileVehicleExpenseRows(input: {
   );
   if (withPercent.length === 0) return [];
   if (withPercent.length === 1) {
+    const plate = trimOrNull(withPercent[0]!.license_plate);
     return [
       {
         key: 'vehicle',
-        label_he: 'רכב',
+        label_he: plate ? `רכב — ${plate}` : 'רכב',
+        label_key: plate ? CO_UI.quickProfile.vehicle : CO_UI.quickProfile.vehicles,
+        ...(plate ? { label_fill: { plate } } : {}),
         display_value: `${Number(withPercent[0]!.business_use_percent)}%`,
         visible: true,
       },
@@ -357,6 +373,8 @@ export function buildQuickProfileVehicleExpenseRows(input: {
     return {
       key: `vehicle_${idx}`,
       label_he: plate ? `רכב — ${plate}` : `רכב ${idx + 1}`,
+      label_key: plate ? CO_UI.quickProfile.vehicle : CO_UI.quickProfile.vehicleN,
+      label_fill: (plate ? { plate } : { n: idx + 1 }) as Record<string, string | number>,
       display_value: `${Number(v.business_use_percent)}%`,
       visible: true,
     };
@@ -391,24 +409,18 @@ export function formatQuickProfilePayrollDisplayHe(
 }
 
 /**
- * Income-tax advances periodicity — same canonical tax-card fields as the registry.
- * Never כן/לא. Never inferred from business type or percent on this surface.
+ * Income-tax advances configuration display.
+ * Registry stores כן/לא only; compose enabled + percent when present.
  */
 export function formatQuickProfileIncomeTaxAdvancesDisplayHe(input: {
   enabled: boolean | null | undefined;
-  frequency: string | null | undefined;
-  profile_advance_status: string | null | undefined;
+  percent: number | null | undefined;
 }): string {
-  const frequencyLabel = formatIncomeTaxAdvanceRegistryFrequencyDisplayHe({
-    enabled: input.enabled,
-    frequency: input.frequency,
-  });
-  if (frequencyLabel) return frequencyLabel;
-  const profileStatus = String(input.profile_advance_status ?? '')
-    .replace(/\u00a0/g, ' ')
-    .trim();
-  if (profileStatus === 'לא') return 'פטור';
-  return 'לא הוגדר';
+  if (!input.enabled) return 'לא';
+  if (input.percent != null && Number.isFinite(Number(input.percent))) {
+    return `כן · ${Number(input.percent)}%`;
+  }
+  return 'כן';
 }
 
 /** Income-tax deductions applicability display (legacy כן/לא). */

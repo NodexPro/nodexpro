@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiJson, userFacingApiMessage } from '../api/client';
 import { moduleClientOperationsObligationsCommands } from '../api/endpoints';
+import { useI18n } from '../i18n/I18nProvider';
+import { fillI18n, localizeSystemLabel } from '../lib/co-display-label.pure';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
 import '../styles/nx-client-obligations-tab.css';
 
@@ -29,18 +31,22 @@ export type ClientObligationsTabModel = {
   payroll_manual_modal?: null | {
     modal_key: string;
     title_he: string;
+    title_key?: string;
     payroll_period_key: string;
     payroll_period_display_he: string;
     status_label_he: string;
+    status_label_key?: string;
     checkboxes: Array<{
       key: string;
       label_he: string;
+      label_key?: string;
       is_checked: boolean;
       interaction: { type: string; command_type?: string; payload?: Record<string, unknown> };
     }>;
     actions: Array<{
       action_key: string;
       action_label_he: string;
+      action_label_key?: string;
       interaction:
         | { type: 'close_modal' }
         | { type: 'command'; command_type: string; payload?: Record<string, unknown> };
@@ -49,13 +55,16 @@ export type ClientObligationsTabModel = {
   ni_auto_reminder_modal?: null | {
     is_visible: boolean;
     title_he: string;
+    title_key?: string;
     message_he: string;
+    message_key?: string;
     monthly_amount: number | null;
     monthly_amount_display_he: string;
     standing_order_checkbox: { is_visible: boolean; is_checked: boolean };
     actions: Array<{
       action_key: string;
       action_label_he: string;
+      action_label_key?: string;
       interaction: {
         type: 'command' | 'open_module' | 'none';
         action_key?: string;
@@ -70,13 +79,16 @@ export type ClientObligationsTabModel = {
   };
   ni_manual_modal?: null | {
     title_he: string;
+    title_key?: string;
     status_label_he: string;
+    status_label_key?: string;
     monthly_amount: number | null;
     monthly_amount_display_he: string;
     standing_order_checkbox: { is_visible: boolean; is_checked: boolean; interaction: { type: 'command'; command_type: 'set_ni_standing_order'; payload?: Record<string, unknown> } };
     actions: Array<{
       action_key: string;
       action_label_he: string;
+      action_label_key?: string;
       interaction: {
         type: 'command' | 'open_module' | 'none';
         action_key?: string;
@@ -94,11 +106,14 @@ export type ClientObligationsTabModel = {
     is_visible: boolean;
     modal_key: string;
     title_he: string;
+    title_key?: string;
     message_he: string;
+    message_key?: string;
     period_key: string;
     checkboxes: Array<{
       key: string;
       label_he: string;
+      label_key?: string;
       is_checked: boolean;
       interaction:
         | { type: 'command'; command_type: string; payload?: Record<string, unknown> }
@@ -112,18 +127,23 @@ export type ClientObligationsTabModel = {
     actions: Array<{
       action_key: string;
       action_label_he: string;
+      action_label_key?: string;
       interaction: { type: 'command'; command_type: string; payload?: Record<string, unknown> };
     }>;
   };
   ni_deductions_manual_modal?: null | {
     modal_key: string;
     title_he: string;
+    title_key?: string;
     message_he: string;
+    message_key?: string;
     period_key: string;
     status_label_he: string;
+    status_label_key?: string;
     checkboxes: Array<{
       key: string;
       label_he: string;
+      label_key?: string;
       is_checked: boolean;
       interaction:
         | { type: 'command'; command_type: string; payload?: Record<string, unknown> }
@@ -132,19 +152,25 @@ export type ClientObligationsTabModel = {
     actions: Array<{
       action_key: string;
       action_label_he: string;
+      action_label_key?: string;
       interaction: { type: 'command'; command_type: string; payload?: Record<string, unknown> };
     }>;
   };
   income_tax_deductions_manual_modal?: null | {
     modal_key: string;
     title_he: string;
+    title_key?: string;
     message_he: string;
+    message_key?: string;
+    message_vars?: Record<string, string>;
     period_key: string;
     period_label_he: string;
     status_label_he: string;
+    status_label_key?: string;
     actions: Array<{
       action_key: string;
       action_label_he: string;
+      action_label_key?: string;
       interaction: { type: 'command'; command_type: string; payload?: Record<string, unknown> };
     }>;
   };
@@ -152,6 +178,7 @@ export type ClientObligationsTabModel = {
     columns: Array<{
       key: string;
       label_he: string;
+      label_key?: string;
       kind: 'date' | 'status' | 'action' | 'text' | 'multi_checkbox';
       order: number;
     }>;
@@ -163,11 +190,14 @@ export type ClientObligationsTabModel = {
         column_key: string;
         kind: 'date' | 'status' | 'action' | 'text' | 'multi_checkbox';
         display_value: string;
+        display_value_key?: string;
         status_code?: string;
         status_label_he?: string;
+        status_label_key?: string;
         status_tone?: 'critical' | 'warning' | 'ok' | 'blocked' | 'neutral';
         icon_key?: string;
         action_label_he?: string | null;
+        action_label_key?: string | null;
         priority_code?: 'high_today' | 'warning' | 'ok';
         interaction?: {
             type: 'command' | 'open_module' | 'open_modal' | 'none';
@@ -213,6 +243,7 @@ export type ClientObligationsTabModel = {
         available_actions?: Array<{
           action_key: string;
           action_label_he: string;
+          action_label_key?: string;
           interaction: {
             type: 'command' | 'open_module' | 'none';
             action_key?: string;
@@ -244,6 +275,7 @@ export type ClientObligationsTabModel = {
         checkboxes?: Array<{
           key: 'vat' | 'income_advances' | 'payroll';
           label_he: string;
+          label_key?: string;
           is_active: boolean;
           is_checked: boolean;
           show_request_icon?: boolean;
@@ -301,25 +333,33 @@ export type ClientObligationsTabModel = {
     due_date_display_he: string;
     status_code: ObligationStatusCode;
     status_label_he: string;
+    status_label_key?: string;
     blocking_reason_he: string | null;
     related_module: string;
     priority_score: number;
     priority_level: 'high' | 'medium' | 'low';
-    suggested_actions: Array<{ action_key: string; label_he: string }>;
+    suggested_actions: Array<{ action_key: string; label_he: string; label_key?: string }>;
     can_mark_reported: boolean;
     can_mark_reported_and_paid: boolean;
     can_mark_not_reported: boolean;
   }>;
-  period_summary: Array<{ period_key: string; status_label_he: string }>;
+  period_summary: Array<{
+    period_key: string;
+    period_label_key?: string;
+    period_label_vars?: Record<string, string>;
+    status_label_he: string;
+    status_label_key?: string;
+  }>;
   annual_report_summary?: {
     period_display_he: string;
     due_date_display_he: string;
     status_code: ObligationStatusCode;
     status_label_he: string;
+    status_label_key?: string;
     status_tone: 'critical' | 'warning' | 'ok' | 'blocked' | 'neutral';
     icon_key: string;
   } | null;
-  labels?: { tab_title_he?: string };
+  labels?: { tab_title_he?: string; tab_title_key?: string };
 };
 const ICON_BY_KEY: Record<string, string> = {
   red_dot: '🔴',
@@ -340,6 +380,7 @@ export function ClientObligationsTab({
   obligationsTab: ClientObligationsTabModel;
   onCaseUpdated: (next: ClientOperationsCaseResponse) => void;
 }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [openActionsForCell, setOpenActionsForCell] = useState<string | null>(null);
@@ -353,14 +394,18 @@ export function ClientObligationsTab({
   const [niAmountModalOpen, setNiAmountModalOpen] = useState(false);
   const [niAmountValue, setNiAmountValue] = useState('');
 
-  const tabTitle = obligationsTab.labels?.tab_title_he?.trim() || 'התחייבויות';
+  const tabTitle = localizeSystemLabel(
+    t,
+    obligationsTab.labels?.tab_title_key,
+    obligationsTab.labels?.tab_title_he?.trim() || t('clientOperations.obligations.title'),
+  );
   const summaryItems = useMemo(
     () => [
-      { key: 'overdue', icon: '◷', label: 'באיחור', value: obligationsTab.summary.overdue_count, tone: 'critical' as const },
-      { key: 'today', icon: '🗓', label: 'היום', value: obligationsTab.summary.due_today_count, tone: 'warn' as const },
-      { key: 'soon', icon: '◔', label: 'בקרוב', value: obligationsTab.summary.due_soon_count, tone: 'soon' as const },
+      { key: 'overdue', icon: '◷', label: t('clientOperations.obligations.overdue'), value: obligationsTab.summary.overdue_count, tone: 'critical' as const },
+      { key: 'today', icon: '🗓', label: t('clientOperations.obligations.today'), value: obligationsTab.summary.due_today_count, tone: 'warn' as const },
+      { key: 'soon', icon: '◔', label: t('clientOperations.obligations.soon'), value: obligationsTab.summary.due_soon_count, tone: 'soon' as const },
     ],
-    [obligationsTab.summary]
+    [obligationsTab.summary, t]
   );
   const firstRow = obligationsTab.table.rows[0];
   const firstPeriod = firstRow?.period_display_he ?? obligationsTab.period_summary[0]?.period_key ?? '—';
@@ -535,14 +580,14 @@ export function ClientObligationsTab({
             {obligationsTab.period_labels ? (
               <>
                 <div className="nx-oblig-summary-pill">
-                  תקופת משכורות: {obligationsTab.period_labels.payroll_salary_period.display_he}
+                  {t('clientOperations.obligations.payrollPeriod')}: {obligationsTab.period_labels.payroll_salary_period.display_he}
                 </div>
                 <div className="nx-oblig-summary-pill">
-                  תקופת דיווח מע״מ: {obligationsTab.period_labels.vat_reporting_period.display_he}
+                  {t('clientOperations.obligations.vatPeriod')}: {obligationsTab.period_labels.vat_reporting_period.display_he}
                 </div>
               </>
             ) : (
-              <div className="nx-oblig-summary-pill">תקופה: {firstPeriod}</div>
+              <div className="nx-oblig-summary-pill">{t('clientOperations.obligations.period')}: {firstPeriod}</div>
             )}
           </div>
         </div>
@@ -566,18 +611,18 @@ export function ClientObligationsTab({
       <section className="nx-oblig-card nx-oblig-main-list">
         {obligationsTab.table.rows.length === 0 ? (
           <div className="nx-oblig-empty">
-            <div className="nx-oblig-empty-title">אין התחייבויות פתוחות כרגע</div>
+            <div className="nx-oblig-empty-title">{t('clientOperations.obligations.noneOpen')}</div>
           </div>
         ) : (
           <div className="nx-oblig-table-wrap">
-            <table className="nx-oblig-table nx-oblig-table--excel" role="table" aria-label="טבלת התחייבויות">
+            <table className="nx-oblig-table nx-oblig-table--excel" role="table" aria-label={t('clientOperations.obligations.table')}>
               <thead>
                 <tr>
                   {obligationsTab.table.columns
                     .slice()
                     .sort((a, b) => a.order - b.order)
                     .map((col) => (
-                    <th key={col.key}>{col.label_he}</th>
+                    <th key={col.key}>{localizeSystemLabel(t, col.label_key, col.label_he)}</th>
                   ))}
                 </tr>
               </thead>
@@ -594,7 +639,7 @@ export function ClientObligationsTab({
                         return (
                       <td key={`${row.row_key}-${col.key}`}>
                         {cell?.kind === 'date' ? (
-                          <div className={`nx-oblig-cell-date-badge ${cell ? '' : 'nx-oblig-cell-btn--empty'}`}>{cell?.display_value || 'לא נדרש'}</div>
+                          <div className={`nx-oblig-cell-date-badge ${cell ? '' : 'nx-oblig-cell-btn--empty'}`}>{cell?.display_value || t('clientOperations.obligations.notRequired')}</div>
                         ) : cell?.kind === 'multi_checkbox' ? (
                           <div className="nx-oblig-multi-checkboxes">
                             {(cell.checkboxes ?? []).map((cb) => (
@@ -606,7 +651,7 @@ export function ClientObligationsTab({
                                     disabled={busy || !cb.is_active || !cb.interaction || cb.interaction.type !== 'command'}
                                     onChange={() => void onCellInteraction(cb.interaction)}
                                   />
-                                  <span>{cb.label_he}</span>
+                                  <span>{localizeSystemLabel(t, cb.label_key, cb.label_he)}</span>
                                 </label>
                                 {cb.show_request_icon ? (
                                   <button
@@ -616,8 +661,15 @@ export function ClientObligationsTab({
                                     }`}
                                     disabled={busy || !cb.is_active || !cb.request_interaction}
                                     onClick={() => void onCellInteraction(cb.request_interaction)}
-                                    aria-label={`שלח בקשה לנתונים עבור ${cb.label_he}`}
-                                    title={cb.request_text_he ?? `שלח בקשה לנתונים עבור ${cb.label_he}`}
+                                    aria-label={fillI18n(t('clientOperations.obligations.sendDataRequest'), {
+                                      label: localizeSystemLabel(t, cb.label_key, cb.label_he),
+                                    })}
+                                    title={
+                                      cb.request_text_he ??
+                                      fillI18n(t('clientOperations.obligations.sendDataRequest'), {
+                                        label: localizeSystemLabel(t, cb.label_key, cb.label_he),
+                                      })
+                                    }
                                   >
                                     <svg className="nx-oblig-request-icon-envelope" viewBox="0 0 20 14" aria-hidden>
                                       <rect x="1.25" y="1.25" width="17.5" height="11.5" rx="1.75" />
@@ -648,12 +700,16 @@ export function ClientObligationsTab({
                                 <span className="nx-oblig-cell-content">
                                   <span className="nx-oblig-cell-badge">
                                     <span>{icon}</span>
-                                    <span>{cell.display_value}</span>
+                                    <span>{localizeSystemLabel(t, cell.display_value_key ?? cell.status_label_key, cell.display_value)}</span>
                                   </span>
-                                  {cell.action_label_he ? <span className="nx-oblig-cell-hint">{cell.action_label_he}</span> : null}
+                                  {cell.action_label_he ? (
+                                    <span className="nx-oblig-cell-hint">
+                                      {localizeSystemLabel(t, cell.action_label_key, cell.action_label_he)}
+                                    </span>
+                                  ) : null}
                                 </span>
                               ) : (
-                                <span className="nx-oblig-cell-empty">לא רלוונטי</span>
+                                <span className="nx-oblig-cell-empty">{t('clientOperations.obligations.notRelevant')}</span>
                               )}
                             </button>
                             {cell?.available_actions && cell.available_actions.length > 0 && openActionsForCell === `${row.row_key}-${col.key}` ? (
@@ -669,7 +725,7 @@ export function ClientObligationsTab({
                                       void onCellInteraction(a.interaction);
                                     }}
                                   >
-                                    {a.action_label_he}
+                                    {localizeSystemLabel(t, a.action_label_key, a.action_label_he)}
                                   </button>
                                 ))}
                               </div>
@@ -688,15 +744,21 @@ export function ClientObligationsTab({
       </section>
 
       <section className="nx-oblig-card nx-oblig-bottom-sections">
-        <h3 className="nx-oblig-section-title">סיכום תקופות</h3>
+        <h3 className="nx-oblig-section-title">{t('clientOperations.obligations.periodSummary')}</h3>
         {obligationsTab.period_summary.length === 0 ? (
-          <div className="nx-oblig-period-empty">אין נתוני תקופות להצגה.</div>
+          <div className="nx-oblig-period-empty">{t('clientOperations.obligations.noPeriods')}</div>
         ) : (
           <ul className="nx-oblig-period-list">
             {obligationsTab.period_summary.map((p, idx) => (
               <li key={`${p.period_key}-${idx}`} className="nx-oblig-period-item">
-                <span className="nx-oblig-period-key">{p.period_key}</span>
-                <span className="nx-oblig-period-status">{p.status_label_he}</span>
+                <span className="nx-oblig-period-key">
+                  {p.period_label_key
+                    ? fillI18n(localizeSystemLabel(t, p.period_label_key, p.period_key), p.period_label_vars ?? {})
+                    : p.period_key}
+                </span>
+                <span className="nx-oblig-period-status">
+                  {localizeSystemLabel(t, p.status_label_key, p.status_label_he)}
+                </span>
               </li>
             ))}
           </ul>
@@ -704,14 +766,19 @@ export function ClientObligationsTab({
       </section>
 
       <section className="nx-oblig-card nx-oblig-bottom-sections">
-        <h3 className="nx-oblig-section-title">דוח שנתי</h3>
+        <h3 className="nx-oblig-section-title">{t('clientOperations.obligations.annualReport')}</h3>
         {!obligationsTab.annual_report_summary ? (
-          <div className="nx-oblig-period-empty">אין נתוני דוח שנתי להצגה.</div>
+          <div className="nx-oblig-period-empty">{t('clientOperations.obligations.noAnnual')}</div>
         ) : (
           <div className="nx-oblig-annual-row">
             <span className="nx-oblig-period-key">{obligationsTab.annual_report_summary.period_display_he}</span>
             <span className={`nx-oblig-status nx-oblig-status--${obligationsTab.annual_report_summary.status_tone}`}>
-              {(ICON_BY_KEY[obligationsTab.annual_report_summary.icon_key] ?? '')} {obligationsTab.annual_report_summary.status_label_he}
+              {(ICON_BY_KEY[obligationsTab.annual_report_summary.icon_key] ?? '')}{' '}
+              {localizeSystemLabel(
+                t,
+                obligationsTab.annual_report_summary.status_label_key,
+                obligationsTab.annual_report_summary.status_label_he,
+              )}
             </span>
             <span className="nx-oblig-period-status">{obligationsTab.annual_report_summary.due_date_display_he}</span>
           </div>
@@ -732,19 +799,19 @@ export function ClientObligationsTab({
             className="nx-modal nx-oblig-ni-modal"
             role="dialog"
             aria-modal="true"
-            aria-label={visibleNiAuto.title_he}
+            aria-label={localizeSystemLabel(t, visibleNiAuto.title_key, visibleNiAuto.title_he)}
           >
             <div className="nx-modal-header">
               <div className="nx-modal-title-wrap nx-modal-title-wrap-stacked">
-                <h2 className="nx-modal-title">{visibleNiAuto.title_he}</h2>
-                <span className="nx-modal-subtitle">{visibleNiAuto.message_he}</span>
+                <h2 className="nx-modal-title">{localizeSystemLabel(t, visibleNiAuto.title_key, visibleNiAuto.title_he)}</h2>
+                <span className="nx-modal-subtitle">{localizeSystemLabel(t, visibleNiAuto.message_key, visibleNiAuto.message_he)}</span>
               </div>
               <button
                 type="button"
                 className="nx-modal-close"
                 onClick={() => setNiAutoDismissed(true)}
-                aria-label="סגור"
-                title="סגור"
+                aria-label={t('clientOperations.close')}
+                title={t('clientOperations.close')}
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                   <path d="M5 5L15 15M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -752,7 +819,9 @@ export function ClientObligationsTab({
               </button>
             </div>
             <div className="nx-modal-body nx-oblig-ni-modal-body">
-              <p className="nx-oblig-ni-prompt-amount">סכום חודשי: {visibleNiAuto.monthly_amount_display_he}</p>
+              <p className="nx-oblig-ni-prompt-amount">
+                {t('clientOperations.obligations.monthlyAmount')}: {visibleNiAuto.monthly_amount_display_he}
+              </p>
               {(() => {
                 const cb = visibleNiAuto.standing_order_checkbox;
                 if (!cb?.is_visible) return null;
@@ -767,7 +836,7 @@ export function ClientObligationsTab({
                         void runObligationCommand('set_ni_standing_order', { enabled: e.target.checked });
                       }}
                     />
-                    <span>קיימת הוראת קבע</span>
+                    <span>{t('clientOperations.obligations.standingOrder')}</span>
                   </label>
                 );
               })()}
@@ -784,7 +853,7 @@ export function ClientObligationsTab({
                       void onCellInteraction(a.interaction);
                     }}
                   >
-                    {a.action_label_he}
+                    {localizeSystemLabel(t, a.action_label_key, a.action_label_he)}
                   </button>
                 ))}
             </div>
@@ -802,11 +871,11 @@ export function ClientObligationsTab({
             }
           }}
         >
-          <div className="nx-modal nx-oblig-ni-modal" role="dialog" aria-modal="true" aria-label={niManual.title_he}>
+          <div className="nx-modal nx-oblig-ni-modal" role="dialog" aria-modal="true" aria-label={localizeSystemLabel(t, niManual.title_key, niManual.title_he)}>
             <div className="nx-modal-header">
               <div className="nx-modal-title-wrap nx-modal-title-wrap-stacked">
-                <h2 className="nx-modal-title">{niManual.title_he}</h2>
-                <span className="nx-modal-subtitle">{niManual.status_label_he}</span>
+                <h2 className="nx-modal-title">{localizeSystemLabel(t, niManual.title_key, niManual.title_he)}</h2>
+                <span className="nx-modal-subtitle">{localizeSystemLabel(t, niManual.status_label_key, niManual.status_label_he)}</span>
               </div>
               <button
                 type="button"
@@ -814,8 +883,8 @@ export function ClientObligationsTab({
                 onClick={() => {
                   setNiManualOpen(false);
                 }}
-                aria-label="סגור"
-                title="סגור"
+                aria-label={t('clientOperations.close')}
+                title={t('clientOperations.close')}
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                   <path d="M5 5L15 15M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -823,7 +892,9 @@ export function ClientObligationsTab({
               </button>
             </div>
             <div className="nx-modal-body nx-oblig-ni-modal-body">
-              <p className="nx-oblig-ni-prompt-amount">סכום חודשי: {niManual.monthly_amount_display_he}</p>
+              <p className="nx-oblig-ni-prompt-amount">
+                {t('clientOperations.obligations.monthlyAmount')}: {niManual.monthly_amount_display_he}
+              </p>
               {(() => {
                 const cb = niManual.standing_order_checkbox;
                 if (!cb?.is_visible) return null;
@@ -838,7 +909,7 @@ export function ClientObligationsTab({
                         void runObligationCommand('set_ni_standing_order', { enabled: e.target.checked });
                       }}
                     />
-                    <span>קיימת הוראת קבע</span>
+                    <span>{t('clientOperations.obligations.standingOrder')}</span>
                   </label>
                 );
               })()}
@@ -855,7 +926,7 @@ export function ClientObligationsTab({
                     void onCellInteraction(a.interaction);
                   }}
                 >
-                  {a.action_label_he}
+                  {localizeSystemLabel(t, a.action_label_key, a.action_label_he)}
                 </button>
                 ))}
             </div>
@@ -875,19 +946,19 @@ export function ClientObligationsTab({
             className="nx-modal nx-oblig-ni-modal"
             role="dialog"
             aria-modal="true"
-            aria-label={visibleNiDedAuto.title_he}
+            aria-label={localizeSystemLabel(t, visibleNiDedAuto.title_key, visibleNiDedAuto.title_he)}
           >
             <div className="nx-modal-header">
               <div className="nx-modal-title-wrap nx-modal-title-wrap-stacked">
-                <h2 className="nx-modal-title">{visibleNiDedAuto.title_he}</h2>
-                <span className="nx-modal-subtitle">{visibleNiDedAuto.message_he}</span>
+                <h2 className="nx-modal-title">{localizeSystemLabel(t, visibleNiDedAuto.title_key, visibleNiDedAuto.title_he)}</h2>
+                <span className="nx-modal-subtitle">{localizeSystemLabel(t, visibleNiDedAuto.message_key, visibleNiDedAuto.message_he)}</span>
               </div>
               <button
                 type="button"
                 className="nx-modal-close"
                 onClick={() => setNiDedAutoDismissed(true)}
-                aria-label="סגור"
-                title="סגור"
+                aria-label={t('clientOperations.close')}
+                title={t('clientOperations.close')}
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                   <path d="M5 5L15 15M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -913,7 +984,7 @@ export function ClientObligationsTab({
                       });
                     }}
                   />
-                  <span>{cb.label_he}</span>
+                  <span>{localizeSystemLabel(t, cb.label_key, cb.label_he)}</span>
                 </label>
               ))}
               {visibleNiDedAuto.suppress_checkbox.is_visible ? (
@@ -929,7 +1000,7 @@ export function ClientObligationsTab({
                       });
                     }}
                   />
-                  <span>לא להציג שוב החודש</span>
+                  <span>{t('clientOperations.obligations.dontShowThisMonth')}</span>
                 </label>
               ) : null}
             </div>
@@ -945,7 +1016,7 @@ export function ClientObligationsTab({
                     void runObligationCommand(a.interaction.command_type, a.interaction.payload ?? {});
                   }}
                 >
-                  {a.action_label_he}
+                  {localizeSystemLabel(t, a.action_label_key, a.action_label_he)}
                 </button>
               ))}
             </div>
@@ -961,20 +1032,20 @@ export function ClientObligationsTab({
             if (e.target === e.currentTarget) setPayrollManualOpen(false);
           }}
         >
-          <div className="nx-modal nx-oblig-ni-modal" role="dialog" aria-modal="true" aria-label={payrollMan.title_he}>
+          <div className="nx-modal nx-oblig-ni-modal" role="dialog" aria-modal="true" aria-label={localizeSystemLabel(t, payrollMan.title_key, payrollMan.title_he)}>
             <div className="nx-modal-header">
               <div className="nx-modal-title-wrap nx-modal-title-wrap-stacked">
-                <h2 className="nx-modal-title">{payrollMan.title_he}</h2>
+                <h2 className="nx-modal-title">{localizeSystemLabel(t, payrollMan.title_key, payrollMan.title_he)}</h2>
                 <span className="nx-modal-subtitle">
-                  {payrollMan.payroll_period_display_he} — {payrollMan.status_label_he}
+                  {payrollMan.payroll_period_display_he} — {localizeSystemLabel(t, payrollMan.status_label_key, payrollMan.status_label_he)}
                 </span>
               </div>
               <button
                 type="button"
                 className="nx-modal-close"
                 onClick={() => setPayrollManualOpen(false)}
-                aria-label="סגור"
-                title="סגור"
+                aria-label={t('clientOperations.close')}
+                title={t('clientOperations.close')}
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                   <path d="M5 5L15 15M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -999,7 +1070,7 @@ export function ClientObligationsTab({
                       );
                     }}
                   />
-                  <span>{cb.label_he}</span>
+                  <span>{localizeSystemLabel(t, cb.label_key, cb.label_he)}</span>
                 </label>
               ))}
             </div>
@@ -1020,7 +1091,7 @@ export function ClientObligationsTab({
                     });
                   }}
                 >
-                  {a.action_label_he}
+                  {localizeSystemLabel(t, a.action_label_key, a.action_label_he)}
                 </button>
               ))}
             </div>
@@ -1036,20 +1107,20 @@ export function ClientObligationsTab({
             if (e.target === e.currentTarget) setItdManualOpen(false);
           }}
         >
-          <div className="nx-modal nx-oblig-ni-modal" role="dialog" aria-modal="true" aria-label={itdManual.title_he}>
+          <div className="nx-modal nx-oblig-ni-modal" role="dialog" aria-modal="true" aria-label={localizeSystemLabel(t, itdManual.title_key, itdManual.title_he)}>
             <div className="nx-modal-header">
               <div className="nx-modal-title-wrap nx-modal-title-wrap-stacked">
-                <h2 className="nx-modal-title">{itdManual.title_he}</h2>
+                <h2 className="nx-modal-title">{localizeSystemLabel(t, itdManual.title_key, itdManual.title_he)}</h2>
                 <span className="nx-modal-subtitle">
-                  {itdManual.period_label_he} — {itdManual.status_label_he}
+                  {itdManual.period_label_he} — {localizeSystemLabel(t, itdManual.status_label_key, itdManual.status_label_he)}
                 </span>
               </div>
               <button
                 type="button"
                 className="nx-modal-close"
                 onClick={() => setItdManualOpen(false)}
-                aria-label="סגור"
-                title="סגור"
+                aria-label={t('clientOperations.close')}
+                title={t('clientOperations.close')}
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                   <path d="M5 5L15 15M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -1057,7 +1128,12 @@ export function ClientObligationsTab({
               </button>
             </div>
             <div className="nx-modal-body nx-oblig-ni-modal-body">
-              <p className="nx-oblig-ni-prompt-amount">{itdManual.message_he}</p>
+              <p className="nx-oblig-ni-prompt-amount">
+                {fillI18n(
+                  localizeSystemLabel(t, itdManual.message_key, itdManual.message_he),
+                  itdManual.message_vars ?? {},
+                )}
+              </p>
             </div>
             <div className="nx-modal-footer nx-oblig-ni-prompt-footer nx-oblig-ni-ded-actions-footer">
               {itdManual.actions.map((a) => (
@@ -1071,7 +1147,7 @@ export function ClientObligationsTab({
                     void runObligationCommand(a.interaction.command_type, a.interaction.payload ?? {});
                   }}
                 >
-                  {a.action_label_he}
+                  {localizeSystemLabel(t, a.action_label_key, a.action_label_he)}
                 </button>
               ))}
             </div>
@@ -1087,18 +1163,18 @@ export function ClientObligationsTab({
             if (e.target === e.currentTarget) setNiDedManualOpen(false);
           }}
         >
-          <div className="nx-modal nx-oblig-ni-modal" role="dialog" aria-modal="true" aria-label={niDedManual.title_he}>
+          <div className="nx-modal nx-oblig-ni-modal" role="dialog" aria-modal="true" aria-label={localizeSystemLabel(t, niDedManual.title_key, niDedManual.title_he)}>
             <div className="nx-modal-header">
               <div className="nx-modal-title-wrap nx-modal-title-wrap-stacked">
-                <h2 className="nx-modal-title">{niDedManual.title_he}</h2>
-                <span className="nx-modal-subtitle">{niDedManual.status_label_he}</span>
+                <h2 className="nx-modal-title">{localizeSystemLabel(t, niDedManual.title_key, niDedManual.title_he)}</h2>
+                <span className="nx-modal-subtitle">{localizeSystemLabel(t, niDedManual.status_label_key, niDedManual.status_label_he)}</span>
               </div>
               <button
                 type="button"
                 className="nx-modal-close"
                 onClick={() => setNiDedManualOpen(false)}
-                aria-label="סגור"
-                title="סגור"
+                aria-label={t('clientOperations.close')}
+                title={t('clientOperations.close')}
               >
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                   <path d="M5 5L15 15M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -1106,7 +1182,7 @@ export function ClientObligationsTab({
               </button>
             </div>
             <div className="nx-modal-body nx-oblig-ni-modal-body">
-              <p className="nx-oblig-ni-prompt-amount">{niDedManual.message_he}</p>
+              <p className="nx-oblig-ni-prompt-amount">{localizeSystemLabel(t, niDedManual.message_key, niDedManual.message_he)}</p>
               {niDedManual.checkboxes.map((cb) => (
                 <label key={cb.key} className="nx-oblig-ni-prompt-checkbox">
                   <input
@@ -1125,7 +1201,7 @@ export function ClientObligationsTab({
                       });
                     }}
                   />
-                  <span>{cb.label_he}</span>
+                  <span>{localizeSystemLabel(t, cb.label_key, cb.label_he)}</span>
                 </label>
               ))}
             </div>
@@ -1141,7 +1217,7 @@ export function ClientObligationsTab({
                     void runObligationCommand(a.interaction.command_type, a.interaction.payload ?? {});
                   }}
                 >
-                  {a.action_label_he}
+                  {localizeSystemLabel(t, a.action_label_key, a.action_label_he)}
                 </button>
               ))}
             </div>
@@ -1157,20 +1233,20 @@ export function ClientObligationsTab({
             if (e.target === e.currentTarget) setNiAmountModalOpen(false);
           }}
         >
-          <div className="nx-modal nx-oblig-ni-modal" role="dialog" aria-modal="true" aria-label="עדכון סכום לתשלום">
+          <div className="nx-modal nx-oblig-ni-modal" role="dialog" aria-modal="true" aria-label={t('clientOperations.obligations.updateAmount')}>
             <div className="nx-modal-header">
               <div className="nx-modal-title-wrap nx-modal-title-wrap-stacked">
-                <h2 className="nx-modal-title">עדכון סכום לתשלום</h2>
-                <span className="nx-modal-subtitle">ביטוח לאומי עצמאי</span>
+                <h2 className="nx-modal-title">{t('clientOperations.obligations.updateAmount')}</h2>
+                <span className="nx-modal-subtitle">{t('clientOperations.taxes.cards.niSelfEmployed')}</span>
               </div>
-              <button type="button" className="nx-modal-close" onClick={() => setNiAmountModalOpen(false)} aria-label="סגור" title="סגור">
+              <button type="button" className="nx-modal-close" onClick={() => setNiAmountModalOpen(false)} aria-label={t('clientOperations.close')} title={t('clientOperations.close')}>
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                   <path d="M5 5L15 15M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               </button>
             </div>
             <div className="nx-modal-body">
-              <label className="nx-oblig-ni-prompt-text" htmlFor="ni-amount-input">סכום חודשי</label>
+              <label className="nx-oblig-ni-prompt-text" htmlFor="ni-amount-input">{t('clientOperations.obligations.monthlyAmount')}</label>
               <input
                 id="ni-amount-input"
                 className="nx-datetime"
@@ -1183,7 +1259,7 @@ export function ClientObligationsTab({
             </div>
             <div className="nx-modal-footer">
               <button type="button" className="nx-btn nx-btn-secondary" onClick={() => setNiAmountModalOpen(false)} disabled={busy}>
-                סגירה
+                {t('clientOperations.close')}
               </button>
               <button
                 type="button"
@@ -1194,7 +1270,7 @@ export function ClientObligationsTab({
                   await runObligationCommand('update_ni_payment_amount', { amount: Number(niAmountValue) });
                 }}
               >
-                שמירה
+                {t('clientOperations.save')}
               </button>
             </div>
           </div>

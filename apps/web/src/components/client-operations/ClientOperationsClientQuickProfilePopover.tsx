@@ -1,6 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useI18n } from '../../i18n/I18nProvider';
+import { fillI18n, localizeSystemLabel } from '../../lib/co-display-label.pure';
 import { placeClientOperationsQuickProfilePopover } from '../../lib/client-operations-quick-profile-placement.pure';
 import '../../styles/nx-client-quick-card.css';
 import '../../styles/nx-co-client-quick-profile.css';
@@ -8,6 +9,7 @@ import '../../styles/nx-co-client-quick-profile.css';
 export type ClientOperationsQuickProfileRow = {
   key: string;
   label_he: string;
+  label_key?: string;
   display_value: string;
   visible: boolean;
   copy_enabled: boolean;
@@ -17,6 +19,8 @@ export type ClientOperationsQuickProfileRow = {
 export type ClientOperationsQuickProfileExpenseRow = {
   key: string;
   label_he: string;
+  label_key?: string;
+  label_fill?: Record<string, string | number>;
   display_value: string;
   visible: boolean;
 };
@@ -31,6 +35,7 @@ export type ClientOperationsClientQuickProfileAggregate = {
   reporting_rows: ClientOperationsQuickProfileRow[];
   recurring_expense_rows: ClientOperationsQuickProfileExpenseRow[];
   expense_section_title_he: string;
+  expense_section_title_key?: string;
   expense_section_visible: boolean;
   income_tax_deductions?: {
     file_number: string | null;
@@ -75,17 +80,28 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   );
 }
 
+function rowLabel(
+  t: (key: string) => string,
+  row: { label_he: string; label_key?: string; label_fill?: Record<string, string | number> },
+): string {
+  const base = localizeSystemLabel(t, row.label_key, row.label_he);
+  if (row.label_fill) return fillI18n(base, row.label_fill);
+  return base;
+}
+
 function ProfileRow({ row }: { row: ClientOperationsQuickProfileRow }) {
+  const { t } = useI18n();
   if (!row.visible) return null;
+  const label = rowLabel(t, row);
   return (
     <div className="nx-client-quick-card__row">
-      <dt className="nx-client-quick-card__label">{row.label_he}</dt>
+      <dt className="nx-client-quick-card__label">{label}</dt>
       <dd className="nx-client-quick-card__value-wrap">
         <span className="nx-client-quick-card__value" title={row.display_value}>
           {row.display_value}
         </span>
         {row.copy_enabled && row.copy_value ? (
-          <CopyButton value={row.copy_value} label={row.label_he} />
+          <CopyButton value={row.copy_value} label={label} />
         ) : null}
       </dd>
     </div>
@@ -208,12 +224,12 @@ export function ClientOperationsClientQuickProfilePopover({ profile, anchorEl, l
         {!loading && profile && showExpenses ? (
           <div className="nx-co-client-quick-profile__expenses">
             <div className="nx-co-client-quick-profile__expenses-title">
-              {profile.expense_section_title_he}
+              {localizeSystemLabel(t, profile.expense_section_title_key, profile.expense_section_title_he)}
             </div>
             <ul className="nx-co-client-quick-profile__expenses-list">
               {expenses.map((row) => (
                 <li key={row.key} className="nx-co-client-quick-profile__expense-row">
-                  <span className="nx-co-client-quick-profile__expense-label">{row.label_he}</span>
+                  <span className="nx-co-client-quick-profile__expense-label">{rowLabel(t, row)}</span>
                   {row.display_value ? (
                     <span className="nx-co-client-quick-profile__expense-value">{row.display_value}</span>
                   ) : null}

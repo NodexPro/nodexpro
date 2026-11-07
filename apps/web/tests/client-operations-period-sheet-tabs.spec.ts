@@ -183,9 +183,9 @@ test('חומר column renders three backend-driven subcontrols מע״מ / מה״
   assert.match(view, /set_payroll_material_brought/);
   assert.match(view, /nx-co-sheet__material-header-title/);
   assert.match(view, /clientOperations\.material/);
-  assert.match(view, /מע״מ/);
-  assert.match(view, /מה״כ/);
-  assert.match(view, /שכר/);
+  assert.match(view, /clientOperations\.registry\.columns\.vat/);
+  assert.match(view, /clientOperations\.registry\.columns\.incomeTaxAdvance/);
+  assert.match(view, /clientOperations\.registry\.columns\.payroll/);
   assert.match(view, /material_cells\?\.vat|cells\?\.vat/);
   assert.match(view, /income_tax_advance/);
   assert.match(view, /payroll/);

@@ -5,6 +5,8 @@ import {
   moduleClientOperationsDocumentsFileOpen,
   moduleClientOperationsDocumentsUpload,
 } from '../api/endpoints';
+import { useI18n } from '../i18n/I18nProvider';
+import { fillI18n, localizeSystemLabel } from '../lib/co-display-label.pure';
 import type { ClientDocumentsTabModel, ClientDocumentsTabFolderCardDto } from './client-documents-tab-types';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
 import { WorkspaceNestedDialogClose } from './WorkspaceNestedDialogClose';
@@ -70,6 +72,7 @@ export function ClientDocumentsTab({
   documentsTab: ClientDocumentsTabModel;
   onCaseUpdated: (next: ClientOperationsCaseResponse) => void;
 }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [folderDlg, setFolderDlg] = useState<FolderDialog>(null);
@@ -203,18 +206,22 @@ export function ClientDocumentsTab({
 
   const confirmArchiveFolder = (folder: ClientDocumentsTabFolderCardDto) => {
     if (!folder.actions.can_archive_or_delete) return;
-    if (!window.confirm('למחוק את התיקייה? פעולה זו בלתי הפיכה.')) return;
+    if (!window.confirm(t('clientOperations.documents.deleteFolderConfirm'))) return;
     void runCommand('archive_or_delete_client_document_folder', { folder_id: folder.folder_id });
   };
 
   const confirmDeleteDocument = (documentId: string) => {
-    if (!window.confirm('למחוק את המסמך?')) return;
+    if (!window.confirm(t('clientOperations.documents.deleteDocumentConfirm'))) return;
     void runCommand('delete_client_document', { document_id: documentId });
   };
 
   const folders = documentsTab.folders_grid.folders;
   const openFolderView = documentsTab.open_folder;
-  const folderPanelTitle = openFolderView?.folder_name_he ?? pendingOpenFolder?.folder_name_he ?? '';
+  const folderPanelTitle = localizeSystemLabel(
+    t,
+    openFolderView?.folder_name_key,
+    openFolderView?.folder_name_he ?? pendingOpenFolder?.folder_name_he ?? '',
+  );
   const showFolderPanel = Boolean((openFolderView || pendingOpenFolder) && !folderPanelDismissed);
   const folderPanelLoading = !openFolderView && Boolean(pendingOpenFolder);
 
@@ -230,7 +237,9 @@ export function ClientDocumentsTab({
 
       <div className="nx-cdocs-surface">
         <div className="nx-cdocs-head">
-          <h2 className="nx-cdocs-title">{documentsTab.ui.tab_title_he}</h2>
+          <h2 className="nx-cdocs-title">
+            {localizeSystemLabel(t, documentsTab.ui.tab_title_key, documentsTab.ui.tab_title_he)}
+          </h2>
           {canEdit ? (
             <button
               type="button"
@@ -238,13 +247,15 @@ export function ClientDocumentsTab({
               disabled={busy}
               onClick={() => setFolderDlg({ mode: 'create' })}
             >
-              + {documentsTab.ui.add_folder_label_he}
+              + {localizeSystemLabel(t, documentsTab.ui.add_folder_label_key, documentsTab.ui.add_folder_label_he)}
             </button>
           ) : null}
         </div>
 
         {folders.length === 0 ? (
-          <p className="nx-cdocs-empty">{documentsTab.ui.empty_folders_state_he}</p>
+          <p className="nx-cdocs-empty">
+            {localizeSystemLabel(t, documentsTab.ui.empty_folders_state_key, documentsTab.ui.empty_folders_state_he)}
+          </p>
         ) : (
           <div className="nx-cdocs-folder-grid">
             {folders.map((f) => (
@@ -262,9 +273,11 @@ export function ClientDocumentsTab({
                   <span className="nx-cdocs-folder-icon-wrap" aria-hidden>
                     <IconFolderLarge />
                   </span>
-                  <span className="nx-cdocs-folder-name">{f.name_he}</span>
+                  <span className="nx-cdocs-folder-name">{localizeSystemLabel(t, f.name_key, f.name_he)}</span>
                   <span className="nx-cdocs-folder-meta">
-                    <span className="nx-cdocs-folder-count">{f.document_count} מסמכים</span>
+                    <span className="nx-cdocs-folder-count">
+                      {fillI18n(t('clientOperations.documents.documentCount'), { count: f.document_count })}
+                    </span>
                   </span>
                 </button>
                 {(f.actions.can_rename || f.actions.can_archive_or_delete) && canEdit ? (
@@ -276,7 +289,7 @@ export function ClientDocumentsTab({
                         disabled={busy}
                         onClick={() => setFolderDlg({ mode: 'rename', folder: f })}
                       >
-                        שינוי שם
+                        {t('clientOperations.documents.rename')}
                       </button>
                     ) : null}
                     {f.actions.can_archive_or_delete ? (
@@ -285,8 +298,8 @@ export function ClientDocumentsTab({
                         className="nx-cdocs-icon-action"
                         disabled={busy}
                         onClick={() => confirmArchiveFolder(f)}
-                        aria-label="מחיקת תיקייה"
-                        title="מחיקה"
+                        aria-label={t('clientOperations.documents.deleteFolder')}
+                        title={t('clientOperations.delete')}
                       >
                         <IconTrashBlue />
                       </button>
@@ -311,7 +324,7 @@ export function ClientDocumentsTab({
               <div className="nx-cdocs-folder-panel-head-actions">
                 {canEdit && openFolderView ? (
                   <button type="button" className="nx-btn nx-btn-primary nx-btn-taxes-compact" disabled={busy} onClick={onPickDocument}>
-                    + {documentsTab.ui.add_document_label_he}
+                    + {localizeSystemLabel(t, documentsTab.ui.add_document_label_key, documentsTab.ui.add_document_label_he)}
                   </button>
                 ) : null}
                 <WorkspaceNestedDialogClose
@@ -323,9 +336,11 @@ export function ClientDocumentsTab({
             </div>
 
             {folderPanelLoading ? (
-              <p className="nx-cdocs-panel-loading">טוען מסמכים…</p>
+              <p className="nx-cdocs-panel-loading">{t('clientOperations.documents.loading')}</p>
             ) : openFolderView && openFolderView.documents.length === 0 ? (
-              <p className="nx-cdocs-empty nx-cdocs-empty--in-panel">{documentsTab.ui.empty_documents_state_he}</p>
+              <p className="nx-cdocs-empty nx-cdocs-empty--in-panel">
+                {localizeSystemLabel(t, documentsTab.ui.empty_documents_state_key, documentsTab.ui.empty_documents_state_he)}
+              </p>
             ) : openFolderView ? (
               <ul className="nx-cdocs-doc-list">
                 {openFolderView.documents.map((d) => {
@@ -346,8 +361,8 @@ export function ClientDocumentsTab({
                             className="nx-cdocs-icon-action"
                             disabled={busy || !d.file_open_allowed}
                             onClick={() => void openFile(d.file_asset_id!)}
-                            aria-label="צפייה במסמך"
-                            title="צפייה"
+                            aria-label={t('clientOperations.documents.viewDocument')}
+                            title={t('clientOperations.documents.view')}
                           >
                             <IconEyeBlue />
                           </button>
@@ -358,8 +373,8 @@ export function ClientDocumentsTab({
                             className="nx-cdocs-icon-action"
                             disabled={busy}
                             onClick={() => confirmDeleteDocument(d.document_id)}
-                            aria-label="מחיקת מסמך"
-                            title="מחיקה"
+                            aria-label={t('clientOperations.documents.deleteDocument')}
+                            title={t('clientOperations.delete')}
                           >
                             <IconTrashBlue />
                           </button>
@@ -384,14 +399,18 @@ export function ClientDocumentsTab({
         >
           <div className="nx-modal nx-cdocs-folder-name-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div className="nx-modal-header">
-              <h2 className="nx-modal-title">{folderDlg.mode === 'create' ? 'תיקייה חדשה' : 'שינוי שם תיקייה'}</h2>
-              <button type="button" className="nx-modal-close" aria-label="סגירה" disabled={busy} onClick={() => setFolderDlg(null)}>
+              <h2 className="nx-modal-title">
+                {folderDlg.mode === 'create'
+                  ? t('clientOperations.documents.newFolder')
+                  : t('clientOperations.documents.renameFolder')}
+              </h2>
+              <button type="button" className="nx-modal-close" aria-label={t('clientOperations.close')} disabled={busy} onClick={() => setFolderDlg(null)}>
                 ×
               </button>
             </div>
             <div className="nx-modal-body">
               <label className="nx-cdocs-field-label" htmlFor="nx-cdocs-folder-name-inp">
-                שם
+                {t('clientOperations.documents.name')}
               </label>
               <input
                 id="nx-cdocs-folder-name-inp"
@@ -399,15 +418,14 @@ export function ClientDocumentsTab({
                 value={folderNameDraft}
                 onChange={(e) => setFolderNameDraft(e.target.value)}
                 disabled={busy}
-                dir="rtl"
               />
             </div>
             <div className="nx-modal-footer nx-tax-nested-modal-footer">
               <button type="button" className="nx-btn nx-btn-primary nx-btn-taxes-compact" disabled={busy} onClick={() => void submitFolderDialog()}>
-                שמירה
+                {t('clientOperations.save')}
               </button>
               <button type="button" className="nx-btn nx-btn-secondary nx-btn-taxes-compact" disabled={busy} onClick={() => setFolderDlg(null)}>
-                ביטול
+                {t('clientOperations.cancel')}
               </button>
             </div>
           </div>

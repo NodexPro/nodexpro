@@ -10,6 +10,11 @@ import {
 } from './client-operations-work-engine-bridge.js';
 import { resolveOfficialFilingDueDateIso } from './client-operations-reporting-due.service.js';
 import { resolveIncomeTaxDeductionsOperationalReportingPeriodKey } from './client-operations-client-quick-profile.pure.js';
+import {
+  CO_UI,
+  obligationCheckboxLabelKey,
+  obligationColumnLabelKey,
+} from './client-operations-ui-labels.pure.js';
 
 /**
  * שכר column — unified payroll process status (Asia/Jerusalem payroll_period_key = previous month).
@@ -129,18 +134,22 @@ type ClientObligationsTabResponse = {
   payroll_manual_modal: null | {
     modal_key: 'payroll_manual_modal';
     title_he: string;
+    title_key?: string;
     payroll_period_key: string;
     payroll_period_display_he: string;
     status_label_he: string;
+    status_label_key?: string;
     checkboxes: Array<{
       key: 'salary_data_received' | 'sent_to_employer' | 'no_salaries_this_month';
       label_he: string;
+      label_key?: string;
       is_checked: boolean;
       interaction: { type: 'command'; command_type: ClientObligationsCommandBody['type']; payload: Record<string, unknown> };
     }>;
     actions: Array<{
       action_key: string;
       action_label_he: string;
+      action_label_key?: string;
       interaction:
         | { type: 'close_modal' }
         | { type: 'command'; command_type: ClientObligationsCommandBody['type']; payload: Record<string, unknown> };
@@ -149,7 +158,9 @@ type ClientObligationsTabResponse = {
   ni_auto_reminder_modal: null | {
     is_visible: boolean;
     title_he: string;
+    title_key?: string;
     message_he: string;
+    message_key?: string;
     monthly_amount: number | null;
     monthly_amount_display_he: string;
     standing_order_checkbox: {
@@ -165,6 +176,7 @@ type ClientObligationsTabResponse = {
     actions: Array<{
       action_key: string;
       action_label_he: string;
+      action_label_key?: string;
       interaction:
         | { type: 'command'; action_key: string; command_type: ClientObligationsCommandBody['type']; payload: Record<string, unknown> }
         | { type: 'open_module'; action_key: string; payload?: Record<string, unknown> };
@@ -172,7 +184,9 @@ type ClientObligationsTabResponse = {
   };
   ni_manual_modal: null | {
     title_he: string;
+    title_key?: string;
     status_label_he: string;
+    status_label_key?: string;
     monthly_amount: number | null;
     monthly_amount_display_he: string;
     standing_order_checkbox: {
@@ -188,6 +202,7 @@ type ClientObligationsTabResponse = {
     actions: Array<{
       action_key: string;
       action_label_he: string;
+      action_label_key?: string;
       interaction:
         | { type: 'command'; action_key: string; command_type: ClientObligationsCommandBody['type']; payload: Record<string, unknown> }
         | { type: 'open_module'; action_key: string; payload?: Record<string, unknown> };
@@ -197,11 +212,14 @@ type ClientObligationsTabResponse = {
     is_visible: boolean;
     modal_key: 'ni_deductions_auto_reminder_modal';
     title_he: string;
+    title_key?: string;
     message_he: string;
+    message_key?: string;
     period_key: string;
     checkboxes: Array<{
       key: 'sent_to_employer' | 'reported_102' | 'reported_100' | 'paid';
       label_he: string;
+      label_key?: string;
       is_checked: boolean;
       interaction:
         | { type: 'command'; command_type: ClientObligationsCommandBody['type']; payload: Record<string, unknown> }
@@ -215,18 +233,23 @@ type ClientObligationsTabResponse = {
     actions: Array<{
       action_key: string;
       action_label_he: string;
+      action_label_key?: string;
       interaction: { type: 'command'; command_type: ClientObligationsCommandBody['type']; payload: Record<string, unknown> };
     }>;
   };
   ni_deductions_manual_modal: null | {
     modal_key: 'ni_deductions_manual_modal';
     title_he: string;
+    title_key?: string;
     message_he: string;
+    message_key?: string;
     period_key: string;
     status_label_he: string;
+    status_label_key?: string;
     checkboxes: Array<{
       key: 'sent_to_employer' | 'reported_102' | 'reported_100' | 'paid';
       label_he: string;
+      label_key?: string;
       is_checked: boolean;
       interaction:
         | { type: 'command'; command_type: ClientObligationsCommandBody['type']; payload: Record<string, unknown> }
@@ -235,6 +258,7 @@ type ClientObligationsTabResponse = {
     actions: Array<{
       action_key: string;
       action_label_he: string;
+      action_label_key?: string;
       interaction: { type: 'command'; command_type: ClientObligationsCommandBody['type']; payload: Record<string, unknown> };
     }>;
   };
@@ -242,6 +266,7 @@ type ClientObligationsTabResponse = {
     columns: Array<{
       key: string;
       label_he: string;
+      label_key?: string;
       kind: 'date' | 'status' | 'action' | 'text' | 'multi_checkbox';
       order: number;
     }>;
@@ -253,11 +278,14 @@ type ClientObligationsTabResponse = {
         column_key: string;
         kind: 'date' | 'status' | 'action' | 'text' | 'multi_checkbox';
         display_value: string;
+        display_value_key?: string;
         status_code?: ObligationStatus | NiDeductionsState | PayrollProcessStatus | IncomeTaxDeductionsAggregateState;
         status_label_he?: string;
+        status_label_key?: string;
         status_tone?: 'critical' | 'warning' | 'ok' | 'blocked' | 'neutral';
         icon_key?: string;
         action_label_he?: string | null;
+        action_label_key?: string | null;
         priority_code?: PriorityCode;
         interaction?: {
           type: 'command' | 'open_module' | 'open_modal' | 'none';
@@ -273,6 +301,7 @@ type ClientObligationsTabResponse = {
         available_actions?: Array<{
           action_key: string;
           action_label_he: string;
+          action_label_key?: string;
           interaction: {
             type: 'command' | 'open_module' | 'open_modal' | 'none';
             action_key?: string;
@@ -288,6 +317,7 @@ type ClientObligationsTabResponse = {
         checkboxes?: Array<{
           key: 'vat' | 'income_advances' | 'payroll';
           label_he: string;
+          label_key?: string;
           is_active: boolean;
           is_checked: boolean;
           show_request_icon?: boolean;
@@ -309,6 +339,7 @@ type ClientObligationsTabResponse = {
           available_actions?: Array<{
             action_key: string;
             action_label_he: string;
+            action_label_key?: string;
             interaction: {
               type: 'command' | 'open_module' | 'open_modal' | 'none';
               action_key?: string;
@@ -328,13 +359,18 @@ type ClientObligationsTabResponse = {
   income_tax_deductions_manual_modal: null | {
     modal_key: 'income_tax_deductions_manual_modal';
     title_he: string;
+    title_key?: string;
     message_he: string;
+    message_key?: string;
+    message_vars?: Record<string, string>;
     period_key: string;
     period_label_he: string;
     status_label_he: string;
+    status_label_key?: string;
     actions: Array<{
       action_key: string;
       action_label_he: string;
+      action_label_key?: string;
       interaction: { type: 'command'; command_type: ClientObligationsCommandBody['type']; payload: Record<string, unknown> };
     }>;
   };
@@ -351,21 +387,28 @@ type ClientObligationsTabResponse = {
     related_module: string;
     priority_score: number;
     priority_level: PriorityLevel;
-    suggested_actions: Array<{ action_key: string; label_he: string }>;
+    suggested_actions: Array<{ action_key: string; label_he: string; label_key?: string }>;
     can_mark_reported: boolean;
     can_mark_reported_and_paid: boolean;
     can_mark_not_reported: boolean;
   }>;
-  period_summary: Array<{ period_key: string; status_label_he: string }>;
+  period_summary: Array<{
+    period_key: string;
+    period_label_key?: string;
+    period_label_vars?: Record<string, string>;
+    status_label_he: string;
+    status_label_key?: string;
+  }>;
   annual_report_summary: {
     period_display_he: string;
     due_date_display_he: string;
     status_code: ObligationStatus;
     status_label_he: string;
+    status_label_key?: string;
     status_tone: 'critical' | 'warning' | 'ok' | 'blocked' | 'neutral';
     icon_key: string;
   } | null;
-  labels: { tab_title_he: string };
+  labels: { tab_title_he: string; tab_title_key?: string };
 };
 
 type ClientTasksTabResponse = {
@@ -638,6 +681,7 @@ function resolveIncomeTaxDeductionsCell(args: {
   state: IncomeTaxDeductionsAggregateState;
   display_value: string;
   status_label_he: string;
+  status_label_key: string;
   status_tone: 'critical' | 'warning' | 'ok' | 'blocked' | 'neutral';
   icon_key: string;
 } {
@@ -647,6 +691,7 @@ function resolveIncomeTaxDeductionsCell(args: {
       state: 'itd_not_required',
       display_value: 'לא נדרש',
       status_label_he: 'לא נדרש',
+      status_label_key: CO_UI.obligations.notRequired,
       status_tone: 'neutral',
       icon_key: 'gray_dot',
     };
@@ -656,6 +701,7 @@ function resolveIncomeTaxDeductionsCell(args: {
       state: 'itd_not_relevant',
       display_value: 'לא רלוונטי',
       status_label_he: 'לא רלוונטי',
+      status_label_key: CO_UI.obligations.notRelevant,
       status_tone: 'neutral',
       icon_key: 'gray_dot',
     };
@@ -665,6 +711,7 @@ function resolveIncomeTaxDeductionsCell(args: {
       state: 'itd_blocked',
       display_value: 'חסום',
       status_label_he: 'חסום',
+      status_label_key: CO_UI.obligations.blocked,
       status_tone: 'blocked',
       icon_key: 'black_dot',
     };
@@ -674,6 +721,7 @@ function resolveIncomeTaxDeductionsCell(args: {
       state: 'itd_paid',
       display_value: 'שולם',
       status_label_he: 'שולם',
+      status_label_key: CO_UI.obligations.paid,
       status_tone: 'ok',
       icon_key: 'green_dot',
     };
@@ -683,6 +731,7 @@ function resolveIncomeTaxDeductionsCell(args: {
       state: 'itd_reported',
       display_value: 'דווח',
       status_label_he: 'דווח',
+      status_label_key: CO_UI.obligations.reported,
       status_tone: 'warning',
       icon_key: 'yellow_dot',
     };
@@ -691,6 +740,7 @@ function resolveIncomeTaxDeductionsCell(args: {
     state: 'itd_not_started',
     display_value: 'לא התחיל',
     status_label_he: 'לא התחיל',
+    status_label_key: CO_UI.obligations.notStarted,
     status_tone: 'blocked',
     icon_key: 'black_dot',
   };
@@ -709,6 +759,7 @@ function buildIncomeTaxDeductionsManualModal(
       actions.push({
         action_key: 'mark_reported',
         action_label_he: 'סמן דווח',
+        action_label_key: CO_UI.obligations.markReported,
         interaction: { type: 'command', command_type: 'mark_income_tax_deductions_reported', payload: p },
       });
     }
@@ -716,29 +767,38 @@ function buildIncomeTaxDeductionsManualModal(
       actions.push({
         action_key: 'mark_paid',
         action_label_he: 'שולם',
+        action_label_key: CO_UI.obligations.paid,
         interaction: { type: 'command', command_type: 'mark_income_tax_deductions_paid', payload: p },
       });
     }
     actions.push({
       action_key: 'mark_not_relevant',
       action_label_he: 'לא רלוונטי',
+      action_label_key: CO_UI.obligations.notRelevant,
       interaction: { type: 'command', command_type: 'mark_income_tax_deductions_not_relevant', payload: p },
     });
   }
   let message_he = `תקופת דיווח: ${req.period_label}. יעד: ${fmtDateHe(req.due_date) ?? req.due_date}.`;
+  let message_key: string = CO_UI.obligations.itdReportingPeriod;
   if (cell.state === 'itd_blocked') {
     message_he = 'נדרש להשלים את מצב השכר (תקין או אין משכורות החודש) לפני דיווח ניכויים.';
+    message_key = CO_UI.obligations.itdBlockedUntilPayroll;
   }
   if (cell.state === 'itd_not_required') {
     message_he = 'לפי התדירות — לא נדרש דיווח החודש.';
+    message_key = CO_UI.obligations.itdNotRequiredThisMonth;
   }
   return {
     modal_key: 'income_tax_deductions_manual_modal',
     title_he: 'מס הכנסה ניכויים',
+    title_key: CO_UI.obligations.incomeTaxDeductionsTitle,
     message_he,
+    message_key,
+    message_vars: { period: req.period_label, due: fmtDateHe(req.due_date) ?? req.due_date },
     period_key: req.period_key,
     period_label_he: req.period_label,
     status_label_he: cell.status_label_he,
+    status_label_key: cell.status_label_key,
     actions,
   };
 }
@@ -844,26 +904,52 @@ function computePayrollProcessStatus(row: PayrollPeriodStateRow): PayrollProcess
 function payrollProcessPresentation(s: PayrollProcessStatus): {
   display_value: string;
   status_label_he: string;
+  status_label_key: string;
   status_tone: 'critical' | 'warning' | 'ok' | 'blocked' | 'neutral';
   icon_key: string;
 } {
   switch (s) {
     case 'payroll_not_relevant':
-      return { display_value: 'לא רלוונטי', status_label_he: 'לא רלוונטי', status_tone: 'neutral', icon_key: 'gray_dot' };
+      return {
+        display_value: 'לא רלוונטי',
+        status_label_he: 'לא רלוונטי',
+        status_label_key: CO_UI.obligations.notRelevant,
+        status_tone: 'neutral',
+        icon_key: 'gray_dot',
+      };
     case 'payroll_no_salaries':
       return {
         display_value: 'אין משכורות החודש',
         status_label_he: 'אין משכורות החודש',
+        status_label_key: CO_UI.obligations.noPayrollThisMonth,
         status_tone: 'neutral',
         icon_key: 'gray_dot',
       };
     case 'payroll_ok':
-      return { display_value: 'תקין', status_label_he: 'תקין', status_tone: 'ok', icon_key: 'green_dot' };
+      return {
+        display_value: 'תקין',
+        status_label_he: 'תקין',
+        status_label_key: CO_UI.obligations.ok,
+        status_tone: 'ok',
+        icon_key: 'green_dot',
+      };
     case 'payroll_ready_to_process':
-      return { display_value: 'חומר התקבל', status_label_he: 'חומר התקבל', status_tone: 'ok', icon_key: 'green_dot' };
+      return {
+        display_value: 'חומר התקבל',
+        status_label_he: 'חומר התקבל',
+        status_label_key: CO_UI.obligations.materialReceived,
+        status_tone: 'ok',
+        icon_key: 'green_dot',
+      };
     case 'payroll_missing_data':
     default:
-      return { display_value: 'חסר נתונים', status_label_he: 'חסר נתונים', status_tone: 'blocked', icon_key: 'yellow_dot' };
+      return {
+        display_value: 'חסר נתונים',
+        status_label_he: 'חסר נתונים',
+        status_label_key: CO_UI.obligations.missingData,
+        status_tone: 'blocked',
+        icon_key: 'yellow_dot',
+      };
   }
 }
 
@@ -1049,13 +1135,16 @@ function buildPayrollManualModal(
   return {
     modal_key: 'payroll_manual_modal',
     title_he: 'עדכון שכר',
+    title_key: CO_UI.obligations.updatePayroll,
     payroll_period_key: payrollPeriodKey,
     payroll_period_display_he: periodKeyToDisplayHe(payrollPeriodKey),
     status_label_he: pres.status_label_he,
+    status_label_key: pres.status_label_key,
     checkboxes: [
       {
         key: 'salary_data_received',
         label_he: 'נתוני שכר התקבלו',
+        label_key: CO_UI.obligations.salaryDataReceived,
         is_checked: row.salary_data_received,
         interaction: {
           type: 'command',
@@ -1066,6 +1155,7 @@ function buildPayrollManualModal(
       {
         key: 'sent_to_employer',
         label_he: 'משכורות נשלחו למעסיק',
+        label_key: CO_UI.obligations.salariesSentToEmployer,
         is_checked: row.sent_to_employer,
         interaction: {
           type: 'command',
@@ -1076,6 +1166,7 @@ function buildPayrollManualModal(
       {
         key: 'no_salaries_this_month',
         label_he: 'אין משכורות החודש',
+        label_key: CO_UI.obligations.noPayrollThisMonth,
         is_checked: row.no_salaries_this_month,
         interaction: {
           type: 'command',
@@ -1088,11 +1179,13 @@ function buildPayrollManualModal(
       {
         action_key: 'close',
         action_label_he: 'שמירה',
+        action_label_key: CO_UI.obligations.save,
         interaction: { type: 'close_modal' },
       },
       {
         action_key: 'not_relevant',
         action_label_he: 'לא רלוונטי',
+        action_label_key: CO_UI.obligations.notRelevant,
         interaction: { type: 'command', command_type: 'mark_payroll_period_not_relevant', payload: p },
       },
     ],
@@ -1152,25 +1245,62 @@ function computeNiDeductionsState(
 function niDeductionsPresentation(state: NiDeductionsState): {
   display_value: string;
   status_label_he: string;
+  status_label_key: string;
   status_tone: 'critical' | 'warning' | 'ok' | 'blocked' | 'neutral';
   icon_key: string;
 } {
   switch (state) {
     case 'not_relevant':
-      return { display_value: 'לא רלוונטי', status_label_he: 'לא רלוונטי', status_tone: 'neutral', icon_key: 'gray_dot' };
+      return {
+        display_value: 'לא רלוונטי',
+        status_label_he: 'לא רלוונטי',
+        status_label_key: CO_UI.obligations.notRelevant,
+        status_tone: 'neutral',
+        icon_key: 'gray_dot',
+      };
     case 'not_started':
-      return { display_value: 'לא התחיל', status_label_he: 'לא התחיל', status_tone: 'blocked', icon_key: 'black_dot' };
+      return {
+        display_value: 'לא התחיל',
+        status_label_he: 'לא התחיל',
+        status_label_key: CO_UI.obligations.notStarted,
+        status_tone: 'blocked',
+        icon_key: 'black_dot',
+      };
     case 'in_progress':
-      return { display_value: 'בטיפול', status_label_he: 'בטיפול', status_tone: 'warning', icon_key: 'yellow_dot' };
+      return {
+        display_value: 'בטיפול',
+        status_label_he: 'בטיפול',
+        status_label_key: CO_UI.obligations.inProgress,
+        status_tone: 'warning',
+        icon_key: 'yellow_dot',
+      };
     case 'ready':
-      return { display_value: 'מוכן לתשלום', status_label_he: 'מוכן לתשלום', status_tone: 'warning', icon_key: 'yellow_dot' };
+      return {
+        display_value: 'מוכן לתשלום',
+        status_label_he: 'מוכן לתשלום',
+        status_label_key: CO_UI.obligations.readyToPay,
+        status_tone: 'warning',
+        icon_key: 'yellow_dot',
+      };
     case 'paid_on_time':
     case 'paid_late':
-      return { display_value: 'שולם', status_label_he: 'שולם', status_tone: 'ok', icon_key: 'green_dot' };
+      return {
+        display_value: 'שולם',
+        status_label_he: 'שולם',
+        status_label_key: CO_UI.obligations.paid,
+        status_tone: 'ok',
+        icon_key: 'green_dot',
+      };
     case 'not_paid':
-      return { display_value: 'לא שולם', status_label_he: 'לא שולם', status_tone: 'critical', icon_key: 'red_dot' };
+      return {
+        display_value: 'לא שולם',
+        status_label_he: 'לא שולם',
+        status_label_key: CO_UI.obligations.unpaid,
+        status_tone: 'critical',
+        icon_key: 'red_dot',
+      };
     default:
-      return { display_value: '—', status_label_he: '—', status_tone: 'neutral', icon_key: 'gray_dot' };
+      return { display_value: '—', status_label_he: '—', status_label_key: '', status_tone: 'neutral', icon_key: 'gray_dot' };
   }
 }
 
@@ -1310,6 +1440,7 @@ function niDeductionsCheckboxDefs(
 ): Array<{
   key: 'sent_to_employer' | 'reported_102' | 'reported_100' | 'paid';
   label_he: string;
+  label_key?: string;
   is_checked: boolean;
   interaction:
     | { type: 'command'; command_type: 'set_ni_deductions_step'; payload: Record<string, unknown> }
@@ -1320,12 +1451,14 @@ function niDeductionsCheckboxDefs(
     {
       key: 'sent_to_employer' as const,
       label_he: 'משכורות נשלחו למעסיק',
+      label_key: CO_UI.obligations.salariesSentToEmployer,
       is_checked: payrollRow.sent_to_employer,
       interaction: { type: 'open_modal' as const, modal_key: 'payroll_manual_modal' as const },
     },
     {
       key: 'reported_102' as const,
       label_he: 'טופס 102 דווח',
+      label_key: CO_UI.obligations.form102Reported,
       is_checked: row.reported_102,
       interaction: {
         type: 'command' as const,
@@ -1336,6 +1469,7 @@ function niDeductionsCheckboxDefs(
     {
       key: 'reported_100' as const,
       label_he: 'טופס 100 דווח',
+      label_key: CO_UI.obligations.form100Reported,
       is_checked: row.reported_100,
       interaction: {
         type: 'command' as const,
@@ -1346,6 +1480,7 @@ function niDeductionsCheckboxDefs(
     {
       key: 'paid' as const,
       label_he: 'ביטוח לאומי ניכויים שולם',
+      label_key: CO_UI.obligations.niDeductionsPaid,
       is_checked: row.paid,
       interaction: {
         type: 'command' as const,
@@ -1362,6 +1497,7 @@ function niDeductionsModalActions(
 ): Array<{
   action_key: string;
   action_label_he: string;
+  action_label_key?: string;
   interaction: { type: 'command'; command_type: ClientObligationsCommandBody['type']; payload: Record<string, unknown> };
 }> {
   if (ndState === 'paid_on_time' || ndState === 'paid_late') return [];
@@ -1370,16 +1506,19 @@ function niDeductionsModalActions(
     {
       action_key: 'payroll_in_progress',
       action_label_he: 'משכורות בטיפול',
+      action_label_key: CO_UI.obligations.payrollInProgress,
       interaction: { type: 'command', command_type: 'mark_ni_deductions_payroll_in_progress', payload: p },
     },
     {
       action_key: 'reported_and_paid',
       action_label_he: 'דווח ושולם',
+      action_label_key: CO_UI.obligations.reportedAndPaid,
       interaction: { type: 'command', command_type: 'mark_ni_deductions_reported_and_paid', payload: p },
     },
     {
       action_key: 'not_relevant',
       action_label_he: 'לא רלוונטי',
+      action_label_key: CO_UI.obligations.notRelevant,
       interaction: { type: 'command', command_type: 'mark_ni_deductions_not_relevant', payload: p },
     },
   ];
@@ -1474,6 +1613,45 @@ function statusLabelHe(status: ObligationStatus): string {
   }
 }
 
+function statusLabelKey(status: ObligationStatus): string {
+  switch (status) {
+    case 'not_relevant':
+      return CO_UI.obligations.notRelevant;
+    case 'waiting_for_material':
+      return CO_UI.obligations.waitingForMaterial;
+    case 'waiting_for_salary_data':
+      return CO_UI.obligations.waitingForSalaryData;
+    case 'waiting_for_income_data':
+      return CO_UI.obligations.waitingForIncomeData;
+    case 'waiting_client_response':
+      return CO_UI.obligations.waitingClientResponse;
+    case 'missing_data':
+      return CO_UI.obligations.missingData;
+    case 'ready_to_report':
+      return CO_UI.obligations.readyToReport;
+    case 'ready_to_process':
+      return CO_UI.obligations.readyToProcess;
+    case 'pending_payment_confirmation':
+      return CO_UI.obligations.pendingPayment;
+    case 'not_reported':
+      return CO_UI.obligations.notReported;
+    case 'reported':
+      return CO_UI.obligations.reported;
+    case 'reported_late':
+      return CO_UI.obligations.reportedLate;
+    case 'reported_and_paid':
+      return CO_UI.obligations.reportedAndPaid;
+    case 'not_paid':
+      return CO_UI.obligations.unpaid;
+    case 'paid_on_time':
+      return CO_UI.obligations.ok;
+    case 'paid_late':
+      return CO_UI.obligations.overdue;
+    default:
+      return '';
+  }
+}
+
 function computePriorityScore(status: ObligationStatus, obligationType: string, hasMissingData: boolean): number {
   void obligationType;
   if (status === 'not_reported' || status === 'reported_late') return 100;
@@ -1514,16 +1692,29 @@ function statusIconKey(status: ObligationStatus): string {
 function cellsToPriorityState(states: ObligationStatus[]): {
   code: PriorityCode;
   label_he: string;
+  label_key: string;
   tone: 'critical' | 'warning' | 'ok';
   icon_key: string;
 } {
   if (states.some((s) => s === 'not_reported' || s === 'reported_late' || s === 'missing_data' || s === 'not_paid' || s === 'paid_late')) {
-    return { code: 'high_today', label_he: 'דחוף היום', tone: 'critical', icon_key: 'red_dot' };
+    return {
+      code: 'high_today',
+      label_he: 'דחוף היום',
+      label_key: CO_UI.obligations.urgentToday,
+      tone: 'critical',
+      icon_key: 'red_dot',
+    };
   }
   if (states.some((s) => s === 'waiting_client_response' || s.startsWith('waiting_for_') || s === 'pending_payment_confirmation')) {
-    return { code: 'warning', label_he: 'לטיפול בקרוב', tone: 'warning', icon_key: 'yellow_dot' };
+    return {
+      code: 'warning',
+      label_he: 'לטיפול בקרוב',
+      label_key: CO_UI.obligations.handleSoon,
+      tone: 'warning',
+      icon_key: 'yellow_dot',
+    };
   }
-  return { code: 'ok', label_he: 'תקין', tone: 'ok', icon_key: 'green_dot' };
+  return { code: 'ok', label_he: 'תקין', label_key: CO_UI.obligations.ok, tone: 'ok', icon_key: 'green_dot' };
 }
 
 function isVatBiMonthlyReportingMonth(now: Date): boolean {
@@ -1609,11 +1800,12 @@ type ObligationRowView = {
   due_date_display_he: string;
   status_code: ObligationStatus;
   status_label_he: string;
+  status_label_key?: string;
   blocking_reason_he: string | null;
   related_module: string;
   priority_score: number;
   priority_level: PriorityLevel;
-  suggested_actions: Array<{ action_key: string; label_he: string }>;
+  suggested_actions: Array<{ action_key: string; label_he: string; label_key?: string }>;
   can_mark_reported: boolean;
   can_mark_reported_and_paid: boolean;
   can_mark_not_reported: boolean;
@@ -1674,6 +1866,7 @@ function availableActionsForCell(
       {
         action_key: 'request_data',
         action_label_he: 'בקש מסמכים מהלקוח',
+        action_label_key: CO_UI.obligations.requestDocumentsFromClient,
         interaction: {
           type: 'command',
           action_key: 'request_data',
@@ -1684,11 +1877,13 @@ function availableActionsForCell(
       {
         action_key: 'mark_received',
         action_label_he: 'סמן חומר כהתקבל',
+        action_label_key: CO_UI.obligations.markMaterialReceived,
         interaction: { type: 'command', action_key: 'mark_received', command_type: 'mark_material_received', payload: obIdPayload },
       },
       {
         action_key: 'mark_not_relevant',
         action_label_he: 'סמן לא רלוונטי',
+        action_label_key: CO_UI.obligations.markNotRelevantAction,
         interaction: { type: 'command', action_key: 'mark_not_relevant', command_type: 'mark_material_not_relevant', payload: obIdPayload },
       }
     );
@@ -1697,6 +1892,7 @@ function availableActionsForCell(
       {
         action_key: 'request_data',
         action_label_he: 'בקש נתוני שכר',
+        action_label_key: CO_UI.obligations.requestSalaryData,
         interaction: {
           type: 'command',
           action_key: 'request_data',
@@ -1707,11 +1903,13 @@ function availableActionsForCell(
       {
         action_key: 'mark_received',
         action_label_he: 'סמן נתוני שכר כהתקבלו',
+        action_label_key: CO_UI.obligations.markSalaryReceived,
         interaction: { type: 'command', action_key: 'mark_received', command_type: 'mark_salary_data_received', payload: obIdPayload },
       },
       {
         action_key: 'mark_not_relevant',
         action_label_he: 'סמן לא רלוונטי',
+        action_label_key: CO_UI.obligations.markNotRelevantAction,
         interaction: { type: 'command', action_key: 'mark_not_relevant', command_type: 'mark_salary_data_not_relevant', payload: obIdPayload },
       }
     );
@@ -1720,6 +1918,7 @@ function availableActionsForCell(
       {
         action_key: 'request_data',
         action_label_he: 'בקש הכנסות',
+        action_label_key: CO_UI.obligations.requestIncome,
         interaction: {
           type: 'command',
           action_key: 'request_data',
@@ -1730,11 +1929,13 @@ function availableActionsForCell(
       {
         action_key: 'mark_received',
         action_label_he: 'סמן הכנסות כהתקבלו',
+        action_label_key: CO_UI.obligations.markIncomeReceived,
         interaction: { type: 'command', action_key: 'mark_received', command_type: 'mark_income_data_received', payload: obIdPayload },
       },
       {
         action_key: 'mark_not_relevant',
         action_label_he: 'סמן לא רלוונטי',
+        action_label_key: CO_UI.obligations.markNotRelevantAction,
         interaction: { type: 'command', action_key: 'mark_not_relevant', command_type: 'mark_income_data_not_relevant', payload: obIdPayload },
       }
     );
@@ -1744,11 +1945,13 @@ function availableActionsForCell(
       {
         action_key: 'mark_reported',
         action_label_he: 'סמן כהוגש',
+        action_label_key: CO_UI.obligations.markSubmitted,
         interaction: { type: 'command', action_key: 'mark_reported', command_type: 'mark_obligation_reported', payload: obIdPayload },
       },
       {
         action_key: 'mark_reported_and_paid',
         action_label_he: 'סמן כהוגש ושולם',
+        action_label_key: CO_UI.obligations.markSubmittedAndPaid,
         interaction: {
           type: 'command',
           action_key: 'mark_reported_and_paid',
@@ -1759,6 +1962,7 @@ function availableActionsForCell(
       {
         action_key: 'mark_not_reported',
         action_label_he: 'סמן כלא דווח',
+        action_label_key: CO_UI.obligations.markNotReported,
         interaction: { type: 'command', action_key: 'mark_not_reported', command_type: 'mark_obligation_not_reported', payload: obIdPayload },
       }
     );
@@ -1766,6 +1970,7 @@ function availableActionsForCell(
       out.push({
         action_key: 'notify_payment',
         action_label_he: 'עדכן סכום לתשלום',
+        action_label_key: CO_UI.obligations.updateAmount,
         interaction: { type: 'command', action_key: 'notify_payment', command_type: 'notify_client_payment_amount', payload: obIdPayload },
       });
     }
@@ -1774,21 +1979,25 @@ function availableActionsForCell(
       {
         action_key: 'mark_paid',
         action_label_he: 'שולם',
+        action_label_key: CO_UI.obligations.paid,
         interaction: { type: 'command', action_key: 'mark_paid', command_type: 'mark_ni_paid', payload: obIdPayload },
       },
       {
         action_key: 'mark_not_paid',
         action_label_he: 'עדיין לא שולם',
+        action_label_key: CO_UI.obligations.stillUnpaid,
         interaction: { type: 'command', action_key: 'mark_not_paid', command_type: 'mark_ni_not_paid', payload: obIdPayload },
       },
       {
         action_key: 'update_amount',
         action_label_he: 'לעדכן סכום לתשלום',
+        action_label_key: CO_UI.obligations.updateAmount,
         interaction: { type: 'open_module', action_key: 'open_national_insurance' },
       },
       {
         action_key: 'mark_not_relevant',
         action_label_he: 'לא רלוונטי',
+        action_label_key: CO_UI.obligations.notRelevant,
         interaction: { type: 'command', action_key: 'mark_not_relevant', command_type: 'mark_ni_not_relevant', payload: obIdPayload },
       }
     );
@@ -1822,11 +2031,18 @@ function niSelfEmployedPriorityStatus(ob: ObligationRowView, todayYmd: string): 
 function nationalInsuranceSelfEmployedCellPresentation(
   ob: ObligationRowView,
   todayYmd: string
-): { display_value: string; status_label_he: string; status_tone: ReturnType<typeof statusTone>; icon_key: string } {
+): {
+  display_value: string;
+  status_label_he: string;
+  status_label_key: string;
+  status_tone: ReturnType<typeof statusTone>;
+  icon_key: string;
+} {
   if (ob.status_code === 'paid_on_time' || ob.status_code === 'paid_late') {
     return {
       display_value: 'שולם',
       status_label_he: 'שולם',
+      status_label_key: CO_UI.obligations.paid,
       status_tone: 'ok',
       icon_key: 'green_dot',
     };
@@ -1835,6 +2051,7 @@ function nationalInsuranceSelfEmployedCellPresentation(
     return {
       display_value: 'באיחור',
       status_label_he: 'באיחור',
+      status_label_key: CO_UI.obligations.overdue,
       status_tone: 'critical',
       icon_key: 'red_dot',
     };
@@ -1842,6 +2059,7 @@ function nationalInsuranceSelfEmployedCellPresentation(
   return {
     display_value: statusLabelHe(ob.status_code),
     status_label_he: statusLabelHe(ob.status_code),
+    status_label_key: statusLabelKey(ob.status_code),
     status_tone: statusTone(ob.status_code),
     icon_key: statusIconKey(ob.status_code),
   };
@@ -1894,15 +2112,15 @@ function buildObligationsTable(
   } | null
 ): ClientObligationsTabResponse['table'] {
   const columns: ClientObligationsTabResponse['table']['columns'] = [
-    { key: 'payroll', label_he: 'שכר', kind: 'status', order: 1 },
-    { key: 'material', label_he: 'הביא חומר', kind: 'multi_checkbox', order: 2 },
-    { key: 'vat', label_he: 'מע״מ', kind: 'status', order: 3 },
-    { key: 'vat_due_day', label_he: 'יום יעד דיווח מע״מ', kind: 'date', order: 4 },
-    { key: 'income_advances', label_he: 'מקדמות מס הכנסה', kind: 'status', order: 5 },
-    { key: 'ni', label_he: 'ביטוח לאומי', kind: 'status', order: 6 },
-    { key: 'ni_deductions', label_he: 'ביטוח לאומי ניכויים', kind: 'status', order: 7 },
-    { key: 'income_tax_deductions', label_he: 'מס הכנסה ניכויים', kind: 'status', order: 8 },
-    { key: 'priority', label_he: 'עדיפות', kind: 'status', order: 9 },
+    { key: 'payroll', label_he: 'שכר', label_key: obligationColumnLabelKey('payroll'), kind: 'status', order: 1 },
+    { key: 'material', label_he: 'הביא חומר', label_key: obligationColumnLabelKey('material'), kind: 'multi_checkbox', order: 2 },
+    { key: 'vat', label_he: 'מע״מ', label_key: obligationColumnLabelKey('vat'), kind: 'status', order: 3 },
+    { key: 'vat_due_day', label_he: 'יום יעד דיווח מע״מ', label_key: obligationColumnLabelKey('vat_due_day'), kind: 'date', order: 4 },
+    { key: 'income_advances', label_he: 'מקדמות מס הכנסה', label_key: obligationColumnLabelKey('income_advances'), kind: 'status', order: 5 },
+    { key: 'ni', label_he: 'ביטוח לאומי', label_key: obligationColumnLabelKey('ni'), kind: 'status', order: 6 },
+    { key: 'ni_deductions', label_he: 'ביטוח לאומי ניכויים', label_key: obligationColumnLabelKey('ni_deductions'), kind: 'status', order: 7 },
+    { key: 'income_tax_deductions', label_he: 'מס הכנסה ניכויים', label_key: obligationColumnLabelKey('income_tax_deductions'), kind: 'status', order: 8 },
+    { key: 'priority', label_he: 'עדיפות', label_key: obligationColumnLabelKey('priority'), kind: 'status', order: 9 },
   ];
   const pick = (pred: (o: ObligationRowView) => boolean): ObligationRowView | null => obligations.find(pred) ?? null;
   const vat = pick((o) => o.obligation_type === 'vat_report');
@@ -1915,6 +2133,11 @@ function buildObligationsTable(
     if (columnKey === 'payroll') return 'אין עובדים';
     if (columnKey === 'material') return 'לא נדרש';
     return 'לא רלוונטי';
+  };
+  const fallbackDisplayKeyByColumn = (columnKey: string): string => {
+    if (columnKey === 'payroll') return CO_UI.obligations.noEmployees;
+    if (columnKey === 'material') return CO_UI.obligations.notRequired;
+    return CO_UI.obligations.notRelevant;
   };
   const statusCell = (columnKey: string, ob: ObligationRowView | null): ClientObligationsTabResponse['table']['rows'][number]['cells'][number] => {
     if (!ob) {
@@ -1932,11 +2155,14 @@ function buildObligationsTable(
         column_key: columnKey,
         kind: 'status',
         display_value: fallbackDisplayByColumn(columnKey),
+        display_value_key: fallbackDisplayKeyByColumn(columnKey),
         status_code: 'not_relevant',
         status_label_he: fallbackDisplayByColumn(columnKey),
+        status_label_key: fallbackDisplayKeyByColumn(columnKey),
         status_tone: 'neutral',
         icon_key: 'gray_dot',
         action_label_he: 'פתח מודול',
+        action_label_key: CO_UI.obligations.openModule,
         interaction: interactionByColumn[columnKey] ?? { type: 'none' },
         available_actions: [],
       };
@@ -1951,12 +2177,19 @@ function buildObligationsTable(
     const standingOrderActive = Boolean(standingOrderUntil) && standingOrderUntil >= ymd(now);
     const niPres = niSelfCell ? nationalInsuranceSelfEmployedCellPresentation(ob, todayYmd) : null;
     const niDisplay = niPres?.display_value ?? statusLabelHe(ob.status_code);
+    const fallbackActionKey = interaction.action_key
+      ? interaction.type === 'command'
+        ? CO_UI.obligations.performAction
+        : CO_UI.obligations.openModule
+      : null;
     return {
       column_key: columnKey,
       kind: 'status',
       display_value: niDisplay,
+      display_value_key: niPres?.status_label_key ?? statusLabelKey(ob.status_code),
       status_code: ob.status_code,
       status_label_he: niPres?.status_label_he ?? statusLabelHe(ob.status_code),
+      status_label_key: niPres?.status_label_key ?? statusLabelKey(ob.status_code),
       status_tone: niPres?.status_tone ?? statusTone(ob.status_code),
       icon_key: niPres?.icon_key ?? statusIconKey(ob.status_code),
       action_label_he: vatBlockedByMaterial
@@ -1964,6 +2197,9 @@ function buildObligationsTable(
         : niSelfCell
           ? null
           : availableActions[0]?.action_label_he ?? (interaction.action_key ? (interaction.type === 'command' ? 'בצע פעולה' : 'פתח מודול') : null),
+      action_label_key: vatBlockedByMaterial || niSelfCell
+        ? null
+        : availableActions[0]?.action_label_key ?? fallbackActionKey,
       interaction,
       available_actions: niSelfCell ? undefined : availableActions,
     };
@@ -1972,7 +2208,9 @@ function buildObligationsTable(
     column_key: columnKey,
     kind: 'date',
     display_value: ob ? ob.due_date_display_he || ob.due_date : 'לא נדרש',
+    display_value_key: ob ? undefined : CO_UI.obligations.notRequired,
     action_label_he: 'פתח מע״מ',
+    action_label_key: CO_UI.obligations.openVat,
     interaction: {
       type: 'open_module',
       action_key: ob ? 'report_vat' : 'open_vat',
@@ -2017,6 +2255,7 @@ function buildObligationsTable(
       return {
         key,
         label_he,
+        label_key: obligationCheckboxLabelKey(key),
         is_active,
         is_checked,
         show_request_icon: shouldShowRequestIcon,
@@ -2047,6 +2286,7 @@ function buildObligationsTable(
               {
                 action_key: 'request_data',
                 action_label_he: 'בקש נתונים',
+                action_label_key: CO_UI.obligations.requestData,
                 interaction: {
                   type: 'command' as const,
                   action_key: 'request_data',
@@ -2057,6 +2297,7 @@ function buildObligationsTable(
               {
                 action_key: 'mark_received',
                 action_label_he: 'סמן כהתקבל',
+                action_label_key: CO_UI.obligations.markReceived,
                 interaction: {
                   type: 'command' as const,
                   action_key: 'mark_received',
@@ -2067,6 +2308,7 @@ function buildObligationsTable(
               {
                 action_key: 'mark_not_relevant',
                 action_label_he: 'סמן לא רלוונטי',
+        action_label_key: CO_UI.obligations.markNotRelevantAction,
                 interaction: {
                   type: 'command' as const,
                   action_key: 'mark_not_relevant',
@@ -2101,11 +2343,14 @@ function buildObligationsTable(
       column_key: 'payroll',
       kind: 'status',
       display_value: pres.display_value,
+      display_value_key: pres.status_label_key,
       status_code: payrollProcessCtx.payrollProcess,
       status_label_he: pres.status_label_he,
+      status_label_key: pres.status_label_key,
       status_tone: pres.status_tone,
       icon_key: pres.icon_key,
       action_label_he: 'עדכון',
+      action_label_key: CO_UI.obligations.update,
       interaction: { type: 'open_modal', modal_key: 'payroll_manual_modal' },
       available_actions: [],
     };
@@ -2125,11 +2370,14 @@ function buildObligationsTable(
           column_key: 'ni_deductions',
           kind: 'status' as const,
           display_value: 'לא רלוונטי',
+          display_value_key: CO_UI.obligations.notRelevant,
           status_code: 'not_relevant' as const,
           status_label_he: 'לא רלוונטי',
+          status_label_key: CO_UI.obligations.notRelevant,
           status_tone: 'neutral' as const,
           icon_key: 'gray_dot',
           action_label_he: 'פתח מיסים',
+          action_label_key: CO_UI.obligations.openTaxes,
           interaction: { type: 'open_module' as const, action_key: 'open_national_insurance_deductions' },
           available_actions: [],
         };
@@ -2141,11 +2389,14 @@ function buildObligationsTable(
         column_key: 'ni_deductions',
         kind: 'status' as const,
           display_value: 'ממתין',
+          display_value_key: CO_UI.obligations.waiting,
           status_code: 'missing_data' as const,
           status_label_he: 'חסר נתונים',
+          status_label_key: CO_UI.obligations.missingData,
           status_tone: 'blocked' as const,
           icon_key: 'yellow_dot',
         action_label_he: 'פתח מיסים',
+        action_label_key: CO_UI.obligations.openTaxes,
         interaction: { type: 'open_module' as const, action_key: 'open_national_insurance_deductions' },
           available_actions: [],
         };
@@ -2155,8 +2406,10 @@ function buildObligationsTable(
           column_key: 'ni_deductions',
           kind: 'status' as const,
           display_value: 'ממתין לשכר',
+          display_value_key: CO_UI.obligations.waitingForPayroll,
           status_code: 'waiting_for_salary_data' as const,
           status_label_he: 'ממתין לשכר',
+          status_label_key: CO_UI.obligations.waitingForPayroll,
           status_tone: 'blocked' as const,
           icon_key: 'black_dot',
           action_label_he: null,
@@ -2177,8 +2430,10 @@ function buildObligationsTable(
             column_key: 'ni_deductions',
             kind: 'status' as const,
             display_value: presPaid.display_value,
+            display_value_key: presPaid.status_label_key,
             status_code: ndStatePaid,
             status_label_he: presPaid.status_label_he,
+            status_label_key: presPaid.status_label_key,
             status_tone: presPaid.status_tone,
             icon_key: presPaid.icon_key,
             action_label_he: null,
@@ -2190,11 +2445,14 @@ function buildObligationsTable(
           column_key: 'ni_deductions',
           kind: 'status' as const,
           display_value: presPaid.display_value,
+          display_value_key: presPaid.status_label_key,
           status_code: ndStatePaid,
           status_label_he: presPaid.status_label_he,
+          status_label_key: presPaid.status_label_key,
           status_tone: presPaid.status_tone,
           icon_key: presPaid.icon_key,
           action_label_he: 'עדכון',
+      action_label_key: CO_UI.obligations.update,
           interaction: { type: 'open_modal' as const, modal_key: 'ni_deductions_manual_modal' as const },
           available_actions: [],
         };
@@ -2204,8 +2462,10 @@ function buildObligationsTable(
           column_key: 'ni_deductions',
           kind: 'status' as const,
           display_value: 'ממתין לשכר',
+          display_value_key: CO_UI.obligations.waitingForPayroll,
           status_code: 'waiting_for_salary_data' as const,
           status_label_he: 'ממתין לשכר',
+          status_label_key: CO_UI.obligations.waitingForPayroll,
           status_tone: 'blocked' as const,
           icon_key: 'black_dot',
           action_label_he: null,
@@ -2225,8 +2485,10 @@ function buildObligationsTable(
           column_key: 'ni_deductions',
           kind: 'status' as const,
           display_value: pres.display_value,
+          display_value_key: pres.status_label_key,
           status_code: ndState,
           status_label_he: pres.status_label_he,
+          status_label_key: pres.status_label_key,
           status_tone: pres.status_tone,
           icon_key: pres.icon_key,
           action_label_he: null,
@@ -2238,11 +2500,14 @@ function buildObligationsTable(
         column_key: 'ni_deductions',
         kind: 'status' as const,
         display_value: pres.display_value,
+        display_value_key: pres.status_label_key,
         status_code: ndState,
         status_label_he: pres.status_label_he,
+        status_label_key: pres.status_label_key,
         status_tone: pres.status_tone,
         icon_key: pres.icon_key,
         action_label_he: 'עדכון',
+        action_label_key: CO_UI.obligations.update,
         interaction: { type: 'open_modal' as const, modal_key: 'ni_deductions_manual_modal' as const },
         available_actions: [],
       };
@@ -2254,11 +2519,14 @@ function buildObligationsTable(
           column_key: 'income_tax_deductions',
           kind: 'status' as const,
           display_value: 'לא רלוונטי',
+          display_value_key: CO_UI.obligations.notRelevant,
           status_code: 'not_relevant' as const,
           status_label_he: 'לא רלוונטי',
+          status_label_key: CO_UI.obligations.notRelevant,
           status_tone: 'neutral' as const,
           icon_key: 'gray_dot',
           action_label_he: 'פתח מיסים',
+          action_label_key: CO_UI.obligations.openTaxes,
           interaction: { type: 'open_module' as const, action_key: 'open_income_tax_deductions' },
           available_actions: [],
         };
@@ -2269,11 +2537,14 @@ function buildObligationsTable(
         column_key: 'income_tax_deductions',
         kind: 'status' as const,
           display_value: 'ממתין',
+          display_value_key: CO_UI.obligations.waiting,
           status_code: 'missing_data' as const,
           status_label_he: 'חסר נתונים',
+          status_label_key: CO_UI.obligations.missingData,
           status_tone: 'blocked' as const,
           icon_key: 'yellow_dot',
         action_label_he: 'פתח מיסים',
+        action_label_key: CO_UI.obligations.openTaxes,
         interaction: { type: 'open_module' as const, action_key: 'open_income_tax_deductions' },
           available_actions: [],
         };
@@ -2283,11 +2554,14 @@ function buildObligationsTable(
           column_key: 'income_tax_deductions',
           kind: 'status' as const,
           display_value: 'ממתין',
+          display_value_key: CO_UI.obligations.waiting,
           status_code: 'missing_data' as const,
           status_label_he: 'חסר תדירות דיווח',
+          status_label_key: CO_UI.obligations.missingReportingFrequency,
           status_tone: 'blocked' as const,
           icon_key: 'yellow_dot',
           action_label_he: 'פתח מיסים',
+          action_label_key: CO_UI.obligations.openTaxes,
           interaction: { type: 'open_module' as const, action_key: 'open_income_tax_deductions' },
           available_actions: [],
         };
@@ -2299,11 +2573,14 @@ function buildObligationsTable(
         column_key: 'income_tax_deductions',
         kind: 'status' as const,
         display_value: cell.display_value,
+        display_value_key: cell.status_label_key,
         status_code: cell.state,
         status_label_he: cell.status_label_he,
+        status_label_key: cell.status_label_key,
         status_tone: cell.status_tone,
         icon_key: cell.icon_key,
         action_label_he: openItdModal ? 'עדכון' : 'פתח מיסים',
+        action_label_key: openItdModal ? CO_UI.obligations.update : CO_UI.obligations.openTaxes,
         interaction: openItdModal
           ? { type: 'open_modal' as const, modal_key: 'income_tax_deductions_manual_modal' as const }
           : { type: 'open_module' as const, action_key: 'open_income_tax_deductions' },
@@ -2327,10 +2604,13 @@ function buildObligationsTable(
         column_key: 'priority',
         kind: 'status' as const,
         display_value: scoringStates.label_he,
+        display_value_key: scoringStates.label_key,
         status_label_he: scoringStates.label_he,
+        status_label_key: scoringStates.label_key,
         status_tone: scoringStates.tone,
         icon_key: scoringStates.icon_key,
         action_label_he: 'הצג משימות',
+        action_label_key: CO_UI.obligations.showTasks,
         priority_code: scoringStates.code,
         interaction: { type: 'open_module' as const, action_key: 'open_tasks' },
         available_actions: [],
@@ -2351,21 +2631,21 @@ function buildObligationsTable(
   };
 }
 
-function obligationActionList(obligationType: string): Array<{ action_key: string; label_he: string }> {
+function obligationActionList(obligationType: string): Array<{ action_key: string; label_he: string; label_key?: string }> {
   if (obligationType === 'vat_report') {
     return [
-      { action_key: 'open_documents', label_he: 'פתח מסמכים' },
-      { action_key: 'request_documents', label_he: 'בקש מסמכים מהלקוח' },
-      { action_key: 'mark_reported', label_he: 'סמן כהוגש' },
+      { action_key: 'open_documents', label_he: 'פתח מסמכים', label_key: CO_UI.obligations.openDocuments },
+      { action_key: 'request_documents', label_he: 'בקש מסמכים מהלקוח', label_key: CO_UI.obligations.requestDocumentsFromClient },
+      { action_key: 'mark_reported', label_he: 'סמן כהוגש', label_key: CO_UI.obligations.markSubmitted },
     ];
   }
   if (obligationType === 'payroll_data') {
     return [
-      { action_key: 'open_payroll', label_he: 'פתח שכר' },
-      { action_key: 'request_salary_data', label_he: 'בקש נתוני שכר' },
+      { action_key: 'open_payroll', label_he: 'פתח שכר', label_key: CO_UI.obligations.openPayroll },
+      { action_key: 'request_salary_data', label_he: 'בקש נתוני שכר', label_key: CO_UI.obligations.requestSalaryData },
     ];
   }
-  return [{ action_key: 'open_related_module', label_he: 'פתח מודול קשור' }];
+  return [{ action_key: 'open_related_module', label_he: 'פתח מודול קשור', label_key: CO_UI.obligations.openRelatedModule }];
 }
 
 function taskSuggestedActionByType(taskType: string): { action_key: string; label_he: string } | null {
@@ -2390,6 +2670,23 @@ type RelevantObligationInput = {
   related_module: string;
   computed_status: ObligationStatus;
 };
+
+function vatDueDateFromPeriod(
+  reportingEndYear: number,
+  reportingEndMonth: number,
+  vatDueType: string | null
+): string {
+  const dueDay = vatDueType === 'pcn' ? 23 : 19;
+  const due = shiftUtcMonth(reportingEndYear, reportingEndMonth, 1);
+  const dueMonth = due.month;
+  const dueYear = due.year;
+  return `${dueYear}-${String(dueMonth).padStart(2, '0')}-${String(dueDay).padStart(2, '0')}`;
+}
+
+function annualDueDate(now: Date): string {
+  const y = Number(businessYmd(now).slice(0, 4));
+  return `${y}-05-31`;
+}
 
 function vatObligationIdentityPeriodKey(
   isBiMonthlyVat: boolean,
@@ -2932,6 +3229,7 @@ export async function getClientObligationsTabReadModel(ctx: RequestContext, clie
       due_date_display_he: fmtDateHe(String(r.due_date)) ?? String(r.due_date),
       status_code: status,
       status_label_he: statusLabelHe(status),
+      status_label_key: statusLabelKey(status),
       blocking_reason_he: blockingReason,
       related_module: String(r.related_module ?? ''),
       priority_score: priorityScore,
@@ -2997,7 +3295,9 @@ export async function getClientObligationsTabReadModel(ctx: RequestContext, clie
         is_visible: true,
         modal_key: 'ni_deductions_auto_reminder_modal',
         title_he: 'תזכורת — ביטוח לאומי ניכויים',
+        title_key: CO_UI.obligations.niDeductionsReminder,
         message_he: 'יש להשלים דיווח ותשלום ניכויים עד ה-15 לחודש.',
+        message_key: CO_UI.obligations.niDeductionsDueBy15,
         period_key: mm,
         checkboxes: niDeductionsCheckboxDefs(mm, niDeductionsRow, payrollRowForPeriod),
         suppress_checkbox: {
@@ -3017,9 +3317,12 @@ export async function getClientObligationsTabReadModel(ctx: RequestContext, clie
       niDeductionsManualModal = {
         modal_key: 'ni_deductions_manual_modal',
         title_he: 'עדכון ביטוח לאומי ניכויים',
+        title_key: CO_UI.obligations.updateNiDeductions,
         message_he: 'מעקב אחר שלבי משכורות, טפסים 100/102 ותשלום ניכויים.',
+        message_key: CO_UI.obligations.niDeductionsFollowSteps,
         period_key: mm,
         status_label_he: niDeductionsPresentation(ndManualState).status_label_he,
+        status_label_key: niDeductionsPresentation(ndManualState).status_label_key,
         checkboxes: niDeductionsCheckboxDefs(mm, niDeductionsRow, payrollRowForPeriod),
         actions: niDeductionsModalActions(mm, ndManualState),
       };
@@ -3127,6 +3430,7 @@ export async function getClientObligationsTabReadModel(ctx: RequestContext, clie
       due_date_display_he: fmtDateHe(niRelSpec.due_date) ?? niRelSpec.due_date,
       status_code: st,
       status_label_he: statusLabelHe(st),
+      status_label_key: statusLabelKey(st),
       blocking_reason_he: null,
       related_module: niRelSpec.related_module,
       priority_score: 0,
@@ -3150,7 +3454,9 @@ export async function getClientObligationsTabReadModel(ctx: RequestContext, clie
   const niManualModal: ClientObligationsTabResponse['ni_manual_modal'] = niRelevant && niOb
     ? {
         title_he: 'תשלום לביטוח לאומי',
+        title_key: CO_UI.obligations.niPaymentTitle,
         status_label_he: nationalInsuranceSelfEmployedCellPresentation(niOb, ymd(now)).status_label_he,
+        status_label_key: nationalInsuranceSelfEmployedCellPresentation(niOb, ymd(now)).status_label_key,
         monthly_amount: niAmount,
         monthly_amount_display_he: niAmountDisplayHe,
         standing_order_checkbox: {
@@ -3167,21 +3473,25 @@ export async function getClientObligationsTabReadModel(ctx: RequestContext, clie
           {
             action_key: 'mark_paid',
             action_label_he: 'שולם',
+            action_label_key: CO_UI.obligations.paid,
             interaction: { type: 'command', action_key: 'mark_paid', command_type: 'mark_ni_paid', payload: { obligation_id: niOb.obligation_id } },
           },
           {
             action_key: 'mark_not_paid',
             action_label_he: 'עדיין לא שולם',
+            action_label_key: CO_UI.obligations.stillUnpaid,
             interaction: { type: 'command', action_key: 'mark_not_paid', command_type: 'mark_ni_not_paid', payload: { obligation_id: niOb.obligation_id } },
           },
           {
             action_key: 'update_amount',
             action_label_he: 'עדכן סכום לתשלום',
+            action_label_key: CO_UI.obligations.updateAmount,
             interaction: { type: 'open_module', action_key: 'open_national_insurance', payload: { mode: 'update_amount' } },
           },
           {
             action_key: 'mark_not_relevant',
             action_label_he: 'לא רלוונטי',
+            action_label_key: CO_UI.obligations.notRelevant,
             interaction: { type: 'command', action_key: 'mark_not_relevant', command_type: 'mark_ni_not_relevant', payload: { obligation_id: niOb.obligation_id } },
           },
         ],
@@ -3225,10 +3535,28 @@ export async function getClientObligationsTabReadModel(ctx: RequestContext, clie
       const base = obligations.slice(0, 12).map((o) => {
         if (o.obligation_type === 'national_insurance_self_employed_payment') {
           const periodKey = 'תקופת דיווח - ביטוח לאומי עצמאים';
-          if (o.status_code === 'paid_late') return { period_key: periodKey, status_label_he: 'שולם עם איחור' };
-          if (o.status_code === 'paid_on_time') return { period_key: periodKey, status_label_he: 'שולם במועד' };
+          if (o.status_code === 'paid_late') {
+            return {
+              period_key: periodKey,
+              period_label_key: CO_UI.obligations.niSelfEmployedPeriod,
+              status_label_he: 'שולם עם איחור',
+              status_label_key: CO_UI.obligations.paidLate,
+            };
+          }
+          if (o.status_code === 'paid_on_time') {
+            return {
+              period_key: periodKey,
+              period_label_key: CO_UI.obligations.niSelfEmployedPeriod,
+              status_label_he: 'שולם במועד',
+              status_label_key: CO_UI.obligations.paidOnTime,
+            };
+          }
         }
-        return { period_key: o.period_display_he || o.period_key, status_label_he: o.status_label_he };
+        return {
+          period_key: o.period_display_he || o.period_key,
+          status_label_he: o.status_label_he,
+          status_label_key: o.status_label_key ?? statusLabelKey(o.status_code),
+        };
       });
       if (niTaxApplicable && payrollReadyForNi) {
         const stNi = computeNiDeductionsState(niDeductionsRow, mm, now, payrollRowForPeriod.sent_to_employer);
@@ -3237,8 +3565,12 @@ export async function getClientObligationsTabReadModel(ctx: RequestContext, clie
             ...base,
             {
               period_key: `תקופת משכורת נוכחית — ${periodKeyToDisplayHe(mm)}`,
+              period_label_key: CO_UI.obligations.currentPayrollPeriod,
+              period_label_vars: { period: periodKeyToDisplayHe(mm) },
               status_label_he:
                 stNi === 'paid_on_time' ? 'שולם ודווח במועד' : 'שולם עם איחור',
+              status_label_key:
+                stNi === 'paid_on_time' ? CO_UI.obligations.paidAndReportedOnTime : CO_UI.obligations.paidLate,
             },
           ];
         }
@@ -3247,7 +3579,10 @@ export async function getClientObligationsTabReadModel(ctx: RequestContext, clie
             ...base,
             {
               period_key: `${periodKeyToDisplayHe(mm)} — ביטוח לאומי ניכויים`,
+              period_label_key: CO_UI.obligations.niDeductionsForPeriod,
+              period_label_vars: { period: periodKeyToDisplayHe(mm) },
               status_label_he: 'לא שולם',
+              status_label_key: CO_UI.obligations.unpaid,
             },
           ];
         }
@@ -3260,11 +3595,12 @@ export async function getClientObligationsTabReadModel(ctx: RequestContext, clie
           due_date_display_he: annual.due_date_display_he,
           status_code: annual.status_code,
           status_label_he: annual.status_label_he,
+          status_label_key: annual.status_label_key ?? statusLabelKey(annual.status_code),
           status_tone: statusTone(annual.status_code),
           icon_key: statusIconKey(annual.status_code),
         }
       : null,
-    labels: { tab_title_he: 'התחייבויות' },
+    labels: { tab_title_he: 'התחייבויות', tab_title_key: CO_UI.obligations.title },
   };
 }
 
