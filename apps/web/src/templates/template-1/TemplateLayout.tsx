@@ -14,7 +14,12 @@ import './tokens.css';
 import '../../styles/nx-client-operations-shell.css';
 import '../../styles/nx-glass-surface.css';
 
-export type Template1SidebarItem = { to: string; label: string; children?: { to: string; label: string }[] };
+export type Template1SidebarItem = {
+  to: string;
+  label: string;
+  labelKey?: string;
+  children?: { to: string; label: string; labelKey?: string }[];
+};
 
 export function TemplateLayout({
   organizations,

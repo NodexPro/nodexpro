@@ -146,8 +146,12 @@ export function translationEntryFilterStatus(entry: {
   value: string;
   status: string;
   placeholder_ok: boolean;
-}): 'missing' | 'draft' | 'published' {
-  if (!entry.value.trim() || !entry.placeholder_ok) return 'missing';
+  bundled_value?: string;
+}): 'missing' | 'draft' | 'published' | 'bundled' {
+  if (entry.value.trim() && !entry.placeholder_ok) return 'missing';
+  if (!entry.value.trim()) {
+    return String(entry.bundled_value ?? '').trim() ? 'bundled' : 'missing';
+  }
   return entry.status === 'published' ? 'published' : 'draft';
 }
 

@@ -441,7 +441,8 @@ router.get('/languages', async (req: Request, res: Response, next: NextFunction)
     const ctx = req.context as RequestContext;
     await assertOwnerOrAuditFailure(ctx, req);
     const locale = typeof req.query.locale === 'string' ? req.query.locale : undefined;
-    return res.json(await buildOwnerLanguagesAggregate(ctx, locale));
+    const moduleGroup = typeof req.query.module === 'string' ? req.query.module : undefined;
+    return res.json(await buildOwnerLanguagesAggregate(ctx, locale, moduleGroup));
   } catch (e) {
     next(e);
   }

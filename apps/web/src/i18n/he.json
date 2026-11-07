@@ -14,6 +14,8 @@
     "modules": "מודולים",
     "billing": "חיובים",
     "clientOperations": "ניהול לקוחות",
+    "collapse": "כיווץ ניווט",
+    "expand": "הרחבת ניווט",
     "income": "הכנסות",
     "docflow": "דוקפלואו",
     "docflowInvites": "הזמנות",
@@ -224,7 +226,28 @@
     "create": "צור",
     "archived": "בארכיון",
     "ok": "אישור",
-    "unavailable": "לא זמין"
+    "unavailable": "לא זמין",
+    "errors": {
+      "workItemVersionConflict": "הפריט עודכן. מרענן…",
+      "versionConflict": "המידע עודכן מאז שנפתח המסך. סגור ופתח מחדש את כרטיס הלקוח, או רענן את הרשימה, ונסה שוב.",
+      "invitationExpired": "תוקף ההזמנה פג. בקשו מהמשרד קישור הזמנה חדש.",
+      "invitationRevoked": "ההזמנה בוטלה. פנו למשרד לקבלת הזמנה חדשה.",
+      "invalidInvitationToken": "קישור ההזמנה אינו תקין או אינו תואם לשרת. בקשו קישור חדש מהמשרד.",
+      "invitationNotAcceptable": "לא ניתן להשתמש בקישור ההזמנה במצב הנוכחי. בקשו מהמשרד קישור חדש.",
+      "portalAccessRevoked": "הגישה ל-DocFlow בוטלה על ידי המשרד. פנו למשרד.",
+      "portalActivationFailed": "לא ניתן להפעיל את הגישה ל-DocFlow. פנו למשרד לתמיכה.",
+      "forbidden": "אין הרשאה לביצוע הפעולה.",
+      "portalSessionExpired": "קישור הגישה ל-DocFlow פג תוקף. בקשו מהמשרד קישור הזמנה חדש.",
+      "portalSessionInvalid": "סשן ה-DocFlow אינו תקף. פתחו שוב את קישור ההזמנה מהאימייל (אותו קישור יכול לחדש את הגישה אם ההזמנה עדיין בתוקף).",
+      "unauthorized": "פג תוקף ההתחברות. יש להיכנס מחדש.",
+      "notImplemented": "הפעולה עדיין לא זמינה בשלב זה. נסה פורמט אחר.",
+      "serverError": "שגיאת שרת זמנית. נסה שוב בעוד רגע; אם זה חוזר — פנה לתמיכה.",
+      "conflict": "קונפליקט גרסה או עדכון במקביל. רענן את הנתונים ונסה שוב.",
+      "failed": "הפעולה נכשלה. נסה שוב.",
+      "aborted": "הבקשה בוטלה.",
+      "network": "בעיית תקשורת. בדוק חיבור לאינטרנט ונסה שוב.",
+      "generic": "שגיאה"
+    }
   },
   "settings": {
     "title": "הגדרות ארגון",
@@ -987,6 +1010,12 @@
     "loadingFromServer": "טוען נתונים מהשרת…",
     "loadingData": "טוען נתונים…",
     "emptyTab": "עוד אין נתונים — {{tab}}",
+    "noData": "אין נתונים.",
+    "tabsAria": "לשוניות תיק",
+    "loadFailed": "הטעינה נכשלה",
+    "reminders": {
+      "dismissAll": "סגור הכל"
+    },
     "noFeesPermission": "אין הרשאת צפייה בשכ״ט או שהנתונים אינם זמינים.",
     "noPayrollPermission": "אין הרשאת צפייה בשכר או שהנתונים אינם זמינים.",
     "noAnnualPermission": "אין הרשאת צפייה בדוח השנתי או שהנתונים אינם זמינים.",
@@ -1126,7 +1155,30 @@
     },
     "docflow": {
       "loading": "טוען DocFlow…",
-      "unavailable": "DocFlow לא זמין לארגון זה."
+      "unavailable": "DocFlow לא זמין לארגון זה.",
+      "revokePortal": "ביטול פורטל",
+      "threadTitle": "כותרת שיחה",
+      "newThread": "+ שיחה חדשה",
+      "noThreads": "אין שיחות",
+      "markRead": "סמן כנקרא",
+      "archive": "ארכיון",
+      "reopen": "פתיחה מחדש",
+      "selectThread": "בחירת שיחה",
+      "noMessages": "עדיין אין הודעות",
+      "writeMessage": "כתבו הודעת משרד",
+      "unread": "לא נקראו:",
+      "sla": "SLA:",
+      "attachments": "קבצים מצורפים:",
+      "portal": "פורטל:",
+      "send": "שליחה",
+      "uploading": "מעלה…",
+      "uploadAttach": "העלאה וצירוף",
+      "types": {
+        "document_request": "בקשת מסמך",
+        "question": "שאלה",
+        "reminder": "תזכורת",
+        "task_followup": "מעקב משימה"
+      }
     },
     "taxes": {
       "loading": "טוען תצוגת מיסים מהשרת…",

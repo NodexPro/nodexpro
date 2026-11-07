@@ -264,13 +264,22 @@ export async function findReminderConflicts(
  * Reminders for toast candidate rendering.
  * We keep a moderate lookback/lookahead window so polling doesn't miss the due moment.
  */
+function noteTypeLabelKey(code: string): string | null {
+  if (code === 'call') return 'clientOperations.notes.call';
+  if (code === 'reminder') return 'clientOperations.notes.reminder';
+  if (code === 'greeting') return 'clientOperations.notes.greeting';
+  return 'clientOperations.notes.text';
+}
+
 export type DueReminderDto = {
   id: string;
   body: string;
   reminder_at: string;
   client_id: string;
   client_name: string | null;
+  type_code: string;
   type_label_he: string;
+  type_label_key: string | null;
 };
 
 export async function getDueReminders(ctx: RequestContext): Promise<{ reminders: DueReminderDto[] }> {
@@ -322,7 +331,9 @@ export async function getDueReminders(ctx: RequestContext): Promise<{ reminders:
     reminder_at: row.reminder_at,
     client_id: row.client_id,
     client_name: nameById.get(row.client_id) ?? null,
+    type_code: row.type_code,
     type_label_he: labelByCode.get(row.type_code) ?? row.type_code,
+    type_label_key: noteTypeLabelKey(row.type_code),
   }));
 
   return { reminders };

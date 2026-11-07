@@ -14,6 +14,8 @@
     "modules": "Modules",
     "billing": "Billing",
     "clientOperations": "Client Operations",
+    "collapse": "Collapse navigation",
+    "expand": "Expand navigation",
     "income": "Income",
     "docflow": "DocFlow",
     "docflowInvites": "Invites",
@@ -224,7 +226,28 @@
     "create": "Create",
     "archived": "Archived",
     "ok": "OK",
-    "unavailable": "Unavailable"
+    "unavailable": "Unavailable",
+    "errors": {
+      "workItemVersionConflict": "Item was updated. Refreshing...",
+      "versionConflict": "This record changed since the screen opened. Close and reopen the client card, or refresh the list, then try again.",
+      "invitationExpired": "This invitation has expired. Ask the office for a new invitation link.",
+      "invitationRevoked": "This invitation was revoked. Contact the office for a new invitation.",
+      "invalidInvitationToken": "This invitation link is invalid or does not match the server. Ask the office for a new link.",
+      "invitationNotAcceptable": "This invitation link cannot be used in its current state. Ask the office for a new link.",
+      "portalAccessRevoked": "DocFlow access was revoked by the office. Contact the office.",
+      "portalActivationFailed": "DocFlow access could not be activated. Contact the office for support.",
+      "forbidden": "You do not have permission to perform this action.",
+      "portalSessionExpired": "The DocFlow access link has expired. Ask the office for a new invitation link.",
+      "portalSessionInvalid": "The DocFlow session is not valid. Open the invitation link from the email again (the same link can renew access if the invitation is still valid).",
+      "unauthorized": "Your session expired. Sign in again.",
+      "notImplemented": "This action is not available yet. Try a different format.",
+      "serverError": "Temporary server error. Try again in a moment; if it continues, contact support.",
+      "conflict": "A version conflict or concurrent update occurred. Refresh the data and try again.",
+      "failed": "The action failed. Try again.",
+      "aborted": "The request was cancelled.",
+      "network": "Network problem. Check your internet connection and try again.",
+      "generic": "Error"
+    }
   },
   "settings": {
     "title": "Organization Settings",
@@ -987,6 +1010,12 @@
     "loadingFromServer": "Loading data from the server…",
     "loadingData": "Loading data…",
     "emptyTab": "No data yet — {{tab}}",
+    "noData": "No data.",
+    "tabsAria": "Workspace tabs",
+    "loadFailed": "Failed to load",
+    "reminders": {
+      "dismissAll": "Dismiss all"
+    },
     "noFeesPermission": "You do not have permission to view fees, or the data is unavailable.",
     "noPayrollPermission": "You do not have permission to view payroll, or the data is unavailable.",
     "noAnnualPermission": "You do not have permission to view the annual report, or the data is unavailable.",
@@ -1126,7 +1155,30 @@
     },
     "docflow": {
       "loading": "Loading DocFlow…",
-      "unavailable": "DocFlow is not available for this organization."
+      "unavailable": "DocFlow is not available for this organization.",
+      "revokePortal": "Revoke Portal",
+      "threadTitle": "Thread title",
+      "newThread": "+ New thread",
+      "noThreads": "No threads",
+      "markRead": "Mark read",
+      "archive": "Archive",
+      "reopen": "Reopen",
+      "selectThread": "Select thread",
+      "noMessages": "No messages yet",
+      "writeMessage": "Write office message",
+      "unread": "Unread:",
+      "sla": "SLA:",
+      "attachments": "Attachments:",
+      "portal": "Portal:",
+      "send": "Send",
+      "uploading": "Uploading…",
+      "uploadAttach": "Upload & attach",
+      "types": {
+        "document_request": "Document request",
+        "question": "Question",
+        "reminder": "Reminder",
+        "task_followup": "Task follow-up"
+      }
     },
     "taxes": {
       "loading": "Loading taxes from the server…",

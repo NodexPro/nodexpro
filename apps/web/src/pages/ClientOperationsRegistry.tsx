@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { parseCreatedClientOpenLocationState } from './client-create-navigation.pure';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../api/client';
+import { useI18n } from '../i18n/I18nProvider';
 import { moduleClientOperationsRegistry, moduleClientOperationsRegistryCommands } from '../api/endpoints';
 import {
   appendClientOperationsWorkspaceQuery,
@@ -128,6 +129,7 @@ type RegistryAggregate = {
 
 export function ClientOperationsRegistry() {
   const auth = useAuth();
+  const { t } = useI18n();
   const location = useLocation();
   const navigate = useNavigate();
   const pendingOpen = parseCreatedClientOpenLocationState(location.state);
@@ -149,7 +151,6 @@ export function ClientOperationsRegistry() {
   const [toolbarCapabilities, setToolbarCapabilities] = useState<ClientOperationsToolbarCapability[]>(
     [],
   );
-  const [titleHe, setTitleHe] = useState('ניהול לקוחות');
   const [customColumnsCapability, setCustomColumnsCapability] = useState({
     max: 0,
     current: 0,
@@ -332,7 +333,6 @@ export function ClientOperationsRegistry() {
     }
     if (data?.filters) setFilters(data.filters);
     if (data?.workspace) setWorkspace(data.workspace);
-    if (typeof data?.title_he === 'string' && data.title_he.trim()) setTitleHe(data.title_he);
     if (data?.query) {
       setQuery({
         q: data.query.q ?? null,
@@ -588,7 +588,7 @@ export function ClientOperationsRegistry() {
         .catch((e) => {
           if (e instanceof Error && e.name === 'AbortError') return;
           if (seq !== loadSeqRef.current) return;
-          setError(e instanceof Error ? e.message : 'Failed to load');
+          setError(e instanceof Error ? e.message : t('clientOperations.loadFailed'));
           // Drop optimistic first-touch tab if backend never confirmed it.
           if (periodKey && !getPeriodAggregateCache(periodCacheRef.current, periodKey, cacheQuery)) {
             const backendPeriods = backendAvailablePeriodsRef.current;
@@ -838,7 +838,7 @@ export function ClientOperationsRegistry() {
       showPageHeader={false}
       onReloadRegistry={(options) => void reloadRegistry(options)}
       variant="spreadsheet"
-      titleHe={titleHe}
+      titleHe={t('clientOperations.moduleTitle')}
       columns={columns}
       toolbarCapabilities={toolbarCapabilities}
       customColumnsCapability={customColumnsCapability}

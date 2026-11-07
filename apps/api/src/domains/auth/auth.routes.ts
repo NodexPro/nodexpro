@@ -146,7 +146,7 @@ async function buildMeResponse(
   if (hasPermission(permissions, 'access_billing') || permissions.includes('subscriptions:read') || permissions.includes('modules:read')) navItems.push({ path: '/modules', label: 'Modules', order: 30 });
   if (hasPermission(permissions, 'access_billing') || permissions.includes('subscriptions:read')) navItems.push({ path: '/billing', label: 'Billing', order: 40 });
 
-  const moduleAppNavItems: { path: string; label: string; order: number }[] = [];
+  const moduleAppNavItems: { path: string; label: string; label_key?: string; order: number }[] = [];
   let commercialModuleCodes: string[] = [];
   if (activeOrgId) {
     const modList = (modsRes.data ?? []) as { module_id: string; modules: unknown }[];
@@ -184,8 +184,13 @@ async function buildMeResponse(
       if (memberModuleIds && !memberModuleIds.has(m.moduleId)) continue;
       const mo = m.nav;
       if (!mo.nav_path?.startsWith('/m/')) continue;
-      const label = mo.code === 'client-operations' ? 'Nodex לקוחות' : (mo.nav_label ?? mo.code);
-      moduleAppNavItems.push({ path: mo.nav_path, label, order: mo.nav_order ?? 100 });
+      const label = mo.code === 'client-operations' ? 'Client Operations' : (mo.nav_label ?? mo.code);
+      moduleAppNavItems.push({
+        path: mo.nav_path,
+        label,
+        label_key: mo.code === 'client-operations' ? 'clientOperations.clientsBrand' : undefined,
+        order: mo.nav_order ?? 100,
+      });
     }
   }
   moduleAppNavItems.sort((a, b) => a.order - b.order);
@@ -218,7 +223,7 @@ async function buildMeResponse(
     permissions,
     enabledModules,
     navItems: exposedCoreNav,
-    moduleAppNavItems: shell.available_modules.map(({ path, label }) => ({ path, label })),
+    moduleAppNavItems: shell.available_modules.map(({ path, label, label_key }) => ({ path, label, label_key })),
     shell_profile: shell.shell_profile,
     default_route: shell.default_route,
     visible_nav_items: shell.available_navigation,

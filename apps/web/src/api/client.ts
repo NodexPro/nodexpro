@@ -1,5 +1,12 @@
 import { resolvePublicApiBaseUrl } from '../lib/resolve-public-api-base-url.pure';
-import { supabase } from '../lib/supabase';
+import { getActiveUiLang, overlayValueAllowedForLocale } from '../lib/i18n-script.pure';
+import {
+  lookupNestedMessage,
+  resolveUserFacingApiMessage,
+} from '../lib/user-facing-api-message.pure';
+import { peekPublishedTranslationOverlay } from '../i18n/I18nProvider';
+import en from '../i18n/en.json';
+import he from '../i18n/he.json';
 import { getBackendActiveOrganizationId } from './org-context';
 
 const API_URL = resolvePublicApiBaseUrl(import.meta.env.VITE_API_URL, import.meta.env.PROD);
@@ -20,95 +27,22 @@ export class ApiError extends Error {
   }
 }
 
-/** הודעה בעברית למשתמש — לא טקסט גולמי מהמסד; מעדיף קוד מהשרת (אגרגט / API). */
-export function userFacingApiMessage(e: unknown): string {
-  if (e instanceof ApiError) {
-    const c = e.code ?? '';
-    if (
-      c === 'WORK_ITEM_VERSION_CONFLICT' ||
-      c === 'version_conflict_on_update'
-    ) {
-      return 'Item was updated. Refreshing...';
-    }
-    if (c === 'VERSION_CONFLICT' || c === 'CONFLICT') {
-      return 'המידע עודכן מאז שנפתח המסך. סגור ופתח מחדש את כרטיס הלקוח, או רענן את הרשימה, ונסה שוב.';
-    }
-    if (c === 'INVITATION_EXPIRED') {
-      return 'תוקף ההזמנה פג. בקשו מהמשרד קישור הזמנה חדש.';
-    }
-    if (c === 'INVITATION_REVOKED') {
-      return 'ההזמנה בוטלה. פנו למשרד לקבלת הזמנה חדשה.';
-    }
-    if (c === 'INVALID_INVITATION_TOKEN') {
-      return 'קישור ההזמנה אינו תקין או אינו תואם לשרת. בקשו קישור חדש מהמשרד.';
-    }
-    if (c === 'INVITATION_NOT_ACCEPTABLE') {
-      return 'לא ניתן להשתמש בקישור ההזמנה במצב הנוכחי. בקשו מהמשרד קישור חדש.';
-    }
-    if (c === 'PORTAL_ACCESS_REVOKED') {
-      return 'הגישה ל-DocFlow בוטלה על ידי המשרד. פנו למשרד.';
-    }
-    if (c === 'PORTAL_USER_MISSING' || c === 'PORTAL_ACTIVATION_FAILED') {
-      return 'לא ניתן להפעיל את הגישה ל-DocFlow. פנו למשרד לתמיכה.';
-    }
-    if (c === 'FORBIDDEN' || e.status === 403) {
-      return 'אין הרשאה לביצוע הפעולה.';
-    }
-    if (c === 'PORTAL_SESSION_EXPIRED') {
-      return 'קישור הגישה ל-DocFlow פג תוקף. בקשו מהמשרד קישור הזמנה חדש.';
-    }
-    if (c === 'PORTAL_SESSION_REVOKED' || c === 'PORTAL_SESSION_INVALID') {
-      return 'סשן ה-DocFlow אינו תקף. פתחו שוב את קישור ההזמנה מהאימייל (אותו קישור יכול לחדש את הגישה אם ההזמנה עדיין בתוקף).';
-    }
-    if (c === 'UNAUTHORIZED' || e.status === 401) {
-      return 'סשן ה-DocFlow אינו תקף. פתחו שוב את קישור ההזמנה מהאימייל.';
-    }
-    /** 501 is not a generic “server crash”; show backend message (e.g. PDF not ready). */
-    if (c === 'NOT_IMPLEMENTED' || e.status === 501) {
-      const m501 = (e.message ?? '').trim();
-      if (m501 && /[\u0590-\u05FF]/.test(m501)) return m501;
-      return 'הפעולה עדיין לא זמינה בשלב זה. נסה פורמט אחר.';
-    }
-    /** Prefer explicit Hebrew server message over generic 500 copy (e.g. PDF_EXPORT_FAILED). */
-    if (e.status >= 500 && e.status !== 501) {
-      const m5 = (e.message ?? '').trim();
-      if (m5 && /[\u0590-\u05FF]/.test(m5)) return m5;
-    }
-    if (c === 'SUPABASE_ERROR' || (e.status >= 500 && e.status !== 501)) {
-      return 'שגיאת שרת זמנית. נסה שוב בעוד רגע; אם זה חוזר — פנה לתמיכה.';
-    }
-    const m = (e.message ?? '').trim();
-    if (m && /[\u0590-\u05FF]/.test(m)) {
-      return m;
-    }
-    if (
-      m &&
-      m.length < 160 &&
-      !/duplicate|violates|null value|column|relation|syntax|supabase|postgres/i.test(m)
-    ) {
-      return m;
-    }
-    if (e.status === 409) {
-      return 'קונפליקט גרסה או עדכון במקביל. רענן את הנתונים ונסה שוב.';
-    }
-    return 'הפעולה נכשלה. נסה שוב.';
-  }
-  if (e instanceof Error) {
-    if (e.name === 'AbortError') return 'הבקשה בוטלה.';
-    const m = e.message || '';
-    if (/failed to fetch|network|load failed/i.test(m)) {
-      return 'בעיית תקשורת. בדוק חיבור לאינטרנט ונסה שוב.';
-    }
-    if (/duplicate key|violates unique|violates check|violates foreign|null value in column|does not exist|relation |column |syntax error at|PGRST\d+|postgres|supabase/i.test(m)) {
-      return 'שגיאת שרת זמנית. נסה שוב בעוד רגע; אם זה חוזר — פנה לתמיכה.';
-    }
-    return m || 'שגיאה';
-  }
-  return 'שגיאה';
+const bundledUiMessages: Record<string, unknown> = { en, he };
+
+function lookupUserFacingApiMessage(locale: string, key: string): string | undefined {
+  const overlay = peekPublishedTranslationOverlay(locale)[key];
+  if (overlay && overlayValueAllowedForLocale(overlay, locale)) return overlay;
+  return lookupNestedMessage(bundledUiMessages[locale] ?? bundledUiMessages.en, key);
+}
+
+/** Localized user-facing API copy. Does not change API error codes. */
+export function userFacingApiMessage(e: unknown, locale = getActiveUiLang()): string {
+  return resolveUserFacingApiMessage(e, locale, lookupUserFacingApiMessage);
 }
 
 async function getToken(): Promise<string | null> {
   try {
+    const { supabase } = await import('../lib/supabase');
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token ?? null;
   } catch {

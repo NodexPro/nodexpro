@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiJson } from '../api/client';
 import { moduleClientOperationsRemindersDue } from '../api/endpoints';
+import { useI18n } from '../i18n/I18nProvider';
+import { localizeSystemLabel } from '../lib/co-display-label.pure';
 import { ReminderToast } from './ReminderToast';
 import '../styles/nx-modal.css';
 
@@ -10,15 +12,17 @@ type DueReminder = {
   reminder_at: string;
   client_id: string;
   client_name: string | null;
+  type_code?: string;
   type_label_he: string;
+  type_label_key?: string | null;
 };
 
 /** Defer first fetch slightly so it does not stack with registry / session on cold load. */
 const INITIAL_FETCH_DELAY_MS = 800;
 
-function formatReminderDate(iso: string): string {
+function formatReminderDate(iso: string, locale: string): string {
   try {
-    return new Date(iso).toLocaleString('he-IL', {
+    return new Date(iso).toLocaleString(locale === 'he' ? 'he-IL' : 'en-GB', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
@@ -30,7 +34,16 @@ function formatReminderDate(iso: string): string {
   }
 }
 
+function noteTypeLabelKey(code: string | undefined): string | null {
+  if (code === 'call') return 'clientOperations.notes.call';
+  if (code === 'reminder') return 'clientOperations.notes.reminder';
+  if (code === 'greeting') return 'clientOperations.notes.greeting';
+  if (code === 'text') return 'clientOperations.notes.text';
+  return null;
+}
+
 export function ReminderToasts({ enabled }: { enabled: boolean }) {
+  const { t, lang } = useI18n();
   const [toasts, setToasts] = useState<DueReminder[]>([]);
   // IDs that were already shown to the user.
   const shownIds = useRef<Set<string>>(new Set());
@@ -83,10 +96,10 @@ export function ReminderToasts({ enabled }: { enabled: boolean }) {
           key={r.id}
           open
           clientName={r.client_name ?? ''}
-          title={r.type_label_he}
+          title={localizeSystemLabel(t, r.type_label_key ?? noteTypeLabelKey(r.type_code), r.type_label_he, lang)}
           description={r.body}
-          reminderTypeLabel={r.type_label_he}
-          reminderDateLabel={formatReminderDate(r.reminder_at)}
+          reminderTypeLabel={localizeSystemLabel(t, r.type_label_key ?? noteTypeLabelKey(r.type_code), r.type_label_he, lang)}
+          reminderDateLabel={formatReminderDate(r.reminder_at, lang)}
           onOpen={() => {}}
           onDismiss={() => dismiss(r.id)}
           onClose={() => dismiss(r.id)}
@@ -107,7 +120,7 @@ export function ReminderToasts({ enabled }: { enabled: boolean }) {
             cursor: 'pointer',
           }}
         >
-          סגור הכל
+          {t('clientOperations.reminders.dismissAll')}
         </button>
       )}
     </div>

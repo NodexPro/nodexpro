@@ -10,6 +10,7 @@ import {
   parseCookieValue,
   resolvePublicUiLang,
 } from '../lib/public-ui-lang.pure';
+import { overlayValueAllowedForLocale, setActiveUiLang } from '../lib/i18n-script.pure';
 
 export type Lang = 'en' | 'he' | 'ru';
 
@@ -38,6 +39,16 @@ const translations: Record<Lang, Messages | Record<string, unknown>> = {
 };
 
 const publishedOverlayCache = new Map<Lang, Record<string, string>>();
+const overlayInvalidationListeners = new Set<() => void>();
+
+export function invalidatePublishedTranslationOverlay(): void {
+  publishedOverlayCache.clear();
+  overlayInvalidationListeners.forEach((listener) => listener());
+}
+
+export function peekPublishedTranslationOverlay(locale: string): Record<string, string> {
+  return publishedOverlayCache.get(locale === 'he' || locale === 'ru' ? locale : 'en') ?? {};
+}
 
 const I18nContext = createContext<I18nContextValue | undefined>(undefined);
 
@@ -67,6 +78,7 @@ function apiBase(): string {
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() => readInitialUiLang());
   const [overlay, setOverlay] = useState<Record<string, string>>(() => publishedOverlayCache.get(readInitialUiLang()) ?? {});
+  const [overlayEpoch, setOverlayEpoch] = useState(0);
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
@@ -74,7 +86,16 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       document.documentElement.dir = lang === 'he' ? 'rtl' : 'ltr';
     }
     persistUiLang(lang);
+    setActiveUiLang(lang);
   }, [lang]);
+
+  useEffect(() => {
+    const listener = () => setOverlayEpoch((value) => value + 1);
+    overlayInvalidationListeners.add(listener);
+    return () => {
+      overlayInvalidationListeners.delete(listener);
+    };
+  }, []);
 
   useEffect(() => {
     const cached = publishedOverlayCache.get(lang);
@@ -82,27 +103,33 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       setOverlay(cached);
       return;
     }
+    setOverlay({});
     let cancelled = false;
     const controller = new AbortController();
-    void fetch(`${apiBase()}/public/i18n/${encodeURIComponent(lang)}`, { signal: controller.signal })
+    void fetch(`${apiBase()}/public/i18n/${encodeURIComponent(lang)}`, {
+      signal: controller.signal,
+      cache: 'no-store',
+    })
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { messages?: unknown } | null) => {
         if (cancelled || !data || typeof data.messages !== 'object' || !data.messages) return;
         const next: Record<string, string> = {};
         for (const [key, value] of Object.entries(data.messages as Record<string, unknown>)) {
-          if (typeof key === 'string' && typeof value === 'string' && value.trim()) next[key] = value;
+          if (typeof key === 'string' && typeof value === 'string' && value.trim() && overlayValueAllowedForLocale(value, lang)) {
+            next[key] = value;
+          }
         }
         publishedOverlayCache.set(lang, next);
         setOverlay(next);
       })
       .catch(() => {
-        /* Bundled JSON remains the fallback. Owner published catalog is additive. */
+        if (!cancelled) setOverlay({});
       });
     return () => {
       cancelled = true;
       controller.abort();
     };
-  }, [lang]);
+  }, [lang, overlayEpoch]);
 
   const setLang = (next: Lang) => {
     setLangState(next);
@@ -110,8 +137,11 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   const t = useMemo(
     () =>
-      (key: string): string =>
-        overlay[key] ?? lookup(translations[lang], key) ?? lookup(en, key) ?? key,
+      (key: string): string => {
+        const published = overlay[key];
+        if (published && overlayValueAllowedForLocale(published, lang)) return published;
+        return lookup(translations[lang], key) ?? lookup(en, key) ?? key;
+      },
     [lang, overlay],
   );
 

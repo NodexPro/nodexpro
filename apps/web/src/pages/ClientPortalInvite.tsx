@@ -56,7 +56,7 @@ export function ClientPortalInvite() {
       .catch((e: unknown) => {
         if (cancelled) return;
         setStatus('error');
-        setMessage(userFacingApiMessage(e));
+        setMessage(userFacingApiMessage(e, 'he'));
       });
     return () => {
       cancelled = true;

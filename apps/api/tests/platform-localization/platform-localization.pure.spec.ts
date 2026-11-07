@@ -61,6 +61,10 @@ test('module completeness is measured per group against the full catalog', () =>
   assert.equal(co?.missing_count, 1);
   assert.equal(settings?.ratio, 1);
   assert.equal(translationEntryFilterStatus({ value: '', status: 'draft', placeholder_ok: true }), 'missing');
+  assert.equal(
+    translationEntryFilterStatus({ value: '', status: 'draft', placeholder_ok: true, bundled_value: 'Search' }),
+    'bundled',
+  );
   assert.equal(translationEntryFilterStatus({ value: 'Hi', status: 'draft', placeholder_ok: true }), 'draft');
   assert.equal(translationEntryFilterStatus({ value: 'Hi', status: 'published', placeholder_ok: true }), 'published');
 });

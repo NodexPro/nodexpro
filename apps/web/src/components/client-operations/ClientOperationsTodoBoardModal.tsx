@@ -459,7 +459,7 @@ export function ClientOperationsTodoBoardModal({
         className="nx-co-todo-board"
         role="dialog"
         aria-modal="true"
-        aria-label="ToDo List"
+        aria-label={t('clientOperations.todo.list')}
         data-testid="client-operations-todo-board"
         tabIndex={-1}
       >

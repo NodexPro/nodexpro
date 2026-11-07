@@ -75,7 +75,7 @@ export function ClientPortalDocflow() {
         }
         setAggregate(out);
       } catch (e) {
-        setError(userFacingApiMessage(e));
+        setError(userFacingApiMessage(e, 'he'));
         setAggregate(null);
       } finally {
         setLoading(false);
@@ -229,7 +229,7 @@ export function ClientPortalDocflow() {
       }
       setAggregate(refreshed);
     } catch (e) {
-      setError(userFacingApiMessage(e));
+      setError(userFacingApiMessage(e, 'he'));
     } finally {
       setBusyCommand('');
     }
@@ -258,7 +258,7 @@ export function ClientPortalDocflow() {
       });
       if (caption) setComposer('');
     } catch (e) {
-      setError(userFacingApiMessage(e));
+      setError(userFacingApiMessage(e, 'he'));
     } finally {
       setUploadingFile(false);
     }
@@ -281,7 +281,7 @@ export function ClientPortalDocflow() {
       if (!url) throw new Error('חסר קישור מאובטח להורדה');
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (e) {
-      setError(userFacingApiMessage(e));
+      setError(userFacingApiMessage(e, 'he'));
     }
   }
 

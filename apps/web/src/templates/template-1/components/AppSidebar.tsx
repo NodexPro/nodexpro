@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import type { Template1SidebarItem } from '../TemplateLayout';
 import type { SidebarAccountBlockModel } from '../../../types/session';
 import { SidebarAccountBlock } from './SidebarAccountBlock';
+import { useI18n } from '../../../i18n/I18nProvider';
 import logoSrc from '../assets/nodexpro-logo.png';
 import '../t1-sidebar-account.css';
 
@@ -175,6 +176,9 @@ export function AppSidebar({
   onLogout: () => void | Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const { t } = useI18n();
+  const labelFor = (item: { label: string; labelKey?: string }) =>
+    item.labelKey ? t(item.labelKey) : item.label;
   const [coarsePointer, setCoarsePointer] = useState(false);
   const coGlass = appearance === 'co-navy-glass';
 
@@ -219,7 +223,7 @@ export function AppSidebar({
           type="button"
           className="t1-sidebar__brand-toggle"
           aria-expanded={showExpanded}
-          aria-label={showExpanded ? 'Collapse navigation' : 'Expand navigation'}
+          aria-label={showExpanded ? t('nav.collapse') : t('nav.expand')}
           onClick={() => mode === 'collapsedHover' && coarsePointer && setExpanded((open) => !open)}
           disabled={mode !== 'collapsedHover' || !coarsePointer}
           style={{
@@ -292,7 +296,7 @@ export function AppSidebar({
               >
                 {coGlass ? <CoNavGlyph icon={item.icon} /> : item.icon}
               </span>
-              {showExpanded && <span>{item.label}</span>}
+              {showExpanded && <span>{labelFor(item)}</span>}
             </NavLink>
             {showExpanded &&
               item.children?.map((child) => (
@@ -332,7 +336,7 @@ export function AppSidebar({
                     className={coGlass ? 't1-sidebar__label' : undefined}
                     data-nav-path={coGlass ? child.to : undefined}
                   >
-                    {child.label}
+                    {labelFor(child)}
                   </span>
                 </NavLink>
               ))}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiJson, userFacingApiMessage } from '../api/client';
+import { useI18n } from '../i18n/I18nProvider';
 import { getBackendActiveOrganizationId } from '../api/org-context';
 import { docflowClientTabAggregate, docflowOfficeCommands } from '../api/endpoints';
 import { newDocflowIdempotencyKey } from '../lib/idempotency-key';
@@ -26,6 +27,7 @@ async function fileToBase64(file: File): Promise<string> {
 }
 
 export function ClientDocflowTab({ clientId }: { clientId: string }) {
+  const { t } = useI18n();
   const [aggregate, setAggregate] = useState<UnknownRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -160,7 +162,7 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
   if (loading) {
     return (
       <div className="client-profile-card">
-        <p style={{ padding: 16, margin: 0, color: '#6b7280' }}>טוען DocFlow…</p>
+        <p style={{ padding: 16, margin: 0, color: '#6b7280' }}>{t('clientOperations.docflow.loading')}</p>
       </div>
     );
   }
@@ -169,7 +171,7 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
   if (!entitlement || entitlement.active !== true) {
     return (
       <div className="client-profile-card">
-        <p style={{ padding: 16, margin: 0, color: '#6b7280' }}>DocFlow לא זמין לארגון זה.</p>
+        <p style={{ padding: 16, margin: 0, color: '#6b7280' }}>{t('clientOperations.docflow.unavailable')}</p>
       </div>
     );
   }
@@ -180,7 +182,7 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
         <div>
           <div style={{ fontWeight: 700 }}>{String((aggregate?.client_header as UnknownRecord | undefined)?.display_name ?? '')}</div>
           <div style={{ color: '#6b7280', fontSize: 13 }}>
-            Portal: {String((aggregate?.portal_access_status as UnknownRecord | undefined)?.status ?? 'unknown')}
+            {t('clientOperations.docflow.portal')} {String((aggregate?.portal_access_status as UnknownRecord | undefined)?.status ?? 'unknown')}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -190,7 +192,7 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
             onClick={() => void runCommand('revoke_client_portal_access', {})}
             className="nx-btn nx-btn-taxes-compact"
           >
-            Revoke Portal
+            {t('clientOperations.docflow.revokePortal')}
           </button>
         </div>
       </div>
@@ -203,7 +205,7 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
             <input
               value={newThreadTitle}
               onChange={(e) => setNewThreadTitle(e.target.value)}
-              placeholder="Thread title"
+              placeholder={t('clientOperations.docflow.threadTitle')}
               style={{ padding: 8, border: '1px solid #d1d5db', borderRadius: 6 }}
             />
             <select
@@ -211,10 +213,10 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
               onChange={(e) => setNewThreadType(e.target.value)}
               style={{ padding: 8, border: '1px solid #d1d5db', borderRadius: 6 }}
             >
-              <option value="document_request">document_request</option>
-              <option value="question">question</option>
-              <option value="reminder">reminder</option>
-              <option value="task_followup">task_followup</option>
+              <option value="document_request">{t('clientOperations.docflow.types.document_request')}</option>
+              <option value="question">{t('clientOperations.docflow.types.question')}</option>
+              <option value="reminder">{t('clientOperations.docflow.types.reminder')}</option>
+              <option value="task_followup">{t('clientOperations.docflow.types.task_followup')}</option>
             </select>
             <button
               type="button"
@@ -228,15 +230,15 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
               }
               className="nx-btn nx-btn-taxes-compact"
             >
-              + New thread
+              {t('clientOperations.docflow.newThread')}
             </button>
           </div>
           <div style={{ maxHeight: 420, overflow: 'auto' }}>
             {!threadList.length ? (
-              <p style={{ margin: 0, padding: 12, color: '#6b7280' }}>No threads</p>
+              <p style={{ margin: 0, padding: 12, color: '#6b7280' }}>{t('clientOperations.docflow.noThreads')}</p>
             ) : (
-              threadList.map((t) => {
-                const id = String(t.id ?? '');
+              threadList.map((thread) => {
+                const id = String(thread.id ?? '');
                 const selected = id === selectedThreadId;
                 return (
                   <button
@@ -246,7 +248,7 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
                     style={{
                       display: 'block',
                       width: '100%',
-                      textAlign: 'right',
+                      textAlign: 'start',
                       padding: 10,
                       border: 'none',
                       borderBottom: '1px solid #f3f4f6',
@@ -254,9 +256,9 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
                       cursor: 'pointer',
                     }}
                   >
-                    <div style={{ fontWeight: 600 }}>{String(t.thread_type_label ?? t.thread_type ?? '')}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>{String(t.thread_status_label ?? t.thread_status ?? '')}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>Unread: {String(t.unread_count ?? 0)}</div>
+                    <div style={{ fontWeight: 600 }}>{String(thread.thread_type_label ?? thread.thread_type ?? '')}</div>
+                    <div style={{ fontSize: 12, color: '#6b7280' }}>{String(thread.thread_status_label ?? thread.thread_status ?? '')}</div>
+                    <div style={{ fontSize: 12, color: '#6b7280' }}>{t('clientOperations.docflow.unread')} {String(thread.unread_count ?? 0)}</div>
                   </button>
                 );
               })
@@ -267,10 +269,10 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
         <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, display: 'flex', flexDirection: 'column', minHeight: 420 }}>
           <div style={{ padding: 10, borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
             <div>
-              <div style={{ fontWeight: 700 }}>{String(selectedThread?.thread_type_label ?? 'Select thread')}</div>
+              <div style={{ fontWeight: 700 }}>{String(selectedThread?.thread_type_label ?? t('clientOperations.docflow.selectThread'))}</div>
               <div style={{ fontSize: 12, color: '#6b7280' }}>{String(selectedThread?.thread_status_label ?? '')}</div>
               <div style={{ fontSize: 12, color: '#6b7280' }}>
-                SLA: {String((selectedThread?.sla_indicator as UnknownRecord | undefined)?.label ?? '—')}
+                {t('clientOperations.docflow.sla')} {String((selectedThread?.sla_indicator as UnknownRecord | undefined)?.label ?? '—')}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -280,7 +282,7 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
                 disabled={!isCommandEnabled('mark_thread_read_by_office').enabled || !selectedThreadId || busyCommand.length > 0}
                 onClick={() => void runCommand('mark_thread_read_by_office', { thread_id: selectedThreadId })}
               >
-                Mark read
+                {t('clientOperations.docflow.markRead')}
               </button>
               <button
                 type="button"
@@ -289,7 +291,7 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
                 onClick={() => void runCommand('archive_client_thread', { thread_id: selectedThreadId })}
                 title={isCommandEnabled('archive_client_thread').reason ?? undefined}
               >
-                Archive
+                {t('clientOperations.docflow.archive')}
               </button>
               <button
                 type="button"
@@ -298,16 +300,16 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
                 onClick={() => void runCommand('reopen_client_thread', { thread_id: selectedThreadId })}
                 title={isCommandEnabled('reopen_client_thread').reason ?? undefined}
               >
-                Reopen
+                {t('clientOperations.docflow.reopen')}
               </button>
             </div>
           </div>
 
           <div style={{ padding: 10, overflow: 'auto', flex: 1 }}>
             {!selectedThreadId ? (
-              <p style={{ color: '#6b7280' }}>Select a thread</p>
+              <p style={{ color: '#6b7280' }}>{t('clientOperations.docflow.selectThread')}</p>
             ) : !messages.length ? (
-              <p style={{ color: '#6b7280' }}>{String((aggregate?.empty_states as UnknownRecord | undefined)?.no_messages ? 'No messages yet' : '')}</p>
+              <p style={{ color: '#6b7280' }}>{String((aggregate?.empty_states as UnknownRecord | undefined)?.no_messages ? t('clientOperations.docflow.noMessages') : '')}</p>
             ) : (
               messages.map((m) => (
                 <div key={String(m.id ?? '')} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 8, marginBottom: 8 }}>
@@ -316,7 +318,7 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
                   </div>
                   <div>{String(m.body ?? '')}</div>
                   <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280' }}>
-                    Attachments: {attachments.filter((a) => String(a.message_id ?? '') === String(m.id ?? '')).length}
+                    {t('clientOperations.docflow.attachments')} {attachments.filter((a) => String(a.message_id ?? '') === String(m.id ?? '')).length}
                   </div>
                 </div>
               ))
@@ -327,7 +329,7 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
             <textarea
               value={composer}
               onChange={(e) => setComposer(e.target.value)}
-              placeholder="Write office message"
+              placeholder={t('clientOperations.docflow.writeMessage')}
               rows={3}
               style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 6, padding: 8, boxSizing: 'border-box' }}
             />
@@ -345,10 +347,10 @@ export function ClientDocflowTab({ clientId }: { clientId: string }) {
                   }).then(() => setComposer(''))
                 }
               >
-                Send
+                {t('clientOperations.docflow.send')}
               </button>
               <label className="nx-btn nx-btn-taxes-compact" style={{ cursor: 'pointer' }}>
-                {uploadingFile ? 'Uploading…' : 'Upload & attach'}
+                {uploadingFile ? t('clientOperations.docflow.uploading') : t('clientOperations.docflow.uploadAttach')}
                 <input
                   type="file"
                   style={{ display: 'none' }}

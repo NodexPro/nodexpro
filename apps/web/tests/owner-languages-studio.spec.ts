@@ -54,18 +54,27 @@ test('Owner Languages page shows module completeness, search, status filters and
   assert.match(page, /module_completeness/);
   assert.match(page, /Filter by module/);
   assert.match(page, /Filter by status/);
-  assert.match(page, /<option value="missing">Missing<\/option>/);
+  assert.match(page, /<option value="missing">No live translation<\/option>/);
+  assert.match(page, /<option value="bundled">Bundled only \(no Owner override\)<\/option>/);
   assert.match(page, /<option value="draft">Draft<\/option>/);
   assert.match(page, /<option value="published">Published<\/option>/);
+  assert.match(page, /Localization issues/);
+  assert.match(page, /module=\$\{encodeURIComponent/);
+  assert.match(page, /Requires code fix/);
   assert.match(page, /rollback_platform_language/);
   assert.match(page, /dirtyEntries/);
   assert.doesNotMatch(page, /canonical settings\/account keys/);
   assert.match(page, /AI generation is not available/);
+  assert.match(page, /Empty catalog fields mean no Owner override/);
+  assert.match(page, /Red cards are confirmed problems/);
+  assert.match(page, /entry\.bundled_value/);
 });
 
 test('I18nProvider overlays published Owner catalog onto bundled JSON', () => {
   assert.match(provider, /public\/i18n\//);
-  assert.match(provider, /overlay\[key\] \?\? lookup\(translations\[lang\], key\) \?\? lookup\(en, key\) \?\? key/);
+  assert.match(provider, /overlayValueAllowedForLocale/);
+  assert.match(provider, /invalidatePublishedTranslationOverlay/);
+  assert.match(provider, /peekPublishedTranslationOverlay/);
   assert.match(provider, /import ru from '\.\/ru\.json'/);
 });
 
@@ -73,7 +82,9 @@ test('draft save snapshots published text and publish writes a rollback snapshot
   assert.match(service, /capturePublishedSnapshotIfMissing/);
   assert.match(service, /rollback_platform_language/);
   assert.match(service, /published_snapshot_preserved: true/);
-  assert.match(service, /existingRows/);
+  assert.match(service, /selectAllRows/);
+  assert.match(service, /localization_audit/);
+  assert.match(service, /POSTGREST_PAGE_SIZE/);
   assert.match(service, /isMissingSnapshotColumn/);
   assert.match(migration, /add column if not exists snapshot jsonb/);
   assert.match(service, /ai_translation: \{\s*available: false/);

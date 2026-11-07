@@ -5,6 +5,7 @@ export type ShellProfile = 'income_only' | 'full_platform' | 'worker' | 'closed'
 export interface SessionNavItemDto {
   path: string;
   label: string;
+  label_key?: string;
   order: number;
 }
 

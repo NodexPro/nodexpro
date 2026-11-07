@@ -13,6 +13,7 @@ function canAccessSettings(permissions: string[]): boolean {
 export interface NavItemDto {
   path: string;
   label: string;
+  label_key?: string;
   order: number;
 }
 

@@ -27,7 +27,6 @@ import {
   buildClientProfileUpdatePayload,
   clientProfileBusinessTypeSelectOptions,
   clientProfileNeedsLeaveGuard,
-  clientProfileSaveStateLabelHe,
   createClientProfileAutosaver,
   draftFromClientOperationsCase,
   hydrateClientProfileBusinessType,
@@ -620,7 +619,7 @@ export function ClientWorkspacePanel({
       ? t('clientOperations.saving')
       : profileSaveState.status === 'saved'
         ? t('clientOperations.saved')
-        : clientProfileSaveStateLabelHe(profileSaveState);
+        : saveError || null;
 
   const clientProfileCard = (
     <div className="client-profile-card">
@@ -1024,7 +1023,7 @@ export function ClientWorkspacePanel({
       </div>
       <div className="nx-workspace-header-divider" />
 
-      <div className="nx-workspace-tabs-bar" role="tablist" aria-label="Workspace tabs">
+      <div className="nx-workspace-tabs-bar" role="tablist" aria-label={t('clientOperations.tabsAria')}>
         {tabs.map((tab) => (
           <button
             key={tab.key}
@@ -1215,7 +1214,7 @@ function WorkspaceModalShell({
         </button>
       </div>
       <div className="nx-workspace-header-divider" />
-      <div className="nx-workspace-tabs-bar" role="tablist" aria-label="Workspace tabs" aria-busy={busy}>
+      <div className="nx-workspace-tabs-bar" role="tablist" aria-label={t('clientOperations.tabsAria')} aria-busy={busy}>
         {TAB_ORDER.filter((t) => isWorkspaceNavTabVisible(t.key, false, true)).map((tab) => (
           <button
             key={tab.key}
@@ -1308,7 +1307,7 @@ export function ClientWorkspaceModal({
               </div>
             ) : (
               <div className="nx-workspace-loading" style={{ minHeight: 200 }}>
-                <div className="nx-empty-note">No data.</div>
+                <div className="nx-empty-note">{t('clientOperations.noData')}</div>
               </div>
             )}
           </WorkspaceModalShell>
@@ -1331,9 +1330,10 @@ export function ClientWorkspacePage({
   error: string;
   initialTab?: string;
 }) {
-  if (loading) return <p style={{ color: '#6b7280', padding: 24 }}>Loading…</p>;
+  const { t } = useI18n();
+  if (loading) return <p style={{ color: '#6b7280', padding: 24 }}>{t('clientOperations.loading')}</p>;
   if (error) return <p style={{ color: '#b91c1c', padding: 24 }}>{error}</p>;
-  if (!workspace) return <p style={{ color: '#6b7280', padding: 24 }}>No data.</p>;
+  if (!workspace) return <p style={{ color: '#6b7280', padding: 24 }}>{t('clientOperations.noData')}</p>;
 
   return <ClientWorkspacePanel workspace={workspace} initialTab={initialTab} />;
 }

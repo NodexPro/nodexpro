@@ -40,7 +40,8 @@ export function AppShell() {
       : [];
   const navItems = navigation.map((n) => ({
     path: n.path,
-    label: sidebarNavLabel(n.path, n.label, t),
+    label: n.label_key ? t(n.label_key) : sidebarNavLabel(n.path, n.label, t),
+    labelKey: n.label_key,
     order: n.order,
   }));
 
@@ -55,17 +56,18 @@ export function AppShell() {
     .map((n) => ({
       path: n.path,
       label: n.label,
+      labelKey: n.label_key,
       moduleCode: inferModuleCodeFromPath(n.path),
     }))
     .filter((item) => !isHiddenModuleItem(item) && isEnabledModuleItem(item, enabledModulesSet))
-    .map((c) => ({ to: c.path, label: sidebarNavLabel(c.path, c.label, t) }));
+    .map((c) => ({ to: c.path, label: c.labelKey ? t(c.labelKey) : sidebarNavLabel(c.path, c.label, t), labelKey: c.labelKey }));
 
   const sidebarItems = navItems
     .filter((n) => !n.path.startsWith('/m/'))
     .map((n) =>
       n.path === '/modules' && moduleChildren.length
-        ? { to: n.path, label: n.label, children: moduleChildren }
-        : { to: n.path, label: n.label },
+        ? { to: n.path, label: n.label, labelKey: n.labelKey, children: moduleChildren }
+        : { to: n.path, label: n.label, labelKey: n.labelKey },
     );
 
   const reminderEnabled = isClientOperationsReminderToastsEnabled({

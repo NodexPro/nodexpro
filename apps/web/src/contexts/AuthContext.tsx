@@ -39,7 +39,7 @@ export interface MeData {
   permissions: string[];
   enabledModules: string[];
   navItems: { path: string; label: string; order: number }[];
-  moduleAppNavItems?: { path: string; label: string }[];
+  moduleAppNavItems?: { path: string; label: string; label_key?: string }[];
   shell_profile?: ShellProfile;
   default_route?: string;
   visible_nav_items?: SessionNavItemDto[];
