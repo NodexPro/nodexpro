@@ -27,9 +27,13 @@ import type { RequestContext } from '../../shared/context.js';
 import { intakeWorkEvent } from '../work-engine/work-engine.event-intake.service.js';
 import {
   PLATFORM_EVENT_ANNUAL_REPORT_DOCUMENTS_MISSING,
+  PLATFORM_EVENT_CLIENT_OPERATIONS_OBLIGATION_FILED,
+  PLATFORM_EVENT_CLIENT_OPERATIONS_OBLIGATION_PAYMENT_ATTESTED,
+  PLATFORM_EVENT_CLIENT_OPERATIONS_OBLIGATION_PAYMENT_OUTSTANDING,
   PLATFORM_EVENT_PAYROLL_DOCUMENTS_MISSING,
   PLATFORM_EVENT_VAT_DOCUMENTS_MISSING,
 } from '../../shared/platform-event-catalog.js';
+import type { TaxObligationPaymentClassification } from '../accounting-base/accounting-base-tax-obligation-payment.pure.js';
 
 const SOURCE_MODULE = 'client_obligations';
 const SOURCE_ENTITY_TYPE = 'client_obligation';
@@ -122,4 +126,94 @@ export async function emitObligationDocumentsMissingIfMapped(
       },
     );
   }
+}
+
+async function emitClientOperationsWorkEvent(input: {
+  ctx: RequestContext;
+  orgId: string;
+  clientId: string;
+  eventType: string;
+  sourceEntityId: string;
+  periodKey: string;
+  payload: Record<string, unknown>;
+}): Promise<void> {
+  if (!input.periodKey) return;
+  try {
+    await intakeWorkEvent({ kind: 'office_request', ctx: input.ctx }, {
+      org_id: input.orgId,
+      client_id: input.clientId,
+      source_module: SOURCE_MODULE,
+      source_entity_type: SOURCE_ENTITY_TYPE,
+      source_entity_id: input.sourceEntityId,
+      event_type: input.eventType,
+      period_key: input.periodKey,
+      occurred_at: new Date().toISOString(),
+      schema_version: SCHEMA_VERSION,
+      emitted_by_type: 'system',
+      emitted_by_id: null,
+      payload: input.payload,
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[client_operations → work_engine] intake failed for filing/payment event', {
+      org_id: input.orgId,
+      client_id: input.clientId,
+      event_type: input.eventType,
+      error: (err as { message?: string })?.message ?? String(err),
+    });
+  }
+}
+
+export async function emitObligationFiledWorkEvent(input: {
+  ctx: RequestContext;
+  orgId: string;
+  clientId: string;
+  obligationId: string;
+  obligationType: string;
+  periodKey: string;
+  canonicalId: string;
+}): Promise<void> {
+  await emitClientOperationsWorkEvent({
+    ctx: input.ctx,
+    orgId: input.orgId,
+    clientId: input.clientId,
+    eventType: PLATFORM_EVENT_CLIENT_OPERATIONS_OBLIGATION_FILED,
+    sourceEntityId: `${input.clientId}::${input.canonicalId}::filed`,
+    periodKey: input.periodKey,
+    payload: {
+      obligation_id: input.obligationId,
+      obligation_type: input.obligationType,
+      canonical_id: input.canonicalId,
+    },
+  });
+}
+
+export async function emitObligationPaymentWorkEvent(input: {
+  ctx: RequestContext;
+  orgId: string;
+  clientId: string;
+  obligationId: string | null;
+  periodKey: string;
+  canonicalId: string;
+  paymentClassification: TaxObligationPaymentClassification;
+}): Promise<void> {
+  const outstanding =
+    input.paymentClassification === 'outstanding' || input.paymentClassification === 'partially_paid';
+  await emitClientOperationsWorkEvent({
+    ctx: input.ctx,
+    orgId: input.orgId,
+    clientId: input.clientId,
+    eventType: outstanding
+      ? PLATFORM_EVENT_CLIENT_OPERATIONS_OBLIGATION_PAYMENT_OUTSTANDING
+      : PLATFORM_EVENT_CLIENT_OPERATIONS_OBLIGATION_PAYMENT_ATTESTED,
+    sourceEntityId: `${input.clientId}::${input.canonicalId}::payment`,
+    periodKey: input.periodKey,
+    payload: {
+      obligation_id: input.obligationId,
+      canonical_id: input.canonicalId,
+      payment_classification: input.paymentClassification,
+      provenance: 'user_attested',
+      bank_verified: false,
+    },
+  });
 }

@@ -29,6 +29,12 @@ import {
 import { executeRecordAndAllocateIncomePayment } from './accounting-base-income-payment.service.js';
 import { executeReverseIncomePaymentAllocation } from './accounting-base-income-payment-reversal.service.js';
 import type { IncomeInvoicePaymentCaseAggregate } from './accounting-base-income-payment-case.read.js';
+import {
+  ACCOUNTING_BASE_COMMAND_ATTEST_TAX_OBLIGATION_PAYMENT,
+  ACCOUNTING_TAX_OBLIGATION_PAYMENT_FACT_AGGREGATE_KEY,
+  type AccountingTaxObligationPaymentFact,
+} from './accounting-base-tax-obligation-payment.pure.js';
+import { executeAttestTaxObligationPayment } from './accounting-base-tax-obligation-payment.service.js';
 
 export type AccountingBaseCommandType =
   | 'create_period'
@@ -45,7 +51,8 @@ export type AccountingBaseCommandType =
   | 'unlink_entry_from_entity'
   | 'recompute_summary'
   | typeof ACCOUNTING_BASE_COMMAND_RECORD_AND_ALLOCATE_INCOME_PAYMENT
-  | typeof ACCOUNTING_BASE_COMMAND_REVERSE_INCOME_PAYMENT_ALLOCATION;
+  | typeof ACCOUNTING_BASE_COMMAND_REVERSE_INCOME_PAYMENT_ALLOCATION
+  | typeof ACCOUNTING_BASE_COMMAND_ATTEST_TAX_OBLIGATION_PAYMENT;
 
 type CommandPayload = Record<string, unknown>;
 type LinkTargetType = 'document' | 'client' | 'module_entity' | 'other' | 'accounting_entry';
@@ -82,6 +89,10 @@ type RefreshedAggregateEnvelope =
   | {
       aggregate_key: typeof ACCOUNTING_BASE_INCOME_PAYMENT_CASE_KEY;
       aggregate: IncomeInvoicePaymentCaseAggregate;
+    }
+  | {
+      aggregate_key: typeof ACCOUNTING_TAX_OBLIGATION_PAYMENT_FACT_AGGREGATE_KEY;
+      aggregate: { fact: AccountingTaxObligationPaymentFact };
     };
 
 /** INV-3E may attach lifecycle + affected A/R slices beyond classic AB workspace envelopes. */
@@ -471,6 +482,15 @@ export async function executeAccountingBaseCommand(
       replay: out.replay,
       refreshed: out.refreshed,
       additional_refreshed: out.additional_refreshed,
+    };
+  }
+
+  if (type === ACCOUNTING_BASE_COMMAND_ATTEST_TAX_OBLIGATION_PAYMENT) {
+    const out = await executeAttestTaxObligationPayment(ctx, organizationId, payload);
+    return {
+      ok: true,
+      command: out.command,
+      refreshed: out.refreshed,
     };
   }
 

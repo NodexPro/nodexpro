@@ -2045,6 +2045,60 @@
         "itdMonthly": "מ\"ה ניכויים חודשי",
         "itdBimonthly": "מ\"ה ניכויים דו-חודשי",
         "itdSemiannual": "מ\"ה ניכויים חצי-שנתי"
+      },
+      "reporting": {
+        "kpi": {
+          "vat": "מע״מ",
+          "incomeTax": "מס הכנסה",
+          "payroll": "שכר",
+          "nationalInsurance": "ביטוח לאומי",
+          "withholding": "ניכויים",
+          "annual": "דוחות שנתיים",
+          "paymentsOutstanding": "תשלומים שטרם שולמו",
+          "paymentsOutstandingTooltip": "תקופות נפרדות עם תשלום מס שטרם שולם, כולל תקופות קודמות"
+        },
+        "remaining": "נותרו",
+        "previousIncomplete": "תקופות קודמות לא הושלמו",
+        "previousIncompleteCount": "תקופות",
+        "overduePeriods": "באיחור",
+        "sortLabel": "מיון",
+        "sortPriority": "עדיפות",
+        "sortClientName": "שם לקוח",
+        "markSubmitted": "סמן כהוגש",
+        "markNotSubmitted": "בטל סימון הגשה",
+        "submittedCheck": "הוגש",
+        "filterAll": "כל סוגי הדיווח",
+        "cell": {
+          "submitted": "הוגש",
+          "overdue": "באיחור",
+          "urgent": "עד מחר או היום",
+          "warning": "עד 4 ימים",
+          "open": "טרם הוגש",
+          "notApplicable": "לא חל",
+          "unknown": "אין מועד ודאי",
+          "paymentOutstanding": "הדוח הוגש. התשלום טרם שולם.",
+          "paymentPartial": "הדוח הוגש. התשלום שולם חלקית.",
+          "paymentUnknown": "הדוח הוגש. התשלום לא אושר."
+        },
+        "row": {
+          "complete": "כל הדיווחים החלים הוגשו והתשלומים הנדרשים אושרו",
+          "overdue": "יש דיווחים באיחור",
+          "urgent": "יש דיווחים להיום או למחר",
+          "warning": "יש דיווחים מתקרבים",
+          "paymentOutstanding": "יש דוחות שהוגשו עם תשלום שטרם שולם",
+          "neutral": "יש דיווחים פתוחים",
+          "none": "אין דיווחים חלים בתקופה זו"
+        },
+        "payment": {
+          "question": "האם המס שולם?",
+          "paidInFull": "כן, שולם במלואו",
+          "outstanding": "לא, לא שולם",
+          "partiallyPaid": "שולם חלקית",
+          "notRequired": "אין צורך בתשלום",
+          "confirm": "אישור",
+          "cancel": "ביטול",
+          "updateTitle": "עדכון סטטוס תשלום מס"
+        }
       }
     },
     "filter": "סינון",

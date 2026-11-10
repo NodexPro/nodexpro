@@ -56,6 +56,21 @@ import {
   resolveAllowedManualStatusesForWrite,
   setClientOperationsCellManualStatus,
 } from './client-operations-cell-manual-status.service.js';
+import { executeClientObligationsCommand } from './client-obligations-tasks-core.service.js';
+import { attestTaxObligationPaymentFact } from '../accounting-base/accounting-base-tax-obligation-payment.service.js';
+import {
+  isTaxObligationPaymentClassification,
+  paymentClassificationIsOutstanding,
+} from '../accounting-base/accounting-base-tax-obligation-payment.pure.js';
+import {
+  emitObligationFiledWorkEvent,
+  emitObligationPaymentWorkEvent,
+} from './client-obligations-work-engine-bridge.js';
+import {
+  isFilingSubmittedStatus,
+  paymentAppliesForReportingKind,
+  type ClientOperationsReportingObligationKind,
+} from './client-operations-reporting-dashboard.pure.js';
 
 export type RegistryCustomColumnDefinition = {
   id: string;
@@ -100,6 +115,9 @@ export type ClientOperationsRegistryCommandBody = {
   column_ids?: unknown;
   column_key?: unknown;
   status?: unknown;
+  obligation_id?: unknown;
+  canonical_id?: unknown;
+  payment_classification?: unknown;
   manual_row_slot?: unknown;
   source_operational_period_key?: unknown;
   target_operational_period_key?: unknown;
@@ -344,6 +362,8 @@ function queryFrom(value: unknown): RegistryQueryInput {
     filter_business_type:
       typeof query.filter_business_type === 'string' ? query.filter_business_type : null,
     filter_handler: typeof query.filter_handler === 'string' ? query.filter_handler : null,
+    filter_reporting_kpi:
+      typeof query.filter_reporting_kpi === 'string' ? query.filter_reporting_kpi : null,
     workspace_scope: typeof query.workspace_scope === 'string' ? query.workspace_scope : null,
     workspace_subject_user_id:
       typeof query.workspace_subject_user_id === 'string' ? query.workspace_subject_user_id : null,
@@ -379,6 +399,35 @@ const NI_DEDUCTIONS_REGISTRY_COMMANDS = new Set([
 const INCOME_TAX_DEDUCTIONS_REGISTRY_COMMANDS = new Set([
   'set_income_tax_deductions_reported',
 ]);
+
+const FILING_REGISTRY_COMMANDS = new Set([
+  'mark_client_operations_obligation_reported',
+  'mark_client_operations_obligation_not_reported',
+  'confirm_client_operations_obligation_filed_with_payment',
+  'confirm_client_operations_obligation_tax_payment',
+]);
+
+function reportingKindFromObligationType(
+  obligationType: string,
+): ClientOperationsReportingObligationKind | null {
+  switch (obligationType) {
+    case 'vat_report':
+      return 'vat';
+    case 'income_tax_advance':
+      return 'income_tax_advance';
+    case 'payroll_data':
+    case 'payroll_submission':
+      return 'payroll';
+    case 'national_insurance_self_employed_payment':
+      return 'national_insurance';
+    case 'income_tax_deductions':
+      return 'income_tax_deductions';
+    case 'annual_report':
+      return 'annual';
+    default:
+      return null;
+  }
+}
 
 const MATERIAL_NOT_APPLICABLE_CODE = 'CLIENT_OPERATIONS_MATERIAL_NOT_APPLICABLE';
 const PAYROLL_NOT_APPLICABLE_CODE = 'CLIENT_OPERATIONS_PAYROLL_NOT_APPLICABLE';
@@ -919,6 +968,130 @@ export async function executeClientOperationsRegistryCommand(
         workspace_subject_user_id: requested.workspace_subject_user_id,
       },
     });
+  } else if (
+    command === 'mark_client_operations_obligation_reported' ||
+    command === 'mark_client_operations_obligation_not_reported'
+  ) {
+    const clientId = idFrom(body.client_id, 'client_id');
+    const obligationId = idFrom(body.obligation_id, 'obligation_id');
+    const { data: existing, error: existingError } = await supabaseAdmin
+      .from('client_obligations')
+      .select('id, status, obligation_type, period_key')
+      .eq('organization_id', orgId)
+      .eq('client_id', clientId)
+      .eq('id', obligationId)
+      .maybeSingle();
+    assertQueryError(existingError, 'Failed to load obligation for registry filing command');
+    if (!existing) throw badRequest('obligation not found');
+    const currentStatus = String((existing as { status?: string }).status ?? '');
+    const alreadySubmitted = isFilingSubmittedStatus(currentStatus);
+    if (command === 'mark_client_operations_obligation_reported') {
+      if (!alreadySubmitted) {
+        await executeClientObligationsCommand(ctx, clientId, {
+          type: 'mark_obligation_reported',
+          payload: { obligation_id: obligationId },
+        });
+        await emitObligationFiledWorkEvent({
+          ctx,
+          orgId,
+          clientId,
+          obligationId,
+          obligationType: String((existing as { obligation_type?: string }).obligation_type ?? ''),
+          periodKey: String((existing as { period_key?: string }).period_key ?? ''),
+          canonicalId: `${String((existing as { obligation_type?: string }).obligation_type ?? '')}::${String((existing as { period_key?: string }).period_key ?? '')}`,
+        });
+      }
+    } else if (alreadySubmitted) {
+      await executeClientObligationsCommand(ctx, clientId, {
+        type: 'mark_obligation_not_reported',
+        payload: { obligation_id: obligationId },
+      });
+    }
+  } else if (
+    command === 'confirm_client_operations_obligation_filed_with_payment' ||
+    command === 'confirm_client_operations_obligation_tax_payment'
+  ) {
+    const clientId = idFrom(body.client_id, 'client_id');
+    const obligationId = idFrom(body.obligation_id, 'obligation_id');
+    const canonicalId = String(body.canonical_id ?? '').trim();
+    if (!canonicalId) throw badRequest('canonical_id required');
+    const classificationRaw = String(body.payment_classification ?? '').trim();
+    if (!isTaxObligationPaymentClassification(classificationRaw)) {
+      throw badRequest('payment_classification required');
+    }
+    const operationalPeriodKey = operationalPeriodKeyFrom(
+      body.operational_period_key ?? (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
+    );
+    const { data: existing, error: existingError } = await supabaseAdmin
+      .from('client_obligations')
+      .select('id, status, obligation_type, period_key')
+      .eq('organization_id', orgId)
+      .eq('client_id', clientId)
+      .eq('id', obligationId)
+      .maybeSingle();
+    assertQueryError(existingError, 'Failed to load obligation for registry payment command');
+    if (!existing) throw badRequest('obligation not found');
+    const obligationType = String((existing as { obligation_type?: string }).obligation_type ?? '');
+    const periodKey = String((existing as { period_key?: string }).period_key ?? '');
+    const kind = reportingKindFromObligationType(obligationType);
+    if (!kind) throw badRequest('obligation type does not support tax payment confirmation');
+    const alreadySubmitted = isFilingSubmittedStatus(String((existing as { status?: string }).status ?? ''));
+    if (command === 'confirm_client_operations_obligation_tax_payment' && !alreadySubmitted) {
+      throw badRequest('cannot update payment on an unfiled obligation');
+    }
+    if (command === 'confirm_client_operations_obligation_filed_with_payment' && !alreadySubmitted) {
+      await executeClientObligationsCommand(ctx, clientId, {
+        type: 'mark_obligation_reported',
+        payload: { obligation_id: obligationId },
+      });
+      await emitObligationFiledWorkEvent({
+        ctx,
+        orgId,
+        clientId,
+        obligationId,
+        obligationType,
+        periodKey,
+        canonicalId,
+      });
+    }
+    if (paymentAppliesForReportingKind(kind)) {
+      await attestTaxObligationPaymentFact({
+        ctx,
+        organizationId: orgId,
+        clientId,
+        obligationCanonicalId: canonicalId,
+        obligationKind: kind,
+        operationalPeriodKey,
+        obligationPeriodKey: periodKey,
+        sourceObligationId: obligationId,
+        paymentClassification: classificationRaw,
+        paymentDueDate: null,
+      });
+      await emitObligationPaymentWorkEvent({
+        ctx,
+        orgId,
+        clientId,
+        obligationId,
+        periodKey: operationalPeriodKey,
+        canonicalId,
+        paymentClassification: classificationRaw,
+      });
+    }
+    await audit(
+      ctx,
+      command === 'confirm_client_operations_obligation_tax_payment'
+        ? AUDIT_ACTIONS.CLIENT_OPERATIONS_OBLIGATION_PAYMENT_UPDATED
+        : AUDIT_ACTIONS.CLIENT_OPERATIONS_OBLIGATION_FILED_WITH_PAYMENT,
+      obligationId,
+      {
+        client_id: clientId,
+        obligation_id: obligationId,
+        canonical_id: canonicalId,
+        payment_classification: classificationRaw,
+        refiled: false,
+        outstanding: paymentClassificationIsOutstanding(classificationRaw),
+      },
+    );
   } else if (command === 'archive_client_operations_custom_column') {
     const column = await loadOwnedColumn(orgId, body.column_id);
     const { error } = await supabaseAdmin
@@ -939,7 +1112,8 @@ export async function executeClientOperationsRegistryCommand(
     MATERIAL_REGISTRY_COMMANDS.has(command) ||
     OPERATIONAL_DATE_REGISTRY_COMMANDS.has(command) ||
     NI_DEDUCTIONS_REGISTRY_COMMANDS.has(command) ||
-    INCOME_TAX_DEDUCTIONS_REGISTRY_COMMANDS.has(command)
+    INCOME_TAX_DEDUCTIONS_REGISTRY_COMMANDS.has(command) ||
+    FILING_REGISTRY_COMMANDS.has(command)
   ) {
     responseQuery.operational_period_key = operationalPeriodKeyFrom(
       body.operational_period_key ?? responseQuery.operational_period_key,

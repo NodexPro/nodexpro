@@ -173,6 +173,8 @@ router.get('/registry', ...withView, async (req, res, next) => {
       typeof req.query.filter_business_type === 'string' ? req.query.filter_business_type : null;
     const filterHandlerRaw =
       typeof req.query.filter_handler === 'string' ? req.query.filter_handler : null;
+    const filterReportingKpiRaw =
+      typeof req.query.filter_reporting_kpi === 'string' ? req.query.filter_reporting_kpi : null;
     const workspaceScopeRaw =
       typeof req.query.workspace_scope === 'string' ? req.query.workspace_scope : null;
     const workspaceSubjectUserIdRaw =
@@ -194,6 +196,7 @@ router.get('/registry', ...withView, async (req, res, next) => {
         filter_reporting_type: filterReportingTypeRaw,
         filter_business_type: filterBusinessTypeRaw,
         filter_handler: filterHandlerRaw,
+        filter_reporting_kpi: filterReportingKpiRaw,
         workspace_scope: workspaceScopeRaw,
         workspace_subject_user_id: workspaceSubjectUserIdRaw,
       },

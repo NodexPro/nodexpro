@@ -175,6 +175,10 @@ export const AUDIT_ACTIONS = {
     'client_operations.ni_deductions.126_cycle_completed',
   CLIENT_OPERATIONS_INCOME_TAX_DEDUCTIONS_REPORTED_SET:
     'client_operations.income_tax_deductions.reported_set',
+  CLIENT_OPERATIONS_OBLIGATION_FILED_WITH_PAYMENT:
+    'client_operations.obligation.filed_with_payment',
+  CLIENT_OPERATIONS_OBLIGATION_PAYMENT_UPDATED:
+    'client_operations.obligation.payment_updated',
   CLIENT_OBLIGATION_COMMAND_EXECUTED: 'client_obligation.command_executed',
   CLIENT_TASK_COMMAND_EXECUTED: 'client_task.command_executed',
   CLIENT_OPERATIONS_NIGHT_PASS_EXECUTED: 'client_operations.night_pass_executed',
@@ -207,6 +211,8 @@ export const AUDIT_ACTIONS = {
   ACCOUNTING_BASE_CUSTOMER_CREDIT_OPENED: 'accounting_base.customer_credit_opened',
   ACCOUNTING_BASE_PAYMENT_ALLOCATION_REVERSAL_FAILED:
     'accounting_base.payment_allocation_reversal_failed',
+  ACCOUNTING_BASE_TAX_OBLIGATION_PAYMENT_ATTESTED:
+    'accounting_base.tax_obligation_payment_attested',
   INCOME_DOCUMENT_PAYMENT_ORCHESTRATION_STARTED: 'income.document_payment_orchestration_started',
   INCOME_DOCUMENT_PAYMENT_AB_LINKED: 'income.document_payment_ab_linked',
   INCOME_DOCUMENT_PAYMENT_RECEIPT_DRAFT_CREATED: 'income.document_payment_receipt_draft_created',

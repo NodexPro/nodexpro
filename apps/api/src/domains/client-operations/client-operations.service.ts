@@ -160,6 +160,21 @@ import {
   loadNiDeductionsPeriodFlagsForClients,
   type NiDeductionsRegistryCell,
 } from './client-operations-ni-deductions-registry.service.js';
+import {
+  attachReportingPresentationToRegistryRow,
+  buildPreviousPeriodFactsFromLoad,
+  loadClientOperationsReportingDashboardInputs,
+  outstandingPaymentPeriodFactsFromLoad,
+  type ReportingDashboardLoad,
+} from './client-operations-reporting-dashboard.service.js';
+import {
+  buildReportingDashboard,
+  isClientOperationsReportingFilterId,
+  type ClientOperationsReportingDashboard,
+  type ClientOperationsReportingPreviousPeriods,
+  type ClientOperationsReportingRowPresentation,
+  type PaymentsOutstandingPeriodFact,
+} from './client-operations-reporting-dashboard.pure.js';
 
 export type ClientOperationsRegistryRow = {
   client_id: string;
@@ -215,6 +230,8 @@ export type ClientOperationsRegistryRow = {
   >;
   /** Backend-owned row filter facets (business matching). */
   filter_facets?: ClientOperationsRegistryRowFilterFacets;
+  /** Backend-owned statutory reporting presentation for the selected period. */
+  reporting?: ClientOperationsReportingRowPresentation;
 };
 
 export type ClientOperationsRegistryResponse = {
@@ -315,10 +332,13 @@ export type ClientOperationsRegistryResponse = {
     filter_reporting_type: string | null;
     filter_business_type: string | null;
     filter_handler: string | null;
+    filter_reporting_kpi: string | null;
     workspace_scope: string | null;
     workspace_subject_user_id: string | null;
   };
   allowed_actions: string[];
+  /** Backend-owned reporting KPI / previous-period / sort contract. */
+  reporting_dashboard?: ClientOperationsReportingDashboard;
 };
 
 export type { ClientOperationsRegistryColumn, ClientOperationsToolbarCapability, RegistryQueryInput };
@@ -496,6 +516,8 @@ export type ClientOperationsRegistryPreSearchMaterialization = {
   columns_needing_legacy_baseline: ClientOperationsRegistryResponse['columns_needing_legacy_baseline'];
   /** Pre-search manual-row values (`slot:columnKey` → text); null when a business filter hides manual rows. */
   manual_row_values_by_slot_column: Map<string, string> | null;
+  reporting_previous_periods: ClientOperationsReportingPreviousPeriods;
+  reporting_outstanding_payment_periods: PaymentsOutstandingPeriodFact[];
   /** Chrome reused on single-client rematerialize — never a second source of truth. */
   handler_display_by_user_id?: Map<string, string | null>;
   visible_custom_columns?: Awaited<ReturnType<typeof loadActiveCustomColumnsExtended>>;
@@ -540,9 +562,10 @@ function registryQueryEcho(
   selectedPeriodKey: string,
 ): ClientOperationsRegistryResponse['query'] {
   const q = (query.q ?? '').trim() || null;
-  const sort_by = query.sort_by?.trim() || null;
+  const sort_by = query.sort_by?.trim() || 'priority';
   const sort_dir = query.sort_dir === 'desc' || query.sort_dir === 'asc' ? query.sort_dir : null;
   const active = normalizeClientOperationsRegistryBusinessFilterQuery(query);
+  const kpi = query.filter_reporting_kpi?.trim() || null;
   return {
     q,
     sort_by,
@@ -555,6 +578,7 @@ function registryQueryEcho(
     filter_reporting_type: active.reporting_type === 'all' ? null : active.reporting_type,
     filter_business_type: active.business_type === 'all' ? null : active.business_type,
     filter_handler: active.handler === 'all' ? null : active.handler,
+    filter_reporting_kpi: isClientOperationsReportingFilterId(kpi) ? kpi : null,
     workspace_scope: query.workspace_scope?.trim() || null,
     workspace_subject_user_id: query.workspace_subject_user_id?.trim() || null,
   };
@@ -654,14 +678,26 @@ export async function listClientOperationsRegistry(
   // Request-scoped search / sort on canonical pre-search rows — the EXISTING matching function.
   const searchMs = Date.now();
   const q = (query.q ?? '').trim() || null;
-  const sort_by = query.sort_by?.trim() || null;
+  const sort_by = query.sort_by?.trim() || 'priority';
   const sort_dir = query.sort_dir === 'desc' || query.sort_dir === 'asc' ? query.sort_dir : null;
-  // Business filters already applied via early facet matching; search/sort still apply.
+  const filter_reporting_kpi = isClientOperationsReportingFilterId(query.filter_reporting_kpi)
+    ? query.filter_reporting_kpi
+    : null;
+  // Business filters already applied via early facet matching; search/sort/KPI still apply.
   const rows = applyRegistryQueryToRows(materialization.built_rows, {
     q,
     sort_by,
     sort_dir,
+    filter_reporting_kpi,
     operational_period_key: selectedPeriodKey,
+  });
+  const reporting_dashboard = buildReportingDashboard({
+    rows: materialization.built_rows,
+    previous_periods: materialization.reporting_previous_periods,
+    sort_by,
+    kpi_filter: filter_reporting_kpi,
+    selected_period_key: selectedPeriodKey,
+    outstanding_period_facts: materialization.reporting_outstanding_payment_periods ?? [],
   });
   // Manual rows: same pipeline as buildManualRowsForRegistryAggregate — values loaded pre-search,
   // `materializeClientOperationsManualRows` applies searchQ per request.
@@ -704,6 +740,7 @@ export async function listClientOperationsRegistry(
       selectedPeriodKey,
     ),
     allowed_actions: buildRegistryAllowedActions(ctx),
+    reporting_dashboard,
   };
   const reusedMaterialization =
     materializationSource === 'hit' || materializationSource === 'coalesced';
@@ -972,9 +1009,16 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     })(),
   );
 
+  const emptyPreviousPeriods: ClientOperationsReportingPreviousPeriods = {
+    incomplete_count: 0,
+    overdue_count: 0,
+    periods: [],
+  };
   const finishMaterialization = (
     shared: Awaited<typeof sharedInputsPromise>,
     builtRows: ClientOperationsRegistryRow[],
+    reportingPreviousPeriods: ClientOperationsReportingPreviousPeriods = emptyPreviousPeriods,
+    reportingOutstandingPaymentPeriods: PaymentsOutstandingPeriodFact[] = [],
   ): ClientOperationsRegistryPreSearchMaterialization => ({
     period: shared.period,
     user_period_data_copy_source_periods: shared.userPeriodDataCopySourcePeriods,
@@ -988,6 +1032,8 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     manual_rows_period_setup: shared.manualRowsPeriodSetup,
     columns_needing_legacy_baseline: shared.userColumnsPeriodExtras.columns_needing_legacy_baseline,
     manual_row_values_by_slot_column: shared.manualRowValuesBySlotColumn,
+    reporting_previous_periods: reportingPreviousPeriods,
+    reporting_outstanding_payment_periods: reportingOutstandingPaymentPeriods,
     handler_display_by_user_id: shared.handlerDisplayByUserId,
     visible_custom_columns: shared.visibleCustomColumns,
     stage_timings: stageTimings,
@@ -1398,6 +1444,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
   const niDeductionsConfiguredClientIds = facetSeeds
     .filter((s) => s.niDeductionsConfigured)
     .map((s) => s.client.id);
+  const previousPeriodKeys = (period.available_periods ?? []).filter((k) => k < selectedPeriodKey);
 
   // VAT due display depends only on tax settings + period — overlap it with phase 2.
   const vatDueMs = Date.now();
@@ -1423,6 +1470,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     niDeductionsPeriodFlagsByClient,
     niDeductions126FactsByClient,
     earliestNiDeductionsApplicableByClient,
+    reportingDashboardLoad,
   ] = matchingClientIds.length
     ? await Promise.all([
         loadNotesAggregatesByClient(orgId, matchingClientIds),
@@ -1462,6 +1510,12 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
           organizationId: orgId,
           clientIds: niDeductionsConfiguredClientIds,
         }),
+        loadClientOperationsReportingDashboardInputs({
+          organizationId: orgId,
+          clientIds: matchingClientIds,
+          selectedPeriodKey,
+          previousPeriodKeys,
+        }),
       ])
     : [
         new Map(),
@@ -1472,6 +1526,12 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
         new Map(),
         new Map(),
         new Map(),
+        await loadClientOperationsReportingDashboardInputs({
+          organizationId: orgId,
+          clientIds: [],
+          selectedPeriodKey,
+          previousPeriodKeys: [],
+        }),
       ];
   markStage('phase2_presentation_loads', phase2Ms);
   const vatDueDisplayByClient = await vatDuePromise;
@@ -1656,14 +1716,43 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       manual_cell_statuses,
       filter_facets: seed.filter_facets,
     }, visibleCustomColumns, customValuesByClientAndColumn);
-    return [{
+    const labeled = {
       ...mergedRow,
       cell_label_keys: buildRegistryRowCellLabelKeys(mergedRow.cells),
-    }];
+    };
+    return [
+      attachReportingPresentationToRegistryRow({
+        row: labeled,
+        tax: tax
+          ? {
+              vat_type: tax.vat_type,
+              vat_due_type: tax.vat_due_type,
+              vat_frequency: tax.vat_frequency,
+              income_tax_advance_enabled: tax.income_tax_advance_enabled,
+            }
+          : null,
+        facts: reportingDashboardLoad.factsByClient.get(c.id) ?? [],
+        paymentFacts: reportingDashboardLoad.paymentFactsByClient.get(c.id) ?? [],
+        calendarDueByKey: reportingDashboardLoad.calendarDueByKey,
+        selectedPeriodKey,
+        today: reportingDashboardLoad.today,
+      }),
+    ];
   });
   markStage('presentation_row_build', presentationMs);
 
-  return finishMaterialization(sharedInputs, builtRows);
+  const reportingPreviousPeriods = buildPreviousPeriodFactsFromLoad({
+    selectedPeriodKey,
+    previousPeriodKeys,
+    load: reportingDashboardLoad as ReportingDashboardLoad,
+    today: reportingDashboardLoad.today,
+  });
+  return finishMaterialization(
+    sharedInputs,
+    builtRows,
+    reportingPreviousPeriods,
+    outstandingPaymentPeriodFactsFromLoad(reportingDashboardLoad as ReportingDashboardLoad),
+  );
 }
 
 /** אופציות קריאה לאגרגט תיק — לא משנות נתונים ב-DB */

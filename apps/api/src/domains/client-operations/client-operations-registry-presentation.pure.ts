@@ -10,6 +10,12 @@ import {
   toolbarCapabilityLabelKey,
   CO_UI,
 } from './client-operations-ui-labels.pure.js';
+import {
+  compareReportingPriorityRows,
+  isClientOperationsReportingFilterId,
+  rowMatchesReportingKpiFilter,
+  type ClientOperationsReportingRowPresentation,
+} from './client-operations-reporting-dashboard.pure.js';
 
 export type RegistryColumnCellKind = 'folder' | 'text' | 'notes' | 'custom' | 'checkbox' | 'operational_date';
 export type ClientOperationsCustomColumnDataType = 'text' | 'number' | 'date' | 'boolean';
@@ -636,6 +642,8 @@ export type RegistryQueryInput = {
   /** Stage 4 workspace projection — authorized by backend (never trust raw). */
   workspace_scope?: string | null;
   workspace_subject_user_id?: string | null;
+  /** KPI chip filter — READ/query only (not a write). */
+  filter_reporting_kpi?: string | null;
 };
 
 /** Canonical created month from `clients.created_at` (Asia/Jerusalem). */
@@ -678,6 +686,7 @@ export function applyRegistryQueryToRows<
     cells: Record<string, string>;
     client_name: string | null;
     created_at?: string | null;
+    reporting?: ClientOperationsReportingRowPresentation | null;
   },
 >(rows: T[], query: RegistryQueryInput): T[] {
   let out = rows;
@@ -688,8 +697,15 @@ export function applyRegistryQueryToRows<
       return Object.values(r.cells).some((v) => v.toLowerCase().includes(q));
     });
   }
-  const sortBy = query.sort_by?.trim() || null;
-  if (sortBy && sortBy !== 'folder') {
+  const kpiFilter = query.filter_reporting_kpi?.trim() || null;
+  if (isClientOperationsReportingFilterId(kpiFilter)) {
+    out = out.filter((r) => rowMatchesReportingKpiFilter(r, kpiFilter));
+  }
+  const sortBy = query.sort_by?.trim() || 'priority';
+  if (sortBy === 'priority') {
+    return [...out].sort((a, b) => compareReportingPriorityRows(a, b));
+  }
+  if (sortBy !== 'folder' && sortBy !== 'period_created') {
     const dir = query.sort_dir === 'desc' ? -1 : 1;
     out = [...out].sort((a, b) => {
       const av = (a.cells[sortBy] ?? '').localeCompare(b.cells[sortBy] ?? '', 'he');

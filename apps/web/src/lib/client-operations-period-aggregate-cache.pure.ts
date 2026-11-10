@@ -17,6 +17,8 @@ export type ClientOperationsRegistryCacheQuery = {
   filter_reporting_type?: string | null;
   filter_business_type?: string | null;
   filter_handler?: string | null;
+  filter_reporting_kpi?: string | null;
+  sort_by?: string | null;
   /** Stage 4 — workspace projection identity (presentation cache only). */
   workspace_scope?: string | null;
   workspace_subject_user_id?: string | null;
@@ -30,6 +32,7 @@ export function buildClientOperationsRegistryCacheKey(
   const period = String(periodKey ?? '').trim();
   if (!period) return '';
   const norm = (v: string | null | undefined) => String(v ?? '').trim();
+  const sort = norm(query?.sort_by);
   return [
     period,
     norm(query?.q),
@@ -39,6 +42,8 @@ export function buildClientOperationsRegistryCacheKey(
     norm(query?.filter_reporting_type),
     norm(query?.filter_business_type),
     norm(query?.filter_handler),
+    norm(query?.filter_reporting_kpi),
+    sort === '' || sort === 'priority' ? 'priority' : sort,
     norm(query?.workspace_scope),
     norm(query?.workspace_subject_user_id),
   ].join('\u001f');
@@ -53,7 +58,8 @@ export function hasActiveClientOperationsBusinessFilters(
       String(query?.filter_payroll ?? '').trim() ||
       String(query?.filter_reporting_type ?? '').trim() ||
       String(query?.filter_business_type ?? '').trim() ||
-      String(query?.filter_handler ?? '').trim(),
+      String(query?.filter_handler ?? '').trim() ||
+      String(query?.filter_reporting_kpi ?? '').trim(),
   );
 }
 

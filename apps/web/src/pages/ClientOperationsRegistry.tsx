@@ -30,6 +30,32 @@ import {
   type PeriodAggregateCacheEntry,
 } from '../lib/client-operations-period-aggregate-cache.pure';
 
+type ClientOperationsReportingDashboard = {
+  kpi_cards: Array<{
+    id: string;
+    label_key: string;
+    submitted_count: number;
+    total_count: number;
+    remaining_count: number;
+    remaining_tone: 'neutral' | 'warning' | 'urgent' | 'overdue';
+  }>;
+  previous_periods: {
+    incomplete_count: number;
+    overdue_count: number;
+    periods: Array<{
+      period_key: string;
+      navigate_period_key: string;
+      display_label: string;
+      kind: 'month' | 'year';
+      incomplete: true;
+      overdue: boolean;
+    }>;
+  };
+  sort_options: Array<{ id: string; label_key: string }>;
+  active_sort: string;
+  active_kpi_filter: string | null;
+};
+
 type RegistryWorkspaceAggregate = {
   scope_kind: 'OFFICE' | 'MY' | 'STAFF';
   viewer_user_id: string;
@@ -99,9 +125,11 @@ type RegistryAggregate = {
     filter_reporting_type?: string | null;
     filter_business_type?: string | null;
     filter_handler?: string | null;
+    filter_reporting_kpi?: string | null;
     workspace_scope?: string | null;
     workspace_subject_user_id?: string | null;
   };
+  reporting_dashboard?: ClientOperationsReportingDashboard;
   period?: { selected_period_key: string; default_period_key: string; available_periods: string[] };
   /** Backend-owned periods with meaningful user-entered custom/manual values (copy menu). */
   user_period_data_copy_source_periods?: string[];
@@ -167,6 +195,7 @@ export function ClientOperationsRegistry() {
     NonNullable<RegistryAggregate['manual_status_paint_modes']>
   >([]);
   const [filters, setFilters] = useState<RegistryAggregate['filters']>(undefined);
+  const [reportingDashboard, setReportingDashboard] = useState<ClientOperationsReportingDashboard | null>(null);
   const [workspace, setWorkspace] = useState<RegistryWorkspaceAggregate | null>(null);
   const [query, setQuery] = useState<{
     q: string | null;
@@ -179,6 +208,7 @@ export function ClientOperationsRegistry() {
     filter_reporting_type: string | null;
     filter_business_type: string | null;
     filter_handler: string | null;
+    filter_reporting_kpi: string | null;
     workspace_scope: string | null;
     workspace_subject_user_id: string | null;
   }>({
@@ -192,6 +222,7 @@ export function ClientOperationsRegistry() {
     filter_reporting_type: null,
     filter_business_type: null,
     filter_handler: null,
+    filter_reporting_kpi: null,
     workspace_scope: null,
     workspace_subject_user_id: null,
   });
@@ -241,6 +272,8 @@ export function ClientOperationsRegistry() {
       filter_reporting_type?: string | null;
       filter_business_type?: string | null;
       filter_handler?: string | null;
+      filter_reporting_kpi?: string | null;
+      sort_by?: string | null;
       workspace_scope?: string | null;
       workspace_subject_user_id?: string | null;
     }): ClientOperationsRegistryCacheQuery => ({
@@ -251,6 +284,8 @@ export function ClientOperationsRegistry() {
       filter_reporting_type: src.filter_reporting_type ?? null,
       filter_business_type: src.filter_business_type ?? null,
       filter_handler: src.filter_handler ?? null,
+      filter_reporting_kpi: src.filter_reporting_kpi ?? null,
+      sort_by: src.sort_by ?? null,
       workspace_scope: src.workspace_scope ?? null,
       workspace_subject_user_id: src.workspace_subject_user_id ?? null,
     }),
@@ -305,6 +340,8 @@ export function ClientOperationsRegistry() {
             filter_reporting_type: data.query?.filter_reporting_type ?? null,
             filter_business_type: data.query?.filter_business_type ?? null,
             filter_handler: data.query?.filter_handler ?? null,
+            filter_reporting_kpi: data.query?.filter_reporting_kpi ?? null,
+            sort_by: data.query?.sort_by ?? null,
             workspace_scope: data.query?.workspace_scope ?? null,
             workspace_subject_user_id: data.query?.workspace_subject_user_id ?? null,
           }),
@@ -332,6 +369,7 @@ export function ClientOperationsRegistry() {
       setManualStatusPaintModes(data.manual_status_paint_modes);
     }
     if (data?.filters) setFilters(data.filters);
+    setReportingDashboard(data?.reporting_dashboard ?? null);
     if (data?.workspace) setWorkspace(data.workspace);
     if (data?.query) {
       setQuery({
@@ -346,6 +384,7 @@ export function ClientOperationsRegistry() {
         filter_reporting_type: data.query.filter_reporting_type ?? null,
         filter_business_type: data.query.filter_business_type ?? null,
         filter_handler: data.query.filter_handler ?? null,
+        filter_reporting_kpi: data.query.filter_reporting_kpi ?? null,
         workspace_scope: data.query.workspace_scope ?? null,
         workspace_subject_user_id: data.query.workspace_subject_user_id ?? null,
       });
@@ -380,6 +419,8 @@ export function ClientOperationsRegistry() {
           filter_reporting_type: data.query?.filter_reporting_type ?? null,
           filter_business_type: data.query?.filter_business_type ?? null,
           filter_handler: data.query?.filter_handler ?? null,
+            filter_reporting_kpi: data.query?.filter_reporting_kpi ?? null,
+          sort_by: data.query?.sort_by ?? null,
           workspace_scope: data.query?.workspace_scope ?? null,
           workspace_subject_user_id: data.query?.workspace_subject_user_id ?? null,
         }),
@@ -403,6 +444,7 @@ export function ClientOperationsRegistry() {
         filter_reporting_type?: string | null;
         filter_business_type?: string | null;
         filter_handler?: string | null;
+        filter_reporting_kpi?: string | null;
         workspace_scope?: string | null;
         workspace_subject_user_id?: string | null;
       },
@@ -462,6 +504,7 @@ export function ClientOperationsRegistry() {
         filter_reporting_type?: string | null;
         filter_business_type?: string | null;
         filter_handler?: string | null;
+        filter_reporting_kpi?: string | null;
         workspace_scope?: string | null;
         workspace_subject_user_id?: string | null;
       },
@@ -482,6 +525,7 @@ export function ClientOperationsRegistry() {
           filter_reporting_type: nextQuery.filter_reporting_type ?? null,
           filter_business_type: nextQuery.filter_business_type ?? null,
           filter_handler: nextQuery.filter_handler ?? null,
+          filter_reporting_kpi: nextQuery.filter_reporting_kpi ?? null,
           workspace_scope: nextQuery.workspace_scope ?? null,
           workspace_subject_user_id: nextQuery.workspace_subject_user_id ?? null,
         });
@@ -525,6 +569,7 @@ export function ClientOperationsRegistry() {
           filter_reporting_type: nextQuery.filter_reporting_type ?? null,
           filter_business_type: nextQuery.filter_business_type ?? null,
           filter_handler: nextQuery.filter_handler ?? null,
+          filter_reporting_kpi: nextQuery.filter_reporting_kpi ?? null,
           workspace_scope: nextQuery.workspace_scope ?? null,
           workspace_subject_user_id: nextQuery.workspace_subject_user_id ?? null,
         });
@@ -577,6 +622,7 @@ export function ClientOperationsRegistry() {
               filter_reporting_type: nextQuery.filter_reporting_type ?? null,
               filter_business_type: nextQuery.filter_business_type ?? null,
               filter_handler: nextQuery.filter_handler ?? null,
+          filter_reporting_kpi: nextQuery.filter_reporting_kpi ?? null,
               workspace_scope: nextQuery.workspace_scope ?? null,
               workspace_subject_user_id: nextQuery.workspace_subject_user_id ?? null,
             },
@@ -652,6 +698,7 @@ export function ClientOperationsRegistry() {
         filter_reporting_type?: string | null;
         filter_business_type?: string | null;
         filter_handler?: string | null;
+        filter_reporting_kpi?: string | null;
       },
       options?: { quiet?: boolean },
     ) => {
@@ -846,6 +893,7 @@ export function ClientOperationsRegistry() {
       columnsNeedingLegacyBaseline={columnsNeedingLegacyBaseline}
       manualStatusPaintModes={manualStatusPaintModes}
       filters={filters}
+      reportingDashboard={reportingDashboard}
       workspace={workspace}
       onWorkspaceChange={onWorkspaceChange}
       query={query}

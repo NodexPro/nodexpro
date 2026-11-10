@@ -43,6 +43,12 @@ export const PLATFORM_EVENT_CLIENT_OPERATIONS_PAYROLL_MATERIAL_MISSING =
   'client_operations.payroll_material_missing' as const;
 export const PLATFORM_EVENT_CLIENT_OPERATIONS_VAT_MATERIAL_MISSING =
   'client_operations.vat_material_missing' as const;
+export const PLATFORM_EVENT_CLIENT_OPERATIONS_OBLIGATION_FILED =
+  'client_operations.obligation_filed' as const;
+export const PLATFORM_EVENT_CLIENT_OPERATIONS_OBLIGATION_PAYMENT_OUTSTANDING =
+  'client_operations.obligation_payment_outstanding' as const;
+export const PLATFORM_EVENT_CLIENT_OPERATIONS_OBLIGATION_PAYMENT_ATTESTED =
+  'client_operations.obligation_payment_attested' as const;
 
 export const PLATFORM_EVENT_CLIENT_OPERATIONS_TYPES = [
   PLATFORM_EVENT_CLIENT_OPERATIONS_ANNUAL_REPORT_DOCUMENTS_MISSING,
@@ -199,6 +205,24 @@ export const PLATFORM_EVENT_CATALOG: readonly PlatformEventCatalogEntry[] = [
     'client_operations',
     CLIENT_OPERATIONS_SCHEMA_VERSION,
     'Client Operations VAT material missing for client period.',
+  ),
+  entry(
+    PLATFORM_EVENT_CLIENT_OPERATIONS_OBLIGATION_FILED,
+    'client_operations',
+    CLIENT_OPERATIONS_SCHEMA_VERSION,
+    'Government filing marked on a Client Operations reporting obligation (audit/context intake; Work Engine mapping pending).',
+  ),
+  entry(
+    PLATFORM_EVENT_CLIENT_OPERATIONS_OBLIGATION_PAYMENT_OUTSTANDING,
+    'client_operations',
+    CLIENT_OPERATIONS_SCHEMA_VERSION,
+    'User-attested tax payment outstanding or partial after filing (audit/context intake; Work Engine mapping pending).',
+  ),
+  entry(
+    PLATFORM_EVENT_CLIENT_OPERATIONS_OBLIGATION_PAYMENT_ATTESTED,
+    'client_operations',
+    CLIENT_OPERATIONS_SCHEMA_VERSION,
+    'User-attested tax payment paid in full or not required (audit/context intake; Work Engine mapping pending).',
   ),
 
   // —— Payroll / VAT / Annual Reports (via Client Obligations bridge) ——

@@ -2045,6 +2045,60 @@
         "itdMonthly": "ITA deductions monthly",
         "itdBimonthly": "ITA deductions bimonthly",
         "itdSemiannual": "ITA deductions semi-annual"
+      },
+      "reporting": {
+        "kpi": {
+          "vat": "VAT",
+          "incomeTax": "Income tax",
+          "payroll": "Payroll",
+          "nationalInsurance": "National Insurance",
+          "withholding": "Withholding",
+          "annual": "Annual reports",
+          "paymentsOutstanding": "Payments outstanding",
+          "paymentsOutstandingTooltip": "Distinct periods with outstanding tax payments, including previous periods"
+        },
+        "remaining": "remaining",
+        "previousIncomplete": "Incomplete previous periods",
+        "previousIncompleteCount": "periods",
+        "overduePeriods": "overdue",
+        "sortLabel": "Sort",
+        "sortPriority": "Priority",
+        "sortClientName": "Client name",
+        "markSubmitted": "Mark as filed",
+        "markNotSubmitted": "Clear filed mark",
+        "submittedCheck": "Filed",
+        "filterAll": "All report types",
+        "cell": {
+          "submitted": "Filed",
+          "overdue": "Overdue",
+          "urgent": "Due today or tomorrow",
+          "warning": "Due within 4 days",
+          "open": "Not filed",
+          "notApplicable": "Not applicable",
+          "unknown": "Due date unknown",
+          "paymentOutstanding": "Report filed. Payment outstanding.",
+          "paymentPartial": "Report filed. Payment partially paid.",
+          "paymentUnknown": "Report filed. Payment not confirmed."
+        },
+        "row": {
+          "complete": "All applicable reports filed and required payments confirmed",
+          "overdue": "Has overdue reports",
+          "urgent": "Has reports due today or tomorrow",
+          "warning": "Has reports due soon",
+          "paymentOutstanding": "Has filed reports with outstanding payment",
+          "neutral": "Reports still open",
+          "none": "No applicable reports this period"
+        },
+        "payment": {
+          "question": "Has the tax been paid?",
+          "paidInFull": "Yes, paid in full",
+          "outstanding": "No, not paid",
+          "partiallyPaid": "Partially paid",
+          "notRequired": "No payment required",
+          "confirm": "Confirm",
+          "cancel": "Cancel",
+          "updateTitle": "Update tax payment status"
+        }
       }
     },
     "filter": "Filter",

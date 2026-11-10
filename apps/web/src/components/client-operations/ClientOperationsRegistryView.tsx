@@ -199,6 +199,103 @@ export type ClientOperationsNiDeductionsCell = {
   };
 };
 
+export type ClientOperationsReportingCellPresentation = {
+  kind: string;
+  column_key: string;
+  canonical_id: string;
+  tone:
+    | 'not_applicable'
+    | 'unknown'
+    | 'neutral_open'
+    | 'warning'
+    | 'urgent'
+    | 'overdue'
+    | 'submitted'
+    | 'payment_outstanding'
+    | 'payment_unknown';
+  tone_label_key: string;
+  tooltip_key: string;
+  applicable: boolean;
+  submitted: boolean;
+  overdue: boolean;
+  due_date: string | null;
+  days_until_due: number | null;
+  obligation_id: string | null;
+  can_mark_submitted: boolean;
+  can_mark_not_submitted: boolean;
+  last_reported_at: string | null;
+  submitted_indicator: boolean;
+  display_dash: boolean;
+  overlay_visible?: boolean;
+  display_icon?: 'none' | 'check' | 'bang_overdue' | 'bang_payment' | 'unknown';
+  filing_state?: 'not_applicable' | 'unfiled' | 'filed';
+  payment_applies?: boolean;
+  payment_question_visible?: boolean;
+  payment_state?: string;
+  payment_due_date?: string | null;
+  payment_due_known?: boolean;
+  payment_overdue?: boolean;
+  payment_provenance?: 'user_attested' | null;
+  bank_verified?: false;
+  allowed_actions?: Array<'confirm_filing' | 'unfile' | 'update_payment'>;
+  payment_modal?: {
+    mode: 'file_with_payment' | 'update_payment';
+    title_key: string;
+    options: Array<{ id: string; label_key: string }>;
+    confirm_key: string;
+    cancel_key: string;
+  } | null;
+};
+
+export type ClientOperationsReportingRowPresentation = {
+  row_tone: 'none' | 'neutral' | 'warning' | 'urgent' | 'overdue' | 'payment_outstanding' | 'complete';
+  row_tone_label_key: string;
+  priority_rank: number;
+  earliest_open_due_date: string | null;
+  open_overdue_count: number;
+  open_urgent_count: number;
+  open_warning_count: number;
+  open_neutral_count: number;
+  open_payment_outstanding_count?: number;
+  applicable_count: number;
+  submitted_count: number;
+  cells: Record<string, ClientOperationsReportingCellPresentation>;
+};
+
+export type ClientOperationsReportingDashboard = {
+  kpi_cards: Array<{
+    id: string;
+    label_key: string;
+    submitted_count: number;
+    total_count: number;
+    remaining_count: number;
+    remaining_tone: 'neutral' | 'warning' | 'urgent' | 'overdue';
+  }>;
+  payments_outstanding_kpi?: {
+    id: 'payments_outstanding';
+    label_key: string;
+    count: number;
+    remaining_tone: 'payment_outstanding';
+    tooltip_key: string;
+    tooltip_periods: Array<{ period_key: string; display_label: string }>;
+  };
+  previous_periods: {
+    incomplete_count: number;
+    overdue_count: number;
+    periods: Array<{
+      period_key: string;
+      navigate_period_key: string;
+      display_label: string;
+      kind: 'month' | 'year';
+      incomplete: true;
+      overdue: boolean;
+    }>;
+  };
+  sort_options: Array<{ id: string; label_key: string }>;
+  active_sort: string;
+  active_kpi_filter: string | null;
+};
+
 export type ClientOperationsIncomeTaxDeductionsCell = {
   configured: boolean;
   due: boolean;
@@ -243,6 +340,7 @@ export type ClientOperationsRegistryRow = {
   /** Ready-to-render display by column key (from aggregate). */
   cells?: Record<string, string>;
   cell_label_keys?: Record<string, string>;
+  reporting?: ClientOperationsReportingRowPresentation;
   /** Backend-owned manual paint status capabilities per column key. */
   manual_cell_statuses?: Record<
     string,
@@ -598,9 +696,11 @@ export type ClientOperationsRegistryViewProps = {
     filter_reporting_type?: string | null;
     filter_business_type?: string | null;
     filter_handler?: string | null;
+    filter_reporting_kpi?: string | null;
     workspace_scope?: string | null;
     workspace_subject_user_id?: string | null;
   };
+  reportingDashboard?: ClientOperationsReportingDashboard | null;
   onQueryChange?: (
     next: {
       q: string | null;
@@ -612,6 +712,7 @@ export type ClientOperationsRegistryViewProps = {
       filter_reporting_type?: string | null;
       filter_business_type?: string | null;
       filter_handler?: string | null;
+      filter_reporting_kpi?: string | null;
     },
     options?: { quiet?: boolean },
   ) => void;
@@ -658,6 +759,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     columnsNeedingLegacyBaseline: _columnsNeedingLegacyBaseline = [],
     manualStatusPaintModes = [],
     filters,
+    reportingDashboard = null,
     workspace = null,
     onWorkspaceChange,
     query,
@@ -796,6 +898,18 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   }>(null);
   const [periodCopyBusy, setPeriodCopyBusy] = useState(false);
   const [periodCopyFeedback, setPeriodCopyFeedback] = useState<string | null>(null);
+  const [paymentModal, setPaymentModal] = useState<{
+    mode: 'file_with_payment' | 'update_payment';
+    row: ClientOperationsRegistryRow;
+    columnKey: string;
+    obligationId: string;
+    canonicalId: string;
+    titleKey: string;
+    options: Array<{ id: string; label_key: string }>;
+    confirmKey: string;
+    cancelKey: string;
+    selected: string | null;
+  } | null>(null);
   const statusPaintSlotsRef = useRef<Map<string, ManualStatusPaintSlot>>(new Map());
   const statusOverlaysRef = useRef<Map<string, ManualStatusOverlay>>(new Map());
   const statusOverlayGenRef = useRef(0);
@@ -832,6 +946,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           filter_reporting_type: query?.filter_reporting_type ?? null,
           filter_business_type: query?.filter_business_type ?? null,
           filter_handler: query?.filter_handler ?? null,
+          filter_reporting_kpi: query?.filter_reporting_kpi ?? null,
         },
         { quiet: true },
       );
@@ -848,6 +963,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       query?.filter_reporting_type,
       query?.filter_business_type,
       query?.filter_handler,
+      query?.filter_reporting_kpi,
     ],
   );
 
@@ -885,6 +1001,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           filter_reporting_type: query?.filter_reporting_type ?? null,
           filter_business_type: query?.filter_business_type ?? null,
           filter_handler: query?.filter_handler ?? null,
+          filter_reporting_kpi: query?.filter_reporting_kpi ?? null,
           [key]: value,
         },
         { quiet: true },
@@ -901,6 +1018,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       query?.filter_reporting_type,
       query?.filter_business_type,
       query?.filter_handler,
+      query?.filter_reporting_kpi,
     ],
   );
 
@@ -917,10 +1035,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         filter_reporting_type: null,
         filter_business_type: null,
         filter_handler: null,
+        filter_reporting_kpi: query?.filter_reporting_kpi ?? null,
       },
       { quiet: true },
     );
-  }, [onQueryChange, query?.q, query?.sort_by, query?.sort_dir]);
+  }, [onQueryChange, query?.q, query?.sort_by, query?.sort_dir, query?.filter_reporting_kpi]);
 
   const onSearchDraftChange = (value: string) => {
     setSearchDraft(value);
@@ -2778,6 +2897,79 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       t('clientOperations.registry.errors.saveFailed'),
     );
   };
+  const openReportingPaymentModal = (
+    row: ClientOperationsRegistryRow,
+    columnKey: string,
+    mode: 'file_with_payment' | 'update_payment',
+  ) => {
+    const reportingCell = row.reporting?.cells?.[columnKey];
+    const modal = reportingCell?.payment_modal;
+    if (!reportingCell?.obligation_id || !modal) return;
+    setPaymentModal({
+      mode,
+      row,
+      columnKey,
+      obligationId: reportingCell.obligation_id,
+      canonicalId: reportingCell.canonical_id,
+      titleKey: modal.title_key,
+      options: modal.options,
+      confirmKey: modal.confirm_key,
+      cancelKey: modal.cancel_key,
+      selected: null,
+    });
+  };
+  const toggleReportingFiled = async (
+    row: ClientOperationsRegistryRow,
+    columnKey: string,
+  ) => {
+    if (statusPaintMode) return;
+    if (!canEdit || !onRegistryCommand) return;
+    const reportingCell = row.reporting?.cells?.[columnKey];
+    if (!reportingCell?.obligation_id) return;
+    const actions = reportingCell.allowed_actions ?? [];
+    if (actions.includes('confirm_filing') && reportingCell.payment_question_visible && reportingCell.payment_modal) {
+      openReportingPaymentModal(row, columnKey, 'file_with_payment');
+      return;
+    }
+    const markSubmitted = actions.includes('confirm_filing') || reportingCell.can_mark_submitted;
+    const markNotSubmitted = actions.includes('unfile') || reportingCell.can_mark_not_submitted;
+    if (!markSubmitted && !markNotSubmitted) return;
+    await runMarkCommand(
+      `${row.client_id}:reporting:${columnKey}`,
+      {
+        command: markSubmitted
+          ? 'mark_client_operations_obligation_reported'
+          : 'mark_client_operations_obligation_not_reported',
+        client_id: row.client_id,
+        obligation_id: reportingCell.obligation_id,
+        operational_period_key: query?.operational_period_key ?? null,
+        query,
+      },
+      t('clientOperations.registry.errors.saveFailed'),
+    );
+  };
+  const confirmReportingPaymentModal = async () => {
+    if (!paymentModal?.selected || !onRegistryCommand) return;
+    const command =
+      paymentModal.mode === 'update_payment'
+        ? 'confirm_client_operations_obligation_tax_payment'
+        : 'confirm_client_operations_obligation_filed_with_payment';
+    const markKey = `${paymentModal.row.client_id}:reporting:${paymentModal.columnKey}`;
+    setPaymentModal(null);
+    await runMarkCommand(
+      markKey,
+      {
+        command,
+        client_id: paymentModal.row.client_id,
+        obligation_id: paymentModal.obligationId,
+        canonical_id: paymentModal.canonicalId,
+        payment_classification: paymentModal.selected,
+        operational_period_key: query?.operational_period_key ?? null,
+        query,
+      },
+      t('clientOperations.registry.errors.saveFailed'),
+    );
+  };
   const setOperationalTargetDate = async (
     row: ClientOperationsRegistryRow,
     columnKey: 'annual_report' | 'capital_declaration',
@@ -3242,6 +3434,160 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           {[...primaryToolbarIds, ...moreToolbarIds].join(',')}
           {capTitle('add_column')}
         </span>
+      </div>
+    );
+  };
+
+  const renderReportingDashboard = () => {
+    if (!reportingDashboard) return null;
+    const activeKpi = query?.filter_reporting_kpi ?? reportingDashboard.active_kpi_filter ?? null;
+    const activeSort = query?.sort_by ?? reportingDashboard.active_sort ?? 'priority';
+    const previous = reportingDashboard.previous_periods;
+    return (
+      <div className="nx-co-sheet__reporting-dash" data-testid="client-operations-reporting-dashboard">
+        <div className="nx-co-sheet__reporting-kpis" role="toolbar" aria-label={t('clientOperations.registry.reporting.filterAll')}>
+          {reportingDashboard.kpi_cards.map((card) => {
+            const selected = activeKpi === card.id;
+            return (
+              <button
+                key={card.id}
+                type="button"
+                data-testid="client-operations-reporting-kpi"
+                data-kpi-id={card.id}
+                className={`nx-co-sheet__reporting-kpi is-${card.remaining_tone}${selected ? ' is-selected' : ''}`}
+                aria-pressed={selected}
+                aria-label={`${t(card.label_key)} ${card.submitted_count} / ${card.total_count}`}
+                onClick={() => {
+                  if (!onQueryChange) return;
+                  onQueryChange({
+                    q: query?.q ?? null,
+                    sort_by: query?.sort_by ?? null,
+                    sort_dir: query?.sort_dir ?? null,
+                    filter_operational_reporting: query?.filter_operational_reporting ?? null,
+                    filter_material: query?.filter_material ?? null,
+                    filter_payroll: query?.filter_payroll ?? null,
+                    filter_reporting_type: query?.filter_reporting_type ?? null,
+                    filter_business_type: query?.filter_business_type ?? null,
+                    filter_handler: query?.filter_handler ?? null,
+                    filter_reporting_kpi: selected ? null : card.id,
+                  }, { quiet: true });
+                }}
+              >
+                <span className="nx-co-sheet__reporting-kpi-label">{t(card.label_key)}</span>
+                <span className="nx-co-sheet__reporting-kpi-frac">
+                  <span className="is-submitted">{card.submitted_count}</span>
+                  <span className="is-muted"> / {card.total_count}</span>
+                </span>
+                {card.remaining_count > 0 ? (
+                  <span className={`nx-co-sheet__reporting-kpi-left is-${card.remaining_tone}`}>
+                    {card.remaining_count} {t('clientOperations.registry.reporting.remaining')}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+          {reportingDashboard.payments_outstanding_kpi ? (() => {
+            const card = reportingDashboard.payments_outstanding_kpi;
+            const selected = activeKpi === card.id;
+            const tooltip = card.tooltip_periods.map((p) => p.display_label).join(' · ');
+            return (
+              <button
+                key={card.id}
+                type="button"
+                data-testid="client-operations-payments-outstanding-kpi"
+                data-kpi-id={card.id}
+                className={`nx-co-sheet__reporting-kpi is-payment-outstanding${selected ? ' is-selected' : ''}`}
+                aria-pressed={selected}
+                aria-label={`${t(card.label_key)} ${card.count}`}
+                title={tooltip || t(card.tooltip_key)}
+                onClick={() => {
+                  if (!onQueryChange) return;
+                  onQueryChange({
+                    q: query?.q ?? null,
+                    sort_by: query?.sort_by ?? null,
+                    sort_dir: query?.sort_dir ?? null,
+                    filter_operational_reporting: query?.filter_operational_reporting ?? null,
+                    filter_material: query?.filter_material ?? null,
+                    filter_payroll: query?.filter_payroll ?? null,
+                    filter_reporting_type: query?.filter_reporting_type ?? null,
+                    filter_business_type: query?.filter_business_type ?? null,
+                    filter_handler: query?.filter_handler ?? null,
+                    filter_reporting_kpi: selected ? null : card.id,
+                  }, { quiet: true });
+                }}
+              >
+                <span className="nx-co-sheet__reporting-kpi-label">{t(card.label_key)}</span>
+                <span className="nx-co-sheet__reporting-kpi-frac">
+                  <span className="is-payment-outstanding">{card.count}</span>
+                </span>
+              </button>
+            );
+          })() : null}
+        </div>
+        <div className="nx-co-sheet__reporting-meta">
+          <div className="nx-co-sheet__reporting-previous">
+            <button
+              type="button"
+              className="nx-co-sheet__reporting-previous-btn"
+              data-testid="client-operations-previous-periods"
+              aria-haspopup="listbox"
+              title={previous.periods.map((p) => p.display_label).join(' · ') || undefined}
+              disabled={!previous.incomplete_count}
+            >
+              {t('clientOperations.registry.reporting.previousIncomplete')}
+              <strong> {previous.incomplete_count} {t('clientOperations.registry.reporting.previousIncompleteCount')}</strong>
+              {previous.overdue_count > 0 ? (
+                <span className="is-overdue">
+                  {' · '}
+                  {previous.overdue_count} {t('clientOperations.registry.reporting.overduePeriods')}
+                </span>
+              ) : null}
+            </button>
+            {previous.periods.length ? (
+              <div className="nx-co-sheet__reporting-previous-list" role="listbox" aria-label={t('clientOperations.registry.reporting.previousIncomplete')}>
+                {previous.periods.map((item) => (
+                  <button
+                    key={item.period_key}
+                    type="button"
+                    role="option"
+                    className={item.overdue ? 'is-overdue' : undefined}
+                    onClick={() => onPeriodChange?.(item.navigate_period_key)}
+                  >
+                    {item.display_label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          {reportingDashboard.sort_options.length ? (
+            <label className="nx-co-sheet__reporting-sort">
+              <span>{t('clientOperations.registry.reporting.sortLabel')}</span>
+              <select
+                value={activeSort === 'client_name' ? 'client_name' : 'priority'}
+                disabled={!onQueryChange}
+                onChange={(event) => {
+                  if (!onQueryChange) return;
+                  onQueryChange({
+                    q: query?.q ?? null,
+                    sort_by: event.target.value,
+                    sort_dir: query?.sort_dir ?? null,
+                    filter_operational_reporting: query?.filter_operational_reporting ?? null,
+                    filter_material: query?.filter_material ?? null,
+                    filter_payroll: query?.filter_payroll ?? null,
+                    filter_reporting_type: query?.filter_reporting_type ?? null,
+                    filter_business_type: query?.filter_business_type ?? null,
+                    filter_handler: query?.filter_handler ?? null,
+                    filter_reporting_kpi: query?.filter_reporting_kpi ?? null,
+                  }, { quiet: true });
+                }}
+              >
+                {reportingDashboard.sort_options.map((opt) => (
+                  <option key={opt.id} value={opt.id}>{t(opt.label_key)}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
       </div>
     );
   };
@@ -3749,6 +4095,92 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     // Configuration / frequency text comes ready-made from the aggregate.
     // Period "not due this month" must NOT overwrite configured labels with —.
     // (CSS `is-not-applicable` may still dim filing-due semantics separately.)
+    const reportingCell = r.reporting?.cells?.[col.key];
+    if (reportingCell?.overlay_visible) {
+      const text = displayForColumn(r, col, t);
+      const markKey = `${r.client_id}:reporting:${col.key}`;
+      const saving = pendingMarkKeys.has(markKey);
+      const actions = reportingCell.allowed_actions ?? [];
+      const canToggle = Boolean(
+        (actions.includes('confirm_filing') || actions.includes('unfile')) &&
+          canEdit &&
+          onRegistryCommand,
+      );
+      const canUpdatePayment = Boolean(
+        actions.includes('update_payment') && canEdit && onRegistryCommand,
+      );
+      const tooltip = t(reportingCell.tooltip_key || reportingCell.tone_label_key);
+      const icon = reportingCell.display_icon ?? 'none';
+      return (
+        <span className="nx-co-sheet__reporting-cell">
+          {reportingCell.display_dash ? (
+            <>
+              <span className="nx-co-sheet__reporting-dash" aria-hidden="true">—</span>
+              <span className="nx-co-sheet__sr-only">{t(reportingCell.tone_label_key)}</span>
+            </>
+          ) : (
+            <>
+              {icon === 'check' ? (
+                <span className="nx-co-sheet__reporting-check" aria-hidden="true">✓</span>
+              ) : icon === 'bang_overdue' ? (
+                <span className="nx-co-sheet__reporting-overdue" aria-hidden="true">!</span>
+              ) : icon === 'bang_payment' ? (
+                <button
+                  type="button"
+                  className="nx-co-sheet__reporting-payment-bang"
+                  disabled={!canUpdatePayment || saving}
+                  title={tooltip}
+                  aria-label={tooltip}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (statusPaintMode || !canUpdatePayment) return;
+                    openReportingPaymentModal(r, col.key, 'update_payment');
+                  }}
+                >
+                  !
+                </button>
+              ) : icon === 'unknown' ? (
+                <button
+                  type="button"
+                  className="nx-co-sheet__reporting-payment-unknown"
+                  disabled={!canUpdatePayment || saving}
+                  title={tooltip}
+                  aria-label={tooltip}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (statusPaintMode || !canUpdatePayment) return;
+                    openReportingPaymentModal(r, col.key, 'update_payment');
+                  }}
+                >
+                  ?
+                </button>
+              ) : null}
+              {canToggle ? (
+                <label className={`nx-co-sheet__reporting-mark${saving ? ' is-saving' : ''}`}>
+                  <input
+                    type="checkbox"
+                    className="nx-co-sheet__checkbox"
+                    checked={reportingCell.submitted}
+                    disabled={saving}
+                    aria-busy={saving}
+                    aria-label={`${t(reportingCell.tone_label_key)} — ${col.label} — ${r.client_name ?? r.client_id}`}
+                    title={t(reportingCell.submitted ? 'clientOperations.registry.reporting.markNotSubmitted' : 'clientOperations.registry.reporting.markSubmitted')}
+                    onChange={() => {
+                      if (statusPaintMode) return;
+                      void toggleReportingFiled(r, col.key);
+                    }}
+                    onClick={(event) => event.stopPropagation()}
+                  />
+                </label>
+              ) : (
+                <span className="nx-co-sheet__sr-only">{t(reportingCell.tone_label_key)}</span>
+              )}
+              <span>{text}</span>
+            </>
+          )}
+        </span>
+      );
+    }
     return displayForColumn(r, col, t);
   };
 
@@ -3862,7 +4294,16 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         <tbody>
           {!periodContentPending
             ? rows.map((row) => (
-            <tr key={row.client_id} className={selectedRowId === row.client_id ? 'is-selected' : undefined} onClick={() => setSelectedRowId(row.client_id)}>
+            <tr
+              key={row.client_id}
+              className={[
+                selectedRowId === row.client_id ? 'is-selected' : '',
+                row.reporting?.row_tone ? `is-reporting-row-${row.reporting.row_tone}` : '',
+              ].filter(Boolean).join(' ') || undefined}
+              title={row.reporting?.row_tone_label_key ? t(row.reporting.row_tone_label_key) : undefined}
+              aria-label={row.reporting?.row_tone_label_key ? `${row.client_name ?? row.client_id} — ${t(row.reporting.row_tone_label_key)}` : undefined}
+              onClick={() => setSelectedRowId(row.client_id)}
+            >
               {visibleColumns.map((column) => {
                 const pk = cellKey(row.client_id, column.key);
                 const presentation = cellPresentation[pk];
@@ -3872,6 +4313,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   focusedCell.colKey === column.key;
                 const manualStatus = row.manual_cell_statuses?.[column.key];
                 const statusToken = manualStatus?.presentation_token ?? null;
+                const reportingCell = row.reporting?.cells?.[column.key];
                 const paintBlocked =
                   Boolean(statusPaintMode) &&
                   column.key !== 'folder' &&
@@ -3897,9 +4339,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       statusPaintMode ? 'is-paint-mode' : '',
                       paintBlocked ? 'is-paint-blocked' : '',
                       obligationApplicable(row, column.key) === false ? 'is-not-applicable' : '',
+                      reportingCell ? `is-reporting-cell-${reportingCell.tone}` : '',
                     ]
                       .filter(Boolean)
                       .join(' ') || undefined}
+                    title={reportingCell ? t(reportingCell.tooltip_key || reportingCell.tone_label_key) : undefined}
                     onMouseDown={(event) => {
                       // Paint mode owns the gesture via capture click — do not turn into format selection.
                       if (statusPaintMode) return;
@@ -4142,6 +4586,72 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
   const modals = (
     <>
+      {paymentModal ? (
+        <div className="nx-clients-overlay nx-client-create nx-client-create--deep-ocean-glass">
+          <div
+            className="nx-glass-card nx-clients-modal nx-co-payment-confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="nx-co-payment-title"
+            dir={lang === 'he' ? 'rtl' : 'ltr'}
+            data-testid="client-operations-payment-modal"
+          >
+            <div className="nx-clients-modal__head">
+              <h3 id="nx-co-payment-title">{t(paymentModal.titleKey)}</h3>
+              <button
+                type="button"
+                onClick={() => setPaymentModal(null)}
+                className="nx-clients-modal__close"
+                aria-label={t(paymentModal.cancelKey)}
+              >
+                ×
+              </button>
+            </div>
+            <form
+              className="nx-clients-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void confirmReportingPaymentModal();
+              }}
+              noValidate
+            >
+              <div className="nx-clients-form__body">
+                <fieldset className="nx-co-payment-confirm-options">
+                  <legend className="nx-clients-form__label-line">{t(paymentModal.titleKey)}</legend>
+                  {paymentModal.options.map((option) => (
+                    <label key={option.id} className="nx-co-payment-confirm-option">
+                      <input
+                        type="radio"
+                        name="nx-co-payment-classification"
+                        value={option.id}
+                        checked={paymentModal.selected === option.id}
+                        onChange={() => setPaymentModal((current) => (current ? { ...current, selected: option.id } : current))}
+                      />
+                      <span>{t(option.label_key)}</span>
+                    </label>
+                  ))}
+                </fieldset>
+              </div>
+              <div className="nx-clients-form__footer">
+                <button
+                  type="submit"
+                  className="nx-glass-btn nx-glass-btn--purple"
+                  disabled={!paymentModal.selected}
+                >
+                  {t(paymentModal.confirmKey)}
+                </button>
+                <button
+                  type="button"
+                  className="nx-glass-btn nx-glass-btn--secondary"
+                  onClick={() => setPaymentModal(null)}
+                >
+                  {t(paymentModal.cancelKey)}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
       {showCreateClient && canCreateCoreClient ? (
         <div className="nx-clients-overlay nx-client-create nx-client-create--deep-ocean-glass">
           <div
@@ -4486,6 +4996,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           : headerEndCluster}
         {/* Inner sheet title removed — module title renders once in the route header. */}
         {renderSpreadsheetToolbar()}
+        {renderReportingDashboard()}
         {renderFilterBar()}
         {error ? <div className="nx-co-sheet__error">{error}</div> : null}
         {commandError ? (

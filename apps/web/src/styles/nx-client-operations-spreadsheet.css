@@ -2326,6 +2326,368 @@
   font-weight: 600;
 }
 
+/* Reporting dashboard — compact KPI + previous-period chip (backend-owned tones). */
+.nx-co-sheet__reporting-dash {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.22) 0%, rgba(18, 55, 86, 0.2) 100%);
+  border: 1px solid rgba(54, 169, 198, 0.5);
+  border-radius: 10px;
+}
+
+.nx-co-sheet__reporting-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.nx-co-sheet__reporting-kpi {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-width: 88px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(247, 250, 255, 0.14);
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  height: auto;
+  cursor: pointer;
+}
+
+.nx-co-sheet__reporting-kpi:hover,
+.nx-co-sheet__reporting-kpi:focus-visible {
+  outline: none;
+  border-color: rgba(125, 236, 247, 0.7);
+  box-shadow: 0 0 0 2px rgba(19, 191, 208, 0.22);
+}
+
+.nx-co-sheet__reporting-kpi.is-selected {
+  background: rgba(247, 250, 255, 0.28);
+  border-color: rgba(125, 236, 247, 0.75);
+}
+
+.nx-co-sheet__reporting-kpi-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.nx-co-sheet__reporting-kpi-frac {
+  font-variant-numeric: tabular-nums;
+}
+
+.nx-co-sheet__reporting-kpi-frac .is-submitted {
+  color: #4ade80;
+}
+
+.nx-co-sheet__reporting-kpi-frac .is-muted {
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 600;
+}
+
+.nx-co-sheet__reporting-kpi-left {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.nx-co-sheet__reporting-kpi-left.is-overdue,
+.nx-co-sheet__reporting-kpi-left.is-urgent,
+.nx-co-sheet__reporting-kpi.is-overdue .nx-co-sheet__reporting-kpi-left,
+.nx-co-sheet__reporting-kpi.is-urgent .nx-co-sheet__reporting-kpi-left {
+  color: #fca5a5;
+}
+
+.nx-co-sheet__reporting-kpi-left.is-warning,
+.nx-co-sheet__reporting-kpi.is-warning .nx-co-sheet__reporting-kpi-left {
+  color: #fde68a;
+}
+
+.nx-co-sheet__reporting-kpi-left.is-neutral {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.nx-co-sheet__reporting-kpi.is-payment-outstanding .nx-co-sheet__reporting-kpi-frac .is-payment-outstanding,
+.nx-co-sheet__reporting-kpi.is-payment-outstanding {
+  border-color: rgba(249, 115, 22, 0.72);
+}
+
+.nx-co-sheet__reporting-kpi.is-payment-outstanding .is-payment-outstanding {
+  color: #fb923c;
+}
+
+.nx-co-sheet__reporting-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  flex: 0 0 auto;
+}
+
+.nx-co-sheet__reporting-previous {
+  position: relative;
+}
+
+.nx-co-sheet__reporting-previous-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(247, 250, 255, 0.12);
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  height: auto;
+  cursor: pointer;
+}
+
+.nx-co-sheet__reporting-previous-btn:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.nx-co-sheet__reporting-previous-btn:not(:disabled):hover,
+.nx-co-sheet__reporting-previous-btn:not(:disabled):focus-visible {
+  outline: none;
+  border-color: rgba(125, 236, 247, 0.7);
+}
+
+.nx-co-sheet__reporting-previous .is-overdue {
+  color: #fca5a5;
+}
+
+.nx-co-sheet__reporting-previous-list {
+  display: none;
+  position: absolute;
+  z-index: 20;
+  inset-inline-start: 0;
+  top: calc(100% + 4px);
+  min-width: 148px;
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(54, 169, 198, 0.55);
+  background: #0d3764;
+  box-shadow: 0 10px 24px rgba(6, 26, 51, 0.35);
+}
+
+.nx-co-sheet__reporting-previous:hover .nx-co-sheet__reporting-previous-list,
+.nx-co-sheet__reporting-previous:focus-within .nx-co-sheet__reporting-previous-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nx-co-sheet__reporting-previous-list button {
+  display: block;
+  width: 100%;
+  text-align: start;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #f7faff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.nx-co-sheet__reporting-previous-list button:hover,
+.nx-co-sheet__reporting-previous-list button:focus-visible {
+  outline: none;
+  background: rgba(125, 236, 247, 0.16);
+}
+
+.nx-co-sheet__reporting-previous-list button.is-overdue {
+  color: #fca5a5;
+}
+
+.nx-co-sheet__reporting-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.nx-co-sheet__reporting-sort select {
+  min-width: 96px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(247, 250, 255, 0.14);
+  color: #102a4c;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  height: auto;
+}
+
+.nx-co-sheet__reporting-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.nx-co-sheet__reporting-check {
+  color: #15803d;
+  font-weight: 800;
+}
+
+.nx-co-sheet__reporting-dash {
+  color: var(--nx-text-muted);
+}
+
+.nx-co-sheet__reporting-overdue,
+.nx-co-sheet__reporting-payment-bang,
+.nx-co-sheet__reporting-payment-unknown {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: rgba(220, 38, 38, 0.18);
+  color: #b91c1c;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.nx-co-sheet__reporting-payment-bang {
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  background: rgba(249, 115, 22, 0.22);
+  color: #ea580c;
+}
+
+.nx-co-sheet__reporting-payment-unknown {
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  background: rgba(100, 116, 139, 0.18);
+  color: #475569;
+}
+
+.nx-co-sheet__table tbody tr.is-reporting-row-overdue,
+.nx-co-sheet__table tbody tr.is-reporting-row-urgent,
+.nx-co-sheet__table tbody tr.is-reporting-row-warning,
+.nx-co-sheet__table tbody tr.is-reporting-row-payment_outstanding,
+.nx-co-sheet__table tbody tr.is-reporting-row-complete,
+.nx-co-sheet__table tbody tr.is-reporting-row-neutral {
+  background: transparent;
+}
+
+.nx-co-sheet__table tbody tr.is-reporting-row-overdue td,
+.nx-co-sheet__table tbody tr.is-reporting-row-overdue:nth-child(even) td {
+  background: rgba(220, 38, 38, 0.055);
+}
+
+.nx-co-sheet__table tbody tr.is-reporting-row-urgent td,
+.nx-co-sheet__table tbody tr.is-reporting-row-urgent:nth-child(even) td {
+  background: rgba(220, 38, 38, 0.04);
+}
+
+.nx-co-sheet__table tbody tr.is-reporting-row-warning td,
+.nx-co-sheet__table tbody tr.is-reporting-row-warning:nth-child(even) td {
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.nx-co-sheet__table tbody tr.is-reporting-row-payment_outstanding td,
+.nx-co-sheet__table tbody tr.is-reporting-row-payment_outstanding:nth-child(even) td {
+  background: rgba(249, 115, 22, 0.1);
+}
+
+.nx-co-sheet__table tbody tr.is-reporting-row-complete td,
+.nx-co-sheet__table tbody tr.is-reporting-row-complete:nth-child(even) td {
+  background: rgba(34, 197, 94, 0.07);
+}
+
+.nx-co-sheet__table tbody tr.is-reporting-row-neutral td,
+.nx-co-sheet__table tbody tr.is-reporting-row-neutral:nth-child(even) td {
+  background: var(--nx-table-bg);
+}
+
+.nx-co-sheet__table tbody td.is-reporting-cell-overdue,
+.nx-co-sheet__table tbody td.is-reporting-cell-urgent {
+  background: rgba(220, 38, 38, 0.18);
+}
+
+.nx-co-sheet__table tbody td.is-reporting-cell-warning {
+  background: rgba(234, 179, 8, 0.22);
+}
+
+.nx-co-sheet__table tbody td.is-reporting-cell-submitted {
+  background: rgba(34, 197, 94, 0.16);
+}
+
+.nx-co-sheet__table tbody td.is-reporting-cell-payment_outstanding {
+  background: rgba(249, 115, 22, 0.28);
+}
+
+.nx-co-sheet__table tbody td.is-reporting-cell-payment_unknown {
+  background: rgba(148, 163, 184, 0.22);
+}
+
+.nx-co-payment-confirm-modal.nx-clients-modal {
+  width: min(520px, 100%);
+  max-height: min(88vh, 520px);
+}
+
+.nx-co-payment-confirm-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  grid-column: 1 / -1;
+}
+
+.nx-co-payment-confirm-options legend {
+  margin-bottom: 6px;
+}
+
+.nx-co-payment-confirm-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.nx-co-sheet__table tbody td.is-reporting-cell-unknown {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(135, 154, 176, 0.08),
+    rgba(135, 154, 176, 0.08) 6px,
+    rgba(247, 250, 255, 0.7) 6px,
+    rgba(247, 250, 255, 0.7) 12px
+  );
+}
+
 /* ── Print root injected by handlePrint ── */
 .nx-co-sheet__print-root {
   display: none;

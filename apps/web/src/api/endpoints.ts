@@ -144,6 +144,7 @@ export const moduleClientOperationsRegistry = (params?: {
   filter_reporting_type?: string | null;
   filter_business_type?: string | null;
   filter_handler?: string | null;
+  filter_reporting_kpi?: string | null;
 }) => {
   const sp = new URLSearchParams();
   if (params?.q?.trim()) sp.set('q', params.q.trim());
@@ -164,6 +165,9 @@ export const moduleClientOperationsRegistry = (params?: {
     sp.set('filter_business_type', params.filter_business_type.trim());
   }
   if (params?.filter_handler?.trim()) sp.set('filter_handler', params.filter_handler.trim());
+  if (params?.filter_reporting_kpi?.trim()) {
+    sp.set('filter_reporting_kpi', params.filter_reporting_kpi.trim());
+  }
   const qs = sp.toString();
   return qs ? `/m/client-operations/registry?${qs}` : '/m/client-operations/registry';
 };
