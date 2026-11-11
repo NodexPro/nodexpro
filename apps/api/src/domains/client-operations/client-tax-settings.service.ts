@@ -21,9 +21,17 @@ import {
   type OsekPaturDeclarationUi,
 } from './osek-patur-declaration.js';
 import { formatNationalInsuranceRegistryDisplayHe } from './national-insurance-registry.js';
-import { computeVatRegistryColumnDisplayHe } from './vat-divuach.js';
-import { resolveVatDueDisplayForCurrentRelevantPeriod } from './client-operations-reporting-due.service.js';
+import { computeVatRegistryColumnDisplayHe, vatDivuachFieldsFromAuthoritativeDue } from './vat-divuach.js';
 import { reconcileCurrentOpenPeriodApplicabilitySnapshotForClient } from './client-operations-operational-period.service.js';
+import { resolveDefaultOperationalPeriodKey } from './client-operations-operational-period.pure.js';
+import {
+  calendarDueMapKey,
+  resolveVatCalendarLookupPeriodKey,
+  resolveVatCalendarObligationKey,
+} from './client-operations-reporting-dashboard.pure.js';
+import { resolveOrganizationActiveRuleset } from '../country-pack/organization-country.service.js';
+import { resolveReportingDueDatesBatch } from '../country-pack/reporting-calendar-resolver.service.js';
+import { businessYmd } from '../../shared/business-time.js';
 
 export type ClientTaxSettingsRow = {
   id: string;
@@ -417,37 +425,46 @@ export async function syncVatPaturForOsekPaturBusinessType(
   });
 }
 
-function vatDivuachFieldsUnset(): {
+async function resolveVatFilingDueDateFromCalendar(input: {
+  organizationId: string;
+  vat_type: string | null;
+  vat_due_type: string | null;
+  vat_frequency: string | null;
+}): Promise<string | null> {
+  const operationalPeriodKey = resolveDefaultOperationalPeriodKey();
+  const lookup = resolveVatCalendarLookupPeriodKey({
+    vat_frequency: input.vat_frequency,
+    operational_period_key: operationalPeriodKey,
+  });
+  const obligationKey = resolveVatCalendarObligationKey({
+    vat_type: input.vat_type,
+    vat_due_type: input.vat_due_type,
+  });
+  if (!lookup || !obligationKey) return null;
+  const ruleset = await resolveOrganizationActiveRuleset(input.organizationId, businessYmd(new Date()));
+  const resolved = await resolveReportingDueDatesBatch({
+    country_code: ruleset.country_code,
+    country_pack_ruleset_id: ruleset.ruleset_id,
+    lookups: [{ obligation_key: obligationKey, reporting_period_key: lookup }],
+  });
+  const hit = resolved.get(calendarDueMapKey(obligationKey, lookup));
+  if (!hit?.resolved || !hit.filing_due_date) return null;
+  return String(hit.filing_due_date).slice(0, 10);
+}
+
+function vatDivuachFieldsFromRow(
+  r: ClientTaxSettingsRow,
+  filingDueDate: string | null = null,
+): {
   vat_divuach_next_due_at: string | null;
   vat_divuach_next_due_display_he: string | null;
   vat_due_registry_display_he: string | null;
 } {
-  return {
-    vat_divuach_next_due_at: null,
-    vat_divuach_next_due_display_he: null,
-    vat_due_registry_display_he: null,
-  };
-}
-
-async function vatDivuachFieldsFromCalendar(
-  orgId: string,
-  r: ClientTaxSettingsRow,
-): Promise<{
-  vat_divuach_next_due_at: string | null;
-  vat_divuach_next_due_display_he: string | null;
-  vat_due_registry_display_he: string | null;
-}> {
-  const resolved = await resolveVatDueDisplayForCurrentRelevantPeriod({
-    organizationId: orgId,
-    vat_type: r.vat_type,
+  return vatDivuachFieldsFromAuthoritativeDue({
     vat_due_type: r.vat_due_type,
     vat_frequency: r.vat_frequency,
+    filing_due_date: filingDueDate,
   });
-  return {
-    vat_divuach_next_due_at: resolved.filing_due_date,
-    vat_divuach_next_due_display_he: resolved.display_he,
-    vat_due_registry_display_he: resolved.display_he,
-  };
 }
 
 function mergeTaxSettingsWithClientAndSessions(
@@ -474,7 +491,8 @@ function cardNumberMaskedFromLast4(last4: string | null): string | null {
 function rowToPublic(
   r: ClientTaxSettingsRow,
   profileAdvanceStatus: string | null,
-  profileDeductionsStatus: string | null
+  profileDeductionsStatus: string | null,
+  filingDueDate: string | null = null,
 ): ClientTaxSettingsPublic {
   return {
     vat_type: r.vat_type,
@@ -508,7 +526,7 @@ function rowToPublic(
     vat_other_payment_text: r.vat_other_payment_text,
     income_tax_other_payment_text: r.income_tax_other_payment_text,
     notes: r.notes,
-    ...vatDivuachFieldsUnset(),
+    ...vatDivuachFieldsFromRow(r, filingDueDate),
     vat_card_holder_name: r.vat_card_holder_name ?? null,
     income_tax_card_holder_name: r.income_tax_card_holder_name ?? null,
     client_tax_id: null,
@@ -795,12 +813,15 @@ export async function getClientTaxSettings(ctx: RequestContext, clientId: string
       updated_at: new Date().toISOString(),
     };
     const effective = applyOsekPaturVatRule(empty, businessType);
+    const filingDueDate = await resolveVatFilingDueDateFromCalendar({
+      organizationId: orgId,
+      vat_type: effective.vat_type,
+      vat_due_type: effective.vat_due_type,
+      vat_frequency: effective.vat_frequency,
+    });
     return {
       settings: mergeTaxSettingsWithClientAndSessions(
-        {
-          ...rowToPublic(effective, profileAdvanceStatus, profileDeductionsStatus),
-          ...(await vatDivuachFieldsFromCalendar(orgId, effective)),
-        },
+        rowToPublic(effective, profileAdvanceStatus, profileDeductionsStatus, filingDueDate),
         clientSnap.tax_id,
         clientSnap.display_name,
         sessions
@@ -810,12 +831,15 @@ export async function getClientTaxSettings(ctx: RequestContext, clientId: string
   }
 
   const r = applyOsekPaturVatRule(row as ClientTaxSettingsRow, businessType);
+  const filingDueDate = await resolveVatFilingDueDateFromCalendar({
+    organizationId: orgId,
+    vat_type: r.vat_type,
+    vat_due_type: r.vat_due_type,
+    vat_frequency: r.vat_frequency,
+  });
   return {
     settings: mergeTaxSettingsWithClientAndSessions(
-      {
-        ...rowToPublic(r, profileAdvanceStatus, profileDeductionsStatus),
-        ...(await vatDivuachFieldsFromCalendar(orgId, r)),
-      },
+      rowToPublic(r, profileAdvanceStatus, profileDeductionsStatus, filingDueDate),
       clientSnap.tax_id,
       clientSnap.display_name,
       sessions

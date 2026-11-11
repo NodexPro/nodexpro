@@ -81,9 +81,14 @@ export const CO_UI = {
       open: 'clientOperations.registry.reporting.cell.open',
       notApplicable: 'clientOperations.registry.reporting.cell.notApplicable',
       unknown: 'clientOperations.registry.reporting.cell.unknown',
+      informational: 'clientOperations.registry.reporting.cell.informational',
       paymentOutstanding: 'clientOperations.registry.reporting.cell.paymentOutstanding',
       paymentPartial: 'clientOperations.registry.reporting.cell.paymentPartial',
       paymentUnknown: 'clientOperations.registry.reporting.cell.paymentUnknown',
+    },
+    period: {
+      monthly: 'clientOperations.registry.reporting.period.monthly',
+      bimonthly: 'clientOperations.registry.reporting.period.bimonthly',
     },
     row: {
       complete: 'clientOperations.registry.reporting.row.complete',

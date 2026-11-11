@@ -7,6 +7,7 @@ import { badRequest } from '../../shared/errors.js';
 import { getClientOperationsCase, type ClientOperationsCaseReadOptions } from './client-operations.service.js';
 import { parseFeesPriceChartView } from './client-fees-tab.service.js';
 import { updateClientTaxSettings, type UpdateClientTaxSettingsBody } from './client-tax-settings.service.js';
+import { recomputeClientObligationsAndTasks } from './client-obligations-tasks-core.service.js';
 
 export type TaxTabCommandType =
   | 'update_tax_vat_registration'
@@ -74,6 +75,7 @@ export async function executeTaxTabCommand(
   const type = t as TaxTabCommandType;
   const partial = sliceCommandPayload(type, body.payload);
   await updateClientTaxSettings(ctx, clientId, partial);
+  await recomputeClientObligationsAndTasks(ctx, clientId, new Date());
   const feesPv = parseFeesPriceChartView(body.fees_price_chart_view);
   const opts: ClientOperationsCaseReadOptions = { feesPriceChartView: feesPv };
   return getClientOperationsCase(ctx, clientId, opts);

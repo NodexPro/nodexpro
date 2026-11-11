@@ -2076,9 +2076,14 @@
           "open": "Not filed",
           "notApplicable": "Not applicable",
           "unknown": "Due date unknown",
+          "informational": "Informational amount. Not a filing deadline.",
           "paymentOutstanding": "Report filed. Payment outstanding.",
           "paymentPartial": "Report filed. Payment partially paid.",
           "paymentUnknown": "Report filed. Payment not confirmed."
+        },
+        "period": {
+          "monthly": "{{period}}",
+          "bimonthly": "{{start}}–{{end}}"
         },
         "row": {
           "complete": "All applicable reports filed and required payments confirmed",

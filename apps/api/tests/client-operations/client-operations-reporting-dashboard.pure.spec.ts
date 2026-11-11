@@ -19,10 +19,19 @@ import {
   isFilingNotApplicableStatus,
   isFilingSubmittedStatus,
   paymentAppliesForReportingKind,
+  formatReportingCalendarDueDisplay,
+  isAuthoritativeLegalOverdue,
+  pickObligationForKind,
+  pickVatObligationFactForFrequency,
+  historicalObligationIdentitiesToPreserve,
+  obligationIdentityKey,
+  reportingKindIsInformational,
+  resolvePreviousPeriodVatCalendarDue,
   resolveReportingCellTone,
   resolveVatCalendarLookupPeriodKey,
   rowMatchesReportingKpiFilter,
   vatBimonthlyObligationMatchesOperationalPeriod,
+  vatFilingPeriodIdentityForOperationalPeriod,
   type ClientOperationsReportingCellInput,
   type ClientOperationsReportingFilingFact,
 } from '../../src/domains/client-operations/client-operations-reporting-dashboard.pure.js';
@@ -192,7 +201,7 @@ test('previous periods count distinct periods, not reports, and split overdue vs
   assert.equal(built.overdue_count, 2);
   assert.deepEqual(
     built.periods.map((p) => p.display_label),
-    ['2025', '08/26', '09/26', '10/26'],
+    ['2025', '08.26', '09.26', '10.26'],
   );
 });
 
@@ -338,6 +347,7 @@ test('filing and payment are independent; unknown payment is not green paid', ()
   assert.equal(partial?.tone, 'payment_outstanding');
   assert.equal(partial?.tooltip_key.includes('paymentPartial'), true);
   assert.equal(paymentAppliesForReportingKind('payroll'), false);
+  assert.equal(paymentAppliesForReportingKind('national_insurance'), false);
   assert.equal(paymentAppliesForReportingKind('vat'), true);
 });
 
@@ -437,3 +447,525 @@ test('filed VAT still counts as submitted in the filing KPI when payment is outs
   assert.equal(vat?.submitted_count, 1);
   assert.equal(vat?.remaining_count, 0);
 });
+
+const OCT_TODAY = '2026-11-10';
+
+test('monthly October VAT uses 2026-10 identity and calendar 2026-11-16, not overdue on 10 Nov', () => {
+  assert.deepEqual(
+    vatFilingPeriodIdentityForOperationalPeriod({ vat_frequency: 'monthly', operational_period_key: '2026-10' }),
+    { period_key: '2026-10' },
+  );
+  const built = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-10',
+    vatFrequency: 'monthly',
+    facts: [
+      {
+        obligation_id: 'ob-vat-oct',
+        obligation_type: 'vat_report',
+        period_key: '2026-10',
+        status: 'ready_to_report',
+        due_date: '2026-11-19',
+        last_reported_at: null,
+      },
+    ],
+    calendarDueDate: '2026-11-16',
+  });
+  assert.equal(built.due_date, '2026-11-16');
+  assert.equal(built.canonical_id, 'vat_report::2026-10');
+  const row = buildReportingRowPresentation([built], OCT_TODAY);
+  assert.equal(row.cells.vat?.tone, 'neutral_open');
+  assert.equal(row.row_tone, 'neutral');
+  assert.equal(row.open_overdue_count, 0);
+});
+
+test('bimonthly September–October VAT files on 10.26 with canonical 2026-09-10', () => {
+  assert.equal(
+    vatFilingPeriodIdentityForOperationalPeriod({ vat_frequency: 'bi_monthly', operational_period_key: '2026-09' }),
+    null,
+  );
+  assert.deepEqual(
+    vatFilingPeriodIdentityForOperationalPeriod({ vat_frequency: 'bi_monthly', operational_period_key: '2026-10' }),
+    { period_key: '2026-09-10' },
+  );
+  const facts: ClientOperationsReportingFilingFact[] = [
+    {
+      obligation_id: 'ob-old',
+      obligation_type: 'vat_report',
+      period_key: '2026-07-08',
+      status: 'missing_data',
+      due_date: '2026-09-19',
+      last_reported_at: null,
+    },
+    {
+      obligation_id: 'ob-current',
+      obligation_type: 'vat_report',
+      period_key: '2026-09-10',
+      status: 'ready_to_report',
+      due_date: '2026-11-19',
+      last_reported_at: null,
+    },
+  ];
+  const picked = pickObligationForKind(facts, 'vat', '2026-10', 'bi_monthly');
+  assert.equal(picked?.obligation_id, 'ob-current');
+  assert.equal(pickObligationForKind(facts, 'vat', '2026-09', 'bi_monthly'), null);
+  const built = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-10',
+    vatFrequency: 'bi_monthly',
+    facts,
+    calendarDueDate: '2026-11-16',
+  });
+  assert.equal(built.canonical_id, 'vat_report::2026-09-10');
+  assert.equal(built.obligation_id, 'ob-current');
+  assert.equal(built.can_mark_submitted, true);
+});
+
+test('selected-tab row highlighting ignores previous-pair VAT and self-employed NI', () => {
+  const row = buildReportingRowPresentation(
+    [
+      buildReportingCellInputFromFacts({
+        kind: 'vat',
+        applicable: true,
+        operationalPeriodKey: '2026-10',
+        vatFrequency: 'bi_monthly',
+        facts: [
+          {
+            obligation_id: 'ob-old',
+            obligation_type: 'vat_report',
+            period_key: '2026-07-08',
+            status: 'missing_data',
+            due_date: '2026-09-19',
+            last_reported_at: null,
+          },
+        ],
+        calendarDueDate: '2026-11-16',
+      }),
+      buildReportingCellInputFromFacts({
+        kind: 'national_insurance',
+        applicable: true,
+        operationalPeriodKey: '2026-10',
+        facts: [
+          {
+            obligation_id: 'ob-ni',
+            obligation_type: 'national_insurance_self_employed_payment',
+            period_key: '2026-10',
+            status: 'not_paid',
+            due_date: '2026-10-15',
+            last_reported_at: null,
+          },
+        ],
+        calendarDueDate: null,
+      }),
+    ],
+    OCT_TODAY,
+  );
+  assert.equal(row.cells.vat?.tone, 'neutral_open');
+  assert.equal(row.cells.national_insurance?.overdue, false);
+  assert.equal(row.cells.national_insurance?.overlay_visible, false);
+  assert.equal(row.cells.national_insurance?.due_date, null);
+  assert.equal(row.row_tone, 'neutral');
+  assert.equal(reportingKindIsInformational('national_insurance'), true);
+});
+
+test('self-employed NI never drives overdue, row tone, filing KPI or payment overlay', () => {
+  const row = buildReportingRowPresentation(
+    [
+      cell({
+        kind: 'national_insurance',
+        submitted: false,
+        due_date: '2026-10-15',
+        payment_classification: 'outstanding',
+      }),
+    ],
+    OCT_TODAY,
+  );
+  assert.equal(row.row_tone, 'none');
+  assert.equal(row.open_overdue_count, 0);
+  assert.equal(row.cells.national_insurance?.overdue, false);
+  assert.equal(row.cells.national_insurance?.overlay_visible, false);
+  assert.equal(row.cells.national_insurance?.allowed_actions.length, 0);
+  const cards = buildReportingKpiCards([{ reporting: row }]);
+  assert.equal(cards.some((c) => c.id === 'national_insurance'), false);
+});
+
+test('unknown legal deadline never becomes overdue; payroll NI deductions stay on selected month', () => {
+  assert.equal(isAuthoritativeLegalOverdue(null, OCT_TODAY), false);
+  assert.equal(resolveReportingCellTone({ applicable: true, submitted: false, due_date: null, today: OCT_TODAY }), 'unknown');
+  const niDed = buildReportingCellInputFromFacts({
+    kind: 'national_insurance_deductions',
+    applicable: true,
+    submittedOverride: false,
+    operationalPeriodKey: '2026-10',
+    facts: [],
+    calendarDueDate: null,
+  });
+  assert.equal(niDed.canonical_id, 'national_insurance_deductions::2026-10');
+  assert.equal(niDed.due_date, null);
+  const row = buildReportingRowPresentation([niDed], OCT_TODAY);
+  assert.equal(row.cells.national_insurance_deductions?.tone, 'unknown');
+  assert.equal(row.cells.national_insurance_deductions?.overdue, false);
+  assert.equal(row.row_tone, 'neutral');
+  const payroll = buildReportingCellInputFromFacts({
+    kind: 'payroll',
+    applicable: true,
+    operationalPeriodKey: '2026-10',
+    facts: [
+      {
+        obligation_id: 'ob-pay',
+        obligation_type: 'payroll_data',
+        period_key: '2026-10',
+        status: 'missing_data',
+        due_date: '2026-10-10',
+        last_reported_at: null,
+      },
+    ],
+    calendarDueDate: null,
+  });
+  assert.equal(payroll.due_date, null);
+  assert.equal(buildReportingRowPresentation([payroll], OCT_TODAY).cells.payroll?.tone, 'unknown');
+});
+
+test('annual incomplete is not overdue without a calendar due date', () => {
+  const built = buildPreviousIncompletePeriods({
+    selected_period_key: '2026-10',
+    facts: [
+      { period_key: '2026', navigate_period_key: '2026-05', kind: 'year', applicable_incomplete: true, overdue: false },
+      { period_key: '2026-08', navigate_period_key: '2026-08', kind: 'month', applicable_incomplete: true, overdue: true },
+    ],
+  });
+  assert.equal(built.incomplete_count, 2);
+  assert.equal(built.overdue_count, 1);
+  const annual = built.periods.find((p) => p.kind === 'year');
+  assert.equal(annual?.overdue, false);
+  const annualCell = buildReportingCellInputFromFacts({
+    kind: 'annual',
+    applicable: true,
+    operationalPeriodKey: '2026-05',
+    facts: [
+      {
+        obligation_id: 'ob-annual',
+        obligation_type: 'annual_report',
+        period_key: '2026',
+        status: 'ready_to_report',
+        due_date: '2026-05-31',
+        last_reported_at: null,
+      },
+    ],
+    calendarDueDate: null,
+  });
+  assert.equal(annualCell.due_date, null);
+  assert.equal(buildReportingRowPresentation([annualCell], OCT_TODAY).cells.annual_report?.tone, 'unknown');
+});
+
+test('previous-period VAT due uses the client VAT calendar family only', () => {
+  const calendar = new Map<string, string>([
+    ['vat_regular_income_tax_advances::2026-09', '2026-10-19'],
+    ['vat_detailed::2026-09', '2026-10-26'],
+  ]);
+  assert.equal(
+    resolvePreviousPeriodVatCalendarDue({
+      vat_frequency: 'monthly',
+      vat_type: 'yes',
+      vat_due_type: 'regular',
+      operational_period_key: '2026-09',
+      calendarDueByKey: calendar,
+    }),
+    '2026-10-19',
+  );
+  assert.equal(
+    resolvePreviousPeriodVatCalendarDue({
+      vat_frequency: 'monthly',
+      vat_type: 'yes',
+      vat_due_type: 'pcn',
+      operational_period_key: '2026-09',
+      calendarDueByKey: calendar,
+    }),
+    '2026-10-26',
+  );
+  assert.equal(
+    resolvePreviousPeriodVatCalendarDue({
+      vat_frequency: 'monthly',
+      vat_type: 'yes',
+      vat_due_type: null,
+      operational_period_key: '2026-09',
+      calendarDueByKey: calendar,
+    }),
+    null,
+  );
+});
+
+test('registry VAT due display uses calendar date, never invented 19/23', () => {
+  assert.equal(
+    formatReportingCalendarDueDisplay({ vat_due_type: 'regular', filing_due_date: '2026-11-16' }),
+    '16.11.2026',
+  );
+  assert.equal(formatReportingCalendarDueDisplay({ vat_due_type: 'pcn', filing_due_date: '2026-11-23' }), 'PCN');
+  assert.equal(formatReportingCalendarDueDisplay({ vat_due_type: 'regular', filing_due_date: null }), null);
+});
+
+test('obligation due_date fallback is not used for legal overdue', () => {
+  const built = buildReportingCellInputFromFacts({
+    kind: 'income_tax_advance',
+    applicable: true,
+    operationalPeriodKey: '2026-10',
+    facts: [
+      {
+        obligation_id: 'ob-ita',
+        obligation_type: 'income_tax_advance',
+        period_key: '2026-10',
+        status: 'missing_data',
+        due_date: '2026-10-10',
+        last_reported_at: null,
+      },
+    ],
+    calendarDueDate: '2026-11-16',
+  });
+  assert.equal(built.due_date, '2026-11-16');
+  const noCalendar = buildReportingCellInputFromFacts({
+    kind: 'income_tax_advance',
+    applicable: true,
+    operationalPeriodKey: '2026-10',
+    facts: [
+      {
+        obligation_id: 'ob-ita',
+        obligation_type: 'income_tax_advance',
+        period_key: '2026-10',
+        status: 'missing_data',
+        due_date: '2026-10-10',
+        last_reported_at: null,
+      },
+    ],
+    calendarDueDate: null,
+  });
+  assert.equal(noCalendar.due_date, null);
+});
+
+test('November recompute identity matches tab 10.26; stale Test/Test4 keys cannot confirm filing', () => {
+  const previous = '2026-10';
+  assert.deepEqual(
+    vatFilingPeriodIdentityForOperationalPeriod({ vat_frequency: 'monthly', operational_period_key: previous }),
+    { period_key: '2026-10' },
+  );
+  assert.deepEqual(
+    vatFilingPeriodIdentityForOperationalPeriod({ vat_frequency: 'bi_monthly', operational_period_key: previous }),
+    { period_key: '2026-09-10' },
+  );
+
+  const staleBimonthly = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-10',
+    vatFrequency: 'bi_monthly',
+    facts: [
+      {
+        obligation_id: 'ob-test-jul-aug',
+        obligation_type: 'vat_report',
+        period_key: '2026-07-08',
+        status: 'ready_to_report',
+        due_date: '2026-09-19',
+        last_reported_at: null,
+      },
+    ],
+    calendarDueDate: '2026-11-16',
+  });
+  assert.equal(staleBimonthly.obligation_id, null);
+  assert.equal(staleBimonthly.can_mark_submitted, false);
+  assert.equal(staleBimonthly.canonical_id, 'vat_report::2026-09-10');
+
+  const currentBimonthly = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-10',
+    vatFrequency: 'bi_monthly',
+    facts: [
+      {
+        obligation_id: 'ob-test-sep-oct',
+        obligation_type: 'vat_report',
+        period_key: '2026-09-10',
+        status: 'ready_to_report',
+        due_date: '2026-11-19',
+        last_reported_at: null,
+      },
+    ],
+    calendarDueDate: '2026-11-16',
+  });
+  assert.equal(currentBimonthly.obligation_id, 'ob-test-sep-oct');
+  assert.equal(currentBimonthly.can_mark_submitted, true);
+
+  const staleMonthly = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-10',
+    vatFrequency: 'monthly',
+    facts: [
+      {
+        obligation_id: 'ob-test4-sep',
+        obligation_type: 'vat_report',
+        period_key: '2026-09',
+        status: 'ready_to_report',
+        due_date: '2026-10-19',
+        last_reported_at: null,
+      },
+    ],
+    calendarDueDate: '2026-11-16',
+  });
+  assert.equal(staleMonthly.obligation_id, null);
+  assert.equal(staleMonthly.can_mark_submitted, false);
+  assert.equal(staleMonthly.canonical_id, 'vat_report::2026-10');
+
+  const missingMaterial = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-10',
+    vatFrequency: 'monthly',
+    facts: [
+      {
+        obligation_id: 'ob-test4-oct',
+        obligation_type: 'vat_report',
+        period_key: '2026-10',
+        status: 'missing_data',
+        due_date: '2026-11-16',
+        last_reported_at: null,
+      },
+    ],
+    calendarDueDate: '2026-11-16',
+  });
+  assert.equal(missingMaterial.obligation_id, 'ob-test4-oct');
+  assert.equal(missingMaterial.can_mark_submitted, false);
+});
+
+test('legacy UTC bimonthly helper in October kept Jul–Aug; operational October is Sep–Oct', () => {
+  function legacyUtcBimonthly(now: Date): string {
+    const curYear = now.getUTCFullYear();
+    const curMonth = now.getUTCMonth() + 1;
+    const prevMonth = curMonth === 1 ? 12 : curMonth - 1;
+    const prevYear = curMonth === 1 ? curYear - 1 : curYear;
+    const endMonth = prevMonth % 2 === 0 ? prevMonth : prevMonth === 1 ? 12 : prevMonth - 1;
+    const endYear = prevMonth % 2 === 0 ? prevYear : prevMonth === 1 ? prevYear - 1 : prevYear;
+    const startMonth = endMonth === 1 ? 12 : endMonth - 1;
+    const startYear = endMonth === 1 ? endYear - 1 : endYear;
+    return `${startYear}-${String(startMonth).padStart(2, '0')}-${String(endMonth).padStart(2, '0')}`;
+  }
+  assert.equal(legacyUtcBimonthly(new Date('2026-10-15T12:00:00Z')), '2026-07-08');
+  assert.deepEqual(
+    vatFilingPeriodIdentityForOperationalPeriod({ vat_frequency: 'bi_monthly', operational_period_key: '2026-10' }),
+    { period_key: '2026-09-10' },
+  );
+});
+
+test('historical previous-period overdue KPI does not change selected-tab row tone', () => {
+  const row = buildReportingRowPresentation(
+    [
+      buildReportingCellInputFromFacts({
+        kind: 'vat',
+        applicable: true,
+        operationalPeriodKey: '2026-10',
+        vatFrequency: 'monthly',
+        facts: [
+          {
+            obligation_id: 'ob-oct',
+            obligation_type: 'vat_report',
+            period_key: '2026-10',
+            status: 'ready_to_report',
+            due_date: '2026-11-16',
+            last_reported_at: null,
+          },
+        ],
+        calendarDueDate: '2026-11-16',
+      }),
+    ],
+    OCT_TODAY,
+  );
+  const previous = buildPreviousIncompletePeriods({
+    selected_period_key: '2026-10',
+    facts: [
+      { period_key: '2026-08', navigate_period_key: '2026-08', kind: 'month', applicable_incomplete: true, overdue: true },
+      { period_key: '2026-09', navigate_period_key: '2026-09', kind: 'month', applicable_incomplete: true, overdue: true },
+      { period_key: '2026', navigate_period_key: '2026-05', kind: 'year', applicable_incomplete: true, overdue: false },
+    ],
+  });
+  assert.equal(previous.overdue_count, 2);
+  assert.equal(row.row_tone, 'neutral');
+  assert.equal(row.open_overdue_count, 0);
+});
+
+test('monthly and bimonthly VAT identities never collide for the selected tab', () => {
+  const mixed: ClientOperationsReportingFilingFact[] = [
+    {
+      obligation_id: 'ob-bimonthly',
+      obligation_type: 'vat_report',
+      period_key: '2026-09-10',
+      status: 'missing_data',
+      due_date: '2026-11-16',
+      last_reported_at: null,
+    },
+    {
+      obligation_id: 'ob-monthly',
+      obligation_type: 'vat_report',
+      period_key: '2026-10',
+      status: 'ready_to_report',
+      due_date: '2026-11-16',
+      last_reported_at: null,
+    },
+  ];
+  assert.equal(pickVatObligationFactForFrequency(mixed, '2026-10', 'monthly')?.obligation_id, 'ob-monthly');
+  assert.equal(pickVatObligationFactForFrequency(mixed, '2026-10', 'bi_monthly')?.obligation_id, 'ob-bimonthly');
+  const monthlyCell = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-10',
+    vatFrequency: 'monthly',
+    facts: mixed,
+    calendarDueDate: '2026-11-16',
+  });
+  assert.equal(monthlyCell.obligation_id, 'ob-monthly');
+  assert.equal(monthlyCell.canonical_id, 'vat_report::2026-10');
+  const bimonthlyCell = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-10',
+    vatFrequency: 'bi_monthly',
+    facts: mixed,
+    calendarDueDate: '2026-11-16',
+  });
+  assert.equal(bimonthlyCell.obligation_id, 'ob-bimonthly');
+  assert.equal(bimonthlyCell.canonical_id, 'vat_report::2026-09-10');
+});
+
+test('repeated recompute preserves older incomplete VAT and does not duplicate identities', () => {
+  const existing = [
+    obligationIdentityKey('vat_report', '2026-07-08'),
+    obligationIdentityKey('vat_report', '2026-08'),
+    obligationIdentityKey('vat_report', '2026-09-10'),
+  ];
+  const currentRelevant = new Set([
+    obligationIdentityKey('vat_report', '2026-09-10'),
+    obligationIdentityKey('payroll_data', '2026-10'),
+  ]);
+  const first = historicalObligationIdentitiesToPreserve({
+    existingKeys: existing,
+    currentRelevantKeys: currentRelevant,
+  });
+  assert.deepEqual(first, [
+    'vat_report::2026-07-08',
+    'vat_report::2026-08',
+  ]);
+  const afterUpsert = [
+    ...existing,
+    obligationIdentityKey('payroll_data', '2026-10'),
+  ];
+  const second = historicalObligationIdentitiesToPreserve({
+    existingKeys: afterUpsert,
+    currentRelevantKeys: currentRelevant,
+  });
+  assert.deepEqual(second, first);
+  const frequencyChange = historicalObligationIdentitiesToPreserve({
+    existingKeys: ['vat_report::2026-10', 'vat_report::2026-09-10'],
+    currentRelevantKeys: new Set(['vat_report::2026-09-10']),
+  });
+  assert.deepEqual(frequencyChange, ['vat_report::2026-10']);
+});
+

@@ -25,10 +25,12 @@ import {
   incomeTaxDeductionsCalendarKey,
   isFilingNotApplicableStatus,
   isFilingSubmittedStatus,
+  isAuthoritativeLegalOverdue,
   lookupCalendarDueDate,
+  resolvePreviousPeriodVatCalendarDue,
   resolveVatCalendarLookupPeriodKey,
   resolveVatCalendarObligationKey,
-  vatBimonthlyObligationMatchesOperationalPeriod,
+  pickVatObligationFactForFrequency,
   type ClientOperationsPreviousPeriodFact,
   type ClientOperationsReportingFilingFact,
   type ClientOperationsReportingPreviousPeriods,
@@ -283,7 +285,8 @@ export function attachReportingPresentationToRegistryRow<T extends RegistryRepor
     Boolean(niDedCell?.items?.['102']?.completed) && Boolean(niDedCell?.items?.['100']?.completed);
   const itdCell = input.row.income_tax_deductions_cell;
   const itdApplicable = Boolean(itdCell?.applicable ?? input.row.period_applicability?.income_tax_deductions_applicable);
-  const annualDue = input.facts.find((f) => f.obligation_type === 'annual_report')?.due_date ?? null;
+  const annualFact = input.facts.find((f) => f.obligation_type === 'annual_report') ?? null;
+  const annualDue = annualFact?.due_date ?? null;
 
   const withPayment = (
     cellInput: ReturnType<typeof buildReportingCellInputFromFacts>,
@@ -360,7 +363,7 @@ export function attachReportingPresentationToRegistryRow<T extends RegistryRepor
         applicable: Boolean(annualDue && annualDue.slice(0, 7) === input.selectedPeriodKey),
         operationalPeriodKey: input.selectedPeriodKey,
         facts: input.facts,
-        calendarDueDate: annualDue,
+        calendarDueDate: null,
       }),
     ),
   ];
@@ -374,6 +377,7 @@ export function buildPreviousPeriodFactsFromLoad(input: {
   previousPeriodKeys: string[];
   load: ReportingDashboardLoad;
   today: string;
+  taxByClient?: ReadonlyMap<string, ReportingDashboardTaxSettings>;
 }): ClientOperationsReportingPreviousPeriods {
   const facts: ClientOperationsPreviousPeriodFact[] = [];
   for (const snap of input.load.previousSnapshots) {
@@ -381,38 +385,29 @@ export function buildPreviousPeriodFactsFromLoad(input: {
     const clientFacts = input.load.factsByClient.get(snap.client_id) ?? [];
     const itd = input.load.itdReportedByClientPeriod.get(clientPeriodKey(snap.client_id, periodKey));
     const niDed = input.load.niDedByClientPeriod.get(clientPeriodKey(snap.client_id, periodKey));
+    const tax = input.taxByClient?.get(snap.client_id) ?? null;
     const checks: Array<{ applicable: boolean; submitted: boolean; due: string | null }> = [];
 
-    const vatFreq = (snap as { vat_frequency?: string | null }).vat_frequency ?? null;
-    const vatLookup = resolveVatCalendarLookupPeriodKey({
+    const vatFreq = (snap as { vat_frequency?: string | null }).vat_frequency ?? tax?.vat_frequency ?? null;
+    const vatDue = resolvePreviousPeriodVatCalendarDue({
       vat_frequency: vatFreq,
+      vat_type: tax?.vat_type ?? null,
+      vat_due_type: tax?.vat_due_type ?? null,
       operational_period_key: periodKey,
+      calendarDueByKey: input.load.calendarDueByKey,
     });
-    const vatDue = vatLookup
-      ? lookupCalendarDueDate(input.load.calendarDueByKey, 'vat_regular_income_tax_advances', vatLookup) ??
-        lookupCalendarDueDate(input.load.calendarDueByKey, 'vat_detailed', vatLookup)
-      : null;
-    const vatFact =
-      clientFacts.find(
-        (f) =>
-          f.obligation_type === 'vat_report' &&
-          vatBimonthlyObligationMatchesOperationalPeriod(f.period_key, periodKey),
-      ) ??
-      clientFacts.find((f) => f.obligation_type === 'vat_report' && f.period_key === periodKey);
+    const vatFact = pickVatObligationFactForFrequency(clientFacts, periodKey, vatFreq);
     checks.push({
       applicable: Boolean(snap.vat_applicable),
       submitted: isFilingSubmittedStatus(vatFact?.status),
-      due: vatDue ?? vatFact?.due_date ?? null,
+      due: vatDue,
     });
 
     const itaFact = clientFacts.find((f) => f.obligation_type === 'income_tax_advance' && f.period_key === periodKey);
     checks.push({
       applicable: Boolean(snap.income_tax_advance_applicable),
       submitted: isFilingSubmittedStatus(itaFact?.status),
-      due:
-        input.load.calendarDueByKey.get(calendarDueMapKey(incomeTaxAdvancesCalendarKey(), periodKey)) ??
-        itaFact?.due_date ??
-        null,
+      due: input.load.calendarDueByKey.get(calendarDueMapKey(incomeTaxAdvancesCalendarKey(), periodKey)) ?? null,
     });
 
     const payrollFact = clientFacts.find(
@@ -423,16 +418,7 @@ export function buildPreviousPeriodFactsFromLoad(input: {
     checks.push({
       applicable: Boolean(snap.payroll_applicable),
       submitted: isFilingSubmittedStatus(payrollFact?.status),
-      due: payrollFact?.due_date ?? null,
-    });
-
-    const niFact = clientFacts.find(
-      (f) => f.obligation_type === 'national_insurance_self_employed_payment' && f.period_key === periodKey,
-    );
-    checks.push({
-      applicable: Boolean(snap.national_insurance_applicable),
-      submitted: isFilingSubmittedStatus(niFact?.status),
-      due: niFact?.due_date ?? null,
+      due: null,
     });
 
     checks.push({
@@ -448,7 +434,7 @@ export function buildPreviousPeriodFactsFromLoad(input: {
 
     const incomplete = checks.filter((c) => c.applicable && !c.submitted);
     if (!incomplete.length) continue;
-    const overdue = incomplete.some((c) => c.due && c.due < input.today);
+    const overdue = incomplete.some((c) => isAuthoritativeLegalOverdue(c.due, input.today));
     facts.push({
       period_key: periodKey,
       navigate_period_key: periodKey,
@@ -470,7 +456,7 @@ export function buildPreviousPeriodFactsFromLoad(input: {
         navigate_period_key: navigate,
         kind: 'year',
         applicable_incomplete: true,
-        overdue: Boolean(due && due < input.today),
+        overdue: false,
       });
     }
   }

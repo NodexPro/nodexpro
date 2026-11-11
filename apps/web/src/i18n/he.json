@@ -2076,9 +2076,14 @@
           "open": "טרם הוגש",
           "notApplicable": "לא חל",
           "unknown": "אין מועד ודאי",
+          "informational": "סכום למידע בלבד. אינו מועד הגשה.",
           "paymentOutstanding": "הדוח הוגש. התשלום טרם שולם.",
           "paymentPartial": "הדוח הוגש. התשלום שולם חלקית.",
           "paymentUnknown": "הדוח הוגש. התשלום לא אושר."
+        },
+        "period": {
+          "monthly": "{{period}}",
+          "bimonthly": "{{start}}–{{end}}"
         },
         "row": {
           "complete": "כל הדיווחים החלים הוגשו והתשלומים הנדרשים אושרו",

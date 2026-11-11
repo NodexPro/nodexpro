@@ -9,6 +9,7 @@ import {
 import { canManageClientHandlerAssignment } from './organization-client-access.js';
 import { parseFeesPriceChartView } from './client-fees-tab.service.js';
 import { type UpdateClientTaxSettingsBody, updateClientTaxSettings } from './client-tax-settings.service.js';
+import { recomputeClientObligationsAndTasks } from './client-obligations-tasks-core.service.js';
 
 type UpdateProfilePayload = Parameters<typeof updateClientOperationsClientProfile>[2];
 
@@ -87,6 +88,7 @@ export async function executeClientOperationsTaxSettingsCommand(
       ? (payload as UpdateClientTaxSettingsBody)
       : ({} as UpdateClientTaxSettingsBody);
   await updateClientTaxSettings(ctx, clientId, body);
+  await recomputeClientObligationsAndTasks(ctx, clientId, new Date());
   const feesPv = parseFeesPriceChartView(opts?.fees_price_chart_view);
   return getClientOperationsCase(ctx, clientId, { feesPriceChartView: feesPv });
 }

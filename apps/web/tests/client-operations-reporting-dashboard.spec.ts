@@ -81,9 +81,41 @@ test('EN/HE reporting dashboard keys exist without hardcoded Hebrew chrome in th
   assert.equal(typeof (heReporting.kpi as { paymentsOutstanding: string }).paymentsOutstanding, 'string');
   assert.equal(typeof (enReporting.payment as { question: string }).question, 'string');
   assert.equal(typeof (heReporting.payment as { question: string }).question, 'string');
+  assert.equal(typeof (enReporting.cell as { informational: string }).informational, 'string');
+  assert.equal(typeof (heReporting.cell as { informational: string }).informational, 'string');
+  assert.equal(typeof (enReporting.period as { monthly: string; bimonthly: string }).monthly, 'string');
+  assert.equal(typeof (heReporting.period as { monthly: string; bimonthly: string }).bimonthly, 'string');
+  assert.match((enReporting.cell as { informational: string }).informational, /Informational/);
+  assert.match((heReporting.cell as { informational: string }).informational, /[\u0590-\u05FF]/);
   const dashSlice = viewSource.slice(
     viewSource.indexOf('const renderReportingDashboard'),
     viewSource.indexOf('const renderFilterBar'),
   );
   assert.doesNotMatch(dashSlice, /[\u0590-\u05FF]/);
+});
+
+test('10.26 row chrome renders backend tones; previous KPI overdue is not applied to rows', () => {
+  assert.match(viewSource, /is-reporting-row-\$\{row\.reporting\.row_tone\}/);
+  assert.match(viewSource, /is-reporting-cell-\$\{reportingCell\.tone\}/);
+  assert.match(viewSource, /previous\.overdue_count/);
+  const rowClassSlice = viewSource.slice(
+    viewSource.indexOf('is-reporting-row-${row.reporting.row_tone}'),
+    viewSource.indexOf('is-reporting-row-${row.reporting.row_tone}') + 200,
+  );
+  assert.doesNotMatch(rowClassSlice, /previous\.overdue/);
+  assert.match(viewSource, /obligation_id:\s*reportingCell\.obligation_id/);
+  assert.doesNotMatch(viewSource, /computeNextVatDivuachDueDate/);
+  assert.doesNotMatch(viewSource, /19 לחודש|23 לחודש/);
+});
+
+test('EN/HE reporting strings and RTL/LTR follow the selected language', () => {
+  const i18nSource = readFileSync(join(dir, '../src/i18n/I18nProvider.tsx'), 'utf8');
+  assert.match(i18nSource, /document\.documentElement\.dir = lang === 'he' \? 'rtl' : 'ltr'/);
+  assert.match(viewSource, /dir=\{lang === 'he' \? 'rtl' : 'ltr'\}/);
+  const enPeriod = (en.clientOperations.registry.reporting as { period: { monthly: string; bimonthly: string } }).period;
+  const hePeriod = (he.clientOperations.registry.reporting as { period: { monthly: string; bimonthly: string } }).period;
+  assert.equal(enPeriod.monthly, '{{period}}');
+  assert.equal(hePeriod.bimonthly, '{{start}}–{{end}}');
+  assert.match((en.clientOperations.registry.reporting as { cell: { informational: string } }).cell.informational, /Informational/);
+  assert.match((he.clientOperations.registry.reporting as { cell: { informational: string } }).cell.informational, /[\u0590-\u05FF]/);
 });

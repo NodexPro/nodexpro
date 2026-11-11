@@ -59,7 +59,10 @@ export type VatDivuachInput = {
   now?: Date;
 };
 
-/** תאריך יעד דיווח הבא (מקומי), או null אם לא חל */
+/**
+ * Legacy 19/23 scheduler. Must not drive Client Operations display or overdue.
+ * Legal filing dates come from Reporting Calendar via vatDivuachFieldsFromAuthoritativeDue.
+ */
 export function computeNextVatDivuachDueDate(params: VatDivuachInput): Date | null {
   const { vat_due_type, vat_frequency } = params;
   const now = params.now ?? new Date();
@@ -83,9 +86,7 @@ export function formatVatDivuachDisplayHe(d: Date): string {
 }
 
 /**
- * תצוגה ברשימת לקוחות: PCN כטקסט; רגיל — תאריך יעד הבא (יום 19 + חודש לפי כלל).
- */
-/** תצוגת עמודת מע״מ ברשימה — מתאים ל-vat_type ב-client_tax_settings (גיבוי) */
+ * תצוגת עמודת מע״מ ברשימה — מתאים ל-vat_type ב-client_tax_settings (גיבוי) */
 export function mapVatTypeToProfileDisplayHe(vatType: string | null | undefined): string | null {
   if (vatType == null || vatType === '') return null;
   switch (vatType) {
@@ -123,18 +124,48 @@ export function computeVatRegistryColumnDisplayHe(
   return mapVatTypeToProfileDisplayHe(vatType ?? null);
 }
 
+/**
+ * Registry VAT-due chrome. Legal dates come from Reporting Calendar `filingDueDate`.
+ * Does not invent 19/23. PCN is a type label, not a computed deadline.
+ */
 export function computeVatDueRegistryDisplayHe(
   vat_due_type: string | null,
   vat_frequency: string | null,
-  now = new Date()
+  _now = new Date(),
+  filingDueDate?: string | null,
 ): string | null {
   if (!vat_due_type || vat_due_type === 'not_relevant') return null;
   if (!vat_frequency || vat_frequency === 'not_relevant') return null;
   if (vat_due_type === 'pcn') return 'PCN';
   if (vat_due_type === 'regular') {
-    const next = computeNextVatDivuachDueDate({ vat_due_type: 'regular', vat_frequency, now });
-    if (!next) return null;
-    return formatDateHeDots(next);
+    const due = String(filingDueDate ?? '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) return null;
+    const [year, month, day] = due.split('-');
+    return `${day}.${month}.${year}`;
   }
   return null;
+}
+
+/** Authoritative calendar date only. Never invents 19/23. */
+export function vatDivuachFieldsFromAuthoritativeDue(input: {
+  vat_due_type: string | null | undefined;
+  vat_frequency: string | null | undefined;
+  filing_due_date: string | null | undefined;
+}): {
+  vat_divuach_next_due_at: string | null;
+  vat_divuach_next_due_display_he: string | null;
+  vat_due_registry_display_he: string | null;
+} {
+  const due = String(input.filing_due_date ?? '').slice(0, 10);
+  const valid = /^\d{4}-\d{2}-\d{2}$/.test(due) ? due : null;
+  return {
+    vat_divuach_next_due_at: valid,
+    vat_divuach_next_due_display_he: valid ? `${due.slice(8, 10)}.${due.slice(5, 7)}.${due.slice(0, 4)}` : null,
+    vat_due_registry_display_he: computeVatDueRegistryDisplayHe(
+      input.vat_due_type ?? null,
+      input.vat_frequency ?? null,
+      new Date(),
+      valid,
+    ),
+  };
 }

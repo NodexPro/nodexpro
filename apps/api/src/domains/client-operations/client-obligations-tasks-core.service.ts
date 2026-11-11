@@ -15,6 +15,10 @@ import {
   obligationCheckboxLabelKey,
   obligationColumnLabelKey,
 } from './client-operations-ui-labels.pure.js';
+import {
+  resolveVatCalendarLookupPeriodKey,
+  vatFilingPeriodIdentityForOperationalPeriod,
+} from './client-operations-reporting-dashboard.pure.js';
 
 /**
  * שכר column — unified payroll process status (Asia/Jerusalem payroll_period_key = previous month).
@@ -466,7 +470,8 @@ export type ClientObligationsCommandBody = {
     | 'mark_payroll_period_not_relevant'
     | 'mark_income_tax_deductions_reported'
     | 'mark_income_tax_deductions_paid'
-    | 'mark_income_tax_deductions_not_relevant';
+    | 'mark_income_tax_deductions_not_relevant'
+    | 'recompute_obligations';
   payload?: Record<string, unknown>;
 };
 
@@ -2666,7 +2671,7 @@ function taskSuggestedActionByType(taskType: string): { action_key: string; labe
 type RelevantObligationInput = {
   obligation_type: string;
   period_key: string;
-  due_date: string;
+  due_date: string | null;
   related_module: string;
   computed_status: ObligationStatus;
 };
@@ -2686,19 +2691,6 @@ function vatDueDateFromPeriod(
 function annualDueDate(now: Date): string {
   const y = Number(businessYmd(now).slice(0, 4));
   return `${y}-05-31`;
-}
-
-function vatObligationIdentityPeriodKey(
-  isBiMonthlyVat: boolean,
-  vatPeriod: { period_key: string; reporting_end_year: number; reporting_end_month: number },
-): string | null {
-  if (!isBiMonthlyVat) return vatPeriod.period_key;
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(vatPeriod.period_key);
-  if (m) return `${m[1]}-${m[2]}`;
-  const endMonth = vatPeriod.reporting_end_month;
-  const startMonth = endMonth === 1 ? 12 : endMonth - 1;
-  const startYear = endMonth === 1 ? vatPeriod.reporting_end_year - 1 : vatPeriod.reporting_end_year;
-  return `${startYear}-${String(startMonth).padStart(2, '0')}`;
 }
 
 async function buildRelevantObligations(orgId: string, clientId: string, now: Date): Promise<RelevantObligationInput[]> {
@@ -2732,28 +2724,36 @@ async function buildRelevantObligations(orgId: string, clientId: string, now: Da
   const businessType = String(p.business_type ?? '');
 
   if (String(t.vat_type ?? '') === 'yes') {
-    const vatFrequency = String(t.vat_frequency ?? '');
-    const isBiMonthlyVat = vatFrequency === 'bi_monthly' || vatFrequency === 'דו חודשי';
-    const vatPeriod = isBiMonthlyVat ? vatReportingPeriodBiMonthly(now) : vatReportingPeriodMonthly(now);
-    const vatIdentity = vatObligationIdentityPeriodKey(isBiMonthlyVat, vatPeriod);
-    const due = vatIdentity
-      ? await resolveOfficialFilingDueDateIso({
-          organizationId: orgId,
-          kind: 'vat',
-          reportingPeriodKey: vatIdentity,
-          vat_type: String(t.vat_type ?? ''),
-          vat_due_type: (t.vat_due_type as string | null) ?? null,
-          vat_frequency: vatFrequency,
-          asOfDate: businessYmd(now),
-        })
-      : null;
-    if (due) {
-      const periodKey = vatPeriod.period_key;
+    const vatFrequencyRaw = String(t.vat_frequency ?? '');
+    const vatFrequency =
+      vatFrequencyRaw === 'דו חודשי' ? 'bi_monthly' : vatFrequencyRaw === 'חודשי' ? 'monthly' : vatFrequencyRaw;
+    const operationalPeriodKey = businessPreviousMonthKey(now);
+    const identity = vatFilingPeriodIdentityForOperationalPeriod({
+      vat_frequency: vatFrequency,
+      operational_period_key: operationalPeriodKey,
+    });
+    const calendarLookup = resolveVatCalendarLookupPeriodKey({
+      vat_frequency: vatFrequency,
+      operational_period_key: operationalPeriodKey,
+    });
+    const due =
+      identity && calendarLookup
+        ? await resolveOfficialFilingDueDateIso({
+            organizationId: orgId,
+            kind: 'vat',
+            reportingPeriodKey: calendarLookup,
+            vat_type: String(t.vat_type ?? ''),
+            vat_due_type: (t.vat_due_type as string | null) ?? null,
+            vat_frequency: vatFrequency,
+            asOfDate: businessYmd(now),
+          })
+        : null;
+    if (identity) {
       const missingMaterialState: ObligationStatus = day > 6 ? 'missing_data' : 'waiting_for_material';
       const status: ObligationStatus = materialBrought ? 'ready_to_report' : missingMaterialState;
       out.push({
         obligation_type: 'vat_report',
-        period_key: periodKey,
+        period_key: identity.period_key,
         due_date: due,
         related_module: 'vat',
         computed_status: status,
@@ -2936,7 +2936,9 @@ async function recomputeClientObligationsAndTasksForOrg(ctx: RequestContext, org
   const current = (currentRows ?? []) as Array<Record<string, unknown>>;
   const keyOf = (o: { obligation_type: string; period_key: string }) => `${o.obligation_type}::${o.period_key}`;
   const currentByKey = new Map<string, Record<string, unknown>>(current.map((r) => [keyOf({ obligation_type: String(r.obligation_type), period_key: String(r.period_key) }), r]));
-  const nextKeys = new Set(relevant.map((r) => keyOf(r)));
+  // HISTORICAL_OBLIGATION_PRESERVATION: upsert only the current relevant set.
+  // Previous period identities stay untouched — do not deactivate, delete, or
+  // overwrite them merely because a newer period is now current.
 
   for (const rel of relevant) {
     const row = currentByKey.get(keyOf(rel));
@@ -3014,16 +3016,6 @@ async function recomputeClientObligationsAndTasksForOrg(ctx: RequestContext, org
         await syncVatMaterialWorkEvent(ctx, orgId, clientId, rel.period_key);
       }
     }
-  }
-
-  for (const old of current) {
-    const key = keyOf({ obligation_type: String(old.obligation_type), period_key: String(old.period_key) });
-    if (nextKeys.has(key)) continue;
-    await supabaseAdmin
-      .from('client_obligations')
-      .update({ is_active: false, updated_at: new Date().toISOString() })
-      .eq('id', String(old.id))
-      .eq('organization_id', orgId);
   }
 
   await syncTasksFromObligations(orgId, clientId, now);
@@ -3426,8 +3418,8 @@ export async function getClientObligationsTabReadModel(ctx: RequestContext, clie
       obligation_type: niRelSpec.obligation_type,
       period_key: niRelSpec.period_key,
       period_display_he: niRelSpec.period_key,
-      due_date: niRelSpec.due_date,
-      due_date_display_he: fmtDateHe(niRelSpec.due_date) ?? niRelSpec.due_date,
+      due_date: niRelSpec.due_date ?? '',
+      due_date_display_he: fmtDateHe(niRelSpec.due_date) ?? niRelSpec.due_date ?? '',
       status_code: st,
       status_label_he: statusLabelHe(st),
       status_label_key: statusLabelKey(st),
@@ -4152,6 +4144,8 @@ export async function executeClientObligationsCommand(
         );
       break;
     }
+    case 'recompute_obligations':
+      break;
     default:
       throw badRequest('Unknown obligations command');
   }

@@ -193,7 +193,6 @@ const REPORTING_OVERLAY_KINDS = new Set<ClientOperationsReportingObligationKind>
   'vat',
   'income_tax_advance',
   'payroll',
-  'national_insurance',
   'annual',
 ]);
 
@@ -204,7 +203,26 @@ const REPORTING_OVERLAY_KINDS = new Set<ClientOperationsReportingObligationKind>
 export function paymentAppliesForReportingKind(
   kind: ClientOperationsReportingObligationKind,
 ): boolean {
-  return kind !== 'payroll';
+  return kind !== 'payroll' && kind !== 'national_insurance';
+}
+
+/** Self-employed NI is an amount display, not a filing-overdue driver. */
+export function reportingKindIsInformational(
+  kind: ClientOperationsReportingObligationKind,
+): boolean {
+  return kind === 'national_insurance';
+}
+
+export function reportingKindAffectsRowTone(
+  kind: ClientOperationsReportingObligationKind,
+): boolean {
+  return !reportingKindIsInformational(kind);
+}
+
+export function reportingKindAffectsFilingKpi(
+  kind: ClientOperationsReportingObligationKind,
+): boolean {
+  return !reportingKindIsInformational(kind);
 }
 
 export type ClientOperationsReportingFilingFact = {
@@ -429,13 +447,17 @@ export function buildReportingCellPresentation(
   input: ClientOperationsReportingCellInput,
   today: string,
 ): ClientOperationsReportingCellPresentation {
-  const paymentApplies =
-    input.payment_applies != null ? input.payment_applies : paymentAppliesForReportingKind(input.kind);
+  const informational = reportingKindIsInformational(input.kind);
+  const paymentApplies = informational
+    ? false
+    : input.payment_applies != null
+      ? input.payment_applies
+      : paymentAppliesForReportingKind(input.kind);
   const filingTone = resolveReportingCellTone({
     applicable: input.applicable,
-    submitted: input.submitted,
+    submitted: informational ? false : input.submitted,
     not_applicable_terminal: input.not_applicable_terminal,
-    due_date: input.due_date,
+    due_date: informational ? null : input.due_date,
     today,
   });
   const applicable = input.applicable && !input.not_applicable_terminal;
@@ -445,13 +467,18 @@ export function buildReportingCellPresentation(
     payment_applies: paymentApplies,
     payment_classification: input.payment_classification ?? null,
   });
-  let tone: ClientOperationsReportingCellTone = filingTone;
-  if (applicable && input.submitted && paymentApplies) {
+  let tone: ClientOperationsReportingCellTone = informational
+    ? applicable
+      ? 'unknown'
+      : 'not_applicable'
+    : filingTone;
+  if (!informational && applicable && input.submitted && paymentApplies) {
     if (paymentState === 'outstanding' || paymentState === 'partially_paid') tone = 'payment_outstanding';
     else if (paymentState === 'unknown') tone = 'payment_unknown';
     else tone = 'submitted';
   }
   const days =
+    informational ||
     tone === 'not_applicable' ||
     tone === 'submitted' ||
     tone === 'payment_outstanding' ||
@@ -460,12 +487,12 @@ export function buildReportingCellPresentation(
       ? null
       : calendarDaysUntilDue(input.due_date, today);
   const paymentDueKnown = Boolean(input.payment_due_date);
-  const overlayVisible = REPORTING_OVERLAY_KINDS.has(input.kind);
+  const overlayVisible = !informational && REPORTING_OVERLAY_KINDS.has(input.kind);
   const paymentQuestionVisible = Boolean(applicable && paymentApplies && overlayVisible);
   const allowed_actions: ClientOperationsReportingAllowedAction[] = [];
-  if (input.can_mark_submitted) allowed_actions.push('confirm_filing');
-  if (input.can_mark_not_submitted) allowed_actions.push('unfile');
-  if (applicable && input.submitted && paymentApplies && overlayVisible) {
+  if (!informational && input.can_mark_submitted) allowed_actions.push('confirm_filing');
+  if (!informational && input.can_mark_not_submitted) allowed_actions.push('unfile');
+  if (!informational && applicable && input.submitted && paymentApplies && overlayVisible) {
     allowed_actions.push('update_payment');
   }
   let displayIcon: ClientOperationsReportingDisplayIcon = 'none';
@@ -473,7 +500,7 @@ export function buildReportingCellPresentation(
   else if (tone === 'overdue') displayIcon = 'bang_overdue';
   else if (tone === 'payment_outstanding') displayIcon = 'bang_payment';
   else if (tone === 'payment_unknown') displayIcon = 'unknown';
-  let tooltipKey = REPORTING_CELL_TONE_LABEL_KEYS[tone];
+  let tooltipKey = informational && applicable ? CO_UI.reporting.cell.informational : REPORTING_CELL_TONE_LABEL_KEYS[tone];
   if (tone === 'payment_outstanding' && paymentState === 'partially_paid') {
     tooltipKey = CO_UI.reporting.cell.paymentPartial;
   }
@@ -490,12 +517,12 @@ export function buildReportingCellPresentation(
     tooltip_key: tooltipKey,
     applicable,
     submitted: input.submitted,
-    overdue: tone === 'overdue',
-    due_date: input.due_date,
+    overdue: !informational && tone === 'overdue',
+    due_date: informational ? null : input.due_date,
     days_until_due: days,
-    obligation_id: input.obligation_id,
-    can_mark_submitted: input.can_mark_submitted,
-    can_mark_not_submitted: input.can_mark_not_submitted,
+    obligation_id: informational ? null : input.obligation_id,
+    can_mark_submitted: informational ? false : input.can_mark_submitted,
+    can_mark_not_submitted: informational ? false : input.can_mark_not_submitted,
     last_reported_at: input.last_reported_at,
     submitted_indicator: tone === 'submitted',
     display_dash: tone === 'not_applicable',
@@ -518,7 +545,7 @@ export function buildReportingCellPresentation(
 export function resolveReportingRowTone(
   cells: readonly ClientOperationsReportingCellPresentation[],
 ): ClientOperationsReportingRowTone {
-  const applicable = cells.filter((c) => c.applicable);
+  const applicable = cells.filter((c) => c.applicable && reportingKindAffectsRowTone(c.kind));
   if (applicable.length === 0) return 'none';
   const rowComplete = applicable.every((c) => c.submitted && cellPaymentComplete(c));
   if (rowComplete) return 'complete';
@@ -539,7 +566,7 @@ export function buildReportingRowPresentation(
     cells[cell.column_key] = cell;
   }
   const list = Object.values(cells);
-  const applicable = list.filter((c) => c.applicable);
+  const applicable = list.filter((c) => c.applicable && reportingKindAffectsRowTone(c.kind));
   const rowTone = resolveReportingRowTone(list);
   const open = applicable.filter((c) => !c.submitted);
   const earliest = open
@@ -604,7 +631,8 @@ export function buildReportingKpiCards(
 ): ClientOperationsReportingKpiCard[] {
   const cards: ClientOperationsReportingKpiCard[] = [];
   for (const id of CLIENT_OPERATIONS_REPORTING_KPI_IDS) {
-    const kinds = REPORTING_KPI_KINDS[id];
+    const kinds = REPORTING_KPI_KINDS[id].filter((kind) => reportingKindAffectsFilingKpi(kind));
+    if (!kinds.length) continue;
     let submitted = 0;
     let total = 0;
     let remainingTone: ClientOperationsReportingKpiCard['remaining_tone'] = 'neutral';
@@ -708,10 +736,31 @@ export function buildPaymentsOutstandingKpi(input: {
 
 export function formatReportingPeriodDisplayLabel(periodKey: string): string {
   const month = PERIOD_KEY_RE.exec(periodKey.trim());
-  if (month) return `${month[2]}/${month[1]!.slice(2)}`;
+  if (month) return `${month[2]}.${month[1]!.slice(2)}`;
   const year = YEAR_KEY_RE.exec(periodKey.trim());
   if (year) return year[1]!;
   return periodKey;
+}
+
+export function isAuthoritativeLegalOverdue(dueDate: string | null | undefined, today: string): boolean {
+  const due = String(dueDate ?? '').slice(0, 10);
+  if (!due) return false;
+  const days = calendarDaysUntilDue(due, today);
+  return days != null && days < 0;
+}
+
+export function formatReportingCalendarDueDisplay(input: {
+  vat_due_type: string | null | undefined;
+  filing_due_date: string | null | undefined;
+}): string | null {
+  const dueType = String(input.vat_due_type ?? '')
+    .trim()
+    .toLowerCase();
+  if (dueType === 'not_relevant' || dueType === '') return null;
+  if (dueType === 'pcn') return 'PCN';
+  const due = String(input.filing_due_date ?? '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) return null;
+  return `${due.slice(8, 10)}.${due.slice(5, 7)}.${due.slice(0, 4)}`;
 }
 
 export function isOperationalPeriodKeyBefore(left: string, right: string): boolean {
@@ -733,23 +782,84 @@ export function vatBimonthlyObligationMatchesOperationalPeriod(
   return endKey === operationalPeriodKey;
 }
 
+export function obligationIdentityKey(obligationType: string, periodKey: string): string {
+  return `${obligationType}::${periodKey}`;
+}
+
+/** Identities outside the current relevant set must remain untouched by recompute. */
+export function historicalObligationIdentitiesToPreserve(input: {
+  existingKeys: readonly string[];
+  currentRelevantKeys: ReadonlySet<string>;
+}): string[] {
+  return input.existingKeys.filter((key) => !input.currentRelevantKeys.has(key));
+}
+
+function normalizeVatFrequency(vatFrequency: string | null | undefined): 'monthly' | 'bi_monthly' | null {
+  const freq = String(vatFrequency ?? '').trim().toLowerCase();
+  if (freq === 'monthly' || freq === 'חודשי') return 'monthly';
+  if (freq === 'bi_monthly' || freq === 'bimonthly' || freq === 'דו חודשי' || freq === 'דו-חודשי') return 'bi_monthly';
+  return null;
+}
+
+export function pickVatObligationFactForFrequency<T extends { obligation_type: string; period_key: string }>(
+  facts: readonly T[],
+  operationalPeriodKey: string,
+  vatFrequency?: string | null,
+): T | null {
+  const matches = facts.filter((f) => f.obligation_type === 'vat_report');
+  const freq = normalizeVatFrequency(vatFrequency);
+  if (freq === 'monthly') {
+    return matches.find((f) => f.period_key === operationalPeriodKey) ?? null;
+  }
+  if (freq === 'bi_monthly') {
+    return (
+      matches.find((f) =>
+        BIMONTHLY_VAT_PERIOD_RE.test(f.period_key) &&
+        vatBimonthlyObligationMatchesOperationalPeriod(f.period_key, operationalPeriodKey),
+      ) ?? null
+    );
+  }
+  return (
+    matches.find((f) => f.period_key === operationalPeriodKey) ??
+    matches.find((f) =>
+      BIMONTHLY_VAT_PERIOD_RE.test(f.period_key) &&
+      vatBimonthlyObligationMatchesOperationalPeriod(f.period_key, operationalPeriodKey),
+    ) ??
+    null
+  );
+}
+
+export function vatFilingPeriodIdentityForOperationalPeriod(input: {
+  vat_frequency: string | null | undefined;
+  operational_period_key: string;
+}): { period_key: string } | null {
+  const freq = String(input.vat_frequency ?? '').trim().toLowerCase();
+  const parsed = parseReportingPeriodKey(input.operational_period_key);
+  if (!parsed) return null;
+  if (freq === 'monthly') return { period_key: input.operational_period_key };
+  if (freq === 'bi_monthly') {
+    if (parsed.month % 2 !== 0) return null;
+    const startMonth = parsed.month - 1;
+    return {
+      period_key: `${parsed.year}-${String(startMonth).padStart(2, '0')}-${String(parsed.month).padStart(2, '0')}`,
+    };
+  }
+  return null;
+}
+
 export function canonicalVatObligationId(input: {
   obligationPeriodKey: string | null;
   operationalPeriodKey: string;
   vatFrequency: string | null | undefined;
 }): string {
-  const freq = String(input.vatFrequency ?? '').trim().toLowerCase();
   if (input.obligationPeriodKey && BIMONTHLY_VAT_PERIOD_RE.test(input.obligationPeriodKey)) {
     return `vat_report::${input.obligationPeriodKey}`;
   }
-  if (freq === 'bi_monthly') {
-    const parsed = parseReportingPeriodKey(input.operationalPeriodKey);
-    if (parsed && parsed.month % 2 === 0) {
-      const startMonth = parsed.month - 1;
-      const start = `${parsed.year}-${String(startMonth).padStart(2, '0')}-${String(parsed.month).padStart(2, '0')}`;
-      return `vat_report::${start}`;
-    }
-  }
+  const identity = vatFilingPeriodIdentityForOperationalPeriod({
+    vat_frequency: input.vatFrequency,
+    operational_period_key: input.operationalPeriodKey,
+  });
+  if (identity) return `vat_report::${identity.period_key}`;
   return `vat_report::${input.operationalPeriodKey}`;
 }
 
@@ -810,15 +920,12 @@ export function pickObligationForKind(
   facts: readonly ClientOperationsReportingFilingFact[],
   kind: ClientOperationsReportingObligationKind,
   operationalPeriodKey: string,
+  vatFrequency?: string | null,
 ): ClientOperationsReportingFilingFact | null {
   const types = obligationTypesForKind(kind);
   const matches = facts.filter((f) => types.includes(f.obligation_type));
   if (kind === 'vat') {
-    return (
-      matches.find((f) => vatBimonthlyObligationMatchesOperationalPeriod(f.period_key, operationalPeriodKey)) ??
-      matches.find((f) => f.period_key === operationalPeriodKey) ??
-      null
-    );
+    return pickVatObligationFactForFrequency(matches, operationalPeriodKey, vatFrequency);
   }
   if (kind === 'annual') {
     return (
@@ -860,7 +967,7 @@ export function buildReportingCellInputFromFacts(input: {
   paymentClassification?: TaxObligationPaymentClassification | null;
   paymentDueDate?: string | null;
 }): ClientOperationsReportingCellInput {
-  const fact = pickObligationForKind(input.facts, input.kind, input.operationalPeriodKey);
+  const fact = pickObligationForKind(input.facts, input.kind, input.operationalPeriodKey, input.vatFrequency);
   const notApplicable =
     input.notApplicableOverride === true || isFilingNotApplicableStatus(fact?.status);
   const applicable = input.applicable && !notApplicable;
@@ -868,7 +975,11 @@ export function buildReportingCellInputFromFacts(input: {
     input.submittedOverride != null
       ? Boolean(input.submittedOverride)
       : isFilingSubmittedStatus(fact?.status);
-  const dueDate = input.calendarDueDate ?? (fact?.due_date ? String(fact.due_date).slice(0, 10) : null);
+  const dueDate = reportingKindIsInformational(input.kind)
+    ? null
+    : input.calendarDueDate
+      ? String(input.calendarDueDate).slice(0, 10)
+      : null;
   const canonicalId =
     input.kind === 'vat'
       ? canonicalVatObligationId({
@@ -894,6 +1005,24 @@ export function buildReportingCellInputFromFacts(input: {
     payment_due_date: input.paymentDueDate ?? null,
     payment_applies: paymentAppliesForReportingKind(input.kind),
   };
+}
+
+export function resolvePreviousPeriodVatCalendarDue(input: {
+  vat_frequency: string | null | undefined;
+  vat_type: string | null | undefined;
+  vat_due_type: string | null | undefined;
+  operational_period_key: string;
+  calendarDueByKey: ReadonlyMap<string, string>;
+}): string | null {
+  const lookup = resolveVatCalendarLookupPeriodKey({
+    vat_frequency: input.vat_frequency,
+    operational_period_key: input.operational_period_key,
+  });
+  const obligationKey = resolveVatCalendarObligationKey({
+    vat_type: input.vat_type,
+    vat_due_type: input.vat_due_type,
+  });
+  return lookupCalendarDueDate(input.calendarDueByKey, obligationKey, lookup);
 }
 
 export type ClientOperationsPreviousPeriodFact = {
