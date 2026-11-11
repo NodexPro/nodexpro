@@ -3476,13 +3476,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 <span className="nx-co-sheet__reporting-kpi-label">{t(card.label_key)}</span>
                 <span className="nx-co-sheet__reporting-kpi-frac">
                   <span className="is-submitted">{card.submitted_count}</span>
-                  <span className="is-muted"> / {card.total_count}</span>
+                  <span className="is-muted">/{card.total_count}</span>
                 </span>
-                {card.remaining_count > 0 ? (
-                  <span className={`nx-co-sheet__reporting-kpi-left is-${card.remaining_tone}`}>
-                    {card.remaining_count} {t('clientOperations.registry.reporting.remaining')}
-                  </span>
-                ) : null}
               </button>
             );
           })}

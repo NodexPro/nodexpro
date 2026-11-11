@@ -2049,11 +2049,14 @@
       "reporting": {
         "kpi": {
           "vat": "VAT",
-          "incomeTax": "Income tax",
+          "incomeTax": "Income-tax advances",
+          "incomeTaxDeductions": "Income-tax deductions",
+          "nationalInsuranceDeductions": "NI deductions",
           "payroll": "Payroll",
           "nationalInsurance": "National Insurance",
           "withholding": "Withholding",
-          "annual": "Annual reports",
+          "annual": "Annual report",
+          "capitalDeclaration": "Capital declaration",
           "paymentsOutstanding": "Payments outstanding",
           "paymentsOutstandingTooltip": "Distinct periods with outstanding tax payments, including previous periods"
         },

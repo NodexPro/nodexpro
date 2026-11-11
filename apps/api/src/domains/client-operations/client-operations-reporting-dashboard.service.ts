@@ -31,11 +31,15 @@ import {
   resolveVatCalendarLookupPeriodKey,
   resolveVatCalendarObligationKey,
   pickVatObligationFactForFrequency,
+  payrollWorkflowCountsAsSubmitted,
+  payrollWorkflowIsNotRelevant,
+  nationalInsuranceDeductionsPeriodicSubmitted,
   type ClientOperationsPreviousPeriodFact,
   type ClientOperationsReportingFilingFact,
   type ClientOperationsReportingPreviousPeriods,
   type ClientOperationsReportingRowPresentation,
   type PaymentsOutstandingPeriodFact,
+  type ReportingKpiClientFacts,
 } from './client-operations-reporting-dashboard.pure.js';
 import type { PeriodApplicabilitySnapshotRow } from './client-operations-operational-period.service.js';
 
@@ -248,6 +252,13 @@ type RegistryReportingRow = {
     completed?: boolean | null;
   };
   reporting?: ClientOperationsReportingRowPresentation;
+  reporting_kpi?: ReportingKpiClientFacts;
+};
+
+export type PayrollWorkflowKpiState = {
+  sent_to_employer: boolean;
+  no_salaries_this_month: boolean;
+  not_relevant: boolean;
 };
 
 export function attachReportingPresentationToRegistryRow<T extends RegistryReportingRow>(input: {
@@ -258,7 +269,9 @@ export function attachReportingPresentationToRegistryRow<T extends RegistryRepor
   calendarDueByKey: ReadonlyMap<string, string>;
   selectedPeriodKey: string;
   today: string;
-}): T & { reporting: ClientOperationsReportingRowPresentation } {
+  payrollWorkflow?: PayrollWorkflowKpiState | null;
+  reportingKpi?: ReportingKpiClientFacts | null;
+}): T & { reporting: ClientOperationsReportingRowPresentation; reporting_kpi: ReportingKpiClientFacts } {
   const vatLookup = resolveVatCalendarLookupPeriodKey({
     vat_frequency: input.tax?.vat_frequency ?? null,
     operational_period_key: input.selectedPeriodKey,
@@ -281,10 +294,16 @@ export function attachReportingPresentationToRegistryRow<T extends RegistryRepor
 
   const niDedCell = input.row.national_insurance_deductions_cell;
   const niDedApplicable = Boolean(niDedCell?.applicable ?? input.row.period_applicability?.national_insurance_deductions_applicable);
-  const niDedSubmitted =
-    Boolean(niDedCell?.items?.['102']?.completed) && Boolean(niDedCell?.items?.['100']?.completed);
+  const niDedSubmitted = nationalInsuranceDeductionsPeriodicSubmitted({
+    reported_102: niDedCell?.items?.['102']?.completed,
+    reported_100: niDedCell?.items?.['100']?.completed,
+  });
   const itdCell = input.row.income_tax_deductions_cell;
   const itdApplicable = Boolean(itdCell?.applicable ?? input.row.period_applicability?.income_tax_deductions_applicable);
+  const payrollNotRelevant = payrollWorkflowIsNotRelevant(input.payrollWorkflow ?? {});
+  const payrollApplicable =
+    Boolean(input.row.period_applicability?.payroll_applicable) && !payrollNotRelevant;
+  const payrollSubmitted = payrollWorkflowCountsAsSubmitted(input.payrollWorkflow ?? {});
   const annualFact = input.facts.find((f) => f.obligation_type === 'annual_report') ?? null;
   const annualDue = annualFact?.due_date ?? null;
 
@@ -322,7 +341,8 @@ export function attachReportingPresentationToRegistryRow<T extends RegistryRepor
     withPayment(
       buildReportingCellInputFromFacts({
         kind: 'payroll',
-        applicable: Boolean(input.row.period_applicability?.payroll_applicable),
+        applicable: payrollApplicable,
+        submittedOverride: payrollSubmitted,
         operationalPeriodKey: input.selectedPeriodKey,
         facts: input.facts,
         calendarDueDate: null,
@@ -369,7 +389,13 @@ export function attachReportingPresentationToRegistryRow<T extends RegistryRepor
   ];
 
   const reporting: ClientOperationsReportingRowPresentation = buildReportingRowPresentation(cells, input.today);
-  return { ...input.row, reporting };
+  const reporting_kpi: ReportingKpiClientFacts = input.reportingKpi ?? {
+    annual_required: false,
+    annual_submitted: false,
+    capital_required: false,
+    capital_submitted: false,
+  };
+  return { ...input.row, reporting, reporting_kpi };
 }
 
 export function buildPreviousPeriodFactsFromLoad(input: {

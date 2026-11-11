@@ -72,7 +72,7 @@ import {
   loadPeriodApplicabilitySnapshots,
   loadPeriodMaterialFacts,
   loadIncomeTaxDeductionsPeriodReported,
-  loadPayrollPeriodSalaryDataReceived,
+  loadPayrollPeriodWorkflowState,
   resolveRegistryOperationalPeriodKey,
   type ClientPeriodSourceRow,
 } from './client-operations-operational-period.service.js';
@@ -101,6 +101,8 @@ import {
 } from './client-operations-annual-capital-operational.pure.js';
 import {
   loadAnnualReportYearInstancesForClients,
+  loadAnnualReportSubmissionsForTaxYear,
+  loadCapitalDeclarationKpiInstances,
   loadOpenCapitalDeclarationInstancesForClients,
   projectAnnualReportCells,
   projectCapitalDeclarationCells,
@@ -170,6 +172,8 @@ import {
 import {
   buildReportingDashboard,
   isClientOperationsReportingFilterId,
+  resolveAnnualReportKpiFact,
+  resolveCapitalDeclarationKpiFact,
   type ClientOperationsReportingDashboard,
   type ClientOperationsReportingPreviousPeriods,
   type ClientOperationsReportingRowPresentation,
@@ -232,6 +236,13 @@ export type ClientOperationsRegistryRow = {
   filter_facets?: ClientOperationsRegistryRowFilterFacets;
   /** Backend-owned statutory reporting presentation for the selected period. */
   reporting?: ClientOperationsReportingRowPresentation;
+  /** Client-scoped annual / capital KPI facts — not obligation canonical_id. */
+  reporting_kpi?: {
+    annual_required: boolean;
+    annual_submitted: boolean;
+    capital_required: boolean;
+    capital_submitted: boolean;
+  };
 };
 
 export type ClientOperationsRegistryResponse = {
@@ -1092,7 +1103,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
           operationalPeriodKey: selectedPeriodKey,
           clientIds: phase1EarlyIds,
         }),
-        loadPayrollPeriodSalaryDataReceived({
+        loadPayrollPeriodWorkflowState({
           organizationId: orgId,
           payrollPeriodKey,
           clientIds: phase1EarlyIds,
@@ -1141,7 +1152,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     { data: taxSettingsRows },
     existingSnapshots,
     materialFacts,
-    payrollSalaryByClient,
+    payrollWorkflowByClient,
     manualStatusesByClientColumn,
   ] = phase1EarlyPromise
     ? await phase1EarlyPromise
@@ -1168,7 +1179,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
           operationalPeriodKey: selectedPeriodKey,
           clientIds,
         }),
-        loadPayrollPeriodSalaryDataReceived({
+        loadPayrollPeriodWorkflowState({
           organizationId: orgId,
           payrollPeriodKey,
           clientIds,
@@ -1367,7 +1378,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     const payrollCell = resolvePayrollMaterialForPeriod({
       payroll_configured: payrollConfigured,
       payroll_due: hasPayroll,
-      salary_data_received: payrollSalaryByClient.get(c.id),
+      salary_data_received: payrollWorkflowByClient.get(c.id)?.salary_data_received,
     });
     const incomeTaxDeductionsDue = obligation.income_tax_deductions.due;
     const incomeTaxDeductionsConfigured = obligation.income_tax_deductions.configured;
@@ -1471,6 +1482,8 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     niDeductions126FactsByClient,
     earliestNiDeductionsApplicableByClient,
     reportingDashboardLoad,
+    annualSubmissionsByClient,
+    capitalKpiInstances,
   ] = matchingClientIds.length
     ? await Promise.all([
         loadNotesAggregatesByClient(orgId, matchingClientIds),
@@ -1516,6 +1529,15 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
           selectedPeriodKey,
           previousPeriodKeys,
         }),
+        loadAnnualReportSubmissionsForTaxYear({
+          organizationId: orgId,
+          clientIds: matchingClientIds,
+          taxYear: annualReportTaxYear,
+        }),
+        loadCapitalDeclarationKpiInstances({
+          organizationId: orgId,
+          clientIds: matchingClientIds,
+        }),
       ])
     : [
         new Map(),
@@ -1532,6 +1554,8 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
           selectedPeriodKey,
           previousPeriodKeys: [],
         }),
+        new Set<string>(),
+        [] as Awaited<ReturnType<typeof loadCapitalDeclarationKpiInstances>>,
       ];
   markStage('phase2_presentation_loads', phase2Ms);
   const vatDueDisplayByClient = await vatDuePromise;
@@ -1548,6 +1572,20 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     openByClientId: openCapitalInstancesByClient,
     canEdit: canEditRegistry,
   });
+  const capitalOpenByClient = new Map<string, { operational_target_date: string | null; status: string }>();
+  const capitalCompletedByClient = new Map<
+    string,
+    Array<{ operational_target_date: string | null; status: string }>
+  >();
+  for (const inst of capitalKpiInstances) {
+    if (inst.status === 'open') {
+      capitalOpenByClient.set(inst.client_id, inst);
+    } else if (inst.status === 'completed') {
+      const list = capitalCompletedByClient.get(inst.client_id) ?? [];
+      list.push(inst);
+      capitalCompletedByClient.set(inst.client_id, list);
+    }
+  }
 
   const presentationMs = Date.now();
   const builtRows: ClientOperationsRegistryRow[] = facetSeeds.flatMap((seed) => {
@@ -1736,6 +1774,22 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
         calendarDueByKey: reportingDashboardLoad.calendarDueByKey,
         selectedPeriodKey,
         today: reportingDashboardLoad.today,
+        payrollWorkflow: payrollWorkflowByClient.get(c.id) ?? null,
+        reportingKpi: (() => {
+          const annual = resolveAnnualReportKpiFact({
+            hasSubmissionForTaxYear: annualSubmissionsByClient.has(c.id),
+          });
+          const capital = resolveCapitalDeclarationKpiFact({
+            open: capitalOpenByClient.get(c.id) ?? null,
+            datedCompleted: capitalCompletedByClient.get(c.id) ?? [],
+          });
+          return {
+            annual_required: annual.required,
+            annual_submitted: annual.submitted,
+            capital_required: capital.required,
+            capital_submitted: capital.submitted,
+          };
+        })(),
       }),
     ];
   });
@@ -1746,6 +1800,17 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     previousPeriodKeys,
     load: reportingDashboardLoad as ReportingDashboardLoad,
     today: reportingDashboardLoad.today,
+    taxByClient: new Map(
+      [...taxByClient.entries()].map(([clientId, tax]) => [
+        clientId,
+        {
+          vat_type: tax.vat_type,
+          vat_due_type: tax.vat_due_type,
+          vat_frequency: tax.vat_frequency,
+          income_tax_advance_enabled: tax.income_tax_advance_enabled,
+        },
+      ]),
+    ),
   });
   return finishMaterialization(
     sharedInputs,

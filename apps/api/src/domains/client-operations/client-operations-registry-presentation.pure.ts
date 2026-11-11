@@ -15,6 +15,7 @@ import {
   isClientOperationsReportingFilterId,
   rowMatchesReportingKpiFilter,
   type ClientOperationsReportingRowPresentation,
+  type ReportingKpiClientFacts,
 } from './client-operations-reporting-dashboard.pure.js';
 
 export type RegistryColumnCellKind = 'folder' | 'text' | 'notes' | 'custom' | 'checkbox' | 'operational_date';
@@ -687,6 +688,7 @@ export function applyRegistryQueryToRows<
     client_name: string | null;
     created_at?: string | null;
     reporting?: ClientOperationsReportingRowPresentation | null;
+    reporting_kpi?: ReportingKpiClientFacts | null;
   },
 >(rows: T[], query: RegistryQueryInput): T[] {
   let out = rows;

@@ -166,6 +166,59 @@ export function projectAnnualReportCells(input: {
   return out;
 }
 
+/** Tax-year submission facts for annual-report KPI (tab_scope annual_report). */
+export async function loadAnnualReportSubmissionsForTaxYear(input: {
+  organizationId: string;
+  clientIds: string[];
+  taxYear: number;
+}): Promise<Set<string>> {
+  const submitted = new Set<string>();
+  if (!input.clientIds.length) return submitted;
+  const { data, error } = await supabaseAdmin
+    .from('client_annual_submission_rows')
+    .select('client_id, tab_scope, submitted_on')
+    .eq('organization_id', input.organizationId)
+    .eq('tax_year', input.taxYear)
+    .in('client_id', input.clientIds);
+  assertQueryError(error, 'Failed to load annual report submissions');
+  for (const raw of data ?? []) {
+    const row = raw as { client_id: string; tab_scope?: string | null; submitted_on?: string | null };
+    const scope = String(row.tab_scope ?? 'annual_report');
+    if (scope && scope !== 'annual_report') continue;
+    if (!row.submitted_on) continue;
+    submitted.add(String(row.client_id));
+  }
+  return submitted;
+}
+
+export type CapitalDeclarationKpiInstance = {
+  client_id: string;
+  status: string;
+  operational_target_date: string | null;
+};
+
+/** Dated capital-declaration instances for KPI (open current work + completed with a filing date). */
+export async function loadCapitalDeclarationKpiInstances(input: {
+  organizationId: string;
+  clientIds: string[];
+}): Promise<CapitalDeclarationKpiInstance[]> {
+  if (!input.clientIds.length) return [];
+  const { data, error } = await supabaseAdmin
+    .from('client_capital_declaration_instances')
+    .select('client_id, status, operational_target_date')
+    .eq('organization_id', input.organizationId)
+    .in('client_id', input.clientIds)
+    .in('status', ['open', 'completed']);
+  assertQueryError(error, 'Failed to load capital declaration KPI instances');
+  return ((data ?? []) as CapitalDeclarationKpiInstance[]).map((row) => ({
+    client_id: String(row.client_id),
+    status: String(row.status),
+    operational_target_date: row.operational_target_date
+      ? String(row.operational_target_date).slice(0, 10)
+      : null,
+  }));
+}
+
 export function projectCapitalDeclarationCells(input: {
   clientIds: string[];
   openByClientId: Map<string, CapitalDeclarationInstanceRow>;

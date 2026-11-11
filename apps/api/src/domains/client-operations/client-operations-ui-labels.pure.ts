@@ -55,10 +55,13 @@ export const CO_UI = {
     kpi: {
       vat: 'clientOperations.registry.reporting.kpi.vat',
       incomeTax: 'clientOperations.registry.reporting.kpi.incomeTax',
+      incomeTaxDeductions: 'clientOperations.registry.reporting.kpi.incomeTaxDeductions',
+      nationalInsuranceDeductions: 'clientOperations.registry.reporting.kpi.nationalInsuranceDeductions',
       payroll: 'clientOperations.registry.reporting.kpi.payroll',
       nationalInsurance: 'clientOperations.registry.reporting.kpi.nationalInsurance',
       withholding: 'clientOperations.registry.reporting.kpi.withholding',
       annual: 'clientOperations.registry.reporting.kpi.annual',
+      capitalDeclaration: 'clientOperations.registry.reporting.kpi.capitalDeclaration',
       paymentsOutstanding: 'clientOperations.registry.reporting.kpi.paymentsOutstanding',
       paymentsOutstandingTooltip: 'clientOperations.registry.reporting.kpi.paymentsOutstandingTooltip',
     },

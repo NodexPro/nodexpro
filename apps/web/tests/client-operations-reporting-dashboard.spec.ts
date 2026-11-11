@@ -77,6 +77,15 @@ test('EN/HE reporting dashboard keys exist without hardcoded Hebrew chrome in th
   assert.equal(typeof heReporting.previousIncomplete, 'string');
   assert.equal(typeof (enReporting.kpi as { vat: string }).vat, 'string');
   assert.equal(typeof (heReporting.kpi as { vat: string }).vat, 'string');
+  assert.equal((enReporting.kpi as { incomeTax: string }).incomeTax, 'Income-tax advances');
+  assert.equal((heReporting.kpi as { incomeTax: string }).incomeTax, 'מקדמות מס הכנסה');
+  assert.equal(typeof (enReporting.kpi as { incomeTaxDeductions: string }).incomeTaxDeductions, 'string');
+  assert.equal(typeof (heReporting.kpi as { incomeTaxDeductions: string }).incomeTaxDeductions, 'string');
+  assert.equal(typeof (enReporting.kpi as { nationalInsuranceDeductions: string }).nationalInsuranceDeductions, 'string');
+  assert.equal(typeof (heReporting.kpi as { nationalInsuranceDeductions: string }).nationalInsuranceDeductions, 'string');
+  assert.equal(typeof (enReporting.kpi as { capitalDeclaration: string }).capitalDeclaration, 'string');
+  assert.equal(typeof (heReporting.kpi as { capitalDeclaration: string }).capitalDeclaration, 'string');
+  assert.match((heReporting.kpi as { capitalDeclaration: string }).capitalDeclaration, /[\u0590-\u05FF]/);
   assert.equal(typeof (enReporting.kpi as { paymentsOutstanding: string }).paymentsOutstanding, 'string');
   assert.equal(typeof (heReporting.kpi as { paymentsOutstanding: string }).paymentsOutstanding, 'string');
   assert.equal(typeof (enReporting.payment as { question: string }).question, 'string');
@@ -92,6 +101,9 @@ test('EN/HE reporting dashboard keys exist without hardcoded Hebrew chrome in th
     viewSource.indexOf('const renderFilterBar'),
   );
   assert.doesNotMatch(dashSlice, /[\u0590-\u05FF]/);
+  assert.doesNotMatch(dashSlice, /card\.remaining_count/);
+  assert.match(dashSlice, /card\.submitted_count/);
+  assert.match(dashSlice, /card\.total_count/);
 });
 
 test('10.26 row chrome renders backend tones; previous KPI overdue is not applied to rows', () => {
@@ -112,10 +124,26 @@ test('EN/HE reporting strings and RTL/LTR follow the selected language', () => {
   const i18nSource = readFileSync(join(dir, '../src/i18n/I18nProvider.tsx'), 'utf8');
   assert.match(i18nSource, /document\.documentElement\.dir = lang === 'he' \? 'rtl' : 'ltr'/);
   assert.match(viewSource, /dir=\{lang === 'he' \? 'rtl' : 'ltr'\}/);
+  assert.match(cssSource, /max-width:\s*100%/);
   const enPeriod = (en.clientOperations.registry.reporting as { period: { monthly: string; bimonthly: string } }).period;
   const hePeriod = (he.clientOperations.registry.reporting as { period: { monthly: string; bimonthly: string } }).period;
   assert.equal(enPeriod.monthly, '{{period}}');
   assert.equal(hePeriod.bimonthly, '{{start}}–{{end}}');
   assert.match((en.clientOperations.registry.reporting as { cell: { informational: string } }).cell.informational, /Informational/);
   assert.match((he.clientOperations.registry.reporting as { cell: { informational: string } }).cell.informational, /[\u0590-\u05FF]/);
+});
+
+test('reporting KPI cards stay presentation-only:  submitted/total, wrap, no remaining line', () => {
+  const dashSlice = viewSource.slice(
+    viewSource.indexOf('const renderReportingDashboard'),
+    viewSource.indexOf('const renderFilterBar'),
+  );
+  assert.match(dashSlice, /card\.submitted_count/);
+  assert.match(dashSlice, /card\.total_count/);
+  assert.doesNotMatch(dashSlice, /card\.remaining_count/);
+  assert.doesNotMatch(dashSlice, /t\(.*remaining/);
+  assert.doesNotMatch(viewSource, /submitted_count\s*\+/);
+  assert.doesNotMatch(viewSource, /total_count\s*-/);
+  assert.match(cssSource, /\.nx-co-sheet__reporting-kpis[\s\S]*?flex-wrap:\s*wrap/);
+  assert.match(cssSource, /\.nx-co-sheet__reporting-dash[\s\S]*?overflow-x:\s*hidden/);
 });

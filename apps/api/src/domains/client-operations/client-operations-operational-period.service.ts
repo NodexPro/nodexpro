@@ -146,17 +146,49 @@ export async function loadPayrollPeriodSalaryDataReceived(input: {
   payrollPeriodKey: string;
   clientIds: string[];
 }): Promise<Map<string, boolean>> {
+  const workflow = await loadPayrollPeriodWorkflowState(input);
   const out = new Map<string, boolean>();
+  for (const [clientId, state] of workflow) {
+    out.set(clientId, state.salary_data_received);
+  }
+  return out;
+}
+
+export type PayrollPeriodWorkflowState = {
+  salary_data_received: boolean;
+  sent_to_employer: boolean;
+  no_salaries_this_month: boolean;
+  not_relevant: boolean;
+};
+
+/** Authoritative payroll workflow flags for reporting KPI — not material-only. */
+export async function loadPayrollPeriodWorkflowState(input: {
+  organizationId: string;
+  payrollPeriodKey: string;
+  clientIds: string[];
+}): Promise<Map<string, PayrollPeriodWorkflowState>> {
+  const out = new Map<string, PayrollPeriodWorkflowState>();
   if (!input.clientIds.length) return out;
   const { data, error } = await supabaseAdmin
     .from('client_payroll_period_state')
-    .select('client_id, salary_data_received')
+    .select('client_id, salary_data_received, sent_to_employer, no_salaries_this_month, not_relevant')
     .eq('organization_id', input.organizationId)
     .eq('payroll_period_key', input.payrollPeriodKey)
     .in('client_id', input.clientIds);
-  assertQueryError(error, 'Failed to load payroll period salary_data_received');
-  for (const row of (data ?? []) as Array<{ client_id: string; salary_data_received: boolean }>) {
-    out.set(row.client_id, Boolean(row.salary_data_received));
+  assertQueryError(error, 'Failed to load payroll period workflow state');
+  for (const row of (data ?? []) as Array<{
+    client_id: string;
+    salary_data_received: boolean;
+    sent_to_employer: boolean;
+    no_salaries_this_month: boolean;
+    not_relevant: boolean;
+  }>) {
+    out.set(row.client_id, {
+      salary_data_received: Boolean(row.salary_data_received),
+      sent_to_employer: Boolean(row.sent_to_employer),
+      no_salaries_this_month: Boolean(row.no_salaries_this_month),
+      not_relevant: Boolean(row.not_relevant),
+    });
   }
   return out;
 }

@@ -3,6 +3,9 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   annualAppliesToOperationalPeriod,
   buildPreviousIncompletePeriods,
@@ -11,6 +14,10 @@ import {
   buildReportingDashboard,
   buildReportingKpiCards,
   buildReportingRowPresentation,
+  nationalInsuranceDeductionsPeriodicSubmitted,
+  payrollWorkflowCountsAsSubmitted,
+  resolveAnnualReportKpiFact,
+  resolveCapitalDeclarationKpiFact,
   calendarDaysUntilDue,
   canonicalVatObligationId,
   CLIENT_OPERATIONS_REPORTING_WARNING_DAYS,
@@ -36,6 +43,7 @@ import {
   type ClientOperationsReportingFilingFact,
 } from '../../src/domains/client-operations/client-operations-reporting-dashboard.pure.js';
 import { applyRegistryQueryToRows } from '../../src/domains/client-operations/client-operations-registry-presentation.pure.js';
+import { resolveAnnualReportTaxYearForOperationalPeriod } from '../../src/domains/client-operations/client-operations-annual-capital-operational.pure.js';
 
 const TODAY = '2026-11-15';
 
@@ -158,9 +166,10 @@ test('priority sort: overdue, urgent, warning, neutral, complete, then counts / 
   );
 });
 
-test('KPI counts applicable obligations once by canonical id; N/A is excluded', () => {
+test('KPI counts each client once even when VAT canonical_ids collide', () => {
   const rows = [
     {
+      client_id: 'c-bi-1',
       reporting: buildReportingRowPresentation(
         [
           cell({ kind: 'vat', submitted: true, canonical_id: 'vat_report::2026-09-10' }),
@@ -170,6 +179,14 @@ test('KPI counts applicable obligations once by canonical id; N/A is excluded', 
       ),
     },
     {
+      client_id: 'c-bi-2',
+      reporting: buildReportingRowPresentation(
+        [cell({ kind: 'vat', submitted: false, canonical_id: 'vat_report::2026-09-10' })],
+        TODAY,
+      ),
+    },
+    {
+      client_id: 'c-month',
       reporting: buildReportingRowPresentation(
         [cell({ kind: 'vat', submitted: false, canonical_id: 'vat_report::2026-10' })],
         TODAY,
@@ -180,9 +197,32 @@ test('KPI counts applicable obligations once by canonical id; N/A is excluded', 
   const vat = cards.find((c) => c.id === 'vat');
   assert.ok(vat);
   assert.equal(vat.submitted_count, 1);
-  assert.equal(vat.total_count, 2);
-  assert.equal(vat.remaining_count, 1);
-  assert.equal(cards.some((c) => c.id === 'income_tax'), false);
+  assert.equal(vat.total_count, 3);
+  assert.equal(`${vat.submitted_count}/${vat.total_count}`, '1/3');
+  assert.equal(cards.find((c) => c.id === 'income_tax')?.total_count, 0);
+});
+
+test('two monthly VAT clients share vat_report::2026-10 identity but count as 2', () => {
+  const rows = [
+    {
+      client_id: 'm1',
+      reporting: buildReportingRowPresentation(
+        [cell({ kind: 'vat', submitted: true, canonical_id: 'vat_report::2026-10' })],
+        TODAY,
+      ),
+    },
+    {
+      client_id: 'm2',
+      reporting: buildReportingRowPresentation(
+        [cell({ kind: 'vat', submitted: false, canonical_id: 'vat_report::2026-10' })],
+        TODAY,
+      ),
+    },
+  ];
+  const vat = buildReportingKpiCards(rows).find((c) => c.id === 'vat');
+  assert.equal(vat?.submitted_count, 1);
+  assert.equal(vat?.total_count, 2);
+  assert.equal(`${vat?.submitted_count}/${vat?.total_count}`, '1/2');
 });
 
 test('previous periods count distinct periods, not reports, and split overdue vs incomplete', () => {
@@ -299,10 +339,11 @@ test('filing fact builder prefers calendar due date and does not invent N/A as s
   assert.equal(na.submitted, false);
 });
 
-test('dashboard contract echoes sort and kpi filter without inventing empty KPI cards', () => {
+test('dashboard contract echoes sort and kpi filter and always emits seven filing cards', () => {
   const dashboard = buildReportingDashboard({
     rows: [
       {
+        client_id: 'c-pay',
         reporting: buildReportingRowPresentation(
           [cell({ kind: 'payroll', submitted: false, due_date: '2026-11-20' })],
           TODAY,
@@ -314,8 +355,19 @@ test('dashboard contract echoes sort and kpi filter without inventing empty KPI 
     kpi_filter: null,
   });
   assert.equal(dashboard.active_sort, 'priority');
-  assert.equal(dashboard.kpi_cards.length, 1);
-  assert.equal(dashboard.kpi_cards[0]?.id, 'payroll');
+  assert.deepEqual(
+    dashboard.kpi_cards.map((c) => c.id),
+    [
+      'vat',
+      'income_tax',
+      'income_tax_deductions',
+      'national_insurance_deductions',
+      'payroll',
+      'annual',
+      'capital_declaration',
+    ],
+  );
+  assert.equal(dashboard.kpi_cards.find((c) => c.id === 'payroll')?.total_count, 1);
   assert.equal(dashboard.sort_options[0]?.id, 'priority');
   assert.equal(dashboard.payments_outstanding_kpi.id, 'payments_outstanding');
   assert.equal(dashboard.payments_outstanding_kpi.count, 0);
@@ -968,4 +1020,361 @@ test('repeated recompute preserves older incomplete VAT and does not duplicate i
   });
   assert.deepEqual(frequencyChange, ['vat_report::2026-10']);
 });
+
+test('monthly VAT is applicable every month; bimonthly VAT is not counted on odd months', () => {
+  const monthlySep = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-09',
+    vatFrequency: 'monthly',
+    facts: [],
+    calendarDueDate: '2026-10-19',
+  });
+  const bimonthlySep = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: false,
+    operationalPeriodKey: '2026-09',
+    vatFrequency: 'bi_monthly',
+    facts: [],
+    calendarDueDate: null,
+  });
+  const bimonthlyOct = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-10',
+    vatFrequency: 'bi_monthly',
+    facts: [],
+    calendarDueDate: '2026-11-16',
+  });
+  assert.equal(monthlySep.applicable, true);
+  assert.equal(monthlySep.canonical_id, 'vat_report::2026-09');
+  assert.equal(bimonthlySep.applicable, false);
+  assert.equal(bimonthlyOct.applicable, true);
+  assert.equal(bimonthlyOct.canonical_id, 'vat_report::2026-09-10');
+  const sepCards = buildReportingKpiCards([
+    { client_id: 'monthly', reporting: buildReportingRowPresentation([monthlySep], TODAY) },
+    { client_id: 'bimonthly', reporting: buildReportingRowPresentation([bimonthlySep], TODAY) },
+  ]);
+  assert.equal(sepCards.find((c) => c.id === 'vat')?.total_count, 1);
+  const octCards = buildReportingKpiCards([
+    {
+      client_id: 'bimonthly',
+      reporting: buildReportingRowPresentation([bimonthlyOct], TODAY),
+    },
+  ]);
+  assert.equal(octCards.find((c) => c.id === 'vat')?.total_count, 1);
+});
+
+test('two monthly VAT clients stay 0/2 when canonical_ids match', () => {
+  const rows = [1, 2].map((n) => ({
+    client_id: `c-month-${n}`,
+    reporting: buildReportingRowPresentation(
+      [cell({ kind: 'vat', submitted: false, canonical_id: 'vat_report::2026-10' })],
+      TODAY,
+    ),
+  }));
+  const vat = buildReportingKpiCards(rows).find((c) => c.id === 'vat');
+  assert.equal(vat?.submitted_count, 0);
+  assert.equal(vat?.total_count, 2);
+});
+
+test('missing obligation row still counts as required and not submitted', () => {
+  const built = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-10',
+    vatFrequency: 'monthly',
+    facts: [],
+    calendarDueDate: '2026-11-16',
+  });
+  assert.equal(built.obligation_id, null);
+  assert.equal(built.submitted, false);
+  const vat = buildReportingKpiCards([
+    {
+      client_id: 'c-missing',
+      reporting: buildReportingRowPresentation([built], TODAY),
+    },
+  ]).find((c) => c.id === 'vat');
+  assert.equal(vat?.submitted_count, 0);
+  assert.equal(vat?.total_count, 1);
+});
+
+test('income-tax advances KPI counts applicable clients only', () => {
+  const rows = [
+    {
+      client_id: 'c-ita',
+      reporting: buildReportingRowPresentation(
+        [cell({ kind: 'income_tax_advance', submitted: true })],
+        TODAY,
+      ),
+    },
+    {
+      client_id: 'c-none',
+      reporting: buildReportingRowPresentation(
+        [cell({ kind: 'income_tax_advance', applicable: false })],
+        TODAY,
+      ),
+    },
+  ];
+  const card = buildReportingKpiCards(rows).find((c) => c.id === 'income_tax');
+  assert.equal(card?.submitted_count, 1);
+  assert.equal(card?.total_count, 1);
+});
+
+test('income-tax deductions KPI is a separate client count', () => {
+  const rows = [
+    {
+      client_id: 'c-itd',
+      reporting: buildReportingRowPresentation(
+        [cell({ kind: 'income_tax_deductions', submitted: false })],
+        TODAY,
+      ),
+    },
+    {
+      client_id: 'c-itd-2',
+      reporting: buildReportingRowPresentation(
+        [cell({ kind: 'income_tax_deductions', submitted: true })],
+        TODAY,
+      ),
+    },
+  ];
+  const card = buildReportingKpiCards(rows).find((c) => c.id === 'income_tax_deductions');
+  assert.equal(card?.submitted_count, 1);
+  assert.equal(card?.total_count, 2);
+});
+
+test('NI deductions monthly KPI counts each client once; 102/100/126 are not three clients', () => {
+  assert.equal(
+    nationalInsuranceDeductionsPeriodicSubmitted({ reported_102: true, reported_100: true }),
+    true,
+  );
+  assert.equal(
+    nationalInsuranceDeductionsPeriodicSubmitted({ reported_102: true, reported_100: false }),
+    false,
+  );
+  const row = {
+    client_id: 'c-ni',
+    reporting: buildReportingRowPresentation(
+      [
+        cell({ kind: 'national_insurance_deductions', submitted: true }),
+        cell({ kind: 'payroll', submitted: false }),
+      ],
+      TODAY,
+    ),
+  };
+  const cards = buildReportingKpiCards([row]);
+  assert.equal(cards.find((c) => c.id === 'national_insurance_deductions')?.total_count, 1);
+  assert.equal(cards.find((c) => c.id === 'national_insurance_deductions')?.submitted_count, 1);
+  assert.equal(cards.find((c) => c.id === 'payroll')?.total_count, 1);
+});
+
+test('payroll KPI uses workflow completion, not material receipt', () => {
+  assert.equal(payrollWorkflowCountsAsSubmitted({ sent_to_employer: true }), true);
+  assert.equal(payrollWorkflowCountsAsSubmitted({ no_salaries_this_month: true }), true);
+  assert.equal(payrollWorkflowCountsAsSubmitted({ sent_to_employer: false }), false);
+  const built = buildReportingCellInputFromFacts({
+    kind: 'payroll',
+    applicable: true,
+    submittedOverride: false,
+    operationalPeriodKey: '2026-10',
+    facts: [],
+    calendarDueDate: null,
+  });
+  assert.equal(built.submitted, false);
+  const done = buildReportingCellInputFromFacts({
+    kind: 'payroll',
+    applicable: true,
+    submittedOverride: true,
+    operationalPeriodKey: '2026-10',
+    facts: [],
+    calendarDueDate: null,
+  });
+  assert.equal(done.submitted, true);
+});
+
+test('annual KPI uses tax year Y-1 for operational 10.26 and counts all required clients', () => {
+  assert.equal(resolveAnnualReportTaxYearForOperationalPeriod('2026-10'), 2025);
+  assert.equal(annualAppliesToOperationalPeriod({ due_date: '2026-05-31', operational_period_key: '2026-10' }), false);
+  const submitted = resolveAnnualReportKpiFact({ hasSubmissionForTaxYear: true });
+  const open = resolveAnnualReportKpiFact({ hasSubmissionForTaxYear: false });
+  assert.equal(submitted.required, true);
+  assert.equal(open.required, true);
+  const cards = buildReportingKpiCards([
+    {
+      client_id: 'a',
+      reporting_kpi: {
+        annual_required: true,
+        annual_submitted: true,
+        capital_required: false,
+        capital_submitted: false,
+      },
+    },
+    {
+      client_id: 'b',
+      reporting_kpi: {
+        annual_required: true,
+        annual_submitted: false,
+        capital_required: false,
+        capital_submitted: false,
+      },
+    },
+  ]);
+  const annual = cards.find((c) => c.id === 'annual');
+  assert.equal(annual?.submitted_count, 1);
+  assert.equal(annual?.total_count, 2);
+});
+
+test('capital declaration KPI requires a filing date and uses submission status', () => {
+  assert.deepEqual(
+    resolveCapitalDeclarationKpiFact({ open: { operational_target_date: null, status: 'open' }, datedCompleted: [] }),
+    { required: false, submitted: false },
+  );
+  assert.deepEqual(
+    resolveCapitalDeclarationKpiFact({
+      open: { operational_target_date: '2026-11-30', status: 'open' },
+      datedCompleted: [],
+    }),
+    { required: true, submitted: false },
+  );
+  assert.deepEqual(
+    resolveCapitalDeclarationKpiFact({
+      open: null,
+      datedCompleted: [{ operational_target_date: '2026-03-01', status: 'completed' }],
+    }),
+    { required: true, submitted: true },
+  );
+});
+
+test('previous-period VAT calendar family follows regular vs PCN client settings', () => {
+  const calendar = new Map([
+    ['vat_regular_income_tax_advances::2026-09', '2026-10-19'],
+    ['vat_detailed::2026-09', '2026-10-26'],
+  ]);
+  assert.equal(
+    resolvePreviousPeriodVatCalendarDue({
+      vat_frequency: 'monthly',
+      vat_type: 'yes',
+      vat_due_type: 'regular',
+      operational_period_key: '2026-09',
+      calendarDueByKey: calendar,
+    }),
+    '2026-10-19',
+  );
+  assert.equal(
+    resolvePreviousPeriodVatCalendarDue({
+      vat_frequency: 'monthly',
+      vat_type: 'yes',
+      vat_due_type: 'pcn',
+      operational_period_key: '2026-09',
+      calendarDueByKey: calendar,
+    }),
+    '2026-10-26',
+  );
+});
+
+test('business KPI filter keeps ITD and NI deductions separate; withholding remains an alias', () => {
+  const itdRow = {
+    client_id: 'c-itd',
+    reporting: buildReportingRowPresentation([cell({ kind: 'income_tax_deductions' })], TODAY),
+  };
+  const niRow = {
+    client_id: 'c-ni',
+    reporting: buildReportingRowPresentation([cell({ kind: 'national_insurance_deductions' })], TODAY),
+  };
+  assert.equal(rowMatchesReportingKpiFilter(itdRow, 'income_tax_deductions'), true);
+  assert.equal(rowMatchesReportingKpiFilter(niRow, 'income_tax_deductions'), false);
+  assert.equal(rowMatchesReportingKpiFilter(niRow, 'national_insurance_deductions'), true);
+  assert.equal(rowMatchesReportingKpiFilter(itdRow, 'withholding'), true);
+  assert.equal(rowMatchesReportingKpiFilter(niRow, 'withholding'), true);
+});
+
+test('form 126 completion does not submit the monthly NI deductions KPI', () => {
+  assert.equal(
+    nationalInsuranceDeductionsPeriodicSubmitted({ reported_102: false, reported_100: false }),
+    false,
+  );
+  const cards = buildReportingKpiCards([
+    {
+      client_id: 'c-126',
+      reporting: buildReportingRowPresentation(
+        [cell({ kind: 'national_insurance_deductions', submitted: false })],
+        TODAY,
+      ),
+    },
+  ]);
+  const ni = cards.find((c) => c.id === 'national_insurance_deductions');
+  assert.equal(ni?.submitted_count, 0);
+  assert.equal(ni?.total_count, 1);
+});
+
+test('business filters change reporting KPI denominators via the filtered population', () => {
+  const all = [
+    {
+      client_id: 'company',
+      reporting: buildReportingRowPresentation([cell({ kind: 'vat', submitted: true })], TODAY),
+    },
+    {
+      client_id: 'osek',
+      reporting: buildReportingRowPresentation([cell({ kind: 'vat', submitted: false })], TODAY),
+    },
+  ];
+  const allVat = buildReportingKpiCards(all).find((c) => c.id === 'vat');
+  assert.equal(`${allVat?.submitted_count}/${allVat?.total_count}`, '1/2');
+  const companyOnly = buildReportingKpiCards(all.filter((r) => r.client_id === 'company')).find(
+    (c) => c.id === 'vat',
+  );
+  assert.equal(`${companyOnly?.submitted_count}/${companyOnly?.total_count}`, '1/1');
+});
+
+test('payroll KPI helpers ignore material receipt; annual KPI click uses reporting_kpi facts', () => {
+  assert.equal(payrollWorkflowCountsAsSubmitted({ sent_to_employer: false, no_salaries_this_month: false }), false);
+  const annualRow = {
+    client_id: 'c-annual',
+    reporting_kpi: {
+      annual_required: true,
+      annual_submitted: false,
+      capital_required: false,
+      capital_submitted: false,
+    },
+  };
+  assert.equal(rowMatchesReportingKpiFilter(annualRow, 'annual'), true);
+  assert.equal(rowMatchesReportingKpiFilter(annualRow, 'capital_declaration'), false);
+  assert.equal(
+    rowMatchesReportingKpiFilter(
+      {
+        client_id: 'c-cap',
+        reporting_kpi: {
+          annual_required: true,
+          annual_submitted: false,
+          capital_required: true,
+          capital_submitted: false,
+        },
+      },
+      'capital_declaration',
+    ),
+    true,
+  );
+});
+
+test('reporting dashboard wiring stays presentation-owned: payroll workflow, taxByClient, no material KPI', () => {
+  const dir = dirname(fileURLToPath(import.meta.url));
+  const dashboardService = readFileSync(
+    join(dir, '../../src/domains/client-operations/client-operations-reporting-dashboard.service.ts'),
+    'utf8',
+  );
+  const registryService = readFileSync(
+    join(dir, '../../src/domains/client-operations/client-operations.service.ts'),
+    'utf8',
+  );
+  assert.match(dashboardService, /payrollWorkflowCountsAsSubmitted/);
+  assert.match(dashboardService, /nationalInsuranceDeductionsPeriodicSubmitted/);
+  assert.match(dashboardService, /taxByClient/);
+  assert.match(dashboardService, /resolvePreviousPeriodVatCalendarDue/);
+  assert.doesNotMatch(dashboardService, /material_brought/);
+  assert.match(registryService, /loadPayrollPeriodWorkflowState/);
+  assert.match(registryService, /loadAnnualReportSubmissionsForTaxYear/);
+  assert.match(registryService, /loadCapitalDeclarationKpiInstances/);
+  assert.match(registryService, /taxByClient:/);
+});
+
 

@@ -850,7 +850,8 @@ test('MC5 — registry aggregate builds material_cells; VAT period_fact is boole
     join(dir, '../../src/domains/client-operations/client-operations.service.ts'),
     'utf8',
   );
-  assert.match(service, /loadPayrollPeriodSalaryDataReceived/);
+  assert.match(service, /loadPayrollPeriodWorkflowState/);
+  assert.match(service, /salary_data_received/);
   assert.match(service, /mapOperationalPeriodKeyToPayrollPeriodKey\(selectedPeriodKey\)/);
   assert.match(service, /periodFact\?\.material_brought/);
   assert.match(service, /periodFact\?\.income_tax_advance_material_brought/);

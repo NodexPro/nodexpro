@@ -2049,11 +2049,14 @@
       "reporting": {
         "kpi": {
           "vat": "מע״מ",
-          "incomeTax": "מס הכנסה",
+          "incomeTax": "מקדמות מס הכנסה",
+          "incomeTaxDeductions": "ניכויים מס הכנסה",
+          "nationalInsuranceDeductions": "ביטוח לאומי ניכויים",
           "payroll": "שכר",
           "nationalInsurance": "ביטוח לאומי",
           "withholding": "ניכויים",
-          "annual": "דוחות שנתיים",
+          "annual": "דוח שנתי",
+          "capitalDeclaration": "הצהרת הון",
           "paymentsOutstanding": "תשלומים שטרם שולמו",
           "paymentsOutstandingTooltip": "תקופות נפרדות עם תשלום מס שטרם שולם, כולל תקופות קודמות"
         },

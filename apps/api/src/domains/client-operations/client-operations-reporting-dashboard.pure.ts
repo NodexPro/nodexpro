@@ -20,21 +20,25 @@ import { type TaxObligationPaymentClassification } from '../accounting-base/acco
 /** Product warning window (calendar days). Does not change statutory due dates. */
 export const CLIENT_OPERATIONS_REPORTING_WARNING_DAYS = 4;
 
+/** Filing KPI cards: one count per client, never canonical_id-only collapse. */
 export const CLIENT_OPERATIONS_REPORTING_KPI_IDS = [
   'vat',
   'income_tax',
+  'income_tax_deductions',
+  'national_insurance_deductions',
   'payroll',
-  'national_insurance',
-  'withholding',
   'annual',
+  'capital_declaration',
 ] as const;
 
 export type ClientOperationsReportingKpiId = (typeof CLIENT_OPERATIONS_REPORTING_KPI_IDS)[number];
 
 export const CLIENT_OPERATIONS_PAYMENTS_OUTSTANDING_KPI_ID = 'payments_outstanding' as const;
 
+/** Legacy `withholding` remains a table filter alias for both deduction kinds. */
 export const CLIENT_OPERATIONS_REPORTING_FILTER_IDS = [
   ...CLIENT_OPERATIONS_REPORTING_KPI_IDS,
+  'withholding',
   CLIENT_OPERATIONS_PAYMENTS_OUTSTANDING_KPI_ID,
 ] as const;
 
@@ -129,10 +133,11 @@ const READY_TO_MARK_STATUSES = new Set(['ready_to_report', 'ready_to_process']);
 export const REPORTING_KPI_LABEL_KEYS: Record<ClientOperationsReportingKpiId, string> = {
   vat: CO_UI.reporting.kpi.vat,
   income_tax: CO_UI.reporting.kpi.incomeTax,
+  income_tax_deductions: CO_UI.reporting.kpi.incomeTaxDeductions,
+  national_insurance_deductions: CO_UI.reporting.kpi.nationalInsuranceDeductions,
   payroll: CO_UI.reporting.kpi.payroll,
-  national_insurance: CO_UI.reporting.kpi.nationalInsurance,
-  withholding: CO_UI.reporting.kpi.withholding,
   annual: CO_UI.reporting.kpi.annual,
+  capital_declaration: CO_UI.reporting.kpi.capitalDeclaration,
 };
 
 export const REPORTING_CELL_TONE_LABEL_KEYS: Record<ClientOperationsReportingCellTone, string> = {
@@ -173,10 +178,11 @@ export const REPORTING_KPI_KINDS: Record<
 > = {
   vat: ['vat'],
   income_tax: ['income_tax_advance'],
+  income_tax_deductions: ['income_tax_deductions'],
+  national_insurance_deductions: ['national_insurance_deductions'],
   payroll: ['payroll'],
-  national_insurance: ['national_insurance'],
-  withholding: ['income_tax_deductions', 'national_insurance_deductions'],
-  annual: ['annual'],
+  annual: [],
+  capital_declaration: [],
 };
 
 const ROW_TONE_PRIORITY: Record<ClientOperationsReportingRowTone, number> = {
@@ -223,6 +229,70 @@ export function reportingKindAffectsFilingKpi(
   kind: ClientOperationsReportingObligationKind,
 ): boolean {
   return !reportingKindIsInformational(kind);
+}
+
+/** Backend-owned annual / capital KPI facts — not derived from obligation canonical_id. */
+export type ReportingKpiClientFacts = {
+  annual_required: boolean;
+  annual_submitted: boolean;
+  capital_required: boolean;
+  capital_submitted: boolean;
+};
+
+export type ReportingKpiRowInput = {
+  client_id?: string | null;
+  reporting?: ClientOperationsReportingRowPresentation | null;
+  reporting_kpi?: ReportingKpiClientFacts | null;
+};
+
+export function reportingKpiClientKey(row: { client_id?: string | null }, fallback: string): string {
+  const id = String(row.client_id ?? '').trim();
+  return id || fallback;
+}
+
+/** Payroll processing complete — not material receipt. */
+export function payrollWorkflowCountsAsSubmitted(input: {
+  sent_to_employer?: boolean | null;
+  no_salaries_this_month?: boolean | null;
+}): boolean {
+  return Boolean(input.sent_to_employer) || Boolean(input.no_salaries_this_month);
+}
+
+export function payrollWorkflowIsNotRelevant(input: { not_relevant?: boolean | null }): boolean {
+  return Boolean(input.not_relevant);
+}
+
+/**
+ * Monthly NI deductions KPI uses periodic 102 + 100 only.
+ * Form 126 is H1/annual and must not add extra clients or monthly completion.
+ */
+export function nationalInsuranceDeductionsPeriodicSubmitted(input: {
+  reported_102?: boolean | null;
+  reported_100?: boolean | null;
+}): boolean {
+  return Boolean(input.reported_102) && Boolean(input.reported_100);
+}
+
+export function resolveAnnualReportKpiFact(input: { hasSubmissionForTaxYear: boolean }): {
+  required: true;
+  submitted: boolean;
+} {
+  return { required: true, submitted: Boolean(input.hasSubmissionForTaxYear) };
+}
+
+export function resolveCapitalDeclarationKpiFact(input: {
+  open: { operational_target_date: string | null; status: string } | null;
+  datedCompleted: ReadonlyArray<{ operational_target_date: string | null; status: string }>;
+}): { required: boolean; submitted: boolean } {
+  const openDate = String(input.open?.operational_target_date ?? '').trim();
+  if (input.open && openDate) {
+    return { required: true, submitted: input.open.status === 'completed' };
+  }
+  const completed = input.datedCompleted.find(
+    (row) => String(row.operational_target_date ?? '').trim() && row.status === 'completed',
+  );
+  if (completed) return { required: true, submitted: true };
+  return { required: false, submitted: false };
 }
 
 export type ClientOperationsReportingFilingFact = {
@@ -626,33 +696,61 @@ export function compareReportingPriorityRows(
   return a.client_id.localeCompare(b.client_id);
 }
 
-export function buildReportingKpiCards(
-  rows: Array<{ reporting?: ClientOperationsReportingRowPresentation | null }>,
-): ClientOperationsReportingKpiCard[] {
+function applyUnsubmittedCellTone(
+  remainingTone: ClientOperationsReportingKpiCard['remaining_tone'],
+  tone: ClientOperationsReportingCellPresentation['tone'] | undefined,
+): ClientOperationsReportingKpiCard['remaining_tone'] {
+  if (tone === 'overdue') return 'overdue';
+  if (tone === 'urgent' && remainingTone !== 'overdue') return 'urgent';
+  if (tone === 'warning' && remainingTone === 'neutral') return 'warning';
+  return remainingTone;
+}
+
+export function buildReportingKpiCards(rows: ReportingKpiRowInput[]): ClientOperationsReportingKpiCard[] {
   const cards: ClientOperationsReportingKpiCard[] = [];
   for (const id of CLIENT_OPERATIONS_REPORTING_KPI_IDS) {
-    const kinds = REPORTING_KPI_KINDS[id].filter((kind) => reportingKindAffectsFilingKpi(kind));
-    if (!kinds.length) continue;
     let submitted = 0;
     let total = 0;
     let remainingTone: ClientOperationsReportingKpiCard['remaining_tone'] = 'neutral';
     const seen = new Set<string>();
-    for (const row of rows) {
-      const cells = row.reporting?.cells;
-      if (!cells) continue;
-      for (const kind of kinds) {
-        const cell = cells[REPORTING_KIND_COLUMN_KEY[kind]];
-        if (!cell?.applicable) continue;
-        if (seen.has(`${cell.canonical_id}`)) continue;
-        seen.add(cell.canonical_id);
+
+    if (id === 'annual' || id === 'capital_declaration') {
+      for (const [index, row] of rows.entries()) {
+        const facts = row.reporting_kpi;
+        const required = id === 'annual' ? Boolean(facts?.annual_required) : Boolean(facts?.capital_required);
+        const done = id === 'annual' ? Boolean(facts?.annual_submitted) : Boolean(facts?.capital_submitted);
+        if (!required) continue;
+        const clientKey = reportingKpiClientKey(row, `__row_${index}`);
+        if (seen.has(clientKey)) continue;
+        seen.add(clientKey);
         total += 1;
-        if (cell.submitted) submitted += 1;
-        else if (cell.tone === 'overdue') remainingTone = 'overdue';
-        else if (cell.tone === 'urgent' && remainingTone !== 'overdue') remainingTone = 'urgent';
-        else if (cell.tone === 'warning' && remainingTone === 'neutral') remainingTone = 'warning';
+        if (done) submitted += 1;
+      }
+    } else {
+      const kinds = REPORTING_KPI_KINDS[id].filter((kind) => reportingKindAffectsFilingKpi(kind));
+      for (const [index, row] of rows.entries()) {
+        const cells = row.reporting?.cells;
+        if (!cells) continue;
+        const clientKey = reportingKpiClientKey(row, `__row_${index}`);
+        if (seen.has(clientKey)) continue;
+        let matched = false;
+        let rowSubmitted = true;
+        for (const kind of kinds) {
+          const cell = cells[REPORTING_KIND_COLUMN_KEY[kind]];
+          if (!cell?.applicable) continue;
+          matched = true;
+          if (!cell.submitted) {
+            rowSubmitted = false;
+            remainingTone = applyUnsubmittedCellTone(remainingTone, cell.tone);
+          }
+        }
+        if (!matched) continue;
+        seen.add(clientKey);
+        total += 1;
+        if (rowSubmitted) submitted += 1;
       }
     }
-    if (total === 0) continue;
+
     cards.push({
       id,
       label_key: REPORTING_KPI_LABEL_KEYS[id],
@@ -673,16 +771,23 @@ export function cellHasPaymentOutstanding(
 }
 
 export function rowMatchesReportingKpiFilter(
-  row: { reporting?: ClientOperationsReportingRowPresentation | null },
+  row: ReportingKpiRowInput,
   kpiId: ClientOperationsReportingFilterId | null,
 ): boolean {
   if (!kpiId) return true;
+  if (kpiId === 'annual') return Boolean(row.reporting_kpi?.annual_required);
+  if (kpiId === 'capital_declaration') return Boolean(row.reporting_kpi?.capital_required);
   const cells = row.reporting?.cells;
   if (!cells) return false;
   if (kpiId === CLIENT_OPERATIONS_PAYMENTS_OUTSTANDING_KPI_ID) {
     return Object.values(cells).some((cell) => cellHasPaymentOutstanding(cell));
   }
-  const kinds = REPORTING_KPI_KINDS[kpiId];
+  const kinds =
+    kpiId === 'withholding'
+      ? (['income_tax_deductions', 'national_insurance_deductions'] as const)
+      : isClientOperationsReportingKpiId(kpiId)
+        ? REPORTING_KPI_KINDS[kpiId]
+        : [];
   return kinds.some((kind) => cells[REPORTING_KIND_COLUMN_KEY[kind]]?.applicable === true);
 }
 
@@ -692,7 +797,7 @@ export type PaymentsOutstandingPeriodFact = {
 };
 
 export function buildPaymentsOutstandingKpi(input: {
-  rows: Array<{ reporting?: ClientOperationsReportingRowPresentation | null }>;
+  rows: ReportingKpiRowInput[];
   outstanding_period_facts: readonly PaymentsOutstandingPeriodFact[];
   selected_period_key: string;
 }): ClientOperationsPaymentsOutstandingKpi {
@@ -701,10 +806,12 @@ export function buildPaymentsOutstandingKpi(input: {
   for (const row of input.rows) {
     const cells = row.reporting?.cells;
     if (!cells) continue;
+    const clientKey = reportingKpiClientKey(row, '');
     for (const cell of Object.values(cells)) {
       if (!cellHasPaymentOutstanding(cell)) continue;
-      if (seen.has(cell.canonical_id)) continue;
-      seen.add(cell.canonical_id);
+      const identity = clientKey ? `${clientKey}::${cell.canonical_id}` : cell.canonical_id;
+      if (seen.has(identity)) continue;
+      seen.add(identity);
       count += 1;
     }
   }
@@ -1095,7 +1202,7 @@ export function buildReportingSortOptions(): Array<{
 }
 
 export function buildReportingDashboard(input: {
-  rows: Array<{ reporting?: ClientOperationsReportingRowPresentation | null }>;
+  rows: ReportingKpiRowInput[];
   previous_periods: ClientOperationsReportingPreviousPeriods;
   sort_by: string | null | undefined;
   kpi_filter: string | null | undefined;
