@@ -115,6 +115,7 @@ export type ClientOperationsReportingPaymentModal = {
 export type ClientOperationsReportingSortId = 'priority' | 'client_name' | 'period_created';
 
 const PERIOD_KEY_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
+const SELF_EMPLOYED_NI_OFFICE_REMINDER_DAY = 15;
 const YEAR_KEY_RE = /^(\d{4})$/;
 const BIMONTHLY_VAT_PERIOD_RE = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|1[0-2])$/;
 
@@ -304,6 +305,73 @@ export type ClientOperationsReportingFilingFact = {
   last_reported_at: string | null;
 };
 
+export type ClientOperationsFrequencyCellChrome =
+  | 'pending'
+  | 'action_required'
+  | 'filed_unpaid'
+  | 'filed_paid'
+  | 'not_applicable';
+
+export type ClientOperationsFilingDetail = {
+  openable: boolean;
+  chrome: ClientOperationsFrequencyCellChrome;
+  period_key: string;
+  period_display: string;
+  filing_status_key: string;
+  filed_on_display: string | null;
+  submission_reference: string | null;
+  payment_classification: TaxObligationPaymentClassification | null;
+  payment_state: ClientOperationsReportingPaymentState;
+  can_confirm_filing: boolean;
+  can_clear_filing: boolean;
+  can_record_payment: boolean;
+  can_report: boolean;
+  can_report_and_pay: boolean;
+  can_mark_paid: boolean;
+  report_key: string;
+  report_and_paid_key: string;
+  paid_key: string;
+  title_key: string;
+  client_key: string;
+  period_label_key: string;
+  frequency_key: string;
+  status_key: string;
+  confirm_action_key: string;
+  filed_on_key: string;
+  reference_key: string;
+  payment_status_key: string;
+  not_recorded_key: string;
+  save_key: string;
+  cancel_key: string;
+};
+
+export type ClientOperationsSelfEmployedNiOperations = {
+  applicable: boolean;
+  openable: boolean;
+  period_key: string;
+  period_display: string;
+  standing_order_active: boolean;
+  standing_order_status_key: string;
+  standing_order_provenance: 'office_recorded';
+  bank_verified: false;
+  authority_verified: false;
+  statutory_deadline: false;
+  office_reminder: boolean;
+  reminder_day: number;
+  action_resolved: boolean;
+  action_status_key: string;
+  can_set_standing_order: boolean;
+  can_confirm_manual_resolution: boolean;
+  title_key: string;
+  month_key: string;
+  amount_key: string;
+  office_note_key: string;
+  resolution_key: string;
+  confirm_resolution_key: string;
+  save_key: string;
+  cancel_key: string;
+};
+
 export type ClientOperationsReportingCellInput = {
   kind: ClientOperationsReportingObligationKind;
   applicable: boolean;
@@ -315,6 +383,7 @@ export type ClientOperationsReportingCellInput = {
   can_mark_submitted: boolean;
   can_mark_not_submitted: boolean;
   last_reported_at: string | null;
+  operational_period_key?: string | null;
   payment_classification?: TaxObligationPaymentClassification | null;
   payment_due_date?: string | null;
   payment_applies?: boolean;
@@ -351,6 +420,7 @@ export type ClientOperationsReportingCellPresentation = {
   bank_verified: false;
   allowed_actions: ClientOperationsReportingAllowedAction[];
   payment_modal: ClientOperationsReportingPaymentModal | null;
+  filing_detail: ClientOperationsFilingDetail | null;
 };
 
 export type ClientOperationsReportingRowPresentation = {
@@ -609,6 +679,19 @@ export function buildReportingCellPresentation(
     bank_verified: false,
     allowed_actions,
     payment_modal: paymentModal,
+    filing_detail: buildFilingDetail({
+      kind: input.kind,
+      applicable,
+      submitted: input.submitted,
+      tone,
+      periodKey: input.operational_period_key ?? '',
+      lastReportedAt: input.last_reported_at,
+      paymentClassification: input.payment_classification ?? null,
+      paymentState,
+      paymentApplies,
+      canConfirmFiling: Boolean(!informational && input.can_mark_submitted),
+      canClearFiling: Boolean(!informational && input.can_mark_not_submitted),
+    }),
   };
 }
 
@@ -847,6 +930,187 @@ export function formatReportingPeriodDisplayLabel(periodKey: string): string {
   const year = YEAR_KEY_RE.exec(periodKey.trim());
   if (year) return year[1]!;
   return periodKey;
+}
+
+function formatReportedOnDisplay(iso: string | null): string | null {
+  if (!iso) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return match ? `${match[3]}.${match[2]}.${match[1]}` : null;
+}
+
+function filingPaymentSettled(state: ClientOperationsReportingPaymentState): boolean {
+  return state === 'paid_in_full' || state === 'not_required';
+}
+
+function buildFilingDetail(input: {
+  kind: ClientOperationsReportingObligationKind;
+  applicable: boolean;
+  submitted: boolean;
+  tone: ClientOperationsReportingCellTone;
+  periodKey: string;
+  lastReportedAt: string | null;
+  paymentClassification: TaxObligationPaymentClassification | null;
+  paymentState: ClientOperationsReportingPaymentState;
+  paymentApplies: boolean;
+  canConfirmFiling: boolean;
+  canClearFiling: boolean;
+}): ClientOperationsFilingDetail | null {
+  if (input.kind !== 'vat' && input.kind !== 'income_tax_advance') return null;
+  const paid = !input.paymentApplies || filingPaymentSettled(input.paymentState);
+  const chrome: ClientOperationsFrequencyCellChrome = !input.applicable
+    ? 'not_applicable'
+    : !input.submitted
+      ? input.tone === 'overdue' || input.tone === 'urgent'
+        ? 'action_required'
+        : 'pending'
+      : paid
+        ? 'filed_paid'
+        : 'filed_unpaid';
+  const canReport = input.applicable && !input.submitted && input.canConfirmFiling;
+  return {
+    openable: input.applicable,
+    chrome,
+    period_key: input.periodKey,
+    period_display: input.periodKey ? formatReportingPeriodDisplayLabel(input.periodKey) : '',
+    filing_status_key: !input.applicable
+      ? CO_UI.reporting.cell.notApplicable
+      : input.submitted
+        ? CO_UI.reporting.cell.submitted
+        : CO_UI.reporting.cell.open,
+    filed_on_display: input.submitted ? formatReportedOnDisplay(input.lastReportedAt) : null,
+    submission_reference: null,
+    payment_classification: input.paymentClassification,
+    payment_state: input.paymentState,
+    can_confirm_filing: input.applicable && input.canConfirmFiling,
+    can_clear_filing: input.applicable && input.canClearFiling,
+    can_record_payment: input.applicable && input.paymentApplies && input.submitted && !paid,
+    can_report: canReport,
+    can_report_and_pay: canReport && input.paymentApplies,
+    can_mark_paid: input.applicable && input.submitted && input.paymentApplies && !paid,
+    report_key: CO_UI.reporting.filing.report,
+    report_and_paid_key: CO_UI.reporting.filing.reportAndPaid,
+    paid_key: CO_UI.reporting.filing.paid,
+    title_key: CO_UI.reporting.filing.title,
+    client_key: CO_UI.reporting.filing.client,
+    period_label_key: CO_UI.reporting.filing.period,
+    frequency_key: CO_UI.reporting.filing.frequency,
+    status_key: CO_UI.reporting.filing.status,
+    confirm_action_key: CO_UI.reporting.filing.confirmAction,
+    filed_on_key: CO_UI.reporting.filing.filedOn,
+    reference_key: CO_UI.reporting.filing.reference,
+    payment_status_key: CO_UI.reporting.filing.paymentStatus,
+    not_recorded_key: CO_UI.reporting.filing.notRecorded,
+    save_key: CO_UI.reporting.filing.save,
+    cancel_key: CO_UI.reporting.filing.cancel,
+  };
+}
+
+const NI_ACTION_RESOLVED_STATUSES = new Set([
+  'paid_on_time',
+  'paid_late',
+  'reported_and_paid',
+  'not_relevant',
+]);
+
+export function standingOrderCoversOperationalMonth(
+  until: string | null | undefined,
+  periodKey: string,
+): boolean {
+  const end = String(until ?? '').slice(0, 10);
+  const period = String(periodKey ?? '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(end) || !PERIOD_KEY_RE.test(period)) return false;
+  const monthStart = `${period}-01`;
+  const yearStart = `${end.slice(0, 4)}-01-01`;
+  return monthStart >= yearStart && monthStart <= end;
+}
+
+export function nextSelfEmployedNiStandingOrderUntil(input: {
+  active: boolean;
+  periodKey: string;
+  existingUntil: string | null | undefined;
+}): string | null {
+  const period = String(input.periodKey ?? '').trim();
+  const existingRaw = String(input.existingUntil ?? '').slice(0, 10);
+  const existing = /^\d{4}-\d{2}-\d{2}$/.test(existingRaw) ? existingRaw : null;
+  if (!PERIOD_KEY_RE.test(period)) return existing;
+  if (!input.active) {
+    return standingOrderCoversOperationalMonth(existing, period) ? null : existing;
+  }
+  const yearEnd = `${period.slice(0, 4)}-12-31`;
+  if (existing && standingOrderCoversOperationalMonth(existing, period) && existing >= yearEnd) {
+    return existing;
+  }
+  return yearEnd;
+}
+
+export function selfEmployedNiActionResolved(status: string | null | undefined): boolean {
+  return NI_ACTION_RESOLVED_STATUSES.has(String(status ?? '').trim());
+}
+
+export function selfEmployedNiOfficeReminderActive(input: {
+  applicable: boolean;
+  standingOrderUntil: string | null | undefined;
+  periodKey: string;
+  today: string;
+  obligationStatus: string | null | undefined;
+}): boolean {
+  if (!input.applicable) return false;
+  if (standingOrderCoversOperationalMonth(input.standingOrderUntil, input.periodKey)) return false;
+  if (selfEmployedNiActionResolved(input.obligationStatus)) return false;
+  const period = String(input.periodKey ?? '').trim();
+  const today = String(input.today ?? '').slice(0, 10);
+  if (!PERIOD_KEY_RE.test(period) || !/^\d{4}-\d{2}-\d{2}$/.test(today)) return false;
+  const threshold = `${period}-${String(SELF_EMPLOYED_NI_OFFICE_REMINDER_DAY).padStart(2, '0')}`;
+  return today >= threshold;
+}
+
+export function selfEmployedNiStorageDate(periodKey: string): string | null {
+  const match = PERIOD_KEY_RE.exec(String(periodKey ?? '').trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${match[1]}-${match[2]}-${String(last).padStart(2, '0')}`;
+}
+
+export function buildSelfEmployedNiOperations(input: {
+  applicable: boolean;
+  standingOrderUntil: string | null | undefined;
+  periodKey: string;
+  today: string;
+  obligationStatus: string | null | undefined;
+}): ClientOperationsSelfEmployedNiOperations {
+  const applicable = input.applicable;
+  const active = standingOrderCoversOperationalMonth(input.standingOrderUntil, input.periodKey);
+  const resolved = selfEmployedNiActionResolved(input.obligationStatus);
+  return {
+    applicable,
+    openable: applicable,
+    period_key: input.periodKey,
+    period_display: input.periodKey ? formatReportingPeriodDisplayLabel(input.periodKey) : '',
+    standing_order_active: active,
+    standing_order_status_key: active
+      ? CO_UI.reporting.ni.standingActive
+      : CO_UI.reporting.ni.standingInactive,
+    standing_order_provenance: 'office_recorded',
+    bank_verified: false,
+    authority_verified: false,
+    statutory_deadline: false,
+    office_reminder: selfEmployedNiOfficeReminderActive(input),
+    reminder_day: SELF_EMPLOYED_NI_OFFICE_REMINDER_DAY,
+    action_resolved: resolved,
+    action_status_key: resolved ? CO_UI.reporting.ni.resolutionDone : CO_UI.reporting.ni.resolutionOpen,
+    can_set_standing_order: applicable,
+    can_confirm_manual_resolution: applicable && !resolved,
+    title_key: CO_UI.reporting.ni.title,
+    month_key: CO_UI.reporting.ni.month,
+    amount_key: CO_UI.reporting.ni.amount,
+    office_note_key: CO_UI.reporting.ni.standingOffice,
+    resolution_key: CO_UI.reporting.ni.resolution,
+    confirm_resolution_key: CO_UI.reporting.ni.confirmResolution,
+    save_key: CO_UI.reporting.ni.save,
+    cancel_key: CO_UI.reporting.ni.cancel,
+  };
 }
 
 export function isAuthoritativeLegalOverdue(dueDate: string | null | undefined, today: string): boolean {
@@ -1108,6 +1372,7 @@ export function buildReportingCellInputFromFacts(input: {
     can_mark_submitted: Boolean(applicable && fact?.obligation_id && canMarkObligationSubmitted(fact.status) && !submitted),
     can_mark_not_submitted: Boolean(applicable && fact?.obligation_id && submitted),
     last_reported_at: fact?.last_reported_at ?? null,
+    operational_period_key: input.operationalPeriodKey,
     payment_classification: input.paymentClassification ?? null,
     payment_due_date: input.paymentDueDate ?? null,
     payment_applies: paymentAppliesForReportingKind(input.kind),

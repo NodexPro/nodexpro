@@ -20,6 +20,7 @@ import {
   buildReportingCellInputFromFacts,
   buildReportingRowPresentation,
   buildPreviousIncompletePeriods,
+  buildSelfEmployedNiOperations,
   calendarDueMapKey,
   incomeTaxAdvancesCalendarKey,
   incomeTaxDeductionsCalendarKey,
@@ -38,6 +39,7 @@ import {
   type ClientOperationsReportingFilingFact,
   type ClientOperationsReportingPreviousPeriods,
   type ClientOperationsReportingRowPresentation,
+  type ClientOperationsSelfEmployedNiOperations,
   type PaymentsOutstandingPeriodFact,
   type ReportingKpiClientFacts,
 } from './client-operations-reporting-dashboard.pure.js';
@@ -271,7 +273,13 @@ export function attachReportingPresentationToRegistryRow<T extends RegistryRepor
   today: string;
   payrollWorkflow?: PayrollWorkflowKpiState | null;
   reportingKpi?: ReportingKpiClientFacts | null;
-}): T & { reporting: ClientOperationsReportingRowPresentation; reporting_kpi: ReportingKpiClientFacts } {
+  niApplicable?: boolean;
+  niStandingOrderUntil?: string | null;
+}): T & {
+  reporting: ClientOperationsReportingRowPresentation;
+  reporting_kpi: ReportingKpiClientFacts;
+  national_insurance_operations: ClientOperationsSelfEmployedNiOperations;
+} {
   const vatLookup = resolveVatCalendarLookupPeriodKey({
     vat_frequency: input.tax?.vat_frequency ?? null,
     operational_period_key: input.selectedPeriodKey,
@@ -395,7 +403,20 @@ export function attachReportingPresentationToRegistryRow<T extends RegistryRepor
     capital_required: false,
     capital_submitted: false,
   };
-  return { ...input.row, reporting, reporting_kpi };
+  const niFact =
+    input.facts.find(
+      (fact) =>
+        fact.obligation_type === 'national_insurance_self_employed_payment' &&
+        fact.period_key === input.selectedPeriodKey,
+    ) ?? null;
+  const national_insurance_operations = buildSelfEmployedNiOperations({
+    applicable: Boolean(input.niApplicable),
+    standingOrderUntil: input.niStandingOrderUntil ?? null,
+    periodKey: input.selectedPeriodKey,
+    today: input.today,
+    obligationStatus: niFact?.status ?? null,
+  });
+  return { ...input.row, reporting, reporting_kpi, national_insurance_operations };
 }
 
 export function buildPreviousPeriodFactsFromLoad(input: {

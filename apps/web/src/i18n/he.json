@@ -2106,6 +2106,37 @@
           "confirm": "אישור",
           "cancel": "ביטול",
           "updateTitle": "עדכון סטטוס תשלום מס"
+        },
+        "filing": {
+          "title": "דיווח",
+          "client": "לקוח",
+          "period": "תקופת דיווח",
+          "frequency": "תדירות דיווח",
+          "status": "סטטוס הגשה",
+          "confirmAction": "אישור הגשה",
+          "report": "דווח",
+          "reportAndPaid": "דווח ושולם",
+          "paid": "שולם",
+          "filedOn": "תאריך הגשה בפועל",
+          "reference": "אסמכתא",
+          "paymentStatus": "סטטוס תשלום",
+          "notRecorded": "לא נרשם",
+          "save": "שמירה",
+          "cancel": "ביטול"
+        },
+        "ni": {
+          "title": "ביטוח לאומי עצמאים",
+          "month": "חודש תפעולי",
+          "amount": "סכום חודשי",
+          "standingActive": "יש הוראת קבע",
+          "standingInactive": "אין הוראת קבע",
+          "standingOffice": "סטטוס שנרשם במשרד. לא אומת מול הבנק או ביטוח לאומי.",
+          "resolution": "סטטוס טיפול",
+          "resolutionDone": "טופל לחודש זה",
+          "resolutionOpen": "הטיפול עדיין פתוח",
+          "confirmResolution": "רישום טיפול ידני לחודש זה",
+          "save": "שמירה",
+          "cancel": "ביטול"
         }
       }
     },

@@ -60,6 +60,9 @@ test('row/cell tones, overdue marker, KPI and previous-period chrome exist', () 
 
 test('payment modal is Create Client-styled, has no Yes preselect, and cancel does not file', () => {
   assert.match(viewSource, /data-testid="client-operations-payment-modal"/);
+  assert.match(viewSource, /data-testid="client-operations-filing-paid"/);
+  assert.match(viewSource, /detail\.can_mark_paid/);
+  assert.match(viewSource, /!canAct \|\| !detail\.can_mark_paid/);
   assert.match(viewSource, /nx-client-create--deep-ocean-glass/);
   assert.match(viewSource, /selected: null/);
   assert.match(viewSource, /disabled=\{!paymentModal\.selected\}/);
@@ -144,6 +147,6 @@ test('reporting KPI cards stay presentation-only:  submitted/total, wrap, no rem
   assert.doesNotMatch(dashSlice, /t\(.*remaining/);
   assert.doesNotMatch(viewSource, /submitted_count\s*\+/);
   assert.doesNotMatch(viewSource, /total_count\s*-/);
-  assert.match(cssSource, /\.nx-co-sheet__reporting-kpis[\s\S]*?flex-wrap:\s*wrap/);
-  assert.match(cssSource, /\.nx-co-sheet__reporting-dash[\s\S]*?overflow-x:\s*hidden/);
+  assert.match(cssSource, /\.nx-co-sheet__reporting-kpis[\s\S]*?grid-template-columns:\s*repeat\(auto-fit/);
+  assert.doesNotMatch(cssSource, /\.nx-co-sheet__reporting-kpis[\s\S]*?overflow-x:\s*auto/);
 });

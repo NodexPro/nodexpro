@@ -81,27 +81,28 @@ test('frontend renders integrated date/calendar control without tax year math', 
   assert.match(apiRegistrySource, /resolveAnnualReportTaxYearForOperationalPeriod\(/);
 });
 
-test('capital N/A renders integrated dash plus open affordance', () => {
+test('capital N/A is a plain dash; open uses the calendar icon', () => {
   assert.match(viewSource, /capital_declaration_cell\?\.can_open/);
   assert.match(viewSource, /open_capital_declaration_instance/);
-  assert.match(viewSource, /פתיחת הצהרת הון/);
-  assert.match(viewSource, /nx-co-sheet__date-field-plus/);
-  assert.match(viewSource, /nx-co-sheet__date-field-value/);
-  assert.match(cssSource, /\.nx-co-sheet__date-field-plus/);
+  assert.match(viewSource, /nx-co-sheet__date-open/);
+  assert.match(viewSource, /ClientOperationsCalendarIcon/);
+  assert.match(viewSource, /nx-co-sheet__plain-dash/);
+  assert.doesNotMatch(viewSource, /nx-co-sheet__date-field-plus/);
+  assert.match(cssSource, /\.nx-co-sheet__date-open/);
 });
 
-test('הצהרת הון open and no-open share the same outer date-field chrome', () => {
-  // One shared outer class for open instance and no-open (+ / —) states.
-  assert.match(viewSource, /nx-co-sheet__date-field is-na\$\{canOpenCapital \? ' is-openable' : ''\}/);
+test('applicable date cells share one calendar control; non-applicable cells are not date inputs', () => {
   assert.match(viewSource, /className=\{`nx-co-sheet__date-field\$\{disabled/);
   assert.match(cssSource, /\.nx-co-sheet__date-field\s*\{[\s\S]*?min-width:\s*104px/);
-  // No-open must not shrink / restyle into a different box (stay within the rule body).
-  assert.doesNotMatch(cssSource, /\.nx-co-sheet__date-field\.is-na\s*\{[^}]*min-width\s*:/);
-  assert.doesNotMatch(cssSource, /\.nx-co-sheet__date-field\.is-openable\s*\{[^}]*min-width\s*:/);
-  assert.doesNotMatch(cssSource, /\.nx-co-sheet__date-field\.is-na\s*\{[^}]*background\s*:/);
-  // Compact + still opens the canonical instance command.
   assert.match(viewSource, /open_capital_declaration_instance/);
-  assert.match(viewSource, /nx-co-sheet__date-field-plus/);
+  assert.match(viewSource, /nx-co-sheet__date-field-icon/);
+  const noOpenBranch = viewSource.slice(
+    viewSource.indexOf("if (!operationalCell?.applicable)"),
+    viewSource.indexOf("const dateInputId"),
+  );
+  assert.match(noOpenBranch, /nx-co-sheet__date-open/);
+  assert.match(noOpenBranch, /nx-co-sheet__plain-dash/);
+  assert.doesNotMatch(noOpenBranch, /type="date"/);
 });
 
 test('editable annual/capital date field is a full-area operable native input', () => {
@@ -137,13 +138,13 @@ test('editable annual/capital date field is a full-area operable native input', 
   // Annual + open capital share the SAME date-field branch (one component pattern).
   assert.match(viewSource, /col\.key === 'annual_report' \? 'annual_report' : 'capital_declaration'/);
   // Capital no-open: + only, no active date input in that branch.
-  assert.match(viewSource, /nx-co-sheet__date-field-plus/);
+  assert.match(viewSource, /nx-co-sheet__date-open/);
   assert.match(viewSource, /open_capital_declaration_instance/);
   const noOpenBranch = viewSource.slice(
     viewSource.indexOf("if (!operationalCell?.applicable)"),
     viewSource.indexOf("const dateInputId"),
   );
-  assert.match(noOpenBranch, /nx-co-sheet__date-field-plus/);
+  assert.match(noOpenBranch, /nx-co-sheet__date-open/);
   assert.doesNotMatch(noOpenBranch, /type="date"/);
   assert.doesNotMatch(noOpenBranch, /showPicker/);
   assert.doesNotMatch(noOpenBranch, /tryShowNativeDatePicker/);
@@ -190,7 +191,7 @@ test('existing material, hidden obligations tab, and month tabs contracts remain
   assert.match(viewSource, /set_material_brought/);
   assert.match(viewSource, /set_income_tax_advance_material_brought/);
   assert.match(viewSource, /set_payroll_material_brought/);
-  assert.match(viewSource, />חומר</);
+  assert.match(viewSource, /clientOperations\.material/);
   assert.match(
     panelSource,
     /HIDDEN_WORKSPACE_NAV_TAB_KEYS\s*=\s*new Set<WorkspaceTabKey>\(\['obligations'\]\)/,
@@ -198,5 +199,5 @@ test('existing material, hidden obligations tab, and month tabs contracts remain
   assert.match(viewSource, /ClientOperationsPeriodSheetTabs/);
   assert.ok((viewSource.match(/ClientOperationsPeriodSheetTabs/g) || []).length >= 2);
   assert.match(tabsSource, /onSelectPeriod/);
-  assert.match(tabsSource, /פתח/);
+  assert.match(tabsSource, /clientOperations\.periods\.open/);
 });

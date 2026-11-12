@@ -28,6 +28,7 @@ import {
   decideMaterialMarkCommandEligibility,
   mapOperationalPeriodKeyToPayrollPeriodKey,
   resolveDefaultOperationalPeriodKey,
+  resolveNationalInsuranceApplicability,
   resolveRegistryObligationSemantics,
   type RegistryObligationSemantics,
 } from './client-operations-operational-period.pure.js';
@@ -57,7 +58,10 @@ import {
   setClientOperationsCellManualStatus,
 } from './client-operations-cell-manual-status.service.js';
 import { executeClientObligationsCommand } from './client-obligations-tasks-core.service.js';
-import { attestTaxObligationPaymentFact } from '../accounting-base/accounting-base-tax-obligation-payment.service.js';
+import {
+  attestTaxObligationPaymentFact,
+  loadTaxObligationPaymentFactsForClients,
+} from '../accounting-base/accounting-base-tax-obligation-payment.service.js';
 import {
   isTaxObligationPaymentClassification,
   paymentClassificationIsOutstanding,
@@ -68,7 +72,10 @@ import {
 } from './client-obligations-work-engine-bridge.js';
 import {
   isFilingSubmittedStatus,
+  nextSelfEmployedNiStandingOrderUntil,
   paymentAppliesForReportingKind,
+  selfEmployedNiActionResolved,
+  selfEmployedNiStorageDate,
   type ClientOperationsReportingObligationKind,
 } from './client-operations-reporting-dashboard.pure.js';
 
@@ -118,6 +125,8 @@ export type ClientOperationsRegistryCommandBody = {
   obligation_id?: unknown;
   canonical_id?: unknown;
   payment_classification?: unknown;
+  standing_order_active?: unknown;
+  confirm_manual_resolution?: unknown;
   manual_row_slot?: unknown;
   source_operational_period_key?: unknown;
   target_operational_period_key?: unknown;
@@ -405,6 +414,7 @@ const FILING_REGISTRY_COMMANDS = new Set([
   'mark_client_operations_obligation_not_reported',
   'confirm_client_operations_obligation_filed_with_payment',
   'confirm_client_operations_obligation_tax_payment',
+  'save_client_operations_self_employed_ni',
 ]);
 
 function reportingKindFromObligationType(
@@ -1054,7 +1064,16 @@ export async function executeClientOperationsRegistryCommand(
         canonicalId,
       });
     }
-    if (paymentAppliesForReportingKind(kind)) {
+    const existingFacts = await loadTaxObligationPaymentFactsForClients({
+      organizationId: orgId,
+      clientIds: [clientId],
+    });
+    const existingClassification = (existingFacts.get(clientId) ?? []).find(
+      (fact) => fact.obligation_canonical_id === canonicalId,
+    )?.payment_classification;
+    const paymentChanged =
+      paymentAppliesForReportingKind(kind) && existingClassification !== classificationRaw;
+    if (paymentChanged) {
       await attestTaxObligationPaymentFact({
         ctx,
         organizationId: orgId,
@@ -1077,7 +1096,9 @@ export async function executeClientOperationsRegistryCommand(
         paymentClassification: classificationRaw,
       });
     }
-    await audit(
+    const recordedFiling =
+      command === 'confirm_client_operations_obligation_filed_with_payment' && !alreadySubmitted;
+    if (recordedFiling || paymentChanged) await audit(
       ctx,
       command === 'confirm_client_operations_obligation_tax_payment'
         ? AUDIT_ACTIONS.CLIENT_OPERATIONS_OBLIGATION_PAYMENT_UPDATED
@@ -1092,6 +1113,107 @@ export async function executeClientOperationsRegistryCommand(
         outstanding: paymentClassificationIsOutstanding(classificationRaw),
       },
     );
+  } else if (command === 'save_client_operations_self_employed_ni') {
+    const clientId = idFrom(body.client_id, 'client_id');
+    const periodKey = operationalPeriodKeyFrom(
+      body.operational_period_key ??
+        (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
+    );
+    const standingActive = booleanFrom(body.standing_order_active, 'standing_order_active');
+    const confirmResolution = body.confirm_manual_resolution === true;
+    await ensureActiveClientInOrg(orgId, clientId);
+    const { data: tax, error: taxError } = await supabaseAdmin
+      .from('client_tax_settings')
+      .select('national_insurance_type, national_insurance_standing_order_until')
+      .eq('organization_id', orgId)
+      .eq('client_id', clientId)
+      .maybeSingle();
+    assertQueryError(taxError, 'Failed to load national insurance settings');
+    const taxRow = tax as {
+      national_insurance_type?: string | null;
+      national_insurance_standing_order_until?: string | null;
+    } | null;
+    if (!taxRow || !resolveNationalInsuranceApplicability(taxRow.national_insurance_type)) {
+      throw badRequest('self-employed national insurance is not applicable');
+    }
+    const existingUntil = taxRow.national_insurance_standing_order_until ?? null;
+    const nextUntil = nextSelfEmployedNiStandingOrderUntil({
+      active: standingActive,
+      periodKey,
+      existingUntil,
+    });
+    const existingNormalized = String(existingUntil ?? '').slice(0, 10) || null;
+    if (nextUntil !== existingNormalized) {
+      const { error: updateError } = await supabaseAdmin
+        .from('client_tax_settings')
+        .update({
+          national_insurance_standing_order_until: nextUntil,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('organization_id', orgId)
+        .eq('client_id', clientId);
+      assertQueryError(updateError, 'Failed to record national insurance standing order');
+      await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_NI_STANDING_ORDER_SET, clientId, {
+        client_id: clientId,
+        operational_period_key: periodKey,
+        standing_order_active: standingActive,
+        standing_order_until: nextUntil,
+        provenance: 'office_recorded',
+        bank_verified: false,
+        authority_verified: false,
+        statutory_deadline: false,
+      });
+    }
+    if (confirmResolution) {
+      const { data: existingOb, error: obError } = await supabaseAdmin
+        .from('client_obligations')
+        .select('id, status, due_date, last_reported_at, docflow_message_sent_at')
+        .eq('organization_id', orgId)
+        .eq('client_id', clientId)
+        .eq('obligation_type', 'national_insurance_self_employed_payment')
+        .eq('period_key', periodKey)
+        .maybeSingle();
+      assertQueryError(obError, 'Failed to load self-employed national insurance obligation');
+      const obligation = existingOb as {
+        status?: string | null;
+        due_date?: string | null;
+        last_reported_at?: string | null;
+        docflow_message_sent_at?: string | null;
+      } | null;
+      if (!selfEmployedNiActionResolved(obligation?.status)) {
+        const storageDate = selfEmployedNiStorageDate(periodKey);
+        if (!storageDate) throw badRequest('operational_period_key must be YYYY-MM');
+        const preservedDue = String(obligation?.due_date ?? '').slice(0, 10);
+        const { error: upErr } = await supabaseAdmin.from('client_obligations').upsert(
+          {
+            organization_id: orgId,
+            client_id: clientId,
+            obligation_type: 'national_insurance_self_employed_payment',
+            period_key: periodKey,
+            due_date: /^\d{4}-\d{2}-\d{2}$/.test(preservedDue) ? preservedDue : storageDate,
+            status: 'paid_on_time',
+            blocking_reason: null,
+            docflow_message_sent_at: obligation?.docflow_message_sent_at ?? null,
+            last_reported_at: obligation?.last_reported_at ?? null,
+            related_module: 'tax',
+            is_active: true,
+            closed_at: null,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'organization_id,client_id,obligation_type,period_key' },
+        );
+        assertQueryError(upErr, 'Failed to record self-employed national insurance resolution');
+        await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_NI_MANUAL_RESOLUTION_SET, clientId, {
+          client_id: clientId,
+          operational_period_key: periodKey,
+          status: 'paid_on_time',
+          provenance: 'office_recorded_manual_resolution',
+          bank_verified: false,
+          authority_verified: false,
+          statutory_deadline: false,
+        });
+      }
+    }
   } else if (command === 'archive_client_operations_custom_column') {
     const column = await loadOwnedColumn(orgId, body.column_id);
     const { error } = await supabaseAdmin

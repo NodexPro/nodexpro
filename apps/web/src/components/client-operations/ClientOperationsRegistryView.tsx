@@ -245,6 +245,65 @@ export type ClientOperationsReportingCellPresentation = {
     confirm_key: string;
     cancel_key: string;
   } | null;
+  filing_detail?: {
+    openable: boolean;
+    chrome: 'pending' | 'action_required' | 'filed_unpaid' | 'filed_paid' | 'not_applicable';
+    period_key: string;
+    period_display: string;
+    filing_status_key: string;
+    filed_on_display: string | null;
+    submission_reference: string | null;
+    payment_classification: string | null;
+    payment_state: string;
+    can_confirm_filing: boolean;
+    can_clear_filing: boolean;
+    can_record_payment: boolean;
+    can_report: boolean;
+    can_report_and_pay: boolean;
+    can_mark_paid: boolean;
+    report_key: string;
+    report_and_paid_key: string;
+    paid_key: string;
+    title_key: string;
+    client_key: string;
+    period_label_key: string;
+    frequency_key: string;
+    status_key: string;
+    confirm_action_key: string;
+    filed_on_key: string;
+    reference_key: string;
+    payment_status_key: string;
+    not_recorded_key: string;
+    save_key: string;
+    cancel_key: string;
+  } | null;
+};
+
+export type ClientOperationsSelfEmployedNiOperations = {
+  applicable: boolean;
+  openable: boolean;
+  period_key: string;
+  period_display: string;
+  standing_order_active: boolean;
+  standing_order_status_key: string;
+  standing_order_provenance: 'office_recorded';
+  bank_verified: false;
+  authority_verified: false;
+  statutory_deadline: false;
+  office_reminder: boolean;
+  reminder_day: number;
+  action_resolved: boolean;
+  action_status_key: string;
+  can_set_standing_order: boolean;
+  can_confirm_manual_resolution: boolean;
+  title_key: string;
+  month_key: string;
+  amount_key: string;
+  office_note_key: string;
+  resolution_key: string;
+  confirm_resolution_key: string;
+  save_key: string;
+  cancel_key: string;
 };
 
 export type ClientOperationsReportingRowPresentation = {
@@ -334,6 +393,12 @@ export type ClientOperationsRegistryRow = {
   national_insurance_deductions_status: string | null;
   income_tax_deductions_status: string | null;
   assigned_handler_user_id: string | null;
+  assigned_employees?: {
+    display: string | null;
+    names: string[];
+    additional_count: number;
+  };
+  national_insurance_operations?: ClientOperationsSelfEmployedNiOperations;
   notes_cell_text_he: string | null;
   operational_notes_count: number;
   vat_due_registry_display_he: string | null;
@@ -566,6 +631,32 @@ function systemColumnHeaderLabel(
 ): string {
   if (!column.system) return column.label;
   return localizeSystemLabel(t, column.label_key, column.label);
+}
+
+function reportingPaymentStateLabelKey(state: string | null | undefined): string {
+  switch (state) {
+    case 'paid_in_full':
+      return 'clientOperations.registry.reporting.payment.paidInFull';
+    case 'outstanding':
+      return 'clientOperations.registry.reporting.payment.outstanding';
+    case 'partially_paid':
+      return 'clientOperations.registry.reporting.payment.partiallyPaid';
+    case 'not_required':
+      return 'clientOperations.registry.reporting.payment.notRequired';
+    case 'not_applicable':
+      return 'clientOperations.registry.reporting.cell.notApplicable';
+    default:
+      return 'clientOperations.registry.reporting.filing.notRecorded';
+  }
+}
+
+function ClientOperationsCalendarIcon() {
+  return (
+    <svg className="nx-co-sheet__date-field-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M3.5 10h17M8 3.5v3M16 3.5v3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
 }
 
 function fillI18n(template: string, vars: Record<string, string>): string {
@@ -909,6 +1000,15 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     confirmKey: string;
     cancelKey: string;
     selected: string | null;
+  } | null>(null);
+  const [filingModal, setFilingModal] = useState<{
+    row: ClientOperationsRegistryRow;
+    columnKey: string;
+  } | null>(null);
+  const [niModal, setNiModal] = useState<{
+    row: ClientOperationsRegistryRow;
+    standingOrderActive: boolean;
+    confirmResolution: boolean;
   } | null>(null);
   const statusPaintSlotsRef = useRef<Map<string, ManualStatusPaintSlot>>(new Map());
   const statusOverlaysRef = useRef<Map<string, ManualStatusOverlay>>(new Map());
@@ -2970,6 +3070,93 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       t('clientOperations.registry.errors.saveFailed'),
     );
   };
+  const openFilingDetailModal = (row: ClientOperationsRegistryRow, columnKey: string) => {
+    const detail = row.reporting?.cells?.[columnKey]?.filing_detail;
+    if (!detail?.openable) return;
+    setFilingModal({ row, columnKey });
+  };
+  const runFilingAction = async (action: 'report' | 'report_and_pay' | 'paid') => {
+    if (!filingModal || !canEdit || !onRegistryCommand) return;
+    const reportingCell = filingModal.row.reporting?.cells?.[filingModal.columnKey];
+    const detail = reportingCell?.filing_detail;
+    if (!reportingCell?.obligation_id || !detail) return;
+    const allowed =
+      action === 'report'
+        ? detail.can_report
+        : action === 'report_and_pay'
+          ? detail.can_report_and_pay
+          : detail.can_mark_paid;
+    if (!allowed) return;
+    const clientId = filingModal.row.client_id;
+    const columnKey = filingModal.columnKey;
+    const obligationId = reportingCell.obligation_id;
+    const canonicalId = reportingCell.canonical_id;
+    setFilingModal(null);
+    const period = query?.operational_period_key ?? null;
+    if (action === 'report') {
+      await runMarkCommand(
+        `${clientId}:reporting:${columnKey}`,
+        {
+          command: 'mark_client_operations_obligation_reported',
+          client_id: clientId,
+          obligation_id: obligationId,
+          operational_period_key: period,
+          query,
+        },
+        t('clientOperations.registry.errors.saveFailed'),
+      );
+      return;
+    }
+    await runMarkCommand(
+      `${clientId}:reporting:${columnKey}`,
+      {
+        command:
+          action === 'report_and_pay'
+            ? 'confirm_client_operations_obligation_filed_with_payment'
+            : 'confirm_client_operations_obligation_tax_payment',
+        client_id: clientId,
+        obligation_id: obligationId,
+        canonical_id: canonicalId,
+        payment_classification: 'paid_in_full',
+        operational_period_key: period,
+        query,
+      },
+      t('clientOperations.registry.errors.saveFailed'),
+    );
+  };
+  const openSelfEmployedNiModal = (row: ClientOperationsRegistryRow) => {
+    const ops = row.national_insurance_operations;
+    if (!ops?.openable) return;
+    setNiModal({
+      row,
+      standingOrderActive: ops.standing_order_active,
+      confirmResolution: false,
+    });
+  };
+  const confirmSelfEmployedNiModal = async () => {
+    if (!niModal || !onRegistryCommand) return;
+    const ops = niModal.row.national_insurance_operations;
+    if (!ops) {
+      setNiModal(null);
+      return;
+    }
+    const standingChanged = niModal.standingOrderActive !== ops.standing_order_active;
+    const resolve = Boolean(niModal.confirmResolution && ops.can_confirm_manual_resolution);
+    setNiModal(null);
+    if (!standingChanged && !resolve) return;
+    await runMarkCommand(
+      `${niModal.row.client_id}:ni-self`,
+      {
+        command: 'save_client_operations_self_employed_ni',
+        client_id: niModal.row.client_id,
+        standing_order_active: niModal.standingOrderActive,
+        confirm_manual_resolution: resolve,
+        operational_period_key: query?.operational_period_key ?? null,
+        query,
+      },
+      t('clientOperations.registry.errors.saveFailed'),
+    );
+  };
   const setOperationalTargetDate = async (
     row: ClientOperationsRegistryRow,
     columnKey: 'annual_report' | 'capital_declaration',
@@ -3476,7 +3663,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 <span className="nx-co-sheet__reporting-kpi-label">{t(card.label_key)}</span>
                 <span className="nx-co-sheet__reporting-kpi-frac">
                   <span className="is-submitted">{card.submitted_count}</span>
-                  <span className="is-muted">/{card.total_count}</span>
+                  <span className="is-muted"> / {card.total_count}</span>
                 </span>
               </button>
             );
@@ -3771,28 +3958,27 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       if (!operationalCell?.applicable) {
         const canOpenCapital =
           col.key === 'capital_declaration' && Boolean(r.capital_declaration_cell?.can_open);
+        if (!canOpenCapital) {
+          return (
+            <span className="nx-co-sheet__plain-dash" aria-label={`${col.label} —`}>
+              —
+            </span>
+          );
+        }
         return (
-          <span
-            className={`nx-co-sheet__date-field is-na${canOpenCapital ? ' is-openable' : ''}`}
-            title={canOpenCapital ? t('clientOperations.openCapitalDeclaration') : undefined}
+          <button
+            type="button"
+            className="nx-co-sheet__date-open"
+            disabled={!canEdit || !onRegistryCommand}
+            title={t('clientOperations.openCapitalDeclaration')}
+            aria-label={`${t('clientOperations.openCapitalDeclaration')} — ${r.client_name ?? r.client_id}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              void openCapitalDeclaration(r);
+            }}
           >
-            <span className="nx-co-sheet__date-field-value">—</span>
-            {canOpenCapital ? (
-              <button
-                type="button"
-                className="nx-co-sheet__date-field-plus"
-                disabled={!canEdit || !onRegistryCommand}
-                title={t('clientOperations.openCapitalDeclaration')}
-                aria-label={`${t('clientOperations.openCapitalDeclaration')} — ${r.client_name ?? r.client_id}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void openCapitalDeclaration(r);
-                }}
-              >
-                +
-              </button>
-            ) : null}
-          </span>
+            <ClientOperationsCalendarIcon />
+          </button>
         );
       }
       const value = operationalCell.operational_target_date ?? '';
@@ -3826,9 +4012,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             selectActiveFormatCell(r.client_id, col);
           }}
         >
-          <span className="nx-co-sheet__date-field-value">{displayValue || '—'}</span>
+          <span className={`nx-co-sheet__date-field-value${value ? '' : ' is-empty'}`}>
+            {value ? displayValue : '\u00a0'}
+          </span>
           <span className="nx-co-sheet__date-field-icon" aria-hidden="true">
-            📅
+            <ClientOperationsCalendarIcon />
           </span>
           <input
             id={dateInputId}
@@ -4071,6 +4259,46 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     if (col.cell_kind === 'checkbox') {
       return displayForColumn(r, col, t);
     }
+    if (col.key === 'handler') {
+      const text = displayForColumn(r, col, t);
+      const names = r.assigned_employees?.names ?? [];
+      return (
+        <span className="nx-co-sheet__handler" title={names.length > 1 ? names.join(' · ') : undefined}>
+          {text}
+        </span>
+      );
+    }
+    if (col.key === 'national_insurance') {
+      const ops = r.national_insurance_operations;
+      const text = displayForColumn(r, col, t);
+      if (!ops?.openable) {
+        return (
+          <span className="nx-co-sheet__plain-dash" aria-label={`${col.label} —`}>
+            —
+          </span>
+        );
+      }
+      return (
+        <button
+          type="button"
+          className={`nx-co-sheet__ni-amount${ops.office_reminder ? ' is-office-reminder' : ''}`}
+          data-testid="client-operations-ni-amount"
+          data-office-reminder={ops.office_reminder ? 'true' : 'false'}
+          data-standing-order={ops.standing_order_active ? 'active' : 'inactive'}
+          title={t(ops.standing_order_status_key)}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (statusPaintMode) {
+              paintCellManualStatus(r, col.key);
+              return;
+            }
+            openSelfEmployedNiModal(r);
+          }}
+        >
+          {text}
+        </button>
+      );
+    }
     if (col.key === 'client_name') {
       const text = displayForColumn(r, col, t);
       return (
@@ -4091,6 +4319,36 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     // Period "not due this month" must NOT overwrite configured labels with —.
     // (CSS `is-not-applicable` may still dim filing-due semantics separately.)
     const reportingCell = r.reporting?.cells?.[col.key];
+    const filingDetail = reportingCell?.filing_detail;
+    if (filingDetail) {
+      if (!filingDetail.openable || filingDetail.chrome === 'not_applicable') {
+        return (
+          <span className="nx-co-sheet__plain-dash" aria-label={`${col.label} —`}>
+            —
+          </span>
+        );
+      }
+      const text = displayForColumn(r, col, t);
+      return (
+        <button
+          type="button"
+          className={`nx-co-sheet__frequency-cell is-${filingDetail.chrome}`}
+          data-testid="client-operations-frequency-cell"
+          data-chrome={filingDetail.chrome}
+          title={t(reportingCell?.tooltip_key || filingDetail.filing_status_key)}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (statusPaintMode) {
+              paintCellManualStatus(r, col.key);
+              return;
+            }
+            openFilingDetailModal(r, col.key);
+          }}
+        >
+          {text}
+        </button>
+      );
+    }
     if (reportingCell?.overlay_visible) {
       const text = displayForColumn(r, col, t);
       const markKey = `${r.client_id}:reporting:${col.key}`;
@@ -4334,7 +4592,14 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       statusPaintMode ? 'is-paint-mode' : '',
                       paintBlocked ? 'is-paint-blocked' : '',
                       obligationApplicable(row, column.key) === false ? 'is-not-applicable' : '',
-                      reportingCell ? `is-reporting-cell-${reportingCell.tone}` : '',
+                      reportingCell?.filing_detail
+                        ? ''
+                        : reportingCell
+                          ? `is-reporting-cell-${reportingCell.tone}`
+                          : '',
+                      column.key === 'national_insurance' && row.national_insurance_operations?.office_reminder
+                        ? 'is-ni-office-reminder'
+                        : '',
                     ]
                       .filter(Boolean)
                       .join(' ') || undefined}
@@ -4647,6 +4912,237 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           </div>
         </div>
       ) : null}
+      {filingModal ? (() => {
+        const reportingCell = filingModal.row.reporting?.cells?.[filingModal.columnKey];
+        const detail = reportingCell?.filing_detail;
+        if (!detail) return null;
+        const frequencyText = displayForColumn(
+          filingModal.row,
+          { key: filingModal.columnKey, label: '', cell_kind: 'text', value_field: null, visible: true, system: true, editable: false, freeze_default: false, align: 'center' },
+          t,
+        );
+        const canAct = Boolean(canEdit && onRegistryCommand && reportingCell?.obligation_id);
+        return (
+          <div className="nx-clients-overlay nx-client-create nx-client-create--deep-ocean-glass">
+            <div
+              className="nx-glass-card nx-clients-modal nx-co-ops-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="nx-co-filing-title"
+              dir={lang === 'he' ? 'rtl' : 'ltr'}
+              data-testid="client-operations-filing-modal"
+            >
+              <div className="nx-clients-modal__head">
+                <h3 id="nx-co-filing-title">{t(detail.title_key)}</h3>
+                <button
+                  type="button"
+                  onClick={() => setFilingModal(null)}
+                  className="nx-clients-modal__close"
+                  aria-label={t(detail.cancel_key)}
+                >
+                  ×
+                </button>
+              </div>
+              <form
+                className="nx-clients-form"
+                onSubmit={(event) => event.preventDefault()}
+                noValidate
+              >
+                <div className="nx-clients-form__body nx-co-ops-modal__body">
+                  <dl className="nx-co-ops-modal__facts">
+                    <div>
+                      <dt>{t(detail.client_key)}</dt>
+                      <dd>{filingModal.row.client_name ?? filingModal.row.client_id}</dd>
+                    </div>
+                    <div>
+                      <dt>{t(detail.period_label_key)}</dt>
+                      <dd>{detail.period_display || detail.period_key}</dd>
+                    </div>
+                    <div>
+                      <dt>{t(detail.frequency_key)}</dt>
+                      <dd>{frequencyText}</dd>
+                    </div>
+                    <div>
+                      <dt>{t(detail.status_key)}</dt>
+                      <dd>{t(detail.filing_status_key)}</dd>
+                    </div>
+                    <div>
+                      <dt>{t(detail.filed_on_key)}</dt>
+                      <dd>{detail.filed_on_display || t(detail.not_recorded_key)}</dd>
+                    </div>
+                    {detail.submission_reference ? (
+                      <div>
+                        <dt>{t(detail.reference_key)}</dt>
+                        <dd>{detail.submission_reference}</dd>
+                      </div>
+                    ) : null}
+                    {detail.can_record_payment ? (
+                      <div>
+                        <dt>{t(detail.payment_status_key)}</dt>
+                        <dd>{t(reportingPaymentStateLabelKey(detail.payment_state))}</dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                  <div className="nx-co-ops-modal__actions">
+                    <button
+                      type="button"
+                      className="nx-glass-btn nx-glass-btn--secondary"
+                      data-testid="client-operations-filing-report"
+                      disabled={!canAct || !detail.can_report}
+                      onClick={() => void runFilingAction('report')}
+                    >
+                      {t(detail.report_key)}
+                    </button>
+                    <button
+                      type="button"
+                      className="nx-glass-btn nx-glass-btn--secondary"
+                      data-testid="client-operations-filing-report-paid"
+                      disabled={!canAct || !detail.can_report_and_pay}
+                      onClick={() => void runFilingAction('report_and_pay')}
+                    >
+                      {t(detail.report_and_paid_key)}
+                    </button>
+                    <button
+                      type="button"
+                      className="nx-glass-btn nx-glass-btn--purple"
+                      data-testid="client-operations-filing-paid"
+                      disabled={!canAct || !detail.can_mark_paid}
+                      onClick={() => void runFilingAction('paid')}
+                    >
+                      {t(detail.paid_key)}
+                    </button>
+                  </div>
+                </div>
+                <div className="nx-clients-form__footer">
+                  <button
+                    type="button"
+                    className="nx-glass-btn nx-glass-btn--secondary"
+                    onClick={() => setFilingModal(null)}
+                  >
+                    {t(detail.cancel_key)}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })() : null}
+      {niModal?.row.national_insurance_operations ? (() => {
+        const ops = niModal.row.national_insurance_operations;
+        if (!ops) return null;
+        const amount = niModal.row.cells?.national_insurance || niModal.row.national_insurance_status || '—';
+        const standingChanged = niModal.standingOrderActive !== ops.standing_order_active;
+        const resolve = Boolean(niModal.confirmResolution && ops.can_confirm_manual_resolution);
+        const canSave = Boolean(canEdit && onRegistryCommand && ops.can_set_standing_order && (standingChanged || resolve));
+        return (
+          <div className="nx-clients-overlay nx-client-create nx-client-create--deep-ocean-glass">
+            <div
+              className="nx-glass-card nx-clients-modal nx-co-ops-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="nx-co-ni-title"
+              dir={lang === 'he' ? 'rtl' : 'ltr'}
+              data-testid="client-operations-ni-modal"
+            >
+              <div className="nx-clients-modal__head">
+                <h3 id="nx-co-ni-title">{t(ops.title_key)}</h3>
+                <button
+                  type="button"
+                  onClick={() => setNiModal(null)}
+                  className="nx-clients-modal__close"
+                  aria-label={t(ops.cancel_key)}
+                >
+                  ×
+                </button>
+              </div>
+              <form
+                className="nx-clients-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void confirmSelfEmployedNiModal();
+                }}
+                noValidate
+              >
+                <div className="nx-clients-form__body nx-co-ops-modal__body">
+                  <dl className="nx-co-ops-modal__facts">
+                    <div>
+                      <dt>{t('clientOperations.registry.reporting.filing.client')}</dt>
+                      <dd>{niModal.row.client_name ?? niModal.row.client_id}</dd>
+                    </div>
+                    <div>
+                      <dt>{t(ops.month_key)}</dt>
+                      <dd>{ops.period_display || ops.period_key}</dd>
+                    </div>
+                    <div>
+                      <dt>{t(ops.amount_key)}</dt>
+                      <dd>{amount}</dd>
+                    </div>
+                    <div>
+                      <dt>{t(ops.resolution_key)}</dt>
+                      <dd>{t(ops.action_status_key)}</dd>
+                    </div>
+                  </dl>
+                  <p className="nx-co-ops-modal__note">{t(ops.office_note_key)}</p>
+                  <fieldset className="nx-co-payment-confirm-options">
+                    <legend className="nx-clients-form__label-line">{t(ops.standing_order_status_key)}</legend>
+                    <label className="nx-co-payment-confirm-option">
+                      <input
+                        type="radio"
+                        name="nx-co-ni-standing"
+                        checked={niModal.standingOrderActive}
+                        disabled={!canEdit || !ops.can_set_standing_order}
+                        onChange={() =>
+                          setNiModal((current) => (current ? { ...current, standingOrderActive: true } : current))
+                        }
+                      />
+                      <span>{t('clientOperations.registry.reporting.ni.standingActive')}</span>
+                    </label>
+                    <label className="nx-co-payment-confirm-option">
+                      <input
+                        type="radio"
+                        name="nx-co-ni-standing"
+                        checked={!niModal.standingOrderActive}
+                        disabled={!canEdit || !ops.can_set_standing_order}
+                        onChange={() =>
+                          setNiModal((current) => (current ? { ...current, standingOrderActive: false } : current))
+                        }
+                      />
+                      <span>{t('clientOperations.registry.reporting.ni.standingInactive')}</span>
+                    </label>
+                  </fieldset>
+                  {ops.can_confirm_manual_resolution ? (
+                    <label className="nx-co-ops-modal__check">
+                      <input
+                        type="checkbox"
+                        checked={niModal.confirmResolution}
+                        disabled={!canEdit}
+                        onChange={(event) =>
+                          setNiModal((current) =>
+                            current ? { ...current, confirmResolution: event.target.checked } : current,
+                          )
+                        }
+                      />
+                      <span>{t(ops.confirm_resolution_key)}</span>
+                    </label>
+                  ) : null}
+                </div>
+                <div className="nx-clients-form__footer">
+                  <button type="submit" className="nx-glass-btn nx-glass-btn--purple" disabled={!canSave}>
+                    {t(ops.save_key)}
+                  </button>
+                  <button
+                    type="button"
+                    className="nx-glass-btn nx-glass-btn--secondary"
+                    onClick={() => setNiModal(null)}
+                  >
+                    {t(ops.cancel_key)}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })() : null}
       {showCreateClient && canCreateCoreClient ? (
         <div className="nx-clients-overlay nx-client-create nx-client-create--deep-ocean-glass">
           <div

@@ -46,6 +46,7 @@ import {
   buildRegistryRowCells,
   buildRegistryRowCellLabelKeys,
   CLIENT_OPERATIONS_REGISTRY_COLUMNS,
+  formatAssignedFileEmployeesDisplay,
   formatIncomeTaxAdvanceRegistryFrequencyDisplayHe,
   formatPcnRegistryDisplay,
   type ClientOperationsRegistryColumn,
@@ -175,6 +176,7 @@ import {
   resolveAnnualReportKpiFact,
   resolveCapitalDeclarationKpiFact,
   type ClientOperationsReportingDashboard,
+  type ClientOperationsSelfEmployedNiOperations,
   type ClientOperationsReportingPreviousPeriods,
   type ClientOperationsReportingRowPresentation,
   type PaymentsOutstandingPeriodFact,
@@ -236,6 +238,12 @@ export type ClientOperationsRegistryRow = {
   filter_facets?: ClientOperationsRegistryRowFilterFacets;
   /** Backend-owned statutory reporting presentation for the selected period. */
   reporting?: ClientOperationsReportingRowPresentation;
+  assigned_employees?: {
+    display: string | null;
+    names: string[];
+    additional_count: number;
+  };
+  national_insurance_operations?: ClientOperationsSelfEmployedNiOperations;
   /** Client-scoped annual / capital KPI facts — not obligation canonical_id. */
   reporting_kpi?: {
     annual_required: boolean;
@@ -593,6 +601,29 @@ function registryQueryEcho(
     workspace_scope: query.workspace_scope?.trim() || null,
     workspace_subject_user_id: query.workspace_subject_user_id?.trim() || null,
   };
+}
+
+async function loadGrantedFileAssigneesByClient(
+  organizationId: string,
+  clientIds: readonly string[],
+): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  if (!clientIds.length) return map;
+  const { data, error } = await supabaseAdmin
+    .from('organization_member_client_grants')
+    .select('client_id, user_id')
+    .eq('organization_id', organizationId)
+    .in('client_id', [...clientIds]);
+  if (error) throw new Error(error.message ?? 'Failed to load client file assignments');
+  for (const row of data ?? []) {
+    const clientId = String((row as { client_id?: string }).client_id ?? '').trim();
+    const userId = String((row as { user_id?: string }).user_id ?? '').trim();
+    if (!clientId || !userId) continue;
+    const list = map.get(clientId) ?? [];
+    if (!list.includes(userId)) list.push(userId);
+    map.set(clientId, list);
+  }
+  return map;
 }
 
 export async function listClientOperationsRegistry(
@@ -1089,7 +1120,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
         supabaseAdmin
           .from('client_tax_settings')
           .select(
-            'client_id, vat_due_type, vat_frequency, vat_type, income_tax_advance_enabled, income_tax_advance_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_deductions_file_number, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency'
+            'client_id, vat_due_type, vat_frequency, vat_type, income_tax_advance_enabled, income_tax_advance_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_standing_order_until, national_insurance_deductions_file_number, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency'
           )
           .eq('organization_id', orgId)
           .in('client_id', phase1EarlyIds),
@@ -1113,6 +1144,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
           operationalPeriodKey: selectedPeriodKey,
           clientIds: phase1EarlyIds,
         }),
+        loadGrantedFileAssigneesByClient(orgId, phase1EarlyIds),
       ])
     : null;
   const activeClientsResult = await timed('active_clients', setupMs, activeClientsQuery);
@@ -1154,6 +1186,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     materialFacts,
     payrollWorkflowByClient,
     manualStatusesByClientColumn,
+    grantedAssigneesByClient,
   ] = phase1EarlyPromise
     ? await phase1EarlyPromise
     : await Promise.all([
@@ -1165,7 +1198,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
         supabaseAdmin
           .from('client_tax_settings')
           .select(
-            'client_id, vat_due_type, vat_frequency, vat_type, income_tax_advance_enabled, income_tax_advance_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_deductions_file_number, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency'
+            'client_id, vat_due_type, vat_frequency, vat_type, income_tax_advance_enabled, income_tax_advance_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_standing_order_until, national_insurance_deductions_file_number, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency'
           )
           .eq('organization_id', orgId)
           .in('client_id', clientIds),
@@ -1189,6 +1222,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
           operationalPeriodKey: selectedPeriodKey,
           clientIds,
         }),
+        loadGrantedFileAssigneesByClient(orgId, clientIds),
       ]);
   markStage('phase1_facet_inputs', phase1Ms);
   const profilesByClientId = new Map<string, Record<string, unknown>>();
@@ -1206,6 +1240,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       income_tax_advance_frequency: string | null;
       national_insurance_type: string | null;
       national_insurance_monthly_amount: number | null;
+      national_insurance_standing_order_until: string | null;
       national_insurance_deductions_file_number: string | null;
       income_tax_deductions_enabled: boolean;
       income_tax_deductions_file_number: string | null;
@@ -1221,6 +1256,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     income_tax_advance_frequency: string | null;
     national_insurance_type: string | null;
     national_insurance_monthly_amount: number | null;
+    national_insurance_standing_order_until: string | null;
     national_insurance_deductions_file_number: string | null;
     income_tax_deductions_enabled: boolean | null;
     income_tax_deductions_file_number: string | null;
@@ -1234,6 +1270,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       income_tax_advance_frequency: t.income_tax_advance_frequency,
       national_insurance_type: t.national_insurance_type,
       national_insurance_monthly_amount: t.national_insurance_monthly_amount,
+      national_insurance_standing_order_until: t.national_insurance_standing_order_until,
       national_insurance_deductions_file_number: t.national_insurance_deductions_file_number,
       income_tax_deductions_enabled: Boolean(t.income_tax_deductions_enabled),
       income_tax_deductions_file_number: t.income_tax_deductions_file_number,
@@ -1747,15 +1784,30 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
         capital_declaration_display_he: capital_declaration_cell.applicable
           ? formatOperationalDateDisplayHe(capital_declaration_cell.operational_target_date)
           : '—',
-        assigned_handler_display_he: assigned_handler_user_id
-          ? (handlerDisplayByUserId.get(assigned_handler_user_id) ?? null)
-          : null,
+        assigned_handler_display_he: formatAssignedFileEmployeesDisplay({
+          handlerUserId: assigned_handler_user_id,
+          handlerName: assigned_handler_user_id
+            ? (handlerDisplayByUserId.get(assigned_handler_user_id) ?? null)
+            : null,
+          grantedUserIds: grantedAssigneesByClient.get(c.id) ?? [],
+          nameByUserId: handlerDisplayByUserId,
+        }).display,
       }),
       manual_cell_statuses,
       filter_facets: seed.filter_facets,
     }, visibleCustomColumns, customValuesByClientAndColumn);
+    const assignedEmployees = formatAssignedFileEmployeesDisplay({
+      handlerUserId: assigned_handler_user_id,
+      handlerName: assigned_handler_user_id
+        ? (handlerDisplayByUserId.get(assigned_handler_user_id) ?? null)
+        : null,
+      grantedUserIds: grantedAssigneesByClient.get(c.id) ?? [],
+      nameByUserId: handlerDisplayByUserId,
+    });
     const labeled = {
       ...mergedRow,
+      cells: { ...mergedRow.cells, handler: assignedEmployees.display ?? '—' },
+      assigned_employees: assignedEmployees,
       cell_label_keys: buildRegistryRowCellLabelKeys(mergedRow.cells),
     };
     return [
@@ -1775,6 +1827,8 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
         selectedPeriodKey,
         today: reportingDashboardLoad.today,
         payrollWorkflow: payrollWorkflowByClient.get(c.id) ?? null,
+        niApplicable: niConfigured,
+        niStandingOrderUntil: tax?.national_insurance_standing_order_until ?? null,
         reportingKpi: (() => {
           const annual = resolveAnnualReportKpiFact({
             hasSubmissionForTaxYear: annualSubmissionsByClient.has(c.id),

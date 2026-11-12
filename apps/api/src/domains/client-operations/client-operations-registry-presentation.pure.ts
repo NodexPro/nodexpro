@@ -349,6 +349,48 @@ function textHe(v: unknown): string {
   return String(v);
 }
 
+export type AssignedFileEmployeeDisplay = {
+  display: string | null;
+  names: string[];
+  additional_count: number;
+};
+
+/** Compact מטפל בתיק label from the client-file handler and file grants. */
+export function formatAssignedFileEmployeesDisplay(input: {
+  handlerUserId: string | null | undefined;
+  handlerName: string | null | undefined;
+  grantedUserIds: readonly string[];
+  nameByUserId: ReadonlyMap<string, string | null>;
+}): AssignedFileEmployeeDisplay {
+  const seen = new Set<string>();
+  const people: Array<{ userId: string; name: string }> = [];
+  const push = (userId: string | null | undefined, preferredName?: string | null) => {
+    const id = String(userId ?? '').trim();
+    if (!id || seen.has(id)) return;
+    const name = String(preferredName ?? input.nameByUserId.get(id) ?? '').trim();
+    if (!name) return;
+    seen.add(id);
+    people.push({ userId: id, name });
+  };
+  const handlerId = String(input.handlerUserId ?? '').trim();
+  const handlerName = String(input.handlerName ?? '').trim();
+  if (handlerId && handlerName) push(handlerId, handlerName);
+  const grants = [...input.grantedUserIds].filter(Boolean).sort((a, b) => {
+    const an = input.nameByUserId.get(a) ?? '';
+    const bn = input.nameByUserId.get(b) ?? '';
+    const byName = an.localeCompare(bn, 'he');
+    return byName !== 0 ? byName : a.localeCompare(b);
+  });
+  for (const userId of grants) push(userId);
+  const primary = people[0]?.name ?? null;
+  const additional = Math.max(0, people.length - 1);
+  return {
+    display: primary == null ? null : additional > 0 ? `${primary} +${additional}` : primary,
+    names: people.map((person) => person.name),
+    additional_count: additional,
+  };
+}
+
 /**
  * Registry column «מה״כ» — ready-to-render reporting frequency (same style as מע״מ).
  * Backend owns the Hebrew label; React must not map monthly/bi_monthly.

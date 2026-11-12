@@ -2106,6 +2106,37 @@
           "confirm": "Confirm",
           "cancel": "Cancel",
           "updateTitle": "Update tax payment status"
+        },
+        "filing": {
+          "title": "Filing",
+          "client": "Client",
+          "period": "Reporting period",
+          "frequency": "Reporting frequency",
+          "status": "Filing status",
+          "confirmAction": "Confirm filing",
+          "report": "Report",
+          "reportAndPaid": "Report and paid",
+          "paid": "Paid",
+          "filedOn": "Actual filing date",
+          "reference": "Submission reference",
+          "paymentStatus": "Payment status",
+          "notRecorded": "Not recorded",
+          "save": "Save",
+          "cancel": "Cancel"
+        },
+        "ni": {
+          "title": "Self-employed National Insurance",
+          "month": "Operational month",
+          "amount": "Monthly amount",
+          "standingActive": "Standing order recorded",
+          "standingInactive": "No standing order",
+          "standingOffice": "Office-recorded status. Not confirmed by the bank or National Insurance.",
+          "resolution": "Action status",
+          "resolutionDone": "Resolved for this month",
+          "resolutionOpen": "Action still open",
+          "confirmResolution": "Record manual resolution for this month",
+          "save": "Save",
+          "cancel": "Cancel"
         }
       }
     },
