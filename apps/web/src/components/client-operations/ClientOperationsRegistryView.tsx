@@ -3631,7 +3631,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     const activeSort = query?.sort_by ?? reportingDashboard.active_sort ?? 'priority';
     const previous = reportingDashboard.previous_periods;
     return (
-      <div className="nx-co-sheet__reporting-dash" data-testid="client-operations-reporting-dashboard">
+      <>
+      <section className="nx-co-registry__kpis" data-testid="client-operations-reporting-dashboard" aria-label={t('clientOperations.registry.reporting.filterAll')}>
         <div className="nx-co-sheet__reporting-kpis" role="toolbar" aria-label={t('clientOperations.registry.reporting.filterAll')}>
           {reportingDashboard.kpi_cards.map((card) => {
             const selected = activeKpi === card.id;
@@ -3706,6 +3707,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             );
           })() : null}
         </div>
+      </section>
+      <section className="nx-co-registry__previous" data-testid="client-operations-previous-periods-section">
         <div className="nx-co-sheet__reporting-meta">
           <div className="nx-co-sheet__reporting-previous">
             <button
@@ -3770,7 +3773,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             </label>
           ) : null}
         </div>
-      </div>
+      </section>
+      </>
     );
   };
 
@@ -5478,16 +5482,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
     return (
       <div
-        className={`nx-co-sheet${fullscreenOpen ? ' nx-co-sheet--app-fullscreen' : ''}`}
+        className="nx-co-registry"
         data-testid="client-operations-spreadsheet"
         data-fullscreen={fullscreenOpen ? 'true' : 'false'}
       >
         {headerWorkspaceSlot
           ? createPortal(headerEndCluster, headerWorkspaceSlot)
           : headerEndCluster}
+        {renderReportingDashboard()}
+        <div className={`nx-co-sheet${fullscreenOpen ? ' nx-co-sheet--app-fullscreen' : ''}`}>
         {/* Inner sheet title removed — module title renders once in the route header. */}
         {renderSpreadsheetToolbar()}
-        {renderReportingDashboard()}
         {renderFilterBar()}
         {error ? <div className="nx-co-sheet__error">{error}</div> : null}
         {commandError ? (
@@ -5791,6 +5796,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           workspaceLabelKey={workspace?.label_key ?? null}
           canEdit={canEdit}
         />
+        </div>
       </div>
     );
   }

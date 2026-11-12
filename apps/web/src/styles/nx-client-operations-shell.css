@@ -163,7 +163,8 @@
   min-height: 0;
 }
 
-.t1-appShell--client-operations .t1-pageMain > div > .nx-co-sheet {
+.t1-appShell--client-operations .t1-pageMain > div > .nx-co-sheet,
+.t1-appShell--client-operations .t1-pageMain > div > .nx-co-registry {
   flex: 1 1 auto;
   min-height: 0;
 }
