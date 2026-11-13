@@ -72,14 +72,13 @@ import {
 } from './client-obligations-work-engine-bridge.js';
 import {
   isFilingSubmittedStatus,
-  nextSelfEmployedNiStandingOrderUntilForMethod,
-  operationalPeriodYear,
   parseSelfEmployedNiHandlingMethod,
   paymentAppliesForReportingKind,
   selfEmployedNiActionResolved,
   selfEmployedNiStorageDate,
   type ClientOperationsReportingObligationKind,
 } from './client-operations-reporting-dashboard.pure.js';
+import { persistSelfEmployedNiMonthSetting } from './client-operations-self-employed-ni-month.service.js';
 
 export type RegistryCustomColumnDefinition = {
   id: string;
@@ -1129,17 +1128,13 @@ export async function executeClientOperationsRegistryCommand(
     if (!handlingMethod) {
       throw badRequest('handling_method is required');
     }
-    const periodYear = operationalPeriodYear(periodKey);
-    if (periodYear == null) throw badRequest('operational_period_key must be YYYY-MM');
     const confirmResolution =
       handlingMethod === 'manual_monthly' &&
       (body.confirm_month_handled === true || body.confirm_manual_resolution === true);
     await ensureActiveClientInOrg(orgId, clientId);
     const { data: tax, error: taxError } = await supabaseAdmin
       .from('client_tax_settings')
-      .select(
-        'national_insurance_type, national_insurance_standing_order_until, national_insurance_self_employed_handling_method, national_insurance_self_employed_handling_year',
-      )
+      .select('national_insurance_type, national_insurance_standing_order_until')
       .eq('organization_id', orgId)
       .eq('client_id', clientId)
       .maybeSingle();
@@ -1147,70 +1142,18 @@ export async function executeClientOperationsRegistryCommand(
     const taxRow = tax as {
       national_insurance_type?: string | null;
       national_insurance_standing_order_until?: string | null;
-      national_insurance_self_employed_handling_method?: string | null;
-      national_insurance_self_employed_handling_year?: number | null;
     } | null;
     if (!taxRow || !resolveNationalInsuranceApplicability(taxRow.national_insurance_type)) {
       throw badRequest('self-employed national insurance is not applicable');
     }
-    const existingUntil = taxRow.national_insurance_standing_order_until ?? null;
-    const existingMethod = parseSelfEmployedNiHandlingMethod(
-      taxRow.national_insurance_self_employed_handling_method,
-    );
-    const existingYearRaw = taxRow.national_insurance_self_employed_handling_year;
-    const existingYear =
-      typeof existingYearRaw === 'number' ? existingYearRaw : Number(existingYearRaw);
-    const methodChanged =
-      existingMethod !== handlingMethod ||
-      !(Number.isInteger(existingYear) && existingYear === periodYear);
-    const nextUntil = nextSelfEmployedNiStandingOrderUntilForMethod({
-      method: handlingMethod,
+    await persistSelfEmployedNiMonthSetting({
+      organizationId: orgId,
+      clientId,
       periodKey,
-      existingUntil,
+      handlingMethod,
+      actorUserId: ctx.user.id,
+      standingOrderUntil: taxRow.national_insurance_standing_order_until ?? null,
     });
-    const existingNormalized = String(existingUntil ?? '').slice(0, 10) || null;
-    const untilChanged = nextUntil !== existingNormalized;
-    if (methodChanged || untilChanged) {
-      const { error: updateError } = await supabaseAdmin
-        .from('client_tax_settings')
-        .update({
-          national_insurance_standing_order_until: nextUntil,
-          national_insurance_self_employed_handling_method: handlingMethod,
-          national_insurance_self_employed_handling_year: periodYear,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('organization_id', orgId)
-        .eq('client_id', clientId);
-      assertQueryError(updateError, 'Failed to record self-employed national insurance handling');
-      if (untilChanged) {
-        await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_NI_STANDING_ORDER_SET, clientId, {
-          client_id: clientId,
-          operational_period_key: periodKey,
-          standing_order_active: handlingMethod === 'standing_order',
-          standing_order_until: nextUntil,
-          handling_method: handlingMethod,
-          provenance: 'office_recorded',
-          bank_verified: false,
-          authority_verified: false,
-          statutory_deadline: false,
-        });
-      }
-      if (methodChanged) {
-        await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_NI_HANDLING_METHOD_SET, clientId, {
-          client_id: clientId,
-          operational_period_key: periodKey,
-          handling_method: handlingMethod,
-          handling_year: periodYear,
-          previous_handling_method: existingMethod,
-          previous_handling_year: Number.isInteger(existingYear) ? existingYear : null,
-          standing_order_until: nextUntil,
-          provenance: 'office_recorded',
-          bank_verified: false,
-          authority_verified: false,
-          statutory_deadline: false,
-        });
-      }
-    }
     if (confirmResolution) {
       const { data: existingOb, error: obError } = await supabaseAdmin
         .from('client_obligations')

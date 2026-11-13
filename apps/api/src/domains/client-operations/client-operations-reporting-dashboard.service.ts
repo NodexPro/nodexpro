@@ -42,6 +42,7 @@ import {
   type ClientOperationsSelfEmployedNiOperations,
   type PaymentsOutstandingPeriodFact,
   type ReportingKpiClientFacts,
+  type SelfEmployedNiMonthSettingInput,
 } from './client-operations-reporting-dashboard.pure.js';
 import type { PeriodApplicabilitySnapshotRow } from './client-operations-operational-period.service.js';
 
@@ -275,8 +276,7 @@ export function attachReportingPresentationToRegistryRow<T extends RegistryRepor
   reportingKpi?: ReportingKpiClientFacts | null;
   niApplicable?: boolean;
   niStandingOrderUntil?: string | null;
-  niHandlingMethod?: string | null;
-  niHandlingYear?: number | null;
+  niMonthSettings?: readonly SelfEmployedNiMonthSettingInput[] | null;
 }): T & {
   reporting: ClientOperationsReportingRowPresentation;
   reporting_kpi: ReportingKpiClientFacts;
@@ -417,8 +417,7 @@ export function attachReportingPresentationToRegistryRow<T extends RegistryRepor
     periodKey: input.selectedPeriodKey,
     today: input.today,
     obligationStatus: niFact?.status ?? null,
-    handlingMethod: input.niHandlingMethod ?? null,
-    handlingYear: input.niHandlingYear ?? null,
+    monthSettings: input.niMonthSettings ?? [],
   });
   return { ...input.row, reporting, reporting_kpi, national_insurance_operations };
 }

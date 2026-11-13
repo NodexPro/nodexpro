@@ -6,8 +6,6 @@ import { fileURLToPath } from 'node:url';
 import {
   buildReportingCellPresentation,
   buildSelfEmployedNiOperations,
-  nextSelfEmployedNiStandingOrderUntil,
-  nextSelfEmployedNiStandingOrderUntilForMethod,
   reportingKindAffectsFilingKpi,
   resolveSelfEmployedNiHandlingMethod,
   selfEmployedNiOfficeReminderActive,
@@ -69,35 +67,14 @@ test('שולם stays disabled until an authoritative filing exists', () => {
   assert.equal(reportingKindAffectsFilingKpi('national_insurance'), false);
 });
 
-test('self-employed NI standing order covers the selected year and the 15th reminder', () => {
-  assert.equal(
-    nextSelfEmployedNiStandingOrderUntil({ active: true, periodKey: '2026-04', existingUntil: null }),
-    '2026-12-31',
-  );
-  assert.equal(
-    nextSelfEmployedNiStandingOrderUntil({
-      active: false,
-      periodKey: '2026-06',
-      existingUntil: '2026-12-31',
-    }),
-    null,
-  );
-  assert.equal(
-    nextSelfEmployedNiStandingOrderUntil({
-      active: true,
-      periodKey: '2027-01',
-      existingUntil: '2026-12-31',
-    }),
-    '2027-12-31',
-  );
+test('self-employed NI office reminder is backend-owned and method-specific', () => {
   const before = buildSelfEmployedNiOperations({
     applicable: true,
     standingOrderUntil: null,
     periodKey: '2026-11',
     today: '2026-11-14',
     obligationStatus: 'not_paid',
-    handlingMethod: 'manual_monthly',
-    handlingYear: 2026,
+    monthSettings: [{ period_key: '2026-11', handling_method: 'manual_monthly' }],
   });
   assert.equal(before.office_reminder, false);
   assert.equal(before.standing_order_active, false);
@@ -107,8 +84,7 @@ test('self-employed NI standing order covers the selected year and the 15th remi
     periodKey: '2026-11',
     today: '2026-11-15',
     obligationStatus: 'not_paid',
-    handlingMethod: 'manual_monthly',
-    handlingYear: 2026,
+    monthSettings: [{ period_key: '2026-11', handling_method: 'manual_monthly' }],
   });
   assert.equal(after, true);
   const covered = buildSelfEmployedNiOperations({
@@ -120,14 +96,14 @@ test('self-employed NI standing order covers the selected year and the 15th remi
   });
   assert.equal(covered.standing_order_active, true);
   assert.equal(covered.office_reminder, false);
+  assert.equal(covered.handling_method_source, 'standing_until');
 });
 
 test('self-employed NI three handling methods stay mutually exclusive and historically unresolved', () => {
   const unresolved = resolveSelfEmployedNiHandlingMethod({
-    storedMethod: null,
-    storedYear: null,
-    standingOrderUntil: null,
     periodKey: '2026-11',
+    standingOrderUntil: null,
+    monthSettings: [],
   });
   assert.equal(unresolved.method, null);
   assert.equal(unresolved.source, 'unresolved');
@@ -142,21 +118,20 @@ test('self-employed NI three handling methods stay mutually exclusive and histor
     false,
   );
   const historicalStanding = resolveSelfEmployedNiHandlingMethod({
-    storedMethod: null,
-    storedYear: null,
-    standingOrderUntil: '2026-12-31',
     periodKey: '2026-11',
+    standingOrderUntil: '2026-12-31',
+    monthSettings: [],
   });
   assert.equal(historicalStanding.method, 'standing_order');
   assert.equal(historicalStanding.source, 'standing_until');
+  assert.equal(historicalStanding.legacy_standing_until_ambiguous, true);
   const clientPays = buildSelfEmployedNiOperations({
     applicable: true,
     standingOrderUntil: '2026-05-31',
     periodKey: '2026-11',
     today: '2026-11-20',
     obligationStatus: 'not_paid',
-    handlingMethod: 'client_pays',
-    handlingYear: 2026,
+    monthSettings: [{ period_key: '2026-11', handling_method: 'client_pays' }],
   });
   assert.equal(clientPays.handling_method, 'client_pays');
   assert.equal(clientPays.office_reminder, false);
@@ -167,8 +142,7 @@ test('self-employed NI three handling methods stay mutually exclusive and histor
     periodKey: '2026-11',
     today: '2026-11-20',
     obligationStatus: 'not_paid',
-    handlingMethod: 'manual_monthly',
-    handlingYear: 2026,
+    monthSettings: [{ period_key: '2026-11', handling_method: 'manual_monthly' }],
   });
   assert.equal(manualOpen.office_reminder, true);
   const manualDone = buildSelfEmployedNiOperations({
@@ -177,8 +151,7 @@ test('self-employed NI three handling methods stay mutually exclusive and histor
     periodKey: '2026-11',
     today: '2026-11-20',
     obligationStatus: 'paid_on_time',
-    handlingMethod: 'manual_monthly',
-    handlingYear: 2026,
+    monthSettings: [{ period_key: '2026-11', handling_method: 'manual_monthly' }],
   });
   assert.equal(manualDone.office_reminder, false);
   assert.equal(manualDone.action_resolved, true);
@@ -188,33 +161,24 @@ test('self-employed NI three handling methods stay mutually exclusive and histor
     periodKey: '2026-12',
     today: '2026-12-20',
     obligationStatus: 'not_paid',
-    handlingMethod: 'manual_monthly',
-    handlingYear: 2026,
+    monthSettings: [{ period_key: '2026-12', handling_method: 'manual_monthly' }],
   });
   assert.equal(otherMonth.office_reminder, true);
-  assert.equal(
-    nextSelfEmployedNiStandingOrderUntilForMethod({
-      method: 'client_pays',
-      periodKey: '2026-06',
-      existingUntil: '2026-12-31',
-    }),
-    '2026-05-31',
-  );
   const previousCovered = resolveSelfEmployedNiHandlingMethod({
-    storedMethod: 'client_pays',
-    storedYear: 2026,
-    standingOrderUntil: '2026-05-31',
     periodKey: '2026-05',
+    standingOrderUntil: '2026-05-31',
+    monthSettings: [{ period_key: '2026-06', handling_method: 'client_pays' }],
   });
   assert.equal(previousCovered.method, 'standing_order');
+  assert.equal(previousCovered.source, 'standing_until');
   const newYear = resolveSelfEmployedNiHandlingMethod({
-    storedMethod: 'standing_order',
-    storedYear: 2026,
-    standingOrderUntil: '2026-12-31',
     periodKey: '2027-01',
+    standingOrderUntil: '2026-12-31',
+    monthSettings: [{ period_key: '2026-12', handling_method: 'standing_order' }],
   });
-  assert.equal(newYear.method, null);
-  assert.equal(newYear.source, 'unresolved');
+  assert.equal(newYear.method, 'standing_order');
+  assert.equal(newYear.source, 'inherited');
+  assert.equal(newYear.january_confirmation_required, true);
 });
 
 test('payment-only confirmation is rejected before filing in the command', () => {

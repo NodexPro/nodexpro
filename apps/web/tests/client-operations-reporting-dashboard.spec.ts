@@ -204,6 +204,10 @@ test('self-employed NI modal is a compact two-column command surface', () => {
   assert.match(viewSource, /handling_method:\s*method/);
   assert.match(viewSource, /confirm_month_handled:\s*resolve/);
   assert.match(viewSource, /data-handling-method=\{ops\.handling_method \?\? 'unresolved'\}/);
+  assert.match(viewSource, /persistInherited/);
+  assert.match(viewSource, /ops\.ni_indicator_alert/);
+  assert.match(viewSource, /data-january-confirmation/);
+  assert.doesNotMatch(viewSource, /SELF_EMPLOYED_NI_OFFICE_REMINDER_DAY/);
   assert.doesNotMatch(viewSource, /standingOrderActive/);
   assert.doesNotMatch(viewSource, /nx-co-ops-modal__check/);
   assert.match(cssSource, /\.nx-co-ni-modal\.nx-clients-modal[\s\S]*?width:\s*min\(580px/);

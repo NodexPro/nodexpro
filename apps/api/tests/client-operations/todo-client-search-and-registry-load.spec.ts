@@ -74,6 +74,10 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: null | { message:
     this.filters.push((r) => vals.includes(r[col]));
     return this;
   }
+  lte(col: string, val: unknown) {
+    this.filters.push((r) => String(r[col] ?? '') <= String(val ?? ''));
+    return this;
+  }
   is(col: string, val: unknown) {
     this.filters.push((r) => (val === null ? r[col] == null : r[col] === val));
     return this;
@@ -558,7 +562,8 @@ test('P4 registry aggregate: independent reads start together; no N+1, no unused
     { materializationCache: false },
   );
   assert.equal(calls.length, small, 'query count must not grow with the number of clients');
-  assert.ok(small <= 36, `registry aggregate query budget exceeded: ${small}`);
+  // 40 on co-ni-three-method-handling plus one set-based monthly NI settings read.
+  assert.ok(small <= 41, `registry aggregate query budget exceeded: ${small}`);
 });
 
 test('P5 registry aggregate: zero-client / zero-grant scope still returns the five manual slots', async () => {

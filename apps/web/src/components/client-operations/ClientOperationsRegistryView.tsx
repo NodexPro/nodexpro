@@ -287,7 +287,9 @@ export type ClientOperationsSelfEmployedNiOperations = {
   period_key: string;
   period_display: string;
   handling_method: SelfEmployedNiHandlingMethod | null;
-  handling_method_source: 'explicit' | 'standing_until' | 'unresolved';
+  handling_method_source: 'explicit' | 'inherited' | 'standing_until' | 'unresolved';
+  january_confirmation_required: boolean;
+  ni_indicator_alert: boolean;
   handling_options: Array<{
     id: SelfEmployedNiHandlingMethod;
     label_key: string;
@@ -3157,11 +3159,15 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       return;
     }
     const methodChanged = method !== ops.handling_method;
+    const persistInherited =
+      ops.handling_method_source === 'inherited' ||
+      ops.handling_method_source === 'standing_until' ||
+      ops.january_confirmation_required;
     const resolve = Boolean(
       method === 'manual_monthly' && niModal.confirmMonthHandled && ops.can_confirm_month_handled,
     );
     setNiModal(null);
-    if (!methodChanged && !resolve) return;
+    if (!methodChanged && !persistInherited && !resolve) return;
     await runMarkCommand(
       `${niModal.row.client_id}:ni-self`,
       {
@@ -4303,11 +4309,13 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       return (
         <button
           type="button"
-          className={`nx-co-sheet__ni-amount${ops.office_reminder ? ' is-office-reminder' : ''}`}
+          className={`nx-co-sheet__ni-amount${ops.ni_indicator_alert ? ' is-office-reminder' : ''}`}
           data-testid="client-operations-ni-amount"
           data-office-reminder={ops.office_reminder ? 'true' : 'false'}
+          data-january-confirmation={ops.january_confirmation_required ? 'true' : 'false'}
           data-standing-order={ops.standing_order_active ? 'active' : 'inactive'}
           data-handling-method={ops.handling_method ?? 'unresolved'}
+          data-handling-source={ops.handling_method_source}
           title={t(ops.standing_order_status_key)}
           onClick={(event) => {
             event.stopPropagation();
@@ -4620,7 +4628,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                         : reportingCell
                           ? `is-reporting-cell-${reportingCell.tone}`
                           : '',
-                      column.key === 'national_insurance' && row.national_insurance_operations?.office_reminder
+                      column.key === 'national_insurance' &&
+                      row.national_insurance_operations?.ni_indicator_alert
                         ? 'is-ni-office-reminder'
                         : '',
                     ]
@@ -5056,6 +5065,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         const amount = niModal.row.cells?.national_insurance || niModal.row.national_insurance_status || '—';
         const selectedMethod = niModal.handlingMethod;
         const methodChanged = selectedMethod !== ops.handling_method;
+        const persistInherited =
+          ops.handling_method_source === 'inherited' ||
+          ops.handling_method_source === 'standing_until' ||
+          ops.january_confirmation_required;
         const resolve = Boolean(
           selectedMethod === 'manual_monthly' &&
             niModal.confirmMonthHandled &&
@@ -5066,7 +5079,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             onRegistryCommand &&
             ops.can_set_handling_method &&
             selectedMethod &&
-            (methodChanged || resolve),
+            (methodChanged || persistInherited || resolve),
         );
         const monthHandledChecked = Boolean(ops.action_resolved || niModal.confirmMonthHandled);
         return (
