@@ -5297,14 +5297,14 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 <div className="nx-clients-form__footer nx-co-ni-modal__footer">
                   <button
                     type="button"
-                    className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
+                    className="nx-glass-btn nx-glass-btn--secondary"
                     onClick={() => setNiModal(null)}
                   >
                     {t(ops.cancel_key)}
                   </button>
                   <button
                     type="submit"
-                    className="nx-btn nx-btn-primary nx-btn-taxes-compact"
+                    className="nx-glass-btn nx-glass-btn--purple"
                     disabled={!canSave}
                   >
                     {t(ops.save_key)}
