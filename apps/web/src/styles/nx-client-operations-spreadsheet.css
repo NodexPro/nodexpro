@@ -2821,11 +2821,46 @@
 
 .nx-co-ni-modal.nx-clients-modal {
   width: min(580px, calc(100vw - 24px));
+  max-width: 100%;
+  height: auto;
   max-height: min(88vh, 640px);
 }
 
-.nx-co-ni-modal .nx-clients-form__body {
+.nx-client-create--deep-ocean-glass .nx-co-ni-modal.nx-clients-modal.nx-glass-card,
+.nx-co-ni-overlay .nx-co-ni-modal.nx-clients-modal.nx-glass-card {
+  width: min(580px, calc(100vw - 24px));
+  max-width: 100%;
+  height: auto;
+  max-height: min(88vh, 640px);
+  overflow-x: hidden;
+  color: #eef6ff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.16), transparent 50%),
+    linear-gradient(180deg, rgba(18, 55, 86, 0.94) 0%, rgba(8, 36, 71, 0.96) 100%);
+}
+
+.nx-co-ni-modal .nx-clients-modal__head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.nx-co-ni-modal .nx-clients-form {
   flex: 0 1 auto;
+}
+
+.nx-co-ni-modal .nx-clients-form__body,
+.nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form__body.nx-co-ni-modal__body {
+  display: flex;
+  flex-direction: column;
+  grid-template-columns: none;
+  gap: 10px;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
 }
 
 .nx-co-ni-modal__body {
@@ -2836,30 +2871,43 @@
 
 .nx-co-ni-modal__grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  width: 100%;
   overflow: hidden;
-  border: 1px solid rgba(16, 42, 76, 0.18);
+  border: 1px solid rgba(54, 169, 198, 0.42);
   border-radius: 8px;
-  background: #f4f7fb;
-  color: #102a4c;
+  background:
+    linear-gradient(180deg, rgba(13, 55, 100, 0.55) 0%, rgba(18, 55, 86, 0.72) 100%);
+  color: #eef6ff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .nx-co-ni-modal__col {
   min-width: 0;
+  min-inline-size: 0;
   margin: 0;
   padding: 0;
   border: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .nx-co-ni-modal__col + .nx-co-ni-modal__col {
-  border-inline-start: 1px solid rgba(16, 42, 76, 0.16);
+  border-inline-start: 1px solid rgba(54, 169, 198, 0.28);
 }
 
-.nx-co-ni-modal__col-title {
+.nx-co-ni-modal__col-title,
+.nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form h4.nx-co-ni-modal__col-title,
+.nx-co-ni-modal__handling > legend.nx-co-ni-modal__col-title {
   display: block;
+  float: none;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
   margin: 0;
   padding: 8px 10px;
-  background: #16345c;
+  background: #123756;
   color: #f8fbff;
   font-size: 12px;
   font-weight: 700;
@@ -2869,64 +2917,103 @@
 
 .nx-co-ni-modal__facts {
   margin: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-.nx-co-ni-modal__row,
-.nx-co-ni-modal__option,
-.nx-co-ni-modal__month-action {
+.nx-co-ni-modal__row {
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr);
   gap: 8px;
   align-items: center;
-  min-height: 36px;
+  min-height: 40px;
   margin: 0;
-  padding: 6px 10px;
-  border-top: 1px solid rgba(16, 42, 76, 0.1);
-  background: #fff;
+  padding: 8px 10px;
+  border-top: 1px solid rgba(54, 169, 198, 0.18);
+  background: rgba(8, 36, 71, 0.22);
   text-align: start;
 }
 
 .nx-co-ni-modal__option,
-.nx-co-ni-modal__month-action {
+.nx-co-ni-modal__month-action,
+.nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form label.nx-co-ni-modal__option,
+.nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form label.nx-co-ni-modal__month-action {
   display: flex;
-  grid-template-columns: none;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-top: 1px solid rgba(54, 169, 198, 0.18);
+  border-radius: 0;
+  background: rgba(16, 45, 73, 0.28);
+  color: #ffffff;
   font-size: 13px;
   font-weight: 600;
-  color: #102a4c;
+  line-height: 1.25;
+  text-align: start;
   cursor: pointer;
+}
+
+.nx-co-ni-modal__option.is-selected,
+.nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form label.nx-co-ni-modal__option.is-selected {
+  background: rgba(0, 207, 239, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(0, 207, 239, 0.45);
+  color: #ffffff;
 }
 
 .nx-co-ni-modal__row dt {
   margin: 0;
   font-size: 12px;
   font-weight: 600;
-  color: #3d5a80;
+  color: rgba(238, 246, 255, 0.72);
 }
 
 .nx-co-ni-modal__row dd {
   margin: 0;
   font-size: 13px;
   font-weight: 700;
-  color: #102a4c;
+  color: #ffffff;
   overflow-wrap: anywhere;
+}
+
+.nx-co-ni-modal__option span,
+.nx-co-ni-modal__month-action span {
+  min-width: 0;
+  color: inherit;
 }
 
 .nx-co-ni-modal__option input,
 .nx-co-ni-modal__month-action input {
   flex: 0 0 auto;
   margin: 0;
+  accent-color: #00cfef;
 }
 
-.nx-co-ni-modal__month-action {
-  background: #eef4fb;
+.nx-co-ni-modal__option:focus-within,
+.nx-co-ni-modal__month-action:focus-within {
+  outline: 2px solid #00cfef;
+  outline-offset: -2px;
 }
 
-.nx-co-ni-modal__footer {
+.nx-co-ni-modal__month-action,
+.nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form label.nx-co-ni-modal__month-action {
+  background: rgba(0, 207, 239, 0.08);
+}
+
+.nx-co-ni-modal__footer,
+.nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form__footer {
   justify-content: center;
   gap: 10px;
+  padding-top: 12px;
+  flex-wrap: wrap;
 }
 
-.nx-co-ni-modal .nx-clients-form__footer .nx-btn {
+.nx-co-ni-modal .nx-clients-form__footer .nx-btn,
+.nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form__footer .nx-btn {
   min-width: 96px;
   height: auto;
   min-height: 0;
@@ -2937,8 +3024,23 @@
   line-height: 1.2;
 }
 
+.nx-co-ni-modal .nx-clients-form__footer .nx-btn-primary {
+  color: #ffffff;
+  border: 1px solid rgba(19, 191, 208, 0.78);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.28), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.78) 0%, rgba(19, 191, 208, 0.62) 100%);
+  box-shadow: 0 0 14px rgba(19, 191, 208, 0.28);
+}
+
+.nx-co-ni-modal .nx-clients-form__footer .nx-btn-secondary {
+  color: #eef6ff;
+  border: 1px solid rgba(54, 169, 198, 0.55);
+  background: rgba(16, 45, 73, 0.42);
+}
+
 .nx-co-ni-modal .nx-clients-form__footer .nx-btn:focus-visible {
-  outline: 2px solid var(--nx-cyan-500);
+  outline: 2px solid var(--nx-cyan-500, #00cfef);
   outline-offset: 2px;
 }
 
@@ -2949,7 +3051,7 @@
 
   .nx-co-ni-modal__col + .nx-co-ni-modal__col {
     border-inline-start: 0;
-    border-top: 1px solid rgba(16, 42, 76, 0.16);
+    border-top: 1px solid rgba(54, 169, 198, 0.28);
   }
 }
 
