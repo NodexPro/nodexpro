@@ -4,7 +4,6 @@
  */
 
 import type { NextFunction, Request, Response } from 'express';
-import { getRequestCorrelationId } from './correlation.js';
 import { originPullSecretMatches } from '../shared/trusted-proxy.pure.js';
 import {
   isLegacyHttpObserveEnabled,
@@ -18,6 +17,8 @@ export type LegacyHttpObserveDependencies = {
   originPullVerified?: (req: Request) => boolean;
   record?: (row: LegacyHttpObservationRow) => void | Promise<void>;
 };
+
+const observedResponses = new WeakSet<Response>();
 
 function headerPresent(value: string | string[] | undefined): boolean {
   if (Array.isArray(value)) return value.some((item) => String(item ?? '').trim().length > 0);
@@ -36,6 +37,14 @@ async function defaultRecord(row: LegacyHttpObservationRow): Promise<void> {
   await recordLegacyHttpObservation(row);
 }
 
+function listenOnceFinish(res: Response, listener: () => void): void {
+  if (typeof res.once === 'function') {
+    res.once('finish', listener);
+    return;
+  }
+  res.on('finish', listener);
+}
+
 export function legacyHttpObserveMiddleware(deps: LegacyHttpObserveDependencies = {}) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const enabled = deps.enabled ?? isLegacyHttpObserveEnabled(process.env.LEGACY_HTTP_OBSERVE);
@@ -48,7 +57,12 @@ export function legacyHttpObserveMiddleware(deps: LegacyHttpObserveDependencies 
       next();
       return;
     }
-    res.on('finish', () => {
+    if (observedResponses.has(res)) {
+      next();
+      return;
+    }
+    observedResponses.add(res);
+    listenOnceFinish(res, () => {
       const row: LegacyHttpObservationRow = {
         endpoint_key: matched.key,
         http_method: matched.method,
@@ -56,7 +70,6 @@ export function legacyHttpObserveMiddleware(deps: LegacyHttpObserveDependencies 
         observed_at: (deps.now ?? (() => new Date()))().toISOString(),
         has_authorization: headerPresent(req.headers.authorization),
         origin_pull_verified: (deps.originPullVerified ?? defaultOriginPullVerified)(req),
-        correlation_id: getRequestCorrelationId(req),
       };
       void Promise.resolve((deps.record ?? defaultRecord)(row)).catch(() => {
         /* observation must never affect the response */

@@ -1,0 +1,54 @@
+name: Legacy HTTP Observations Retention
+
+on:
+  schedule:
+    # Daily 03:15 UTC. Backend owns the 90-day cutoff.
+    - cron: '15 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: legacy-http-observations-purge
+  cancel-in-progress: false
+
+jobs:
+  purge:
+    name: Purge expired legacy HTTP observations
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Call protected retention endpoint
+        env:
+          INTERNAL_CRON_SECRET: ${{ secrets.INTERNAL_CRON_SECRET }}
+          PURGE_URL: https://nodexpro.onrender.com/api/v1/owner/internal/legacy-http-observations/purge
+        run: |
+          set -euo pipefail
+          if [ -z "${INTERNAL_CRON_SECRET:-}" ]; then
+            echo "::error::Repository secret INTERNAL_CRON_SECRET is not set."
+            exit 1
+          fi
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+          http_code="$(
+            curl -sS \
+              --max-time 120 \
+              --retry 1 \
+              --retry-delay 10 \
+              --retry-connrefused \
+              -o "$response_file" \
+              -w '%{http_code}' \
+              -X POST "$PURGE_URL" \
+              -H "Content-Type: application/json" \
+              -H "X-Internal-Cron-Secret: ${INTERNAL_CRON_SECRET}" \
+              -d '{}'
+          )"
+          echo "HTTP status: ${http_code}"
+          if command -v jq >/dev/null 2>&1 && jq -e . >/dev/null 2>&1 <"$response_file"; then
+            jq -c '{ ok: (.ok // false), deleted: (.deleted // 0) }' "$response_file"
+          else
+            echo "Summary: non-JSON response body"
+          fi
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "::error::Legacy HTTP observation purge failed with HTTP ${http_code}"
+            exit 1
+          fi

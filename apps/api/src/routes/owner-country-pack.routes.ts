@@ -29,7 +29,10 @@ import {
   releaseOwnerSecurityContainment,
   type SecurityJournalQuery,
 } from '../domains/owner-system-health/owner-security-events.service.js';
-import { buildOwnerLegacyHttpObservationsAggregate } from '../shared/legacy-http-observe.service.js';
+import {
+  buildOwnerLegacyHttpObservationsAggregate,
+  purgeLegacyHttpObservations,
+} from '../shared/legacy-http-observe.service.js';
 import { refreshPrivilegedMfaGate } from '../domains/auth/privileged-mfa.service.js';
 import { activatePlatformOwnerMfa, verifyPlatformOwnerMfaRecovery } from '../domains/auth/platform-owner-mfa-activation.service.js';
 import { getRequestCorrelationId } from '../middleware/correlation.js';
@@ -134,6 +137,20 @@ router.post('/internal/geoip/update', async (req: Request, res: Response, next: 
     return res.json({
       ok: true,
       ...result,
+      correlation_id: getRequestCorrelationId(req),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post('/internal/legacy-http-observations/purge', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    requireInternalCronSecret(req);
+    const result = await purgeLegacyHttpObservations();
+    return res.json({
+      ok: true,
+      deleted: result.deleted,
       correlation_id: getRequestCorrelationId(req),
     });
   } catch (e) {

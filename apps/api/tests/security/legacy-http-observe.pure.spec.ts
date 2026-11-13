@@ -79,7 +79,6 @@ test('summary counts facts without inventing internal or external labels', () =>
         observed_at: '2026-11-13T00:00:00.000Z',
         has_authorization: true,
         origin_pull_verified: true,
-        correlation_id: 'cid-1',
       },
       {
         endpoint_key: 'PATCH /organizations/:orgId/settings',
@@ -125,6 +124,10 @@ test('middleware records matched PATCH on finish and does not change the handler
   let finish: (() => void) | undefined;
   const res = {
     statusCode: 200,
+    once(event: string, listener: () => void) {
+      if (event === 'finish') finish = listener;
+      return res;
+    },
     on(event: string, listener: () => void) {
       if (event === 'finish') finish = listener;
       return res;
@@ -186,16 +189,34 @@ test('observation SQL is service-role only and has no PII columns; legacy PATCH/
   assert.doesNotMatch(sql, /\borganization_id\b/);
   assert.doesNotMatch(sql, /\brequest_body\b/);
   assert.doesNotMatch(sql, /\bquery_string\b/);
+  assert.doesNotMatch(sql, /\bcorrelation_id\b/);
 
   const observeSrc = readFileSync(join(dir, '../../src/middleware/legacy-http-observe.ts'), 'utf8');
   assert.doesNotMatch(observeSrc, /req\.body/);
   assert.doesNotMatch(observeSrc, /req\.query/);
   assert.doesNotMatch(observeSrc, /trustedClientIp/);
   assert.doesNotMatch(observeSrc, /user-agent/);
+  assert.doesNotMatch(observeSrc, /getRequestCorrelationId/);
+  assert.match(observeSrc, /res\.once/);
 
   const ownerRoutes = readFileSync(join(dir, '../../src/routes/owner-country-pack.routes.ts'), 'utf8');
   assert.match(ownerRoutes, /assertOwnerOrAuditFailure\(ctx, req\)/);
   assert.match(ownerRoutes, /\/aggregates\/legacy-http-observations/);
+  assert.match(ownerRoutes, /\/internal\/legacy-http-observations\/purge/);
+  assert.match(ownerRoutes, /requireInternalCronSecret\(req\)/);
+  const purgeSlice = ownerRoutes.slice(
+    ownerRoutes.indexOf('/internal/legacy-http-observations/purge'),
+    ownerRoutes.indexOf('/aggregates/legacy-http-observations'),
+  );
+  assert.match(purgeSlice, /requireInternalCronSecret\(req\)/);
+  const aggregateSlice = ownerRoutes.slice(ownerRoutes.indexOf('/aggregates/legacy-http-observations'));
+  assert.match(aggregateSlice, /assertOwnerOrAuditFailure\(ctx, req\)/);
+
+  const serviceSrc = readFileSync(join(dir, '../../src/shared/legacy-http-observe.service.ts'), 'utf8');
+  assert.match(serviceSrc, /export async function purgeLegacyHttpObservations/);
+  assert.match(serviceSrc, /startLegacyHttpObservationRetentionScheduler/);
+  const indexSrc = readFileSync(join(dir, '../../src/index.ts'), 'utf8');
+  assert.match(indexSrc, /startLegacyHttpObservationRetentionScheduler\(\)/);
 
   const clients = readFileSync(join(dir, '../../src/domains/clients/clients.routes.ts'), 'utf8');
   assert.match(clients, /router\.patch\('\/:id\/clients\/:clientId'/);

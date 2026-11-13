@@ -55,7 +55,6 @@ export type LegacyHttpObservationRow = {
   observed_at: string;
   has_authorization: boolean;
   origin_pull_verified: boolean;
-  correlation_id?: string | null;
 };
 
 export function isLegacyHttpObserveEnabled(raw: string | null | undefined): boolean {
@@ -129,7 +128,6 @@ export function summarizeLegacyHttpObservations(
       observed_at: row.observed_at,
       has_authorization: row.has_authorization,
       origin_pull_verified: row.origin_pull_verified,
-      correlation_id: row.correlation_id ?? null,
     })),
   };
 }

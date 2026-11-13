@@ -62,6 +62,7 @@ import { recordSecurityEvent, securitySubjectKey } from './shared/security-event
 import { securityActionForStatus } from './shared/security-event.pure.js';
 import { apiSecurityMiddleware } from './middleware/api-security.js';
 import { legacyHttpObserveMiddleware } from './middleware/legacy-http-observe.js';
+import { startLegacyHttpObservationRetentionScheduler } from './shared/legacy-http-observe.service.js';
 import { UPLOAD_JSON_MAX_BYTES } from './shared/api-security.pure.js';
 import { isPrivateOrReservedIp } from './shared/request-source.pure.js';
 import { isCloudflareIp, isVercelIp } from './shared/trusted-proxy.pure.js';
@@ -320,4 +321,5 @@ app.listen(config.port, () => {
       console.error('[api] DB-IP Lite provisioning failed; security GeoIP enrichment will fall back to Unknown.');
     });
   logModuleLoaded();
+  startLegacyHttpObservationRetentionScheduler();
 });

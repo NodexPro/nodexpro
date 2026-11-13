@@ -4,7 +4,9 @@
 -- user agents, organization ids, user ids, or path parameters.
 -- Observation does not authorize, mutate, or replace those routes.
 --
--- Retention: 90 days (API deletes older rows on insert). Service-role only.
+-- Retention: 90 days. Cleanup is scheduled in the API process and via
+-- POST /api/v1/owner/internal/legacy-http-observations/purge (internal cron secret).
+-- Inserts also delete rows older than 90 days. Service-role only.
 -- Rollback:
 --   drop table if exists public.legacy_http_observations;
 
@@ -16,7 +18,6 @@ create table if not exists public.legacy_http_observations (
   observed_at timestamptz not null default now(),
   has_authorization boolean not null,
   origin_pull_verified boolean not null,
-  correlation_id text null,
   constraint legacy_http_observations_http_method_check
     check (http_method in ('PATCH', 'PUT')),
   constraint legacy_http_observations_http_status_check
@@ -44,9 +45,6 @@ comment on column public.legacy_http_observations.has_authorization is
 
 comment on column public.legacy_http_observations.origin_pull_verified is
   'Whether the configured origin-pull secret matched. A transport fact, not an internal/external label.';
-
-comment on column public.legacy_http_observations.correlation_id is
-  'First-party request correlation id. Not a client identifier.';
 
 create index if not exists idx_legacy_http_observations_observed_at
   on public.legacy_http_observations (observed_at desc);
