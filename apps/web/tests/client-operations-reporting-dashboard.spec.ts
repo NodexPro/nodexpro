@@ -137,7 +137,7 @@ test('EN/HE reporting dashboard keys exist without hardcoded Hebrew chrome in th
   assert.match((enReporting.cell as { informational: string }).informational, /Informational/);
   assert.match((heReporting.cell as { informational: string }).informational, /[\u0590-\u05FF]/);
   const dashSlice = viewSource.slice(
-    viewSource.indexOf('const renderReportingDashboard'),
+    viewSource.indexOf('const renderReportingKpis'),
     viewSource.indexOf('const renderFilterBar'),
   );
   assert.doesNotMatch(dashSlice, /[\u0590-\u05FF]/);
@@ -175,7 +175,7 @@ test('EN/HE reporting strings and RTL/LTR follow the selected language', () => {
 
 test('reporting KPI cards stay presentation-only:  submitted/total, wrap, no remaining line', () => {
   const dashSlice = viewSource.slice(
-    viewSource.indexOf('const renderReportingDashboard'),
+    viewSource.indexOf('const renderReportingKpis'),
     viewSource.indexOf('const renderFilterBar'),
   );
   assert.match(dashSlice, /card\.submitted_count/);
@@ -184,7 +184,7 @@ test('reporting KPI cards stay presentation-only:  submitted/total, wrap, no rem
   assert.doesNotMatch(dashSlice, /t\(.*remaining/);
   assert.doesNotMatch(viewSource, /submitted_count\s*\+/);
   assert.doesNotMatch(viewSource, /total_count\s*-/);
-  assert.match(cssSource, /\.nx-co-sheet__reporting-kpis[\s\S]*?grid-template-columns:\s*repeat\(8,\s*minmax\(0,\s*112px\)\)/);
+  assert.match(cssSource, /\.nx-co-sheet__reporting-kpis[\s\S]*?grid-template-columns:\s*repeat\(8,\s*minmax\(0,\s*1fr\)\)/);
   assert.match(viewSource, /nx-co-registry__kpis/);
   assert.match(viewSource, /nx-co-registry__previous/);
   assert.doesNotMatch(cssSource, /\.nx-co-sheet__reporting-kpis[\s\S]*?overflow-x:\s*auto/);

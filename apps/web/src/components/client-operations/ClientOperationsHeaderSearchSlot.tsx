@@ -4,12 +4,11 @@ import { createContext, useContext } from 'react';
  * Client Operations — header search slot (presentation only).
  *
  * The route header (TemplateLayout → ClientOperationsAppHeader) exposes an empty
- * DOM slot in its centre. The registry view portals its EXISTING search field
- * into that slot, so the search keeps one owner: the same `searchDraft` state,
- * debounce, clear and aggregate `onQueryChange` path. No second search state.
+ * DOM slot in its centre. The registry view portals its existing KPI cards into
+ * that slot. Search stays a single toolbar field (`searchDraft` + debounce).
  *
  * `null` = no slot available (route without the CO header, or fullscreen sheet
- * covering the header) → the view renders the same field inline in its toolbar.
+ * covering the header) → the view renders the KPI row inside the sheet.
  */
 export const ClientOperationsHeaderSearchSlotContext = createContext<HTMLElement | null>(null);
 

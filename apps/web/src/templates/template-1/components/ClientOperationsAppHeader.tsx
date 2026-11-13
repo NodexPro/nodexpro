@@ -13,7 +13,7 @@ export const CLIENT_OPERATIONS_HEADER_TITLE_KEY = 'clientOperations.moduleTitle'
  * Replaces the generic AppHeader ONLY under /m/client-operations:
  *  - no duplicated account / language chrome (already owned by the sidebar account block)
  *  - module title follows the platform locale direction
- *  - centre slot that receives the registry view's existing search field via portal
+ *  - centre slot that receives the registry KPI cards via portal
  *  - end slot for backend-owned workspace selector (Owner/Admin only when visible)
  *
  * Other modules keep the generic AppHeader untouched.

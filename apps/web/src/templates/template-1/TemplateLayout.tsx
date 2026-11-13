@@ -66,18 +66,18 @@ export function TemplateLayout({
   const usesCanonicalWorkingShell = true;
   const isNavyNativeSurface =
     isClientOperationsModule || isUsersRolesWorkspace || isDashboard || isSettings || isOfficeGlassSurface;
-  const pageMaxWidth =
-    isClientOperationsModule ||
-    isIncomeModule ||
-    isWorkEngineSection ||
-    isUsersRolesWorkspace ||
-    isDashboard ||
-    isSettings ||
-    isOfficeGlassSurface
+  const pageMaxWidth = isClientOperationsModule
+    ? '100%'
+    : isIncomeModule ||
+        isWorkEngineSection ||
+        isUsersRolesWorkspace ||
+        isDashboard ||
+        isSettings ||
+        isOfficeGlassSurface
       ? 1600
       : 1100;
 
-  // CO route only: header centre slot that receives the registry's existing search field (portal).
+  // CO route only: header centre slot receives the registry KPI row (portal). Search stays in the sheet toolbar.
   const [coHeaderSearchSlot, setCoHeaderSearchSlot] = useState<HTMLElement | null>(null);
   const coHeaderSearchSlotRef = useCallback((el: HTMLDivElement | null) => setCoHeaderSearchSlot(el), []);
   const [coHeaderWorkspaceSlot, setCoHeaderWorkspaceSlot] = useState<HTMLElement | null>(null);

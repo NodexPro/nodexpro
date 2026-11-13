@@ -5,8 +5,9 @@
  *  - CO route header shows "ניהול לקוחות" on the right (RTL) and NO duplicated
  *    account / language chrome (owned by the sidebar account block).
  *  - Inner sheet title "תפעול לקוחות" is no longer rendered.
- *  - The EXISTING search renderer is portaled into the header slot — one state,
+ *  - The EXISTING search renderer lives once in the sheet toolbar — one state,
  *    one debounce, one clear path, one aggregate `onQueryChange` path.
+ *  - The header centre slot receives the existing KPI row, not a second search.
  *  - Other routes keep the generic AppHeader (org / language / user chrome).
  */
 import test from 'node:test';
@@ -95,26 +96,22 @@ test('4 search field renderer exists exactly once (single renderSearchField)', (
   assert.equal(inputs.length, 1, 'exactly one <input type="search"> in the registry view');
   const placeholders = viewSource.match(/placeholder=\{t\('clientOperations\.searchPlaceholder'\)\}/g) ?? [];
   assert.equal(placeholders.length, 1);
-  assert.match(viewSource, /const renderSearchField = \(placement: 'header' \| 'toolbar'\) =>/);
+  assert.match(viewSource, /const renderSearchField = \(placement: 'toolbar'\) =>/);
   assert.match(viewSource, /data-testid="client-operations-search"/);
   assert.doesNotMatch(coHeaderSource, /type="search"|<input/);
 });
 
-test('5 search is portaled to the header slot — not in the old toolbar group', () => {
+test('5 search stays in the toolbar; KPI row is portaled into the header slot', () => {
   assert.match(viewSource, /import \{ createPortal \} from 'react-dom'/);
-  assert.match(viewSource, /const searchInHeader = Boolean\(headerSearchSlot\) && !fullscreenOpen;/);
-  assert.match(
-    toolbarSlice,
-    /searchInHeader && headerSearchSlot\s*\? createPortal\(renderSearchField\('header'\), headerSearchSlot\)/,
-  );
-  // Old static toolbar search group is gone.
+  assert.match(toolbarSlice, /nx-co-sheet__toolbar-group--search/);
+  assert.match(toolbarSlice, /renderSearchField\('toolbar'\)/);
+  assert.doesNotMatch(toolbarSlice, /renderSearchField\('header'\)/);
+  assert.doesNotMatch(toolbarSlice, /createPortal\(renderSearchField/);
   assert.doesNotMatch(
     toolbarSlice,
     /<div className="nx-co-sheet__toolbar-group">\s*<div className="nx-co-sheet__search">/,
   );
-  // Inline fallback only when there is no header slot (or the fullscreen sheet covers the header).
-  assert.match(toolbarSlice, /nx-co-sheet__toolbar-group--search-fallback/);
-  // Header exposes the slot; layout wires the slot ref → context → view.
+  assert.match(viewSource, /createPortal\(renderReportingKpis\(\), headerSearchSlot\)/);
   assert.match(coHeaderSource, /ref=\{searchSlotRef\}/);
   assert.match(coHeaderSource, /CLIENT_OPERATIONS_HEADER_SEARCH_SLOT_TEST_ID/);
   assert.match(layoutSource, /ClientOperationsHeaderSearchSlotContext\.Provider/);
@@ -145,8 +142,8 @@ test('7 clear still works — native clear / empty draft restores immediately', 
   assert.match(viewSource, /const q = raw\.trim\(\) \|\| null;/);
   // Debounce unchanged (120ms) for typing.
   assert.match(viewSource, /searchDebounceRef\.current = setTimeout\(\(\) => \{\s*applyLiveSearch\(value\);\s*\}, 120\);/);
-  // Native X stays visible on the dark header glass.
-  assert.match(shellCss, /\.nx-co-sheet__search--header input::-webkit-search-cancel-button/);
+  // Native X stays on the compact toolbar field.
+  assert.match(sheetCss, /\.nx-co-sheet__search-field input::-webkit-search-cancel-button/);
 });
 
 test('8 filters + search remain combinable (search carries active filters; filters carry q)', () => {
@@ -177,12 +174,11 @@ test('9 unrelated routes retain account header chrome; office language lives on 
   assert.doesNotMatch(sidebar, /UiLanguageSwitch/);
 });
 
-test('10 header styles: dark blue glass search, approved palette — scoped to CO only', () => {
+test('10 header styles: KPI slot in the approved navy header — scoped to CO only', () => {
   assert.match(shellCss, /\.nx-co-app-header\s*\{[^}]*linear-gradient\(\s*90deg,\s*#082447/);
-  assert.match(
-    shellCss,
-    /\.nx-co-app-header \.nx-co-sheet__search--header input\s*\{[^}]*linear-gradient\(\s*180deg,\s*rgba\(13, 55, 100, 0\.78\)/,
-  );
+  assert.match(shellCss, /\.nx-co-app-header\s*\{[^}]*grid-template-columns:\s*auto minmax\(0,\s*1fr\) auto/);
+  assert.doesNotMatch(shellCss, /\.nx-co-sheet__search--header/);
+  assert.match(sheetCss, /grid-template-columns:\s*repeat\(8,\s*minmax\(0,\s*1fr\)\)/);
   assert.match(shellCss, /--nx-navy-950: #061a33/);
   assert.match(shellCss, /--nx-navy-900: #082447/);
   assert.match(shellCss, /--nx-navy-850: #0a2d55/);
@@ -193,7 +189,10 @@ test('10 header styles: dark blue glass search, approved palette — scoped to C
   assert.match(shellCss, /--nx-cyan-300: #7decf7/);
   assert.match(shellCss, /--nx-violet-500: #6657e8/);
   assert.match(shellCss, /--nx-violet-400: #8074f2/);
-  assert.match(sheetCss, /border:\s*1px solid rgba\(54, 169, 198, 0\.62\)/);
+  assert.doesNotMatch(sheetCss, /border:\s*1px solid rgba\(54, 169, 198, 0\.62\)/);
+  assert.match(sheetCss, /\.nx-co-sheet__canvas \{[\s\S]*?max-height:\s*none/);
+  assert.match(sheetCss, /\.nx-co-sheet__canvas \{[\s\S]*?overflow-y:\s*auto/);
+  assert.match(sheetCss, /\.nx-co-sheet__table thead th \{[\s\S]*?position:\s*sticky/);
   assert.match(
     sheetCss,
     /\.nx-co-sheet__period-tab\.is-current-working-period\s*\{[\s\S]*?linear-gradient\(180deg, rgba\(54, 169, 198, 0\.62\) 0%, rgba\(19, 191, 208, 0\.48\) 100%\)/,

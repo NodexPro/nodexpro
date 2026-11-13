@@ -5,7 +5,7 @@
 .nx-co-registry {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   width: 100%;
   min-width: 0;
   min-height: 0;
@@ -74,25 +74,16 @@
   direction: inherit;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
   min-height: 0;
-  padding: 14px 18px 14px;
+  min-width: 0;
+  width: 100%;
+  padding: 0;
   box-sizing: border-box;
-  /* Deep Ocean Glass workspace — same recipe as Create Client modal / Dashboard cards. */
-  background:
-    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
-    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
-    linear-gradient(180deg, rgba(18, 55, 86, 0.46) 0%, rgba(16, 45, 73, 0.52) 100%);
-  border: 1px solid rgba(54, 169, 198, 0.62);
-  border-radius: 20px;
-  box-shadow:
-    0 0 0 1px rgba(54, 169, 198, 0.28),
-    0 0 28px rgba(19, 191, 208, 0.18),
-    0 16px 36px rgba(16, 45, 73, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -1px 0 rgba(19, 191, 208, 0.12);
-  backdrop-filter: blur(22px) saturate(1.25);
-  -webkit-backdrop-filter: blur(22px) saturate(1.25);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .nx-co-sheet__toolbar {
@@ -103,18 +94,18 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px 12px;
+  gap: 6px 8px;
   width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
   box-sizing: border-box;
-  padding: 8px 10px;
+  padding: 4px 8px;
   background:
     radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.16), transparent 52%),
     linear-gradient(180deg, rgba(51, 116, 147, 0.32) 0%, rgba(18, 55, 86, 0.28) 100%);
   border: 1px solid rgba(54, 169, 198, 0.58);
-  border-radius: 10px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 0 0 1px rgba(19, 191, 208, 0.04);
+  border-radius: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -127,16 +118,16 @@
   align-items: center;
   overflow: visible;
   width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
   box-sizing: border-box;
-  padding: 6px 10px;
+  padding: 4px 8px;
   background:
     radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.16), transparent 52%),
     linear-gradient(180deg, rgba(51, 116, 147, 0.32) 0%, rgba(18, 55, 86, 0.28) 100%);
   border: 1px solid rgba(54, 169, 198, 0.58);
-  border-radius: 10px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 0 0 1px rgba(19, 191, 208, 0.04);
+  border-radius: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -411,11 +402,12 @@
 }
 
 .nx-co-sheet__search-field input {
-  width: min(220px, 42vw);
+  width: min(200px, 28vw);
+  height: 30px;
   border: 1px solid rgba(90, 135, 185, 0.22);
-  border-radius: 8px;
-  padding: 6px 10px;
-  padding-inline-start: 34px;
+  border-radius: 6px;
+  padding: 0 10px;
+  padding-inline-start: 30px;
   /* Reserved end slot for the pending spinner (constant → no layout shift while searching). */
   padding-inline-end: 28px;
   font-size: 13px;
@@ -640,16 +632,16 @@
     var(--nx-grid) 62px
   );
   background-attachment: local;
-  border: 1px solid rgba(54, 169, 198, 0.38);
-  border-radius: 12px;
-  box-shadow:
-    0 8px 22px rgba(16, 45, 73, 0.16),
-    0 0 0 1px rgba(210, 238, 255, 0.35);
+  border: 1px solid var(--nx-grid);
+  border-radius: 0;
+  box-shadow: none;
   /* Explicit axes: keep required H/V scroll without fake arrow chrome. */
   overflow-x: auto;
   overflow-y: auto;
-  max-height: calc(100vh - 180px);
+  width: 100%;
+  max-height: none;
   min-height: 0;
+  min-width: 0;
   flex: 1 1 auto;
   scrollbar-width: thin;
   scrollbar-color: var(--nx-glass-scroll-thumb, rgba(125, 236, 247, 0.38)) transparent;
@@ -1486,8 +1478,8 @@
   height: 100dvh;
   max-height: 100dvh;
   box-sizing: border-box;
-  padding: 24px 28px;
-  gap: 8px;
+  padding: 8px;
+  gap: 4px;
   isolation: isolate;
   /* Same navy atmosphere as the shell; the icy glass panel is drawn by ::before. */
   background-color: #061a33;
@@ -1505,22 +1497,7 @@
 }
 
 .nx-co-sheet--app-fullscreen::before {
-  content: '';
-  position: absolute;
-  inset: 12px 14px;
-  z-index: -1;
-  pointer-events: none;
-  border-radius: 20px;
-  background:
-    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
-    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
-    linear-gradient(180deg, rgba(18, 55, 86, 0.46) 0%, rgba(16, 45, 73, 0.52) 100%);
-  border: 1px solid rgba(54, 169, 198, 0.62);
-  box-shadow:
-    0 0 0 1px rgba(54, 169, 198, 0.28),
-    0 0 28px rgba(19, 191, 208, 0.18),
-    0 16px 36px rgba(16, 45, 73, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  content: none;
 }
 
 .nx-co-sheet--app-fullscreen .nx-co-sheet__workspace {
@@ -1583,7 +1560,7 @@
   }
 
   .nx-co-sheet__canvas {
-    max-height: calc(100vh - 220px);
+    max-height: none;
   }
 }
 
@@ -1593,6 +1570,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   flex: 1 1 auto;
   position: relative;
 }
@@ -1656,45 +1634,38 @@
   font-size: 12px;
 }
 
-/* Bottom strip: Deep Ocean Glass month bar, matching Create Client / Dashboard chips. */
+/* Excel worksheet tabs — thin strip directly under the grid. Tab colors stay the current palette. */
 .nx-co-sheet__period-tabs {
-  position: sticky;
-  bottom: 0;
+  position: relative;
+  bottom: auto;
   z-index: 6;
   display: flex;
   flex-direction: column;
   flex: 0 0 auto;
   gap: 0;
-  margin-top: 10px;
-  background:
-    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
-    linear-gradient(180deg, rgba(18, 55, 86, 0.42) 0%, rgba(16, 45, 73, 0.5) 100%);
-  border: 1px solid rgba(54, 169, 198, 0.62);
-  border-top: 1px solid rgba(19, 191, 208, 0.4);
-  border-radius: 14px;
-  /* One thin Excel sheet-tab row — no tall gutter under the grid. */
+  margin-top: 0;
+  min-width: 0;
+  background: var(--nx-table-header);
+  border: 1px solid var(--nx-grid);
+  border-top: 0;
+  border-radius: 0;
   min-height: 0;
-  padding: 8px 10px;
-  box-shadow:
-    0 0 0 1px rgba(54, 169, 198, 0.22),
-    0 10px 28px rgba(16, 45, 73, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22);
-  backdrop-filter: blur(16px) saturate(1.2);
-  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  padding: 0 4px;
+  box-shadow: none;
 }
 
 .nx-co-sheet__period-tabs-scroll {
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
-  align-items: center;
-  gap: 8px;
-  padding: 0 2px;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 4px 2px 0;
   /* Horizontal only: vertical auto here creates the bottom-left ▲▼ stub. */
   overflow-x: auto;
   overflow-y: hidden;
-  min-height: 38px;
-  max-height: 42px;
+  min-height: 28px;
+  max-height: 40px;
   scrollbar-width: thin;
   scrollbar-color: rgba(125, 236, 247, 0.35) transparent;
 }
@@ -1728,11 +1699,11 @@
   font-size: 14px;
   font-weight: 600;
   line-height: 1;
-  padding: 6px 16px;
-  border-radius: 8px;
+  padding: 2px 12px;
+  border-radius: 6px 6px 0 0;
   cursor: pointer;
-  min-width: 64px;
-  height: 34px;
+  min-width: 56px;
+  height: 26px;
   box-sizing: border-box;
   white-space: nowrap;
   flex: 0 0 auto;
@@ -1931,16 +1902,19 @@
 }
 
 .nx-co-sheet__toolbar-group--status-paint {
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
 }
 
 .nx-co-sheet__status-mode {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 12px;
+  justify-content: center;
+  gap: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: 1px solid var(--nx-co-grid);
   border-radius: 6px;
   background: #fff;
@@ -2467,13 +2441,14 @@
   font-weight: 600;
 }
 
-/* Reporting dashboard — KPI section above filters. Values stay backend-owned. */
+/* Reporting KPI row. Seven filing cards plus the payments-outstanding card: one equal track each. Values stay backend-owned. */
 .nx-co-sheet__reporting-kpis {
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 112px));
-  grid-auto-rows: 64px;
-  justify-content: start;
-  gap: 8px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-auto-rows: minmax(44px, auto);
+  justify-content: stretch;
+  align-items: stretch;
+  gap: 6px;
   width: 100%;
   min-width: 0;
   overflow: visible;
@@ -2481,7 +2456,7 @@
 
 @media (max-width: 760px) {
   .nx-co-sheet__reporting-kpis {
-    grid-template-columns: repeat(4, minmax(0, 112px));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

@@ -3344,11 +3344,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
   /**
    * ONE search renderer / ONE search truth (searchDraft + debounce + applyLiveSearch → onQueryChange).
-   * Placement is presentation only: portaled into the route header slot when available,
-   * otherwise (no CO header / fullscreen sheet covering the header) inline in the toolbar.
+   * The field always lives in the sheet toolbar. The route header slot hosts the KPI row instead.
    */
   const searchBusy = searchDebouncePending || searchPending;
-  const renderSearchField = (placement: 'header' | 'toolbar') => (
+  const renderSearchField = (placement: 'toolbar') => (
     <div className={`nx-co-sheet__search nx-co-sheet__search--${placement}`} data-testid="client-operations-search">
       <div className="nx-co-sheet__search-field" aria-busy={searchBusy ? 'true' : undefined}>
         <button
@@ -3399,7 +3398,6 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       </div>
     </div>
   );
-  const searchInHeader = Boolean(headerSearchSlot) && !fullscreenOpen;
 
   const renderSpreadsheetToolbar = () => {
     const currentPk = focusedCell ? clientOperationsPresentationCellKey(focusedCell) : null;
@@ -3608,31 +3606,30 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         {/* ── Status paint modes ── */}
         {manualStatusPaintModes.length ? (
           <div className="nx-co-sheet__toolbar-group nx-co-sheet__toolbar-group--status-paint" role="toolbar" aria-label={t('clientOperations.statusPaint')}>
-            {manualStatusPaintModes.map((mode) => (
+            {manualStatusPaintModes.map((mode) => {
+              const statusLabel = localizeSystemLabel(t, mode.label_key, mode.label_he);
+              return (
               <button
                 key={mode.id}
                 type="button"
                 className={`nx-co-sheet__status-mode nx-co-sheet__status-mode--${mode.presentation_token}${statusPaintMode === mode.id ? ' is-active' : ''}`}
                 disabled={!canEdit}
                 aria-pressed={statusPaintMode === mode.id}
-                title={localizeSystemLabel(t, mode.label_key, mode.label_he)}
+                aria-label={statusLabel}
+                title={statusLabel}
                 onClick={() => setStatusPaintMode((current) => (current === mode.id ? null : mode.id))}
               >
                 <span className="nx-co-sheet__status-mode-swatch" aria-hidden="true" />
-                <span>{localizeSystemLabel(t, mode.label_key, mode.label_he)}</span>
+                <span className="nx-co-sheet__sr-only">{statusLabel}</span>
               </button>
-            ))}
+              );
+            })}
           </div>
         ) : null}
 
-        {/* ── Search ── lives in the route header (portal); toolbar fallback only when no header slot. */}
-        {searchInHeader && headerSearchSlot
-          ? createPortal(renderSearchField('header'), headerSearchSlot)
-          : (
-            <div className="nx-co-sheet__toolbar-group nx-co-sheet__toolbar-group--search-fallback">
-              {renderSearchField('toolbar')}
-            </div>
-          )}
+        <div className="nx-co-sheet__toolbar-group nx-co-sheet__toolbar-group--search">
+          {renderSearchField('toolbar')}
+        </div>
         {/* HIDDEN for now — keep underlying capabilities/handlers for later restore:
             סינון / מיון ↑ / מיון ↓ / הקפאה */}
 
@@ -3738,13 +3735,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     );
   };
 
-  const renderReportingDashboard = () => {
+  const renderReportingKpis = () => {
     if (!reportingDashboard) return null;
     const activeKpi = query?.filter_reporting_kpi ?? reportingDashboard.active_kpi_filter ?? null;
-    const activeSort = query?.sort_by ?? reportingDashboard.active_sort ?? 'priority';
-    const previous = reportingDashboard.previous_periods;
     return (
-      <>
       <section className="nx-co-registry__kpis" data-testid="client-operations-reporting-dashboard" aria-label={t('clientOperations.registry.reporting.filterAll')}>
         <div className="nx-co-sheet__reporting-kpis" role="toolbar" aria-label={t('clientOperations.registry.reporting.filterAll')}>
           {reportingDashboard.kpi_cards.map((card) => {
@@ -3821,6 +3815,14 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           })() : null}
         </div>
       </section>
+    );
+  };
+
+  const renderPreviousPeriods = () => {
+    if (!reportingDashboard) return null;
+    const activeSort = query?.sort_by ?? reportingDashboard.active_sort ?? 'priority';
+    const previous = reportingDashboard.previous_periods;
+    return (
       <section className="nx-co-registry__previous" data-testid="client-operations-previous-periods-section">
         <div className="nx-co-sheet__reporting-meta">
           <div className="nx-co-sheet__reporting-previous">
@@ -3887,7 +3889,6 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           ) : null}
         </div>
       </section>
-      </>
     );
   };
 
@@ -5657,9 +5658,13 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         {headerWorkspaceSlot
           ? createPortal(headerEndCluster, headerWorkspaceSlot)
           : headerEndCluster}
-        {renderReportingDashboard()}
+        {headerSearchSlot && !fullscreenOpen
+          ? createPortal(renderReportingKpis(), headerSearchSlot)
+          : null}
+        {renderPreviousPeriods()}
         <div className={`nx-co-sheet${fullscreenOpen ? ' nx-co-sheet--app-fullscreen' : ''}`}>
         {/* Inner sheet title removed — module title renders once in the route header. */}
+        {headerSearchSlot && !fullscreenOpen ? null : renderReportingKpis()}
         {renderSpreadsheetToolbar()}
         {renderFilterBar()}
         {error ? <div className="nx-co-sheet__error">{error}</div> : null}
