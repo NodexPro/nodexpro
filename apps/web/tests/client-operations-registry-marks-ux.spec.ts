@@ -66,7 +66,7 @@ test('command notice sits next to the sheet and uses the cyan notice class', () 
   assert.doesNotMatch(css, /\.nx-co-sheet__command-notice \{[\s\S]*#b91c1c/);
 });
 
-test('mark click uses pending state and never locally flips the business checked value', () => {
+test('mark click uses pending state; optimistic fill is presentation-only until aggregate returns', () => {
   assert.match(view, /pendingMarkKeys/);
   assert.match(view, /pendingMarkKeys\.has\(markKey\)/);
   assert.doesNotMatch(view, /Boolean\(pendingMarkKey\)/);
@@ -74,7 +74,8 @@ test('mark click uses pending state and never locally flips the business checked
   assert.match(view, /aria-busy=\{saving\}/);
   assert.match(view, /if \(!cell\?\.editable\) return/);
   assert.doesNotMatch(view, /checked=\{\s*!current/);
-  assert.doesNotMatch(view, /optimisticChecked|localChecked/);
+  assert.match(view, /resolveOptimisticCheckboxChecked/);
+  assert.match(view, /beginOptimisticCheckbox/);
   assert.match(css, /\.nx-co-sheet__material-slot\.is-saving/);
   assert.match(css, /\.nx-co-sheet__table td input\[type='checkbox'\]:checked[\s\S]*box-shadow:\s*none/);
 });
