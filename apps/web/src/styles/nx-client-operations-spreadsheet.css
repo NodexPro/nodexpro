@@ -2824,6 +2824,7 @@
   max-width: 100%;
   height: auto;
   max-height: min(88vh, 640px);
+  font-family: Arial, sans-serif;
 }
 
 .nx-client-create--deep-ocean-glass .nx-co-ni-modal.nx-clients-modal.nx-glass-card,
@@ -2833,19 +2834,6 @@
   height: auto;
   max-height: min(88vh, 640px);
   overflow-x: hidden;
-  color: #eef6ff;
-  background:
-    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
-    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.16), transparent 50%),
-    linear-gradient(180deg, rgba(18, 55, 86, 0.94) 0%, rgba(8, 36, 71, 0.96) 100%);
-}
-
-.nx-co-ni-modal .nx-clients-modal__head {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
 }
 
 .nx-co-ni-modal .nx-clients-form {
@@ -2857,7 +2845,7 @@
   display: flex;
   flex-direction: column;
   grid-template-columns: none;
-  gap: 10px;
+  gap: 8px 16px;
   flex: 0 1 auto;
   min-height: 0;
   overflow-x: hidden;
@@ -2866,35 +2854,34 @@
 .nx-co-ni-modal__body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .nx-co-ni-modal__grid {
   display: grid;
   grid-column: 1 / -1;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px 16px;
   width: 100%;
-  overflow: hidden;
-  border: 1px solid rgba(54, 169, 198, 0.42);
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, rgba(13, 55, 100, 0.55) 0%, rgba(18, 55, 86, 0.72) 100%);
-  color: #eef6ff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  align-items: start;
 }
 
 .nx-co-ni-modal__col {
   min-width: 0;
   min-inline-size: 0;
   margin: 0;
-  padding: 0;
-  border: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
-}
-
-.nx-co-ni-modal__col + .nx-co-ni-modal__col {
-  border-inline-start: 1px solid rgba(54, 169, 198, 0.28);
+  gap: 8px;
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 0 1px rgba(19, 191, 208, 0.04);
 }
 
 .nx-co-ni-modal__col-title,
@@ -2905,12 +2892,12 @@
   box-sizing: border-box;
   width: 100%;
   max-width: none;
-  margin: 0;
-  padding: 8px 10px;
-  background: #123756;
-  color: #f8fbff;
-  font-size: 12px;
-  font-weight: 700;
+  margin: 2px 0 0;
+  padding: 0;
+  background: transparent;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
   line-height: 1.2;
   text-align: start;
 }
@@ -2919,18 +2906,17 @@
   margin: 0;
   display: flex;
   flex-direction: column;
+  gap: 8px;
 }
 
 .nx-co-ni-modal__row {
   display: grid;
   grid-template-columns: 72px minmax(0, 1fr);
   gap: 8px;
-  align-items: center;
-  min-height: 40px;
+  align-items: baseline;
+  min-height: 0;
   margin: 0;
-  padding: 8px 10px;
-  border-top: 1px solid rgba(54, 169, 198, 0.18);
-  background: rgba(8, 36, 71, 0.22);
+  padding: 0;
   text-align: start;
 }
 
@@ -2943,13 +2929,15 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 40px;
+  min-height: 34px;
   margin: 0;
   padding: 8px 10px;
-  border: 0;
-  border-top: 1px solid rgba(54, 169, 198, 0.18);
-  border-radius: 0;
-  background: rgba(16, 45, 73, 0.28);
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  border-radius: 8px;
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.18), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.22) 0%, rgba(23, 84, 122, 0.14) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
   color: #ffffff;
   font-size: 13px;
   font-weight: 600;
@@ -2958,24 +2946,35 @@
   cursor: pointer;
 }
 
+.nx-co-ni-modal__option:hover:not(:has(input:disabled)),
+.nx-co-ni-modal__month-action:hover:not(:has(input:disabled)) {
+  border-color: rgba(19, 191, 208, 0.7);
+}
+
 .nx-co-ni-modal__option.is-selected,
 .nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form label.nx-co-ni-modal__option.is-selected {
-  background: rgba(0, 207, 239, 0.16);
-  box-shadow: inset 0 0 0 1px rgba(0, 207, 239, 0.45);
+  border-color: rgba(19, 191, 208, 0.92);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.28), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.42) 0%, rgba(19, 191, 208, 0.28) 100%);
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.3),
+    0 0 12px rgba(54, 169, 198, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
   color: #ffffff;
 }
 
 .nx-co-ni-modal__row dt {
   margin: 0;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  color: rgba(238, 246, 255, 0.72);
+  color: #ffffff;
 }
 
 .nx-co-ni-modal__row dd {
   margin: 0;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: #ffffff;
   overflow-wrap: anywhere;
 }
@@ -2989,69 +2988,38 @@
 .nx-co-ni-modal__option input,
 .nx-co-ni-modal__month-action input {
   flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
   margin: 0;
-  accent-color: #00cfef;
+  accent-color: #13bfd0;
+}
+
+.nx-co-ni-modal__option:has(input:disabled),
+.nx-co-ni-modal__month-action:has(input:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .nx-co-ni-modal__option:focus-within,
 .nx-co-ni-modal__month-action:focus-within {
-  outline: 2px solid #00cfef;
-  outline-offset: -2px;
-}
-
-.nx-co-ni-modal__month-action,
-.nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form label.nx-co-ni-modal__month-action {
-  background: rgba(0, 207, 239, 0.08);
+  outline: none;
+  border-color: rgba(19, 191, 208, 0.92);
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.3),
+    0 0 12px rgba(54, 169, 198, 0.28);
 }
 
 .nx-co-ni-modal__footer,
 .nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form__footer {
-  justify-content: center;
-  gap: 10px;
+  justify-content: flex-end;
+  gap: 12px;
   padding-top: 12px;
   flex-wrap: wrap;
-}
-
-.nx-co-ni-modal .nx-clients-form__footer .nx-btn,
-.nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form__footer .nx-btn {
-  min-width: 96px;
-  height: auto;
-  min-height: 0;
-  padding: 8px 20px;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.nx-co-ni-modal .nx-clients-form__footer .nx-btn-primary {
-  color: #ffffff;
-  border: 1px solid rgba(19, 191, 208, 0.78);
-  background:
-    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.28), transparent 48%),
-    linear-gradient(180deg, rgba(54, 169, 198, 0.78) 0%, rgba(19, 191, 208, 0.62) 100%);
-  box-shadow: 0 0 14px rgba(19, 191, 208, 0.28);
-}
-
-.nx-co-ni-modal .nx-clients-form__footer .nx-btn-secondary {
-  color: #eef6ff;
-  border: 1px solid rgba(54, 169, 198, 0.55);
-  background: rgba(16, 45, 73, 0.42);
-}
-
-.nx-co-ni-modal .nx-clients-form__footer .nx-btn:focus-visible {
-  outline: 2px solid var(--nx-cyan-500, #00cfef);
-  outline-offset: 2px;
 }
 
 @media (max-width: 560px) {
   .nx-co-ni-modal__grid {
     grid-template-columns: 1fr;
-  }
-
-  .nx-co-ni-modal__col + .nx-co-ni-modal__col {
-    border-inline-start: 0;
-    border-top: 1px solid rgba(54, 169, 198, 0.28);
   }
 }
 

@@ -216,15 +216,25 @@ test('self-employed NI modal is a compact two-column command surface', () => {
   assert.match(cssSource, /\.nx-co-sheet__ni-amount:focus-visible[\s\S]*?outline:\s*2px solid/);
   assert.match(viewSource, /nx-co-ni-overlay/);
   assert.match(viewSource, /nx-co-ni-modal__option\$\{selectedMethod === option\.id \? ' is-selected' : ''\}/);
+  const niModalSrc = viewSource.slice(
+    viewSource.indexOf('data-testid="client-operations-ni-modal"'),
+    viewSource.indexOf('showCreateClient && canCreateCoreClient'),
+  );
+  assert.match(niModalSrc, /nx-glass-btn nx-glass-btn--secondary/);
+  assert.match(niModalSrc, /nx-glass-btn nx-glass-btn--purple/);
+  assert.doesNotMatch(niModalSrc, /nx-btn-taxes-compact/);
   const niCss = cssSource.slice(
     cssSource.indexOf('.nx-co-ni-modal.nx-clients-modal'),
     cssSource.indexOf('.nx-co-sheet__reporting-check'),
   );
-  assert.match(niCss, /#123756/);
   assert.match(niCss, /grid-template-columns:\s*none/);
   assert.match(niCss, /label\.nx-co-ni-modal__option[\s\S]*?flex-direction:\s*row/);
   assert.match(niCss, /\.nx-co-ni-modal__option\.is-selected/);
+  assert.match(niCss, /accent-color:\s*#13bfd0/);
+  assert.match(niCss, /rgba\(54,\s*169,\s*198/);
+  assert.match(niCss, /rgba\(19,\s*191,\s*208/);
+  assert.doesNotMatch(niCss, /background:\s*#123756/);
+  assert.doesNotMatch(niCss, /border-top:\s*1px solid/);
   assert.doesNotMatch(niCss, /background:\s*#f4f7fb/);
   assert.doesNotMatch(niCss, /background:\s*#fff;/);
-  assert.match(niCss, /\.nx-btn-primary/);
 });
