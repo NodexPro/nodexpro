@@ -5188,7 +5188,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         );
         const monthHandledChecked = Boolean(ops.action_resolved || niModal.confirmMonthHandled);
         return (
-          <div className="nx-clients-overlay nx-client-create nx-client-create--deep-ocean-glass">
+          <div className="nx-clients-overlay nx-client-create nx-client-create--deep-ocean-glass nx-co-ni-overlay">
             <div
               className="nx-glass-card nx-clients-modal nx-co-ops-modal nx-co-ni-modal"
               role="dialog"
@@ -5248,7 +5248,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       {ops.handling_options.map((option) => (
                         <label
                           key={option.id}
-                          className="nx-co-ni-modal__option"
+                          className={`nx-co-ni-modal__option${selectedMethod === option.id ? ' is-selected' : ''}`}
                           data-testid={`client-operations-ni-handling-${option.id}`}
                         >
                           <input

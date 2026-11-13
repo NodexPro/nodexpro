@@ -214,4 +214,17 @@ test('self-employed NI modal is a compact two-column command surface', () => {
   assert.match(cssSource, /@media \(max-width:\s*560px\)[\s\S]*?\.nx-co-ni-modal__grid[\s\S]*?grid-template-columns:\s*1fr/);
   assert.match(cssSource, /\.nx-co-sheet__ni-amount:hover[\s\S]*?background:\s*transparent/);
   assert.match(cssSource, /\.nx-co-sheet__ni-amount:focus-visible[\s\S]*?outline:\s*2px solid/);
+  assert.match(viewSource, /nx-co-ni-overlay/);
+  assert.match(viewSource, /nx-co-ni-modal__option\$\{selectedMethod === option\.id \? ' is-selected' : ''\}/);
+  const niCss = cssSource.slice(
+    cssSource.indexOf('.nx-co-ni-modal.nx-clients-modal'),
+    cssSource.indexOf('.nx-co-sheet__reporting-check'),
+  );
+  assert.match(niCss, /#123756/);
+  assert.match(niCss, /grid-template-columns:\s*none/);
+  assert.match(niCss, /label\.nx-co-ni-modal__option[\s\S]*?flex-direction:\s*row/);
+  assert.match(niCss, /\.nx-co-ni-modal__option\.is-selected/);
+  assert.doesNotMatch(niCss, /background:\s*#f4f7fb/);
+  assert.doesNotMatch(niCss, /background:\s*#fff;/);
+  assert.match(niCss, /\.nx-btn-primary/);
 });
