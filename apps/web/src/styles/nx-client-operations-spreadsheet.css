@@ -1035,10 +1035,74 @@
   background-image: linear-gradient(180deg, #268cff 0%, #123756 100%);
 }
 
+/*
+ * חומר / ניכויים sheet checkboxes: kill the native Windows glyph and the
+ * light-gradient / ::after tick that painted as a white stripe on a partial fill.
+ * Unrelated toolbar/filter checkboxes keep the shared premium-check control.
+ */
+.nx-co-sheet__table td .nx-co-sheet__material-slot .nx-co-sheet__checkbox,
+.nx-co-sheet__table td .nx-co-sheet__itd-slot .nx-co-sheet__checkbox,
+.nx-co-sheet__material-slot .nx-co-sheet__checkbox,
+.nx-co-sheet__itd-slot .nx-co-sheet__checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  accent-color: transparent;
+  background-clip: padding-box;
+  background-origin: border-box;
+  background-image: none;
+  box-shadow: none;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.nx-co-sheet__table td .nx-co-sheet__material-slot .nx-co-sheet__checkbox:checked,
+.nx-co-sheet__table td .nx-co-sheet__material-slot .nx-co-sheet__checkbox:checked:hover,
+.nx-co-sheet__table td .nx-co-sheet__material-slot .nx-co-sheet__checkbox:checked:focus-visible,
+.nx-co-sheet__table td .nx-co-sheet__itd-slot .nx-co-sheet__checkbox:checked,
+.nx-co-sheet__table td .nx-co-sheet__itd-slot .nx-co-sheet__checkbox:checked:hover,
+.nx-co-sheet__table td .nx-co-sheet__itd-slot .nx-co-sheet__checkbox:checked:focus-visible,
+.nx-co-sheet__material-slot .nx-co-sheet__checkbox:checked,
+.nx-co-sheet__material-slot .nx-co-sheet__checkbox:checked:hover,
+.nx-co-sheet__material-slot .nx-co-sheet__checkbox:checked:focus-visible,
+.nx-co-sheet__itd-slot .nx-co-sheet__checkbox:checked,
+.nx-co-sheet__itd-slot .nx-co-sheet__checkbox:checked:hover,
+.nx-co-sheet__itd-slot .nx-co-sheet__checkbox:checked:focus-visible {
+  background: #268cff;
+  background-color: #268cff;
+  background-image: none;
+  border-color: #00cfef;
+  box-shadow: none;
+}
+
+.nx-co-sheet__table td .nx-co-sheet__material-slot .nx-co-sheet__checkbox:checked::before,
+.nx-co-sheet__table td .nx-co-sheet__material-slot .nx-co-sheet__checkbox:checked::after,
+.nx-co-sheet__table td .nx-co-sheet__itd-slot .nx-co-sheet__checkbox:checked::before,
+.nx-co-sheet__table td .nx-co-sheet__itd-slot .nx-co-sheet__checkbox:checked::after,
+.nx-co-sheet__material-slot .nx-co-sheet__checkbox:checked::before,
+.nx-co-sheet__material-slot .nx-co-sheet__checkbox:checked::after,
+.nx-co-sheet__itd-slot .nx-co-sheet__checkbox:checked::before,
+.nx-co-sheet__itd-slot .nx-co-sheet__checkbox:checked::after,
+.nx-co-sheet__material-slot .nx-co-sheet__checkbox:indeterminate::after,
+.nx-co-sheet__itd-slot .nx-co-sheet__checkbox:indeterminate::after {
+  content: none;
+  display: none;
+  width: 0;
+  height: 0;
+  margin: 0;
+  border: 0;
+  background: none;
+  transform: none;
+}
+
+.nx-co-sheet__material-slot .nx-co-sheet__checkbox:focus-visible,
+.nx-co-sheet__itd-slot .nx-co-sheet__checkbox:focus-visible {
+  outline: 2px solid #00cfef;
+  outline-offset: 2px;
+}
+
 .nx-co-sheet__material-slot.is-saving .nx-co-sheet__checkbox,
 .nx-co-sheet__itd-slot.is-saving .nx-co-sheet__checkbox {
-  outline: 2px solid rgba(125, 236, 247, 0.95);
-  outline-offset: 2px;
   opacity: 1;
 }
 

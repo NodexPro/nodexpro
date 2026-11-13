@@ -2,6 +2,16 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from 'react-dom';
 import { apiFetch, apiJson, ApiError, userFacingApiMessage } from '../../api/client';
 import { localizeClientOperationsRegistryCommandError } from '../../lib/client-operations-registry-command-error.pure';
+import {
+  beginOptimisticCheckbox,
+  canStartOptimisticCheckboxCommand,
+  checkboxOptimisticMarkKey,
+  dropOptimisticCheckboxesForOtherPeriod,
+  resolveOptimisticCheckboxChecked,
+  revertOptimisticCheckbox,
+  shouldClearOptimisticCheckboxAfterSuccess,
+  type OptimisticCheckboxEntry,
+} from '../../lib/client-operations-checkbox-optimistic.pure';
 import { localizeSystemLabel } from '../../lib/co-display-label.pure';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../i18n/I18nProvider';
@@ -985,6 +995,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [commandError, setCommandError] = useState('');
   const [pendingMarkKeys, setPendingMarkKeys] = useState<ReadonlySet<string>>(() => new Set());
   const pendingMarkKeysRef = useRef<Set<string>>(new Set());
+  const optimisticChecksRef = useRef<Map<string, OptimisticCheckboxEntry>>(new Map());
+  const [optimisticChecks, setOptimisticChecks] = useState<ReadonlyMap<string, OptimisticCheckboxEntry>>(
+    () => new Map(),
+  );
   const [editingHeaderColumnId, setEditingHeaderColumnId] = useState<string | null>(null);
   const [headerDraft, setHeaderDraft] = useState('');
   const [editingCellKey, setEditingCellKey] = useState<string | null>(null);
@@ -1037,6 +1051,15 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   useEffect(() => {
     setSearchDraft(query?.q ?? '');
   }, [query?.q]);
+
+  const viewedCheckboxPeriodKey = query?.operational_period_key ?? period?.selected_period_key ?? '';
+
+  useEffect(() => {
+    if (!dropOptimisticCheckboxesForOtherPeriod(optimisticChecksRef.current, viewedCheckboxPeriodKey)) {
+      return;
+    }
+    setOptimisticChecks(new Map(optimisticChecksRef.current));
+  }, [viewedCheckboxPeriodKey]);
 
   useEffect(() => {
     return () => {
@@ -2277,6 +2300,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     setEditingCellKey(null);
     setCellDraft('');
     setManualDraftOverlay({});
+    if (dropOptimisticCheckboxesForOtherPeriod(optimisticChecksRef.current, nextPeriodKey)) {
+      setOptimisticChecks(new Map(optimisticChecksRef.current));
+    }
     if (shouldClearActiveCellOnPeriodChange()) {
       setFocusedCell(null);
     }
@@ -2897,14 +2923,46 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       : fallback;
   };
 
-  const runMarkCommand = async (markKey: string, body: Record<string, unknown>, fallback: string) => {
+  const runMarkCommand = async (
+    markKey: string,
+    body: Record<string, unknown>,
+    fallback: string,
+    optimistic?: { periodKey: string; value: boolean },
+  ) => {
+    if (!canStartOptimisticCheckboxCommand(pendingMarkKeysRef.current, markKey)) return;
     if (pendingMarkKeysRef.current.has(markKey)) return;
     pendingMarkKeysRef.current.add(markKey);
     setPendingMarkKeys(new Set(pendingMarkKeysRef.current));
     setCommandError('');
+    let seq: number | null = null;
+    if (optimistic) {
+      const entry = beginOptimisticCheckbox(optimisticChecksRef.current, {
+        markKey,
+        periodKey: optimistic.periodKey,
+        value: optimistic.value,
+      });
+      if (entry) {
+        seq = entry.seq;
+        setOptimisticChecks(new Map(optimisticChecksRef.current));
+        onInvalidateStaleLoads?.();
+      }
+    }
     try {
       await onRegistryCommand?.(body);
+      if (
+        seq != null &&
+        shouldClearOptimisticCheckboxAfterSuccess({
+          entry: optimisticChecksRef.current.get(markKey),
+          seq,
+        })
+      ) {
+        optimisticChecksRef.current.delete(markKey);
+        setOptimisticChecks(new Map(optimisticChecksRef.current));
+      }
     } catch (error) {
+      if (seq != null && revertOptimisticCheckbox(optimisticChecksRef.current, markKey, seq)) {
+        setOptimisticChecks(new Map(optimisticChecksRef.current));
+      }
       setCommandError(localizeRegistryCommandError(error, fallback));
     } finally {
       pendingMarkKeysRef.current.delete(markKey);
@@ -2946,20 +3004,28 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         : stream === 'income_tax_advance'
           ? 'set_income_tax_advance_material_brought'
           : 'set_payroll_material_brought';
-    const current =
-      stream === 'vat'
-        ? Boolean(cell.value ?? row.material_brought_flag)
-        : Boolean(cell.value);
+    const periodKey = viewedCheckboxPeriodKey;
+    const markKey = checkboxOptimisticMarkKey(row.client_id, `material:${stream}`, periodKey);
+    if (pendingMarkKeysRef.current.has(markKey)) return;
+    const aggregateChecked =
+      stream === 'vat' ? Boolean(cell.value ?? row.material_brought_flag) : Boolean(cell.value);
+    const current = resolveOptimisticCheckboxChecked({
+      aggregateChecked,
+      entry: optimisticChecksRef.current.get(markKey),
+      viewedPeriodKey: periodKey,
+    });
+    const next = !current;
     await runMarkCommand(
-      `${row.client_id}:material:${stream}`,
+      markKey,
       {
         command,
         client_id: row.client_id,
-        value: !current,
-        operational_period_key: query?.operational_period_key ?? null,
+        value: next,
+        operational_period_key: periodKey || null,
         query,
       },
       t('clientOperations.registry.errors.saveFailed'),
+      { periodKey, value: next },
     );
   };
   const toggleNiDeductionsItem = async (
@@ -2971,30 +3037,43 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     const cell = row.national_insurance_deductions_cell;
     const item = cell?.items[formKey];
     if (!item?.editable) return;
+    const periodKey = viewedCheckboxPeriodKey;
     if (formKey === '126') {
       if (item.completed) return;
+      const markKey = checkboxOptimisticMarkKey(row.client_id, 'ni:126', periodKey);
+      if (pendingMarkKeysRef.current.has(markKey)) return;
       await runMarkCommand(
-        `${row.client_id}:ni:126`,
+        markKey,
         {
           command: 'complete_ni_deductions_126_cycle',
           client_id: row.client_id,
-          operational_period_key: query?.operational_period_key ?? null,
+          operational_period_key: periodKey || null,
           query,
         },
         t('clientOperations.registry.errors.saveFailed'),
+        { periodKey, value: true },
       );
       return;
     }
+    const markKey = checkboxOptimisticMarkKey(row.client_id, `ni:${formKey}`, periodKey);
+    if (pendingMarkKeysRef.current.has(markKey)) return;
+    const current = resolveOptimisticCheckboxChecked({
+      aggregateChecked: Boolean(item.completed),
+      entry: optimisticChecksRef.current.get(markKey),
+      viewedPeriodKey: periodKey,
+    });
+    const next = !current;
     await runMarkCommand(
-      `${row.client_id}:ni:${formKey}`,
+      markKey,
       {
         command: formKey === '102' ? 'set_ni_deductions_reported_102' : 'set_ni_deductions_reported_100',
         client_id: row.client_id,
-        value: !Boolean(item.completed),
-        operational_period_key: query?.operational_period_key ?? null,
+        value: next,
+        operational_period_key: periodKey || null,
         query,
       },
       t('clientOperations.registry.errors.saveFailed'),
+      { periodKey, value: next },
     );
   };
   const toggleIncomeTaxDeductions = async (row: ClientOperationsRegistryRow) => {
@@ -3002,16 +3081,26 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     if (!canEdit || !onRegistryCommand) return;
     const cell = row.income_tax_deductions_cell;
     if (!cell?.editable) return;
+    const periodKey = viewedCheckboxPeriodKey;
+    const markKey = checkboxOptimisticMarkKey(row.client_id, 'itd', periodKey);
+    if (pendingMarkKeysRef.current.has(markKey)) return;
+    const current = resolveOptimisticCheckboxChecked({
+      aggregateChecked: Boolean(cell.completed),
+      entry: optimisticChecksRef.current.get(markKey),
+      viewedPeriodKey: periodKey,
+    });
+    const next = !current;
     await runMarkCommand(
-      `${row.client_id}:itd`,
+      markKey,
       {
         command: 'set_income_tax_deductions_reported',
         client_id: row.client_id,
-        value: !Boolean(cell.completed),
-        operational_period_key: query?.operational_period_key ?? null,
+        value: next,
+        operational_period_key: periodKey || null,
         query,
       },
       t('clientOperations.registry.errors.saveFailed'),
+      { periodKey, value: next },
     );
   };
   const openReportingPaymentModal = (
@@ -4126,12 +4215,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               );
             }
             const editable = Boolean(stream.cell?.editable);
-            const checked = Boolean(
+            const markKey = checkboxOptimisticMarkKey(r.client_id, `material:${stream.key}`, viewedCheckboxPeriodKey);
+            const aggregateChecked = Boolean(
               stream.key === 'vat'
                 ? stream.cell?.value ?? r.material_brought_flag
                 : stream.cell?.value,
             );
-            const markKey = `${r.client_id}:material:${stream.key}`;
+            const checked = resolveOptimisticCheckboxChecked({
+              aggregateChecked,
+              entry: optimisticChecks.get(markKey),
+              viewedPeriodKey: viewedCheckboxPeriodKey,
+            });
             const saving = pendingMarkKeys.has(markKey);
             return (
               <label
@@ -4143,11 +4237,12 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   type="checkbox"
                   className="nx-co-sheet__checkbox"
                   checked={checked}
-                  disabled={!editable || !canEdit || !col.editable || !onRegistryCommand || pendingMarkKeys.has(markKey)}
+                  disabled={!editable || !canEdit || !col.editable || !onRegistryCommand}
                   aria-busy={saving}
                   aria-label={`${t('clientOperations.material')} ${stream.labelHe} — ${clientLabel} — ${periodLabel}${editable ? '' : t('clientOperations.notRequiredThisMonth')}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
                   onChange={() => {
                     if (statusPaintMode) return;
+                    if (pendingMarkKeysRef.current.has(markKey)) return;
                     void toggleMaterialStream(r, stream.key);
                   }}
                   onClick={(event) => {
@@ -4202,8 +4297,12 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               );
             }
             const editable = Boolean(item?.editable) && !(form.key === '126' && item?.completed);
-            const checked = Boolean(item?.completed);
-            const markKey = `${r.client_id}:ni:${form.key}`;
+            const markKey = checkboxOptimisticMarkKey(r.client_id, `ni:${form.key}`, viewedCheckboxPeriodKey);
+            const checked = resolveOptimisticCheckboxChecked({
+              aggregateChecked: Boolean(item?.completed),
+              entry: optimisticChecks.get(markKey),
+              viewedPeriodKey: viewedCheckboxPeriodKey,
+            });
             const saving = pendingMarkKeys.has(markKey);
             return (
               <label
@@ -4215,11 +4314,12 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   type="checkbox"
                   className="nx-co-sheet__checkbox"
                   checked={checked}
-                  disabled={!editable || !canEdit || !col.editable || !onRegistryCommand || pendingMarkKeys.has(markKey)}
+                  disabled={!editable || !canEdit || !col.editable || !onRegistryCommand}
                   aria-busy={saving}
                   aria-label={`${t('clientOperations.niDeductionsShort')} ${form.labelHe} — ${clientLabel} — ${periodLabel}${editable ? '' : t('clientOperations.notRequiredThisMonth')}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
                   onChange={() => {
                     if (statusPaintMode) return;
+                    if (pendingMarkKeysRef.current.has(markKey)) return;
                     void toggleNiDeductionsItem(r, form.key);
                   }}
                   onClick={(event) => {
@@ -4251,8 +4351,12 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         );
       }
       const editable = Boolean(cell.editable);
-      const checked = Boolean(cell.completed);
-      const markKey = `${r.client_id}:itd`;
+      const markKey = checkboxOptimisticMarkKey(r.client_id, 'itd', viewedCheckboxPeriodKey);
+      const checked = resolveOptimisticCheckboxChecked({
+        aggregateChecked: Boolean(cell.completed),
+        entry: optimisticChecks.get(markKey),
+        viewedPeriodKey: viewedCheckboxPeriodKey,
+      });
       const saving = pendingMarkKeys.has(markKey);
       return (
         <label
@@ -4263,11 +4367,12 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             type="checkbox"
             className="nx-co-sheet__checkbox"
             checked={checked}
-            disabled={!editable || !canEdit || !col.editable || !onRegistryCommand || pendingMarkKeys.has(markKey)}
+            disabled={!editable || !canEdit || !col.editable || !onRegistryCommand}
             aria-busy={saving}
             aria-label={`${col.label} — ${clientLabel} — ${periodLabel}${editable ? '' : t('clientOperations.notRequiredThisMonth')}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
             onChange={() => {
               if (statusPaintMode) return;
+              if (pendingMarkKeysRef.current.has(markKey)) return;
               void toggleIncomeTaxDeductions(r);
             }}
             onClick={(event) => {
