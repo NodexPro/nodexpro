@@ -115,6 +115,7 @@ export type ClientOperationsReportingPaymentModal = {
 export type ClientOperationsReportingSortId = 'priority' | 'client_name' | 'period_created';
 
 const PERIOD_KEY_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
+/** TEMPORARY_COUNTRY_PACK_PENDING: internal office reminder, not a statutory NI deadline. */
 const SELF_EMPLOYED_NI_OFFICE_REMINDER_DAY = 15;
 const YEAR_KEY_RE = /^(\d{4})$/;
 const BIMONTHLY_VAT_PERIOD_RE = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|1[0-2])$/;
@@ -345,11 +346,41 @@ export type ClientOperationsFilingDetail = {
   cancel_key: string;
 };
 
+export const SELF_EMPLOYED_NI_HANDLING_METHODS = [
+  'standing_order',
+  'client_pays',
+  'manual_monthly',
+] as const;
+
+export type SelfEmployedNiHandlingMethod = (typeof SELF_EMPLOYED_NI_HANDLING_METHODS)[number];
+export type SelfEmployedNiHandlingMethodSource =
+  | 'explicit'
+  | 'inherited'
+  | 'standing_until'
+  | 'unresolved';
+
+export type SelfEmployedNiMonthSettingInput = {
+  period_key: string;
+  handling_method: string | null;
+};
+
+export type ClientOperationsSelfEmployedNiHandlingOption = {
+  id: SelfEmployedNiHandlingMethod;
+  label_key: string;
+  selected: boolean;
+};
+
 export type ClientOperationsSelfEmployedNiOperations = {
   applicable: boolean;
   openable: boolean;
   period_key: string;
   period_display: string;
+  handling_method: SelfEmployedNiHandlingMethod | null;
+  handling_method_source: SelfEmployedNiHandlingMethodSource;
+  legacy_standing_until_ambiguous: boolean;
+  january_confirmation_required: boolean;
+  ni_indicator_alert: boolean;
+  handling_options: ClientOperationsSelfEmployedNiHandlingOption[];
   standing_order_active: boolean;
   standing_order_status_key: string;
   standing_order_provenance: 'office_recorded';
@@ -361,13 +392,19 @@ export type ClientOperationsSelfEmployedNiOperations = {
   action_resolved: boolean;
   action_status_key: string;
   can_set_standing_order: boolean;
+  can_set_handling_method: boolean;
   can_confirm_manual_resolution: boolean;
+  can_confirm_month_handled: boolean;
   title_key: string;
+  client_details_key: string;
+  client_key: string;
   month_key: string;
   amount_key: string;
+  handling_title_key: string;
   office_note_key: string;
   resolution_key: string;
   confirm_resolution_key: string;
+  month_handled_key: string;
   save_key: string;
   cancel_key: string;
 };
@@ -1024,23 +1061,150 @@ export function standingOrderCoversOperationalMonth(
   return monthStart >= yearStart && monthStart <= end;
 }
 
-export function nextSelfEmployedNiStandingOrderUntil(input: {
-  active: boolean;
+export function parseSelfEmployedNiHandlingMethod(value: unknown): SelfEmployedNiHandlingMethod | null {
+  const raw = String(value ?? '').trim();
+  return (SELF_EMPLOYED_NI_HANDLING_METHODS as readonly string[]).includes(raw)
+    ? (raw as SelfEmployedNiHandlingMethod)
+    : null;
+}
+
+export function operationalPeriodYear(periodKey: string): number | null {
+  const match = PERIOD_KEY_RE.exec(String(periodKey ?? '').trim());
+  return match ? Number(match[1]) : null;
+}
+
+export function operationalPeriodMonth(periodKey: string): number | null {
+  const match = PERIOD_KEY_RE.exec(String(periodKey ?? '').trim());
+  return match ? Number(match[2]) : null;
+}
+
+export function isSelfEmployedNiJanuaryPeriod(periodKey: string): boolean {
+  return operationalPeriodMonth(periodKey) === 1;
+}
+
+export function selfEmployedNiMethodInheritableToPeriod(
+  sourcePeriodKey: string,
+  targetPeriodKey: string,
+): boolean {
+  const sourceYear = operationalPeriodYear(sourcePeriodKey);
+  const targetYear = operationalPeriodYear(targetPeriodKey);
+  return sourceYear != null && targetYear != null && sourceYear === targetYear;
+}
+
+export function selfEmployedNiStandingOrderInheritableToPeriod(
+  sourcePeriodKey: string,
+  targetPeriodKey: string,
+): boolean {
+  return selfEmployedNiMethodInheritableToPeriod(sourcePeriodKey, targetPeriodKey);
+}
+
+function monthSettingPeriodKey(value: unknown): string | null {
+  const period = String(value ?? '').trim();
+  return PERIOD_KEY_RE.test(period) ? period : null;
+}
+
+export function resolveSelfEmployedNiHandlingMethod(input: {
   periodKey: string;
-  existingUntil: string | null | undefined;
-}): string | null {
+  standingOrderUntil?: string | null;
+  monthSettings?: readonly SelfEmployedNiMonthSettingInput[] | null;
+}): {
+  method: SelfEmployedNiHandlingMethod | null;
+  source: SelfEmployedNiHandlingMethodSource;
+  standing_order_active: boolean;
+  legacy_standing_until_ambiguous: boolean;
+  january_confirmation_required: boolean;
+} {
   const period = String(input.periodKey ?? '').trim();
-  const existingRaw = String(input.existingUntil ?? '').slice(0, 10);
-  const existing = /^\d{4}-\d{2}-\d{2}$/.test(existingRaw) ? existingRaw : null;
-  if (!PERIOD_KEY_RE.test(period)) return existing;
-  if (!input.active) {
-    return standingOrderCoversOperationalMonth(existing, period) ? null : existing;
+  const unresolved = {
+    method: null,
+    source: 'unresolved' as const,
+    standing_order_active: false,
+    legacy_standing_until_ambiguous: false,
+    january_confirmation_required: false,
+  };
+  if (!PERIOD_KEY_RE.test(period)) return unresolved;
+
+  const settings = Array.isArray(input.monthSettings) ? input.monthSettings : [];
+  const byPeriod = new Map<string, SelfEmployedNiHandlingMethod | null>();
+  for (const row of settings) {
+    const key = monthSettingPeriodKey(row?.period_key);
+    if (!key) continue;
+    byPeriod.set(key, parseSelfEmployedNiHandlingMethod(row.handling_method));
   }
-  const yearEnd = `${period.slice(0, 4)}-12-31`;
-  if (existing && standingOrderCoversOperationalMonth(existing, period) && existing >= yearEnd) {
-    return existing;
+
+  if (byPeriod.has(period)) {
+    const explicit = byPeriod.get(period) ?? null;
+    return {
+      method: explicit,
+      source: 'explicit',
+      standing_order_active: explicit === 'standing_order',
+      legacy_standing_until_ambiguous: false,
+      january_confirmation_required: false,
+    };
   }
-  return yearEnd;
+
+  const year = operationalPeriodYear(period);
+  const earlier = [...byPeriod.keys()].filter((key) => key < period).sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+  const sameYearEarlier = earlier.filter((key) => operationalPeriodYear(key) === year);
+  for (const previousKey of sameYearEarlier) {
+    const previousMethod = byPeriod.get(previousKey) ?? null;
+    return {
+      method: previousMethod,
+      source: 'inherited',
+      standing_order_active: previousMethod === 'standing_order',
+      legacy_standing_until_ambiguous: false,
+      january_confirmation_required: false,
+    };
+  }
+
+  if (isSelfEmployedNiJanuaryPeriod(period)) {
+    let suggested: SelfEmployedNiHandlingMethod | null = null;
+    let source: SelfEmployedNiHandlingMethodSource = 'unresolved';
+    for (const previousKey of earlier) {
+      suggested = byPeriod.get(previousKey) ?? null;
+      source = 'inherited';
+      break;
+    }
+    const untilCovers = standingOrderCoversOperationalMonth(input.standingOrderUntil, period);
+    if (suggested == null && untilCovers) {
+      suggested = 'standing_order';
+      source = 'standing_until';
+    }
+    return {
+      method: suggested,
+      source,
+      standing_order_active: suggested === 'standing_order',
+      legacy_standing_until_ambiguous: source === 'standing_until',
+      january_confirmation_required: true,
+    };
+  }
+
+  if (standingOrderCoversOperationalMonth(input.standingOrderUntil, period)) {
+    return {
+      method: 'standing_order',
+      source: 'standing_until',
+      standing_order_active: true,
+      legacy_standing_until_ambiguous: true,
+      january_confirmation_required: false,
+    };
+  }
+  return unresolved;
+}
+
+function selfEmployedNiMonthlyStatusKey(
+  method: SelfEmployedNiHandlingMethod | null,
+  resolved: boolean,
+): string {
+  if (!method) return CO_UI.reporting.ni.methodUnresolved;
+  if (method === 'standing_order') return CO_UI.reporting.ni.standingActive;
+  if (method === 'client_pays') return CO_UI.reporting.ni.clientPays;
+  return resolved ? CO_UI.reporting.ni.resolutionDone : CO_UI.reporting.ni.resolutionOpen;
+}
+
+function selfEmployedNiHandlingLabelKey(method: SelfEmployedNiHandlingMethod): string {
+  if (method === 'standing_order') return CO_UI.reporting.ni.standingActive;
+  if (method === 'client_pays') return CO_UI.reporting.ni.clientPays;
+  return CO_UI.reporting.ni.manualMonthly;
 }
 
 export function selfEmployedNiActionResolved(status: string | null | undefined): boolean {
@@ -1049,13 +1213,20 @@ export function selfEmployedNiActionResolved(status: string | null | undefined):
 
 export function selfEmployedNiOfficeReminderActive(input: {
   applicable: boolean;
-  standingOrderUntil: string | null | undefined;
+  standingOrderUntil?: string | null;
   periodKey: string;
   today: string;
   obligationStatus: string | null | undefined;
+  monthSettings?: readonly SelfEmployedNiMonthSettingInput[] | null;
 }): boolean {
   if (!input.applicable) return false;
-  if (standingOrderCoversOperationalMonth(input.standingOrderUntil, input.periodKey)) return false;
+  const handling = resolveSelfEmployedNiHandlingMethod({
+    periodKey: input.periodKey,
+    standingOrderUntil: input.standingOrderUntil,
+    monthSettings: input.monthSettings,
+  });
+  if (handling.january_confirmation_required) return false;
+  if (handling.method !== 'manual_monthly') return false;
   if (selfEmployedNiActionResolved(input.obligationStatus)) return false;
   const period = String(input.periodKey ?? '').trim();
   const today = String(input.today ?? '').slice(0, 10);
@@ -1075,39 +1246,65 @@ export function selfEmployedNiStorageDate(periodKey: string): string | null {
 
 export function buildSelfEmployedNiOperations(input: {
   applicable: boolean;
-  standingOrderUntil: string | null | undefined;
+  standingOrderUntil?: string | null;
   periodKey: string;
   today: string;
   obligationStatus: string | null | undefined;
+  monthSettings?: readonly SelfEmployedNiMonthSettingInput[] | null;
 }): ClientOperationsSelfEmployedNiOperations {
   const applicable = input.applicable;
-  const active = standingOrderCoversOperationalMonth(input.standingOrderUntil, input.periodKey);
+  const handling = resolveSelfEmployedNiHandlingMethod({
+    periodKey: input.periodKey,
+    standingOrderUntil: input.standingOrderUntil,
+    monthSettings: input.monthSettings,
+  });
   const resolved = selfEmployedNiActionResolved(input.obligationStatus);
+  const canConfirmMonthHandled =
+    applicable && handling.method === 'manual_monthly' && !resolved && !handling.january_confirmation_required;
+  const officeReminder = selfEmployedNiOfficeReminderActive(input);
   return {
     applicable,
     openable: applicable,
     period_key: input.periodKey,
     period_display: input.periodKey ? formatReportingPeriodDisplayLabel(input.periodKey) : '',
-    standing_order_active: active,
-    standing_order_status_key: active
+    handling_method: handling.method,
+    handling_method_source: handling.source,
+    legacy_standing_until_ambiguous: handling.legacy_standing_until_ambiguous,
+    january_confirmation_required: handling.january_confirmation_required,
+    ni_indicator_alert: handling.january_confirmation_required || officeReminder,
+    handling_options: SELF_EMPLOYED_NI_HANDLING_METHODS.map((id) => ({
+      id,
+      label_key: selfEmployedNiHandlingLabelKey(id),
+      selected: handling.method === id,
+    })),
+    standing_order_active: handling.standing_order_active,
+    standing_order_status_key: handling.standing_order_active
       ? CO_UI.reporting.ni.standingActive
-      : CO_UI.reporting.ni.standingInactive,
+      : handling.method
+        ? selfEmployedNiHandlingLabelKey(handling.method)
+        : CO_UI.reporting.ni.methodUnresolved,
     standing_order_provenance: 'office_recorded',
     bank_verified: false,
     authority_verified: false,
     statutory_deadline: false,
-    office_reminder: selfEmployedNiOfficeReminderActive(input),
+    office_reminder: officeReminder,
     reminder_day: SELF_EMPLOYED_NI_OFFICE_REMINDER_DAY,
     action_resolved: resolved,
-    action_status_key: resolved ? CO_UI.reporting.ni.resolutionDone : CO_UI.reporting.ni.resolutionOpen,
+    action_status_key: selfEmployedNiMonthlyStatusKey(handling.method, resolved),
     can_set_standing_order: applicable,
-    can_confirm_manual_resolution: applicable && !resolved,
+    can_set_handling_method: applicable,
+    can_confirm_manual_resolution: canConfirmMonthHandled,
+    can_confirm_month_handled: canConfirmMonthHandled,
     title_key: CO_UI.reporting.ni.title,
+    client_details_key: CO_UI.reporting.ni.clientDetails,
+    client_key: CO_UI.reporting.ni.client,
     month_key: CO_UI.reporting.ni.month,
     amount_key: CO_UI.reporting.ni.amount,
+    handling_title_key: CO_UI.reporting.ni.handlingTitle,
     office_note_key: CO_UI.reporting.ni.standingOffice,
     resolution_key: CO_UI.reporting.ni.resolution,
-    confirm_resolution_key: CO_UI.reporting.ni.confirmResolution,
+    confirm_resolution_key: CO_UI.reporting.ni.monthHandled,
+    month_handled_key: CO_UI.reporting.ni.monthHandled,
     save_key: CO_UI.reporting.ni.save,
     cancel_key: CO_UI.reporting.ni.cancel,
   };

@@ -72,12 +72,13 @@ import {
 } from './client-obligations-work-engine-bridge.js';
 import {
   isFilingSubmittedStatus,
-  nextSelfEmployedNiStandingOrderUntil,
+  parseSelfEmployedNiHandlingMethod,
   paymentAppliesForReportingKind,
   selfEmployedNiActionResolved,
   selfEmployedNiStorageDate,
   type ClientOperationsReportingObligationKind,
 } from './client-operations-reporting-dashboard.pure.js';
+import { persistSelfEmployedNiMonthSetting } from './client-operations-self-employed-ni-month.service.js';
 
 export type RegistryCustomColumnDefinition = {
   id: string;
@@ -126,7 +127,9 @@ export type ClientOperationsRegistryCommandBody = {
   canonical_id?: unknown;
   payment_classification?: unknown;
   standing_order_active?: unknown;
+  handling_method?: unknown;
   confirm_manual_resolution?: unknown;
+  confirm_month_handled?: unknown;
   manual_row_slot?: unknown;
   source_operational_period_key?: unknown;
   target_operational_period_key?: unknown;
@@ -1119,8 +1122,15 @@ export async function executeClientOperationsRegistryCommand(
       body.operational_period_key ??
         (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
     );
-    const standingActive = booleanFrom(body.standing_order_active, 'standing_order_active');
-    const confirmResolution = body.confirm_manual_resolution === true;
+    const handlingMethod =
+      parseSelfEmployedNiHandlingMethod(body.handling_method) ??
+      (body.standing_order_active === true ? 'standing_order' : null);
+    if (!handlingMethod) {
+      throw badRequest('handling_method is required');
+    }
+    const confirmResolution =
+      handlingMethod === 'manual_monthly' &&
+      (body.confirm_month_handled === true || body.confirm_manual_resolution === true);
     await ensureActiveClientInOrg(orgId, clientId);
     const { data: tax, error: taxError } = await supabaseAdmin
       .from('client_tax_settings')
@@ -1136,34 +1146,14 @@ export async function executeClientOperationsRegistryCommand(
     if (!taxRow || !resolveNationalInsuranceApplicability(taxRow.national_insurance_type)) {
       throw badRequest('self-employed national insurance is not applicable');
     }
-    const existingUntil = taxRow.national_insurance_standing_order_until ?? null;
-    const nextUntil = nextSelfEmployedNiStandingOrderUntil({
-      active: standingActive,
+    await persistSelfEmployedNiMonthSetting({
+      organizationId: orgId,
+      clientId,
       periodKey,
-      existingUntil,
+      handlingMethod,
+      actorUserId: ctx.user.id,
+      standingOrderUntil: taxRow.national_insurance_standing_order_until ?? null,
     });
-    const existingNormalized = String(existingUntil ?? '').slice(0, 10) || null;
-    if (nextUntil !== existingNormalized) {
-      const { error: updateError } = await supabaseAdmin
-        .from('client_tax_settings')
-        .update({
-          national_insurance_standing_order_until: nextUntil,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('organization_id', orgId)
-        .eq('client_id', clientId);
-      assertQueryError(updateError, 'Failed to record national insurance standing order');
-      await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_NI_STANDING_ORDER_SET, clientId, {
-        client_id: clientId,
-        operational_period_key: periodKey,
-        standing_order_active: standingActive,
-        standing_order_until: nextUntil,
-        provenance: 'office_recorded',
-        bank_verified: false,
-        authority_verified: false,
-        statutory_deadline: false,
-      });
-    }
     if (confirmResolution) {
       const { data: existingOb, error: obError } = await supabaseAdmin
         .from('client_obligations')

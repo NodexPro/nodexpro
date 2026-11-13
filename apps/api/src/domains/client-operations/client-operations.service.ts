@@ -170,6 +170,7 @@ import {
   outstandingPaymentPeriodFactsFromLoad,
   type ReportingDashboardLoad,
 } from './client-operations-reporting-dashboard.service.js';
+import { loadSelfEmployedNiMonthSettings } from './client-operations-self-employed-ni-month.service.js';
 import {
   buildReportingDashboard,
   isClientOperationsReportingFilterId,
@@ -1278,6 +1279,12 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     });
   }
 
+  const niMonthSettingsByClient = await loadSelfEmployedNiMonthSettings({
+    organizationId: orgId,
+    clientIds,
+    throughPeriodKey: selectedPeriodKey,
+  });
+
   const periodSources: ClientPeriodSourceRow[] = safeClients
     // Never invent historical applicability for archived clients — membership only via frozen snapshot/material.
     .filter((client) => !client.is_archived)
@@ -1829,6 +1836,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
         payrollWorkflow: payrollWorkflowByClient.get(c.id) ?? null,
         niApplicable: niConfigured,
         niStandingOrderUntil: tax?.national_insurance_standing_order_until ?? null,
+        niMonthSettings: niMonthSettingsByClient.get(c.id) ?? [],
         reportingKpi: (() => {
           const annual = resolveAnnualReportKpiFact({
             hasSubmissionForTaxYear: annualSubmissionsByClient.has(c.id),

@@ -16,9 +16,14 @@ import {
   obligationColumnLabelKey,
 } from './client-operations-ui-labels.pure.js';
 import {
+  resolveSelfEmployedNiHandlingMethod,
   resolveVatCalendarLookupPeriodKey,
   vatFilingPeriodIdentityForOperationalPeriod,
 } from './client-operations-reporting-dashboard.pure.js';
+import {
+  loadSelfEmployedNiMonthSettings,
+  persistSelfEmployedNiMonthSetting,
+} from './client-operations-self-employed-ni-month.service.js';
 
 /**
  * שכר column — unified payroll process status (Asia/Jerusalem payroll_period_key = previous month).
@@ -2843,15 +2848,12 @@ async function buildRelevantObligations(orgId: string, clientId: string, now: Da
   const niEnabled = niType === 'yes' || niType === 'כן';
   if (niEnabled) {
     const due = `${mm}-15`;
-    const standingOrderUntil = String(t.national_insurance_standing_order_until ?? '');
-    const standingOrderActive = Boolean(standingOrderUntil) && standingOrderUntil >= ymd(now);
-    const status: ObligationStatus = standingOrderActive ? 'paid_on_time' : 'not_paid';
     out.push({
       obligation_type: 'national_insurance_self_employed_payment',
       period_key: mm,
       due_date: due,
       related_module: 'tax',
-      computed_status: status,
+      computed_status: 'not_paid',
     });
   }
 
@@ -2943,8 +2945,6 @@ async function recomputeClientObligationsAndTasksForOrg(ctx: RequestContext, org
   for (const rel of relevant) {
     const row = currentByKey.get(keyOf(rel));
     const existingStatus = row ? (String(row.status) as ObligationStatus) : null;
-    const niStandingOrderOverridesNotPaid =
-      rel.obligation_type === 'national_insurance_self_employed_payment' && rel.computed_status === 'paid_on_time';
     const commandOwned =
       existingStatus === 'reported' ||
       existingStatus === 'reported_late' ||
@@ -2953,7 +2953,7 @@ async function recomputeClientObligationsAndTasksForOrg(ctx: RequestContext, org
       existingStatus === 'pending_payment_confirmation' ||
       existingStatus === 'paid_on_time' ||
       existingStatus === 'paid_late' ||
-      (existingStatus === 'not_paid' && !niStandingOrderOverridesNotPaid) ||
+      existingStatus === 'not_paid' ||
       existingStatus === 'not_relevant';
     const vatPrerequisiteMissing = rel.obligation_type === 'vat_report' && !materialBrought;
     const keepCommandOwned =
@@ -3437,8 +3437,21 @@ export async function getClientObligationsTabReadModel(ctx: RequestContext, clie
   const niAmount =
     Number.isFinite(niAmountNum) && niAmountNum > 0 ? niAmountNum : null;
   const niAmountDisplayHe = niAmount != null ? `${niAmount.toLocaleString('he-IL')} ₪` : 'לא הוגדר סכום';
-  const standingOrderUntil = String(taxSnapshot?.national_insurance_standing_order_until ?? '');
-  const standingOrderActive = Boolean(standingOrderUntil) && standingOrderUntil >= ymd(now);
+  const niMonthSettings = niOb
+    ? ((
+        await loadSelfEmployedNiMonthSettings({
+          organizationId: orgId,
+          clientIds: [clientId],
+          throughPeriodKey: niOb.period_key,
+        })
+      ).get(clientId) ?? [])
+    : [];
+  const niHandling = resolveSelfEmployedNiHandlingMethod({
+    periodKey: niOb?.period_key ?? '',
+    standingOrderUntil: taxSnapshot?.national_insurance_standing_order_until ?? null,
+    monthSettings: niMonthSettings,
+  });
+  const standingOrderActive = niHandling.method === 'standing_order';
   const niRelevant = Boolean(niRelSpec) && (niObFromDb == null || niObFromDb.status_code !== 'not_relevant');
 
   const niAutoReminderModal: ClientObligationsTabResponse['ni_auto_reminder_modal'] = null;
@@ -3869,27 +3882,30 @@ export async function executeClientObligationsCommand(
     }
     case 'set_ni_standing_order': {
       const enabled = payload.enabled !== false;
-      const yearEnd = `${new Date(nowIso).getUTCFullYear()}-12-31`;
-      await supabaseAdmin
+      const niRel = await loadNiSelfEmployedRelevantObligation(orgId, clientId, commandNow);
+      if (!niRel) throw badRequest('לא חל ביטוח לאומי לעצמאי ללקוח');
+      const { data: taxRow, error: taxError } = await supabaseAdmin
         .from('client_tax_settings')
-        .upsert(
-          {
-            organization_id: orgId,
-            client_id: clientId,
-            national_insurance_standing_order_until: enabled ? yearEnd : null,
-            updated_at: nowIso,
-          },
-          { onConflict: 'organization_id,client_id' }
-        );
-      if (enabled) {
-        await supabaseAdmin
-          .from('client_obligations')
-          .update({ status: 'paid_on_time', updated_at: nowIso })
-          .eq('organization_id', orgId)
-          .eq('client_id', clientId)
-          .eq('obligation_type', 'national_insurance_self_employed_payment')
-          .eq('is_active', true);
-      }
+        .select('national_insurance_standing_order_until')
+        .eq('organization_id', orgId)
+        .eq('client_id', clientId)
+        .maybeSingle();
+      if (taxError) throw new AppError(500, taxError.message ?? 'client_tax_settings read failed', 'SUPABASE_ERROR');
+      await persistSelfEmployedNiMonthSetting({
+        organizationId: orgId,
+        clientId,
+        periodKey: niRel.period_key,
+        handlingMethod: enabled ? 'standing_order' : null,
+        actorUserId: ctx.user.id,
+        standingOrderUntil:
+          (taxRow as { national_insurance_standing_order_until?: string | null } | null)
+            ?.national_insurance_standing_order_until ?? null,
+      });
+      obligationAuditExtra = {
+        operational_period_key: niRel.period_key,
+        handling_method: enabled ? 'standing_order' : null,
+        standing_order_until_mutated: false,
+      };
       break;
     }
     case 'update_ni_payment_amount': {

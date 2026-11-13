@@ -2755,6 +2755,140 @@
   justify-content: center;
 }
 
+.nx-co-ni-modal.nx-clients-modal {
+  width: min(580px, calc(100vw - 24px));
+  max-height: min(88vh, 640px);
+}
+
+.nx-co-ni-modal .nx-clients-form__body {
+  flex: 0 1 auto;
+}
+
+.nx-co-ni-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nx-co-ni-modal__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr);
+  overflow: hidden;
+  border: 1px solid rgba(16, 42, 76, 0.18);
+  border-radius: 8px;
+  background: #f4f7fb;
+  color: #102a4c;
+}
+
+.nx-co-ni-modal__col {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.nx-co-ni-modal__col + .nx-co-ni-modal__col {
+  border-inline-start: 1px solid rgba(16, 42, 76, 0.16);
+}
+
+.nx-co-ni-modal__col-title {
+  display: block;
+  margin: 0;
+  padding: 8px 10px;
+  background: #16345c;
+  color: #f8fbff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: start;
+}
+
+.nx-co-ni-modal__facts {
+  margin: 0;
+}
+
+.nx-co-ni-modal__row,
+.nx-co-ni-modal__option,
+.nx-co-ni-modal__month-action {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 36px;
+  margin: 0;
+  padding: 6px 10px;
+  border-top: 1px solid rgba(16, 42, 76, 0.1);
+  background: #fff;
+  text-align: start;
+}
+
+.nx-co-ni-modal__option,
+.nx-co-ni-modal__month-action {
+  display: flex;
+  grid-template-columns: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: #102a4c;
+  cursor: pointer;
+}
+
+.nx-co-ni-modal__row dt {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3d5a80;
+}
+
+.nx-co-ni-modal__row dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #102a4c;
+  overflow-wrap: anywhere;
+}
+
+.nx-co-ni-modal__option input,
+.nx-co-ni-modal__month-action input {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.nx-co-ni-modal__month-action {
+  background: #eef4fb;
+}
+
+.nx-co-ni-modal__footer {
+  justify-content: center;
+  gap: 10px;
+}
+
+.nx-co-ni-modal .nx-clients-form__footer .nx-btn {
+  min-width: 96px;
+  height: auto;
+  min-height: 0;
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.nx-co-ni-modal .nx-clients-form__footer .nx-btn:focus-visible {
+  outline: 2px solid var(--nx-cyan-500);
+  outline-offset: 2px;
+}
+
+@media (max-width: 560px) {
+  .nx-co-ni-modal__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .nx-co-ni-modal__col + .nx-co-ni-modal__col {
+    border-inline-start: 0;
+    border-top: 1px solid rgba(16, 42, 76, 0.16);
+  }
+}
+
 .nx-co-sheet__reporting-check {
   color: #15803d;
   font-weight: 800;

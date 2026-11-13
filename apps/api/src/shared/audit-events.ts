@@ -180,6 +180,7 @@ export const AUDIT_ACTIONS = {
   CLIENT_OPERATIONS_OBLIGATION_PAYMENT_UPDATED:
     'client_operations.obligation.payment_updated',
   CLIENT_OPERATIONS_NI_STANDING_ORDER_SET: 'client_operations.ni_standing_order.set',
+  CLIENT_OPERATIONS_NI_HANDLING_METHOD_SET: 'client_operations.ni_handling_method.set',
   CLIENT_OPERATIONS_NI_MANUAL_RESOLUTION_SET: 'client_operations.ni_manual_resolution.set',
   CLIENT_OBLIGATION_COMMAND_EXECUTED: 'client_obligation.command_executed',
   CLIENT_TASK_COMMAND_EXECUTED: 'client_task.command_executed',

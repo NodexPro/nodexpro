@@ -6,8 +6,8 @@ import { fileURLToPath } from 'node:url';
 import {
   buildReportingCellPresentation,
   buildSelfEmployedNiOperations,
-  nextSelfEmployedNiStandingOrderUntil,
   reportingKindAffectsFilingKpi,
+  resolveSelfEmployedNiHandlingMethod,
   selfEmployedNiOfficeReminderActive,
   type ClientOperationsReportingCellInput,
 } from '../../src/domains/client-operations/client-operations-reporting-dashboard.pure.js';
@@ -67,33 +67,14 @@ test('שולם stays disabled until an authoritative filing exists', () => {
   assert.equal(reportingKindAffectsFilingKpi('national_insurance'), false);
 });
 
-test('self-employed NI standing order covers the selected year and the 15th reminder', () => {
-  assert.equal(
-    nextSelfEmployedNiStandingOrderUntil({ active: true, periodKey: '2026-04', existingUntil: null }),
-    '2026-12-31',
-  );
-  assert.equal(
-    nextSelfEmployedNiStandingOrderUntil({
-      active: false,
-      periodKey: '2026-06',
-      existingUntil: '2026-12-31',
-    }),
-    null,
-  );
-  assert.equal(
-    nextSelfEmployedNiStandingOrderUntil({
-      active: true,
-      periodKey: '2027-01',
-      existingUntil: '2026-12-31',
-    }),
-    '2027-12-31',
-  );
+test('self-employed NI office reminder is backend-owned and method-specific', () => {
   const before = buildSelfEmployedNiOperations({
     applicable: true,
     standingOrderUntil: null,
     periodKey: '2026-11',
     today: '2026-11-14',
     obligationStatus: 'not_paid',
+    monthSettings: [{ period_key: '2026-11', handling_method: 'manual_monthly' }],
   });
   assert.equal(before.office_reminder, false);
   assert.equal(before.standing_order_active, false);
@@ -103,6 +84,7 @@ test('self-employed NI standing order covers the selected year and the 15th remi
     periodKey: '2026-11',
     today: '2026-11-15',
     obligationStatus: 'not_paid',
+    monthSettings: [{ period_key: '2026-11', handling_method: 'manual_monthly' }],
   });
   assert.equal(after, true);
   const covered = buildSelfEmployedNiOperations({
@@ -114,6 +96,89 @@ test('self-employed NI standing order covers the selected year and the 15th remi
   });
   assert.equal(covered.standing_order_active, true);
   assert.equal(covered.office_reminder, false);
+  assert.equal(covered.handling_method_source, 'standing_until');
+});
+
+test('self-employed NI three handling methods stay mutually exclusive and historically unresolved', () => {
+  const unresolved = resolveSelfEmployedNiHandlingMethod({
+    periodKey: '2026-11',
+    standingOrderUntil: null,
+    monthSettings: [],
+  });
+  assert.equal(unresolved.method, null);
+  assert.equal(unresolved.source, 'unresolved');
+  assert.equal(
+    selfEmployedNiOfficeReminderActive({
+      applicable: true,
+      standingOrderUntil: null,
+      periodKey: '2026-11',
+      today: '2026-11-20',
+      obligationStatus: 'not_paid',
+    }),
+    false,
+  );
+  const historicalStanding = resolveSelfEmployedNiHandlingMethod({
+    periodKey: '2026-11',
+    standingOrderUntil: '2026-12-31',
+    monthSettings: [],
+  });
+  assert.equal(historicalStanding.method, 'standing_order');
+  assert.equal(historicalStanding.source, 'standing_until');
+  assert.equal(historicalStanding.legacy_standing_until_ambiguous, true);
+  const clientPays = buildSelfEmployedNiOperations({
+    applicable: true,
+    standingOrderUntil: '2026-05-31',
+    periodKey: '2026-11',
+    today: '2026-11-20',
+    obligationStatus: 'not_paid',
+    monthSettings: [{ period_key: '2026-11', handling_method: 'client_pays' }],
+  });
+  assert.equal(clientPays.handling_method, 'client_pays');
+  assert.equal(clientPays.office_reminder, false);
+  assert.equal(clientPays.handling_options.filter((option) => option.selected).length, 1);
+  const manualOpen = buildSelfEmployedNiOperations({
+    applicable: true,
+    standingOrderUntil: '2026-05-31',
+    periodKey: '2026-11',
+    today: '2026-11-20',
+    obligationStatus: 'not_paid',
+    monthSettings: [{ period_key: '2026-11', handling_method: 'manual_monthly' }],
+  });
+  assert.equal(manualOpen.office_reminder, true);
+  const manualDone = buildSelfEmployedNiOperations({
+    applicable: true,
+    standingOrderUntil: '2026-05-31',
+    periodKey: '2026-11',
+    today: '2026-11-20',
+    obligationStatus: 'paid_on_time',
+    monthSettings: [{ period_key: '2026-11', handling_method: 'manual_monthly' }],
+  });
+  assert.equal(manualDone.office_reminder, false);
+  assert.equal(manualDone.action_resolved, true);
+  const otherMonth = buildSelfEmployedNiOperations({
+    applicable: true,
+    standingOrderUntil: '2026-05-31',
+    periodKey: '2026-12',
+    today: '2026-12-20',
+    obligationStatus: 'not_paid',
+    monthSettings: [{ period_key: '2026-12', handling_method: 'manual_monthly' }],
+  });
+  assert.equal(otherMonth.office_reminder, true);
+  const previousCovered = resolveSelfEmployedNiHandlingMethod({
+    periodKey: '2026-05',
+    standingOrderUntil: '2026-05-31',
+    monthSettings: [{ period_key: '2026-06', handling_method: 'client_pays' }],
+  });
+  assert.equal(previousCovered.method, 'standing_order');
+  assert.equal(previousCovered.source, 'standing_until');
+  const newYear = resolveSelfEmployedNiHandlingMethod({
+    periodKey: '2027-01',
+    standingOrderUntil: '2026-12-31',
+    monthSettings: [{ period_key: '2026-12', handling_method: 'standing_order' }],
+  });
+  assert.equal(newYear.method, 'standing_order');
+  assert.equal(newYear.source, 'inherited');
+  assert.equal(newYear.january_confirmation_required, true);
 });
 
 test('payment-only confirmation is rejected before filing in the command', () => {
@@ -124,5 +189,7 @@ test('payment-only confirmation is rejected before filing in the command', () =>
   assert.match(source, /cannot update payment on an unfiled obligation/);
   assert.match(source, /existingClassification !== classificationRaw/);
   assert.match(source, /save_client_operations_self_employed_ni/);
+  assert.match(source, /handling_method is required/);
+  assert.match(source, /confirm_month_handled/);
   assert.doesNotMatch(source, /set_ni_standing_order/);
 });
