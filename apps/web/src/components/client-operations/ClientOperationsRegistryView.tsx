@@ -4093,7 +4093,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               return (
                 <span
                   key={stream.key}
-                  className="nx-co-sheet__material-slot is-na"
+                  className="nx-co-sheet__material-slot is-na nx-co-sheet__plain-dash"
                   title={`${stream.labelHe} ${t('clientOperations.notConfigured')}`}
                   aria-label={`${t('clientOperations.material')} ${stream.labelHe} — ${clientLabel} — ${periodLabel} — ${t('clientOperations.notConfigured')}`}
                 >
@@ -4150,7 +4150,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       const niConfigured = Boolean(niCell?.configured ?? niCell?.applicable);
       if (!niConfigured) {
         return (
-          <span className="nx-co-sheet__na" title={t('clientOperations.noDeductionsFile')} aria-label={`${col.label} —`}>
+          <span className="nx-co-sheet__plain-dash" title={t('clientOperations.noDeductionsFile')} aria-label={`${col.label} —`}>
             —
           </span>
         );
@@ -4169,7 +4169,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               return (
                 <span
                   key={form.key}
-                  className="nx-co-sheet__material-slot is-na"
+                  className="nx-co-sheet__material-slot is-na nx-co-sheet__plain-dash"
                   title={`${form.labelHe} ${t('clientOperations.notConfigured')}`}
                   aria-label={`${t('clientOperations.niDeductionsShort')} ${form.labelHe} — ${clientLabel} — ${periodLabel} — ${t('clientOperations.notConfigured')}`}
                 >
@@ -4221,7 +4221,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       const cell = r.income_tax_deductions_cell;
       if (!cell?.configured) {
         return (
-          <span className="nx-co-sheet__na" title={t('clientOperations.noDeductionsFile')} aria-label={`${col.label} —`}>
+          <span className="nx-co-sheet__plain-dash" title={t('clientOperations.noDeductionsFile')} aria-label={`${col.label} —`}>
             —
           </span>
         );
@@ -4372,7 +4372,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         <span className="nx-co-sheet__reporting-cell">
           {reportingCell.display_dash ? (
             <>
-              <span className="nx-co-sheet__reporting-dash" aria-hidden="true">—</span>
+              <span className="nx-co-sheet__plain-dash" aria-hidden="true">—</span>
               <span className="nx-co-sheet__sr-only">{t(reportingCell.tone_label_key)}</span>
             </>
           ) : (

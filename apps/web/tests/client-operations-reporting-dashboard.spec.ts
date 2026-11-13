@@ -52,10 +52,47 @@ test('row/cell tones, overdue marker, KPI and previous-period chrome exist', () 
   assert.match(viewSource, /is-reporting-cell-\$\{reportingCell\.tone\}/);
   assert.match(viewSource, /nx-co-sheet__reporting-overdue/);
   assert.match(viewSource, /onPeriodChange\?\.\(item\.navigate_period_key\)/);
-  assert.match(cssSource, /\.nx-co-sheet__reporting-dash\b/);
+  assert.match(cssSource, /\.nx-co-sheet__plain-dash\b/);
   assert.match(cssSource, /\.nx-co-sheet__table tbody tr\.is-reporting-row-complete td/);
   assert.match(cssSource, /\.nx-co-sheet__table tbody td\.is-reporting-cell-overdue/);
   assert.match(cssSource, /\.nx-co-sheet__table tbody td\.is-reporting-cell-payment_outstanding/);
+});
+
+test('frozen cells paint the same row tone; N/A dash and hover stay unboxed', () => {
+  assert.match(
+    cssSource,
+    /\.nx-co-sheet__table\.is-frozen tbody tr\.is-reporting-row-warning td\[data-freeze='true'\]/,
+  );
+  assert.match(
+    cssSource,
+    /\.nx-co-sheet__table\.is-frozen tbody tr\.is-reporting-row-overdue td\[data-freeze='true'\]/,
+  );
+  assert.match(
+    cssSource,
+    /\.nx-co-sheet__table\.is-frozen tbody tr\.is-reporting-row-urgent td\[data-freeze='true'\]/,
+  );
+  const frozenDefault = cssSource.slice(
+    cssSource.indexOf(".nx-co-sheet__table.is-frozen [data-freeze='true'] {"),
+    cssSource.indexOf(".nx-co-sheet__table.is-frozen thead [data-freeze='true'] {"),
+  );
+  assert.match(frozenDefault, /background:\s*var\(--nx-table-bg\)/);
+  assert.doesNotMatch(frozenDefault, /background:\s*inherit/);
+  assert.match(cssSource, /td\.is-manual-status-ready \{\s*background:\s*#ffd43b !important/);
+  const hoverBlock = cssSource.slice(
+    cssSource.indexOf('.nx-co-sheet__frequency-cell:hover'),
+    cssSource.indexOf('.nx-co-sheet__frequency-cell.is-action_required'),
+  );
+  assert.doesNotMatch(hoverBlock, /rgba\(19,\s*191,\s*208/);
+  assert.match(hoverBlock, /:focus-visible/);
+  assert.match(viewSource, /display_dash \? \([\s\S]*?nx-co-sheet__plain-dash/);
+  assert.doesNotMatch(viewSource, /className="nx-co-sheet__reporting-dash"/);
+  const dashRule = cssSource.slice(
+    cssSource.indexOf('.nx-co-sheet__plain-dash,'),
+    cssSource.indexOf('.nx-co-sheet__reporting-cell'),
+  );
+  assert.match(dashRule, /background:\s*none/);
+  assert.match(dashRule, /border-radius:\s*0/);
+  assert.doesNotMatch(cssSource, /td\.is-not-applicable \{\s*background:\s*#f8fafc/);
 });
 
 test('payment modal is Create Client-styled, has no Yes preselect, and cancel does not file', () => {

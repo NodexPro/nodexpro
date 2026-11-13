@@ -810,7 +810,8 @@
 .nx-co-sheet__table.is-frozen [data-freeze='true'] {
   position: sticky;
   z-index: 2;
-  background: inherit;
+  /* Opaque fill so scrolled cells do not bleed. Row-tone rules below override. */
+  background: var(--nx-table-bg);
 }
 
 .nx-co-sheet__table.is-frozen thead [data-freeze='true'] {
@@ -1093,8 +1094,16 @@
 }
 
 .nx-co-sheet__material-slot.is-na {
-  color: #9ca3af;
-  font-size: 13px;
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
   user-select: none;
 }
 
@@ -1783,14 +1792,17 @@
 }
 
 .nx-co-sheet__na {
-  color: #9ca3af;
-  font-size: 13px;
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: inherit;
   user-select: none;
 }
 
 .nx-co-sheet__table td.is-not-applicable {
-  background: #f8fafc;
-  color: #9ca3af;
+  color: var(--nx-text-muted);
 }
 
 .nx-co-sheet__fullscreen .nx-co-sheet__workspace {
@@ -1938,6 +1950,7 @@
 /* Child chrome must not cover the status fill with opaque white. */
 .nx-co-sheet__table td[class*='is-manual-status-'] .nx-co-sheet__custom-cell,
 .nx-co-sheet__table td[class*='is-manual-status-'] .nx-co-sheet__na,
+.nx-co-sheet__table td[class*='is-manual-status-'] .nx-co-sheet__plain-dash,
 .nx-co-sheet__table td[class*='is-manual-status-'] .nx-co-sheet__material,
 .nx-co-sheet__table td[class*='is-manual-status-'] .nx-co-sheet__date-field,
 .nx-co-sheet__table td[class*='is-manual-status-'] .nx-co-sheet__notes-btn,
@@ -2391,22 +2404,6 @@
 }
 
 /* Reporting dashboard — KPI section above filters. Values stay backend-owned. */
-.nx-co-sheet__reporting-dash {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-  width: 100%;
-  box-sizing: border-box;
-  overflow: visible;
-  padding: 12px 14px;
-  background:
-    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
-    linear-gradient(180deg, rgba(51, 116, 147, 0.22) 0%, rgba(18, 55, 86, 0.2) 100%);
-  border: 1px solid rgba(54, 169, 198, 0.5);
-  border-radius: 10px;
-}
-
 .nx-co-sheet__reporting-kpis {
   display: grid;
   grid-template-columns: repeat(8, minmax(0, 112px));
@@ -2641,12 +2638,18 @@
 }
 
 .nx-co-sheet__frequency-cell:hover,
-.nx-co-sheet__frequency-cell:focus-visible,
-.nx-co-sheet__ni-amount:hover,
-.nx-co-sheet__ni-amount:focus-visible {
+.nx-co-sheet__ni-amount:hover {
   outline: none;
-  box-shadow: inset 0 0 0 1px rgba(19, 191, 208, 0.65);
-  background: rgba(19, 191, 208, 0.1);
+  box-shadow: none;
+  background: transparent;
+}
+
+.nx-co-sheet__frequency-cell:focus-visible,
+.nx-co-sheet__ni-amount:focus-visible {
+  outline: 2px solid var(--nx-cyan-500);
+  outline-offset: 1px;
+  box-shadow: none;
+  background: transparent;
 }
 
 .nx-co-sheet__frequency-cell.is-action_required {
@@ -2677,11 +2680,14 @@
   font-weight: 700;
 }
 
-.nx-co-sheet__plain-dash {
+.nx-co-sheet__plain-dash,
+.nx-co-sheet__reporting-dash {
   display: inline;
   padding: 0;
   border: 0;
+  border-radius: 0;
   background: none;
+  box-shadow: none;
   color: inherit;
 }
 
@@ -2754,10 +2760,6 @@
   font-weight: 800;
 }
 
-.nx-co-sheet__reporting-dash {
-  color: var(--nx-text-muted);
-}
-
 .nx-co-sheet__reporting-overdue,
 .nx-co-sheet__reporting-payment-bang,
 .nx-co-sheet__reporting-payment-unknown {
@@ -2826,6 +2828,54 @@
 
 .nx-co-sheet__table tbody tr.is-reporting-row-neutral td,
 .nx-co-sheet__table tbody tr.is-reporting-row-neutral:nth-child(even) td {
+  background: var(--nx-table-bg);
+}
+
+/* Sticky cells must paint the same row tone opaquely (specificity beats `is-frozen [data-freeze]`). */
+.nx-co-sheet__table.is-frozen tbody tr.is-selected td[data-freeze='true'],
+.nx-co-sheet__table.is-frozen tbody tr:nth-child(even).is-selected td[data-freeze='true'] {
+  background:
+    linear-gradient(var(--nx-co-select), var(--nx-co-select)),
+    var(--nx-table-bg);
+}
+
+.nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-overdue td[data-freeze='true'],
+.nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-overdue:nth-child(even) td[data-freeze='true'] {
+  background:
+    linear-gradient(rgba(220, 38, 38, 0.055), rgba(220, 38, 38, 0.055)),
+    var(--nx-table-bg);
+}
+
+.nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-urgent td[data-freeze='true'],
+.nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-urgent:nth-child(even) td[data-freeze='true'] {
+  background:
+    linear-gradient(rgba(220, 38, 38, 0.04), rgba(220, 38, 38, 0.04)),
+    var(--nx-table-bg);
+}
+
+.nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-warning td[data-freeze='true'],
+.nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-warning:nth-child(even) td[data-freeze='true'] {
+  background:
+    linear-gradient(rgba(234, 179, 8, 0.08), rgba(234, 179, 8, 0.08)),
+    var(--nx-table-bg);
+}
+
+.nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-payment_outstanding td[data-freeze='true'],
+.nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-payment_outstanding:nth-child(even) td[data-freeze='true'] {
+  background:
+    linear-gradient(rgba(249, 115, 22, 0.1), rgba(249, 115, 22, 0.1)),
+    var(--nx-table-bg);
+}
+
+.nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-complete td[data-freeze='true'],
+.nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-complete:nth-child(even) td[data-freeze='true'] {
+  background:
+    linear-gradient(rgba(34, 197, 94, 0.07), rgba(34, 197, 94, 0.07)),
+    var(--nx-table-bg);
+}
+
+.nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-neutral td[data-freeze='true'],
+.nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-neutral:nth-child(even) td[data-freeze='true'] {
   background: var(--nx-table-bg);
 }
 
