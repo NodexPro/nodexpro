@@ -2819,6 +2819,12 @@
   justify-content: center;
 }
 
+.nx-co-ni-overlay.nx-clients-overlay {
+  background: rgba(4, 12, 28, 0.52);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
 .nx-co-ni-modal.nx-clients-modal {
   width: min(580px, calc(100vw - 24px));
   max-width: 100%;
@@ -2827,21 +2833,83 @@
   font-family: Arial, sans-serif;
 }
 
-.nx-client-create--deep-ocean-glass .nx-co-ni-modal.nx-clients-modal.nx-glass-card,
 .nx-co-ni-overlay .nx-co-ni-modal.nx-clients-modal.nx-glass-card {
   width: min(580px, calc(100vw - 24px));
   max-width: 100%;
   height: auto;
   max-height: min(88vh, 640px);
+  margin: 0;
+  padding: 0 0 12px;
   overflow-x: hidden;
+  color: #eef6ff;
+  border-radius: 16px;
+  border: 1px solid rgba(70, 213, 255, 0.42);
+  background:
+    radial-gradient(ellipse at 92% 0%, rgba(101, 88, 232, 0.16), transparent 36%),
+    radial-gradient(ellipse at 78% 0%, rgba(39, 124, 255, 0.26), transparent 48%),
+    linear-gradient(165deg, #04152f 0%, #082652 46%, #124c9a 78%, #04152f 100%);
+  box-shadow:
+    0 24px 56px rgba(2, 8, 24, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.nx-co-ni-overlay .nx-co-ni-modal .nx-clients-modal__head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 56px;
+  margin: 0 0 10px;
+  padding: 12px 52px 12px 16px;
+  padding-inline: 16px 52px;
+  border-bottom: 1px solid rgba(210, 238, 255, 0.28);
+  background: linear-gradient(180deg, rgba(39, 124, 255, 0.22), rgba(8, 38, 82, 0));
+}
+
+.nx-co-ni-overlay .nx-co-ni-modal .nx-clients-modal__head h3 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: #eef6ff;
+  font-family: Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: start;
+}
+
+.nx-co-ni-overlay .nx-co-ni-modal .nx-clients-modal__close {
+  position: absolute;
+  inset-block-start: 12px;
+  inset-inline-end: 12px;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(210, 238, 255, 0.4);
+  background: rgba(8, 38, 82, 0.35);
+  color: #e8f4ff;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.nx-co-ni-overlay .nx-co-ni-modal .nx-clients-modal__close:hover {
+  background: rgba(70, 213, 255, 0.2);
+  color: #ffffff;
+}
+
+.nx-co-ni-overlay .nx-co-ni-modal .nx-clients-modal__close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.45);
 }
 
 .nx-co-ni-modal .nx-clients-form {
   flex: 0 1 auto;
 }
 
-.nx-co-ni-modal .nx-clients-form__body,
-.nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form__body.nx-co-ni-modal__body {
+.nx-co-ni-modal .nx-clients-form__body {
   display: flex;
   flex-direction: column;
   grid-template-columns: none;
@@ -2849,6 +2917,7 @@
   flex: 0 1 auto;
   min-height: 0;
   overflow-x: hidden;
+  padding: 0 16px;
 }
 
 .nx-co-ni-modal__body {
@@ -2871,21 +2940,16 @@
   min-inline-size: 0;
   margin: 0;
   padding: 10px 12px;
-  border: 1px solid rgba(54, 169, 198, 0.58);
+  border: 1px solid rgba(70, 213, 255, 0.42);
   border-radius: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background:
-    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
-    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.22),
-    0 0 0 1px rgba(19, 191, 208, 0.04);
+  background: linear-gradient(180deg, rgba(10, 48, 108, 0.96), rgba(6, 32, 78, 0.94));
+  box-shadow: none;
 }
 
 .nx-co-ni-modal__col-title,
-.nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form h4.nx-co-ni-modal__col-title,
 .nx-co-ni-modal__handling > legend.nx-co-ni-modal__col-title {
   display: block;
   float: none;
@@ -2922,8 +2986,8 @@
 
 .nx-co-ni-modal__option,
 .nx-co-ni-modal__month-action,
-.nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form label.nx-co-ni-modal__option,
-.nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form label.nx-co-ni-modal__month-action {
+.nx-co-ni-overlay .nx-co-ni-modal .nx-clients-form label.nx-co-ni-modal__option,
+.nx-co-ni-overlay .nx-co-ni-modal .nx-clients-form label.nx-co-ni-modal__month-action {
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -2932,13 +2996,11 @@
   min-height: 34px;
   margin: 0;
   padding: 8px 10px;
-  border: 1px solid rgba(54, 169, 198, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 8px;
-  background:
-    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.18), transparent 56%),
-    linear-gradient(180deg, rgba(51, 116, 147, 0.22) 0%, rgba(23, 84, 122, 0.14) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
-  color: #ffffff;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  color: #0b2248;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.25;
@@ -2948,20 +3010,15 @@
 
 .nx-co-ni-modal__option:hover:not(:has(input:disabled)),
 .nx-co-ni-modal__month-action:hover:not(:has(input:disabled)) {
-  border-color: rgba(19, 191, 208, 0.7);
+  border-color: rgba(56, 189, 248, 0.9);
 }
 
 .nx-co-ni-modal__option.is-selected,
-.nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form label.nx-co-ni-modal__option.is-selected {
-  border-color: rgba(19, 191, 208, 0.92);
-  background:
-    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.28), transparent 48%),
-    linear-gradient(180deg, rgba(54, 169, 198, 0.42) 0%, rgba(19, 191, 208, 0.28) 100%);
-  box-shadow:
-    0 0 0 2px rgba(19, 191, 208, 0.3),
-    0 0 12px rgba(54, 169, 198, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28);
-  color: #ffffff;
+.nx-co-ni-overlay .nx-co-ni-modal .nx-clients-form label.nx-co-ni-modal__option.is-selected {
+  border-color: rgba(56, 189, 248, 0.95);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(214, 236, 255, 0.96));
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.65);
+  color: #0b2248;
 }
 
 .nx-co-ni-modal__row dt {
@@ -2991,7 +3048,7 @@
   width: 16px;
   height: 16px;
   margin: 0;
-  accent-color: #13bfd0;
+  accent-color: #3b82f6;
 }
 
 .nx-co-ni-modal__option:has(input:disabled),
@@ -3003,18 +3060,64 @@
 .nx-co-ni-modal__option:focus-within,
 .nx-co-ni-modal__month-action:focus-within {
   outline: none;
-  border-color: rgba(19, 191, 208, 0.92);
-  box-shadow:
-    0 0 0 2px rgba(19, 191, 208, 0.3),
-    0 0 12px rgba(54, 169, 198, 0.28);
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
-.nx-co-ni-modal__footer,
-.nx-client-create--deep-ocean-glass .nx-co-ni-modal .nx-clients-form__footer {
-  justify-content: flex-end;
+.nx-co-ni-overlay .nx-co-ni-modal .nx-clients-form__footer.nx-co-ni-modal__footer {
+  justify-content: center;
+  align-items: center;
   gap: 12px;
-  padding-top: 12px;
+  margin-top: 10px;
+  padding: 12px 16px 0;
+  border-top: 1px solid rgba(210, 238, 255, 0.28);
+  background: transparent;
   flex-wrap: wrap;
+}
+
+.nx-co-ni-overlay .nx-co-ni-modal__footer .nx-glass-btn {
+  min-width: 96px;
+  min-height: 36px;
+  height: auto;
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.nx-co-ni-overlay .nx-co-ni-modal__footer .nx-glass-btn--purple {
+  color: #ffffff;
+  border: none;
+  background: linear-gradient(135deg, #38bdf8 0%, #3b82f6 30%, #4f46e5 65%, #7c3aed 100%);
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.22);
+}
+
+.nx-co-ni-overlay .nx-co-ni-modal__footer .nx-glass-btn--purple:hover:not(:disabled) {
+  box-shadow: 0 6px 18px rgba(79, 70, 229, 0.3);
+  filter: none;
+}
+
+.nx-co-ni-overlay .nx-co-ni-modal__footer .nx-glass-btn--purple:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.28);
+}
+
+.nx-co-ni-overlay .nx-co-ni-modal__footer .nx-glass-btn--secondary {
+  color: #334155;
+  border: 1px solid #dbe3ee;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(232, 244, 255, 0.92));
+  box-shadow: none;
+}
+
+.nx-co-ni-overlay .nx-co-ni-modal__footer .nx-glass-btn--secondary:hover:not(:disabled) {
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+
+.nx-co-ni-overlay .nx-co-ni-modal__footer .nx-glass-btn--secondary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
 }
 
 @media (max-width: 560px) {

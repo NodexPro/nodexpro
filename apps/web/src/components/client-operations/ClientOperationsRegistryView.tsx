@@ -5188,7 +5188,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         );
         const monthHandledChecked = Boolean(ops.action_resolved || niModal.confirmMonthHandled);
         return (
-          <div className="nx-clients-overlay nx-client-create nx-client-create--deep-ocean-glass nx-co-ni-overlay">
+          <div className="nx-clients-overlay nx-co-ni-overlay">
             <div
               className="nx-glass-card nx-clients-modal nx-co-ops-modal nx-co-ni-modal"
               role="dialog"
@@ -5296,18 +5296,18 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 </div>
                 <div className="nx-clients-form__footer nx-co-ni-modal__footer">
                   <button
-                    type="button"
-                    className="nx-glass-btn nx-glass-btn--secondary"
-                    onClick={() => setNiModal(null)}
-                  >
-                    {t(ops.cancel_key)}
-                  </button>
-                  <button
                     type="submit"
                     className="nx-glass-btn nx-glass-btn--purple"
                     disabled={!canSave}
                   >
                     {t(ops.save_key)}
+                  </button>
+                  <button
+                    type="button"
+                    className="nx-glass-btn nx-glass-btn--secondary"
+                    onClick={() => setNiModal(null)}
+                  >
+                    {t(ops.cancel_key)}
                   </button>
                 </div>
               </form>
