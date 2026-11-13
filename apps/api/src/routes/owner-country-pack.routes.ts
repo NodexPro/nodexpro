@@ -29,6 +29,7 @@ import {
   releaseOwnerSecurityContainment,
   type SecurityJournalQuery,
 } from '../domains/owner-system-health/owner-security-events.service.js';
+import { buildOwnerLegacyHttpObservationsAggregate } from '../shared/legacy-http-observe.service.js';
 import { refreshPrivilegedMfaGate } from '../domains/auth/privileged-mfa.service.js';
 import { activatePlatformOwnerMfa, verifyPlatformOwnerMfaRecovery } from '../domains/auth/platform-owner-mfa-activation.service.js';
 import { getRequestCorrelationId } from '../middleware/correlation.js';
@@ -260,6 +261,16 @@ router.get('/aggregates/security-events', async (req: Request, res: Response, ne
       page: req.query.page ? Number(req.query.page) : 1,
     };
     return res.json(await buildOwnerSecurityEventsAggregate(ctx, token, query));
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/aggregates/legacy-http-observations', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    await assertOwnerOrAuditFailure(ctx, req);
+    return res.json(await buildOwnerLegacyHttpObservationsAggregate(ctx));
   } catch (e) {
     next(e);
   }

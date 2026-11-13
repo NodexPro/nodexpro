@@ -237,6 +237,7 @@ export const AUDIT_ACTIONS = {
   OWNER_PASSWORD_RECOVERY_OTP_VERIFIED: 'owner_password_recovery.otp_verified',
   OWNER_PASSWORD_RECOVERY_COMPLETED: 'owner_password_recovery.completed',
   OWNER_SECURITY_CHECK_FAILED: 'owner_security_check_failed',
+  LEGACY_HTTP_OBSERVATIONS_READ: 'legacy_http_observations.read',
   COUNTRY_CREATED: 'country_created',
   COUNTRY_PACK_CREATED: 'country_pack_created',
   COUNTRY_PACK_ENABLED: 'country_pack_enabled',

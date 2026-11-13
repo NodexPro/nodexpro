@@ -16,6 +16,8 @@ export const config = {
   cloudflareOriginProtection: String(process.env.CLOUDFLARE_ORIGIN_PROTECTION ?? '').trim().toLowerCase() === 'true',
   cloudflareOriginPullSecret: process.env.CLOUDFLARE_ORIGIN_PULL_SECRET?.trim() || null,
   edgeProtectionVerified: String(process.env.EDGE_PROTECTION_VERIFIED ?? '').trim().toLowerCase() === 'true',
+  // Privacy-safe counters for seven legacy PATCH/PUT routes. Set "false" to disable writes.
+  legacyHttpObserveEnabled: String(process.env.LEGACY_HTTP_OBSERVE ?? 'true').trim().toLowerCase() !== 'false',
   documentScanner: {
     clamdHost: process.env.CLAMD_HOST?.trim() || null,
     clamdPort: Number.parseInt(process.env.CLAMD_PORT ?? '3310', 10),
