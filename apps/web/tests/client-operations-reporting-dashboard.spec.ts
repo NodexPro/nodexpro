@@ -189,3 +189,25 @@ test('reporting KPI cards stay presentation-only:  submitted/total, wrap, no rem
   assert.match(viewSource, /nx-co-registry__previous/);
   assert.doesNotMatch(cssSource, /\.nx-co-sheet__reporting-kpis[\s\S]*?overflow-x:\s*auto/);
 });
+
+test('self-employed NI modal is a compact two-column command surface', () => {
+  const ni = (en.clientOperations.registry.reporting as { ni: Record<string, string> }).ni;
+  const niHe = (he.clientOperations.registry.reporting as { ni: Record<string, string> }).ni;
+  assert.equal(niHe.clientDetails, 'פרטי לקוח');
+  assert.equal(niHe.handlingTitle, 'אופן תשלום / טיפול');
+  assert.equal(niHe.clientPays, 'לקוח משלם לבד');
+  assert.equal(niHe.manualMonthly, 'טיפול ידני חודשי');
+  assert.equal(niHe.monthHandled, 'טיפול החודש הושלם');
+  assert.equal(typeof ni.methodUnresolved, 'string');
+  assert.match(viewSource, /nx-co-ni-modal__grid/);
+  assert.match(viewSource, /ops\.handling_options\.map/);
+  assert.match(viewSource, /handling_method:\s*method/);
+  assert.match(viewSource, /confirm_month_handled:\s*resolve/);
+  assert.match(viewSource, /data-handling-method=\{ops\.handling_method \?\? 'unresolved'\}/);
+  assert.doesNotMatch(viewSource, /standingOrderActive/);
+  assert.doesNotMatch(viewSource, /nx-co-ops-modal__check/);
+  assert.match(cssSource, /\.nx-co-ni-modal\.nx-clients-modal[\s\S]*?width:\s*min\(580px/);
+  assert.match(cssSource, /@media \(max-width:\s*560px\)[\s\S]*?\.nx-co-ni-modal__grid[\s\S]*?grid-template-columns:\s*1fr/);
+  assert.match(cssSource, /\.nx-co-sheet__ni-amount:hover[\s\S]*?background:\s*transparent/);
+  assert.match(cssSource, /\.nx-co-sheet__ni-amount:focus-visible[\s\S]*?outline:\s*2px solid/);
+});

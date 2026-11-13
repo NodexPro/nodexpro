@@ -279,11 +279,20 @@ export type ClientOperationsReportingCellPresentation = {
   } | null;
 };
 
+export type SelfEmployedNiHandlingMethod = 'standing_order' | 'client_pays' | 'manual_monthly';
+
 export type ClientOperationsSelfEmployedNiOperations = {
   applicable: boolean;
   openable: boolean;
   period_key: string;
   period_display: string;
+  handling_method: SelfEmployedNiHandlingMethod | null;
+  handling_method_source: 'explicit' | 'standing_until' | 'unresolved';
+  handling_options: Array<{
+    id: SelfEmployedNiHandlingMethod;
+    label_key: string;
+    selected: boolean;
+  }>;
   standing_order_active: boolean;
   standing_order_status_key: string;
   standing_order_provenance: 'office_recorded';
@@ -295,13 +304,19 @@ export type ClientOperationsSelfEmployedNiOperations = {
   action_resolved: boolean;
   action_status_key: string;
   can_set_standing_order: boolean;
+  can_set_handling_method: boolean;
   can_confirm_manual_resolution: boolean;
+  can_confirm_month_handled: boolean;
   title_key: string;
+  client_details_key: string;
+  client_key: string;
   month_key: string;
   amount_key: string;
+  handling_title_key: string;
   office_note_key: string;
   resolution_key: string;
   confirm_resolution_key: string;
+  month_handled_key: string;
   save_key: string;
   cancel_key: string;
 };
@@ -1007,8 +1022,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   } | null>(null);
   const [niModal, setNiModal] = useState<{
     row: ClientOperationsRegistryRow;
-    standingOrderActive: boolean;
-    confirmResolution: boolean;
+    handlingMethod: SelfEmployedNiHandlingMethod | null;
+    confirmMonthHandled: boolean;
   } | null>(null);
   const statusPaintSlotsRef = useRef<Map<string, ManualStatusPaintSlot>>(new Map());
   const statusOverlaysRef = useRef<Map<string, ManualStatusOverlay>>(new Map());
@@ -3129,28 +3144,31 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     if (!ops?.openable) return;
     setNiModal({
       row,
-      standingOrderActive: ops.standing_order_active,
-      confirmResolution: false,
+      handlingMethod: ops.handling_method,
+      confirmMonthHandled: false,
     });
   };
   const confirmSelfEmployedNiModal = async () => {
     if (!niModal || !onRegistryCommand) return;
     const ops = niModal.row.national_insurance_operations;
-    if (!ops) {
+    const method = niModal.handlingMethod;
+    if (!ops || !method) {
       setNiModal(null);
       return;
     }
-    const standingChanged = niModal.standingOrderActive !== ops.standing_order_active;
-    const resolve = Boolean(niModal.confirmResolution && ops.can_confirm_manual_resolution);
+    const methodChanged = method !== ops.handling_method;
+    const resolve = Boolean(
+      method === 'manual_monthly' && niModal.confirmMonthHandled && ops.can_confirm_month_handled,
+    );
     setNiModal(null);
-    if (!standingChanged && !resolve) return;
+    if (!methodChanged && !resolve) return;
     await runMarkCommand(
       `${niModal.row.client_id}:ni-self`,
       {
         command: 'save_client_operations_self_employed_ni',
         client_id: niModal.row.client_id,
-        standing_order_active: niModal.standingOrderActive,
-        confirm_manual_resolution: resolve,
+        handling_method: method,
+        confirm_month_handled: resolve,
         operational_period_key: query?.operational_period_key ?? null,
         query,
       },
@@ -4289,6 +4307,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           data-testid="client-operations-ni-amount"
           data-office-reminder={ops.office_reminder ? 'true' : 'false'}
           data-standing-order={ops.standing_order_active ? 'active' : 'inactive'}
+          data-handling-method={ops.handling_method ?? 'unresolved'}
           title={t(ops.standing_order_status_key)}
           onClick={(event) => {
             event.stopPropagation();
@@ -5035,13 +5054,25 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         const ops = niModal.row.national_insurance_operations;
         if (!ops) return null;
         const amount = niModal.row.cells?.national_insurance || niModal.row.national_insurance_status || '—';
-        const standingChanged = niModal.standingOrderActive !== ops.standing_order_active;
-        const resolve = Boolean(niModal.confirmResolution && ops.can_confirm_manual_resolution);
-        const canSave = Boolean(canEdit && onRegistryCommand && ops.can_set_standing_order && (standingChanged || resolve));
+        const selectedMethod = niModal.handlingMethod;
+        const methodChanged = selectedMethod !== ops.handling_method;
+        const resolve = Boolean(
+          selectedMethod === 'manual_monthly' &&
+            niModal.confirmMonthHandled &&
+            ops.can_confirm_month_handled,
+        );
+        const canSave = Boolean(
+          canEdit &&
+            onRegistryCommand &&
+            ops.can_set_handling_method &&
+            selectedMethod &&
+            (methodChanged || resolve),
+        );
+        const monthHandledChecked = Boolean(ops.action_resolved || niModal.confirmMonthHandled);
         return (
           <div className="nx-clients-overlay nx-client-create nx-client-create--deep-ocean-glass">
             <div
-              className="nx-glass-card nx-clients-modal nx-co-ops-modal"
+              className="nx-glass-card nx-clients-modal nx-co-ops-modal nx-co-ni-modal"
               role="dialog"
               aria-modal="true"
               aria-labelledby="nx-co-ni-title"
@@ -5067,79 +5098,98 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 }}
                 noValidate
               >
-                <div className="nx-clients-form__body nx-co-ops-modal__body">
-                  <dl className="nx-co-ops-modal__facts">
-                    <div>
-                      <dt>{t('clientOperations.registry.reporting.filing.client')}</dt>
-                      <dd>{niModal.row.client_name ?? niModal.row.client_id}</dd>
-                    </div>
-                    <div>
-                      <dt>{t(ops.month_key)}</dt>
-                      <dd>{ops.period_display || ops.period_key}</dd>
-                    </div>
-                    <div>
-                      <dt>{t(ops.amount_key)}</dt>
-                      <dd>{amount}</dd>
-                    </div>
-                    <div>
-                      <dt>{t(ops.resolution_key)}</dt>
-                      <dd>{t(ops.action_status_key)}</dd>
-                    </div>
-                  </dl>
-                  <p className="nx-co-ops-modal__note">{t(ops.office_note_key)}</p>
-                  <fieldset className="nx-co-payment-confirm-options">
-                    <legend className="nx-clients-form__label-line">{t(ops.standing_order_status_key)}</legend>
-                    <label className="nx-co-payment-confirm-option">
-                      <input
-                        type="radio"
-                        name="nx-co-ni-standing"
-                        checked={niModal.standingOrderActive}
-                        disabled={!canEdit || !ops.can_set_standing_order}
-                        onChange={() =>
-                          setNiModal((current) => (current ? { ...current, standingOrderActive: true } : current))
-                        }
-                      />
-                      <span>{t('clientOperations.registry.reporting.ni.standingActive')}</span>
-                    </label>
-                    <label className="nx-co-payment-confirm-option">
-                      <input
-                        type="radio"
-                        name="nx-co-ni-standing"
-                        checked={!niModal.standingOrderActive}
-                        disabled={!canEdit || !ops.can_set_standing_order}
-                        onChange={() =>
-                          setNiModal((current) => (current ? { ...current, standingOrderActive: false } : current))
-                        }
-                      />
-                      <span>{t('clientOperations.registry.reporting.ni.standingInactive')}</span>
-                    </label>
-                  </fieldset>
-                  {ops.can_confirm_manual_resolution ? (
-                    <label className="nx-co-ops-modal__check">
-                      <input
-                        type="checkbox"
-                        checked={niModal.confirmResolution}
-                        disabled={!canEdit}
-                        onChange={(event) =>
-                          setNiModal((current) =>
-                            current ? { ...current, confirmResolution: event.target.checked } : current,
-                          )
-                        }
-                      />
-                      <span>{t(ops.confirm_resolution_key)}</span>
-                    </label>
-                  ) : null}
+                <div className="nx-clients-form__body nx-co-ni-modal__body">
+                  <div className="nx-co-ni-modal__grid">
+                    <section className="nx-co-ni-modal__col" aria-labelledby="nx-co-ni-client-col">
+                      <h4 id="nx-co-ni-client-col" className="nx-co-ni-modal__col-title">
+                        {t(ops.client_details_key)}
+                      </h4>
+                      <dl className="nx-co-ni-modal__facts">
+                        <div className="nx-co-ni-modal__row">
+                          <dt>{t(ops.client_key)}</dt>
+                          <dd>{niModal.row.client_name ?? niModal.row.client_id}</dd>
+                        </div>
+                        <div className="nx-co-ni-modal__row">
+                          <dt>{t(ops.amount_key)}</dt>
+                          <dd>{amount}</dd>
+                        </div>
+                        <div className="nx-co-ni-modal__row">
+                          <dt>{t(ops.month_key)}</dt>
+                          <dd>{ops.period_display || ops.period_key}</dd>
+                        </div>
+                        <div className="nx-co-ni-modal__row">
+                          <dt>{t(ops.resolution_key)}</dt>
+                          <dd>{t(ops.action_status_key)}</dd>
+                        </div>
+                      </dl>
+                    </section>
+                    <fieldset className="nx-co-ni-modal__col nx-co-ni-modal__handling">
+                      <legend id="nx-co-ni-handling-col" className="nx-co-ni-modal__col-title">
+                        {t(ops.handling_title_key)}
+                      </legend>
+                      {ops.handling_options.map((option) => (
+                        <label
+                          key={option.id}
+                          className="nx-co-ni-modal__option"
+                          data-testid={`client-operations-ni-handling-${option.id}`}
+                        >
+                          <input
+                            type="radio"
+                            name="nx-co-ni-handling"
+                            value={option.id}
+                            checked={selectedMethod === option.id}
+                            disabled={!canEdit || !ops.can_set_handling_method}
+                            onChange={() =>
+                              setNiModal((current) =>
+                                current
+                                  ? {
+                                      ...current,
+                                      handlingMethod: option.id,
+                                      confirmMonthHandled:
+                                        option.id === 'manual_monthly' ? current.confirmMonthHandled : false,
+                                    }
+                                  : current,
+                              )
+                            }
+                          />
+                          <span>{t(option.label_key)}</span>
+                        </label>
+                      ))}
+                      {selectedMethod === 'manual_monthly' ? (
+                        <label
+                          className="nx-co-ni-modal__month-action"
+                          data-testid="client-operations-ni-month-handled"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={monthHandledChecked}
+                            disabled={!canEdit || ops.action_resolved}
+                            onChange={(event) =>
+                              setNiModal((current) =>
+                                current ? { ...current, confirmMonthHandled: event.target.checked } : current,
+                              )
+                            }
+                          />
+                          <span>{t(ops.month_handled_key)}</span>
+                        </label>
+                      ) : null}
+                    </fieldset>
+                  </div>
                 </div>
-                <div className="nx-clients-form__footer">
-                  <button type="submit" className="nx-glass-btn nx-glass-btn--purple" disabled={!canSave}>
-                    {t(ops.save_key)}
-                  </button>
+                <div className="nx-clients-form__footer nx-co-ni-modal__footer">
                   <button
                     type="button"
-                    className="nx-glass-btn nx-glass-btn--secondary"
+                    className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
                     onClick={() => setNiModal(null)}
                   >
                     {t(ops.cancel_key)}
+                  </button>
+                  <button
+                    type="submit"
+                    className="nx-btn nx-btn-primary nx-btn-taxes-compact"
+                    disabled={!canSave}
+                  >
+                    {t(ops.save_key)}
                   </button>
                 </div>
               </form>

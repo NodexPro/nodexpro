@@ -1120,7 +1120,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
         supabaseAdmin
           .from('client_tax_settings')
           .select(
-            'client_id, vat_due_type, vat_frequency, vat_type, income_tax_advance_enabled, income_tax_advance_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_standing_order_until, national_insurance_deductions_file_number, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency'
+            'client_id, vat_due_type, vat_frequency, vat_type, income_tax_advance_enabled, income_tax_advance_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_standing_order_until, national_insurance_self_employed_handling_method, national_insurance_self_employed_handling_year, national_insurance_deductions_file_number, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency'
           )
           .eq('organization_id', orgId)
           .in('client_id', phase1EarlyIds),
@@ -1198,7 +1198,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
         supabaseAdmin
           .from('client_tax_settings')
           .select(
-            'client_id, vat_due_type, vat_frequency, vat_type, income_tax_advance_enabled, income_tax_advance_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_standing_order_until, national_insurance_deductions_file_number, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency'
+            'client_id, vat_due_type, vat_frequency, vat_type, income_tax_advance_enabled, income_tax_advance_frequency, national_insurance_type, national_insurance_monthly_amount, national_insurance_standing_order_until, national_insurance_self_employed_handling_method, national_insurance_self_employed_handling_year, national_insurance_deductions_file_number, income_tax_deductions_enabled, income_tax_deductions_file_number, income_tax_deductions_frequency'
           )
           .eq('organization_id', orgId)
           .in('client_id', clientIds),
@@ -1241,6 +1241,8 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       national_insurance_type: string | null;
       national_insurance_monthly_amount: number | null;
       national_insurance_standing_order_until: string | null;
+      national_insurance_self_employed_handling_method: string | null;
+      national_insurance_self_employed_handling_year: number | null;
       national_insurance_deductions_file_number: string | null;
       income_tax_deductions_enabled: boolean;
       income_tax_deductions_file_number: string | null;
@@ -1257,6 +1259,8 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     national_insurance_type: string | null;
     national_insurance_monthly_amount: number | null;
     national_insurance_standing_order_until: string | null;
+    national_insurance_self_employed_handling_method: string | null;
+    national_insurance_self_employed_handling_year: number | null;
     national_insurance_deductions_file_number: string | null;
     income_tax_deductions_enabled: boolean | null;
     income_tax_deductions_file_number: string | null;
@@ -1271,6 +1275,10 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       national_insurance_type: t.national_insurance_type,
       national_insurance_monthly_amount: t.national_insurance_monthly_amount,
       national_insurance_standing_order_until: t.national_insurance_standing_order_until,
+      national_insurance_self_employed_handling_method:
+        t.national_insurance_self_employed_handling_method ?? null,
+      national_insurance_self_employed_handling_year:
+        t.national_insurance_self_employed_handling_year ?? null,
       national_insurance_deductions_file_number: t.national_insurance_deductions_file_number,
       income_tax_deductions_enabled: Boolean(t.income_tax_deductions_enabled),
       income_tax_deductions_file_number: t.income_tax_deductions_file_number,
@@ -1829,6 +1837,8 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
         payrollWorkflow: payrollWorkflowByClient.get(c.id) ?? null,
         niApplicable: niConfigured,
         niStandingOrderUntil: tax?.national_insurance_standing_order_until ?? null,
+        niHandlingMethod: tax?.national_insurance_self_employed_handling_method ?? null,
+        niHandlingYear: tax?.national_insurance_self_employed_handling_year ?? null,
         reportingKpi: (() => {
           const annual = resolveAnnualReportKpiFact({
             hasSubmissionForTaxYear: annualSubmissionsByClient.has(c.id),
