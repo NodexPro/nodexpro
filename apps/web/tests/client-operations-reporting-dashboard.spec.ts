@@ -147,7 +147,7 @@ test('reporting KPI cards stay presentation-only:  submitted/total, wrap, no rem
   assert.doesNotMatch(dashSlice, /t\(.*remaining/);
   assert.doesNotMatch(viewSource, /submitted_count\s*\+/);
   assert.doesNotMatch(viewSource, /total_count\s*-/);
-  assert.match(cssSource, /\.nx-co-sheet__reporting-kpis[\s\S]*?grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(cssSource, /\.nx-co-sheet__reporting-kpis[\s\S]*?grid-template-columns:\s*repeat\(8,\s*minmax\(0,\s*112px\)\)/);
   assert.match(viewSource, /nx-co-registry__kpis/);
   assert.match(viewSource, /nx-co-registry__previous/);
   assert.doesNotMatch(cssSource, /\.nx-co-sheet__reporting-kpis[\s\S]*?overflow-x:\s*auto/);
