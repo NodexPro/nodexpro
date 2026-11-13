@@ -61,6 +61,8 @@ import { securityContainmentMiddleware } from './shared/security-containment.ser
 import { recordSecurityEvent, securitySubjectKey } from './shared/security-event.service.js';
 import { securityActionForStatus } from './shared/security-event.pure.js';
 import { apiSecurityMiddleware } from './middleware/api-security.js';
+import { legacyHttpObserveMiddleware } from './middleware/legacy-http-observe.js';
+import { startLegacyHttpObservationRetentionScheduler } from './shared/legacy-http-observe.service.js';
 import { UPLOAD_JSON_MAX_BYTES } from './shared/api-security.pure.js';
 import { isPrivateOrReservedIp } from './shared/request-source.pure.js';
 import { isCloudflareIp, isVercelIp } from './shared/trusted-proxy.pure.js';
@@ -106,6 +108,8 @@ app.use(
 app.use(correlationMiddleware);
 // Measurement only: `Server-Timing` response header (API time + Supabase call count/avg/max). No behavior.
 app.use(requestTimingMiddleware);
+// Privacy-safe usage counters for seven legacy PATCH/PUT routes. Does not authorize or mutate.
+app.use(legacyHttpObserveMiddleware());
 app.use(securityContainmentMiddleware());
 app.use(apiSecurityMiddleware());
 const corsAllowedOriginsRaw = process.env.CORS_ALLOWED_ORIGINS ?? '';
@@ -317,4 +321,5 @@ app.listen(config.port, () => {
       console.error('[api] DB-IP Lite provisioning failed; security GeoIP enrichment will fall back to Unknown.');
     });
   logModuleLoaded();
+  startLegacyHttpObservationRetentionScheduler();
 });
