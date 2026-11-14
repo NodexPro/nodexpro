@@ -849,6 +849,8 @@
     "searchPlaceholder": "חיפוש בטבלה…",
     "searchClients": "חיפוש לקוחות",
     "searching": "מחפש...",
+    "searchSuggestions": "לקוחות תואמים",
+    "searchNoMatches": "לא נמצאו התאמות",
     "sheetTools": "כלי גיליון",
     "undo": "בטל",
     "redo": "בצע שוב",

@@ -121,15 +121,15 @@ test('5 search stays in the toolbar; KPI row is portaled into the header slot', 
 });
 
 test('6 header search drives the same canonical search query (one state, one path)', () => {
-  // Exactly one searchDraft state and one debounce ref in the view.
   assert.equal((viewSource.match(/useState\(query\?\.q \?\? ''\)/g) ?? []).length, 1);
-  assert.equal((viewSource.match(/const searchDebounceRef = useRef/g) ?? []).length, 1);
-  // The single renderer binds that state and the existing handlers.
+  assert.equal((viewSource.match(/const searchDebounceRef = useRef/g) ?? []).length, 0);
   assert.match(viewSource, /const renderSearchField[\s\S]*?value=\{searchDraft\}[\s\S]*?onChange=\{\(e\) => onSearchDraftChange\(e\.target\.value\)\}/);
-  assert.match(viewSource, /const renderSearchField[\s\S]*?applyLiveSearch\(searchDraft\)/);
+  assert.match(viewSource, /const renderSearchField[\s\S]*?confirmTypedSearch\(\)/);
+  assert.match(viewSource, /matchClientOperationsRegistrySuggestions\(rows, searchDraft\)/);
   // applyLiveSearch → onQueryChange({ q, ... }, { quiet: true }) — aggregate read, not a command.
   assert.match(viewSource, /const applyLiveSearch = useCallback\([\s\S]*?onQueryChange\(\s*\{\s*q,/);
   assert.doesNotMatch(viewSource, /const applyLiveSearch[\s\S]{0,900}onRegistryCommand/);
+  assert.doesNotMatch(viewSource, /setTimeout\(\(\) => \{\s*applyLiveSearch/);
   // No search state / handler in header or layout — header is a dumb slot.
   assert.doesNotMatch(coHeaderSource, /useState|onChange|searchDraft|onQueryChange/);
   assert.doesNotMatch(layoutSource, /searchDraft|onQueryChange|setSearch/);
@@ -138,11 +138,10 @@ test('6 header search drives the same canonical search query (one state, one pat
 });
 
 test('7 clear still works — native clear / empty draft restores immediately', () => {
-  assert.match(viewSource, /if \(!value\.trim\(\)\) \{\s*applyLiveSearch\(''\);\s*return;\s*\}/);
+  assert.match(viewSource, /if \(!value\.trim\(\)\) \{[\s\S]*?applyLiveSearch\(''\);\s*return;\s*\}/);
   assert.match(viewSource, /const q = raw\.trim\(\) \|\| null;/);
-  // Debounce unchanged (120ms) for typing.
-  assert.match(viewSource, /searchDebounceRef\.current = setTimeout\(\(\) => \{\s*applyLiveSearch\(value\);\s*\}, 120\);/);
-  // Native X stays on the compact toolbar field.
+  assert.match(viewSource, /Typing only updates suggestions/);
+  assert.doesNotMatch(viewSource, /setTimeout\(\(\) => \{\s*applyLiveSearch/);
   assert.match(sheetCss, /\.nx-co-sheet__search-field input::-webkit-search-cancel-button/);
 });
 

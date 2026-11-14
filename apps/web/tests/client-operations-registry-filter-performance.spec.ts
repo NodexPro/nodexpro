@@ -36,8 +36,7 @@ test('1 dropdown onChange immediately starts aggregate request (no Apply / Enter
 });
 
 test('2 no filter debounce on dropdowns', () => {
-  // Search keeps debounce; business filter path must not.
-  assert.match(viewSource, /searchDebounceRef\.current = setTimeout\(\(\) => \{\s*applyLiveSearch/);
+  assert.doesNotMatch(viewSource, /setTimeout\(\(\) => \{\s*applyLiveSearch/);
   assert.doesNotMatch(
     viewSource,
     /applyBusinessFilterChange[\s\S]{0,400}setTimeout/,
@@ -86,8 +85,9 @@ test('7 no frontend business rows.filter matching', () => {
   assert.doesNotMatch(viewSource, /filter_facets/);
 });
 
-test('8 search debounce remains 120ms; filters do not inherit it', () => {
-  assert.match(viewSource, /applyLiveSearch\(value\);\s*\}, 120\)/);
+test('8 search typing does not reload the aggregate; filters do not debounce', () => {
+  assert.match(viewSource, /Typing only updates suggestions/);
+  assert.doesNotMatch(viewSource, /setTimeout\(\(\) => \{\s*applyLiveSearch/);
   assert.match(viewSource, /applyBusinessFilterChange/);
   assert.doesNotMatch(
     viewSource,

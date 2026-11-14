@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { apiFetch, apiJson, ApiError, userFacingApiMessage } from '../../api/client';
 import { localizeClientOperationsRegistryCommandError } from '../../lib/client-operations-registry-command-error.pure';
@@ -13,6 +13,11 @@ import {
   type OptimisticCheckboxEntry,
 } from '../../lib/client-operations-checkbox-optimistic.pure';
 import { localizeSystemLabel } from '../../lib/co-display-label.pure';
+import {
+  matchClientOperationsRegistrySuggestions,
+  moveClientOperationsSearchSuggestionIndex,
+  type ClientOperationsSearchSuggestion,
+} from '../../lib/client-operations-search-suggestions.pure';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../i18n/I18nProvider';
 import {
@@ -973,8 +978,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     wrap: false,
   }));
   const [searchDraft, setSearchDraft] = useState(query?.q ?? '');
-  /** Typing debounce window (before the aggregate request starts) — presentation only. */
-  const [searchDebouncePending, setSearchDebouncePending] = useState(false);
+  const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
+  const [searchActiveIndex, setSearchActiveIndex] = useState(-1);
   // Freeze sticky CSS retained; toolbar toggle is hidden — keep pinned columns on by default.
   const freezeOn = true;
   const [bordersOn, setBordersOn] = useState(true);
@@ -1045,7 +1050,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const statusOverlaysRef = useRef<Map<string, ManualStatusOverlay>>(new Map());
   const statusOverlayGenRef = useRef(0);
   const skipUndoPushRef = useRef(false);
-  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchFieldRef = useRef<HTMLDivElement | null>(null);
+  const searchScrollClientIdRef = useRef<string | null>(null);
   const searchRequestSeqRef = useRef(0);
 
   useEffect(() => {
@@ -1061,16 +1067,45 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     setOptimisticChecks(new Map(optimisticChecksRef.current));
   }, [viewedCheckboxPeriodKey]);
 
+  const searchSuggestions = useMemo(
+    () => matchClientOperationsRegistrySuggestions(rows, searchDraft),
+    [rows, searchDraft],
+  );
+
   useEffect(() => {
-    return () => {
-      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    setSearchActiveIndex(-1);
+  }, [searchDraft]);
+
+  useEffect(() => {
+    if (!searchSuggestionsOpen || searchActiveIndex < 0) return;
+    const clientId = searchSuggestions[searchActiveIndex]?.client_id;
+    if (!clientId) return;
+    document.getElementById(`client-operations-search-option-${clientId}`)?.scrollIntoView({ block: 'nearest' });
+  }, [searchActiveIndex, searchSuggestions, searchSuggestionsOpen]);
+
+  useEffect(() => {
+    if (!searchSuggestionsOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      const root = searchFieldRef.current;
+      if (!root || !(event.target instanceof Node) || root.contains(event.target)) return;
+      setSearchSuggestionsOpen(false);
     };
-  }, []);
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [searchSuggestionsOpen]);
+
+  useEffect(() => {
+    const clientId = searchScrollClientIdRef.current;
+    if (!clientId) return;
+    const row = document.querySelector(`tr[data-client-id="${CSS.escape(clientId)}"]`);
+    if (!row) return;
+    row.scrollIntoView({ block: 'nearest' });
+    searchScrollClientIdRef.current = null;
+  }, [rows]);
 
   const applyLiveSearch = useCallback(
     (raw: string) => {
-      // Debounce window is over; from here the page-owned `searchPending` reflects the request.
-      setSearchDebouncePending(false);
+      // Explicit confirm or clear only. Typing must not start this read.
       if (!onQueryChange) return;
       const q = raw.trim() || null;
       if ((query?.q ?? null) === q) return;
@@ -1181,18 +1216,69 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     );
   }, [onQueryChange, query?.q, query?.sort_by, query?.sort_dir, query?.filter_reporting_kpi]);
 
+  const focusRegistryClient = (clientId: string) => {
+    setSelectedRowId(clientId);
+    searchScrollClientIdRef.current = clientId;
+    const row = document.querySelector(`tr[data-client-id="${CSS.escape(clientId)}"]`);
+    if (!row) return;
+    row.scrollIntoView({ block: 'nearest' });
+    searchScrollClientIdRef.current = null;
+  };
+
+  const confirmSearchSuggestion = (suggestion: ClientOperationsSearchSuggestion) => {
+    setSearchSuggestionsOpen(false);
+    setSearchActiveIndex(-1);
+    const nextDraft = suggestion.query || suggestion.client_name;
+    setSearchDraft(nextDraft);
+    focusRegistryClient(suggestion.client_id);
+    if (suggestion.query) applyLiveSearch(suggestion.query);
+  };
+
+  const confirmTypedSearch = () => {
+    setSearchSuggestionsOpen(false);
+    if (!isCap('search')) return;
+    applyLiveSearch(searchDraft);
+  };
+
   const onSearchDraftChange = (value: string) => {
     setSearchDraft(value);
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    // Native clear (X) and empty field restore immediately; typing uses a short debounce.
+    // Native clear restores the unfiltered aggregate immediately. Typing only updates suggestions.
     if (!value.trim()) {
+      setSearchSuggestionsOpen(false);
+      setSearchActiveIndex(-1);
       applyLiveSearch('');
       return;
     }
-    setSearchDebouncePending(true);
-    searchDebounceRef.current = setTimeout(() => {
-      applyLiveSearch(value);
-    }, 120);
+    setSearchSuggestionsOpen(true);
+  };
+
+  const onSearchKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setSearchSuggestionsOpen(false);
+      return;
+    }
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (!searchSuggestionsOpen && searchDraft.trim()) setSearchSuggestionsOpen(true);
+      setSearchActiveIndex((current) =>
+        moveClientOperationsSearchSuggestionIndex(
+          current,
+          event.key === 'ArrowDown' ? 1 : -1,
+          searchSuggestions.length,
+        ),
+      );
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const highlighted = searchSuggestionsOpen ? searchSuggestions[searchActiveIndex] : undefined;
+      if (highlighted) {
+        confirmSearchSuggestion(highlighted);
+        return;
+      }
+      confirmTypedSearch();
+    }
   };
 
   useEffect(() => {
@@ -3343,12 +3429,14 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const moreToolbarIds = ['text_color', 'fill_color', 'number_format', 'borders', 'toggle_columns'];
 
   /**
-   * ONE search renderer / ONE search truth (searchDraft + debounce + applyLiveSearch → onQueryChange).
-   * The field always lives in the sheet toolbar. The route header slot hosts the KPI row instead.
+   * ONE search field. Typing updates suggestions from the current aggregate only.
+   * `applyLiveSearch` runs on clear, Enter without a highlight, the icon, or a chosen suggestion.
    */
-  const searchBusy = searchDebouncePending || searchPending;
+  const searchBusy = searchPending;
+  const searchListId = 'client-operations-search-suggestions';
+  const activeSuggestion = searchSuggestionsOpen ? searchSuggestions[searchActiveIndex] : undefined;
   const renderSearchField = (placement: 'toolbar') => (
-    <div className={`nx-co-sheet__search nx-co-sheet__search--${placement}`} data-testid="client-operations-search">
+    <div className={`nx-co-sheet__search nx-co-sheet__search--${placement}`} data-testid="client-operations-search" ref={searchFieldRef}>
       <div className="nx-co-sheet__search-field" aria-busy={searchBusy ? 'true' : undefined}>
         <button
           type="button"
@@ -3356,7 +3444,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           disabled={!isCap('search')}
           title={capTitle('search') ?? t('clientOperations.search')}
           aria-label={t('clientOperations.search')}
-          onClick={() => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); applyLiveSearch(searchDraft); }}
+          onClick={() => confirmTypedSearch()}
         >
           <svg className="nx-co-sheet__search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
             <circle cx="11" cy="11" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.75" />
@@ -3365,20 +3453,23 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         </button>
         <input
           type="search"
+          dir="auto"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={searchSuggestionsOpen}
+          aria-controls={searchListId}
+          aria-activedescendant={activeSuggestion ? `client-operations-search-option-${activeSuggestion.client_id}` : undefined}
           value={searchDraft}
           disabled={!isCap('search')}
           title={capTitle('search')}
           placeholder={t('clientOperations.searchPlaceholder')}
           aria-label={t('clientOperations.searchClients')}
           onChange={(e) => onSearchDraftChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && isCap('search')) {
-              if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-              applyLiveSearch(searchDraft);
-            }
+          onFocus={() => {
+            if (searchDraft.trim()) setSearchSuggestionsOpen(true);
           }}
+          onKeyDown={onSearchKeyDown}
         />
-        {/* Compact pending state INSIDE the field: fixed slot (no layout shift), typed text untouched. */}
         <span
           className="nx-co-sheet__search-pending"
           role="status"
@@ -3395,6 +3486,41 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             </>
           ) : null}
         </span>
+        {searchSuggestionsOpen && searchDraft.trim() ? (
+          <div
+            id={searchListId}
+            className="nx-co-sheet__search-suggestions"
+            role="listbox"
+            aria-label={t('clientOperations.searchSuggestions')}
+            data-testid="client-operations-search-suggestions"
+          >
+            {searchSuggestions.length === 0 ? (
+              <div className="nx-co-sheet__search-empty" role="status">
+                {t('clientOperations.searchNoMatches')}
+              </div>
+            ) : (
+              searchSuggestions.map((suggestion, index) => (
+                <button
+                  key={suggestion.client_id}
+                  id={`client-operations-search-option-${suggestion.client_id}`}
+                  type="button"
+                  role="option"
+                  aria-selected={index === searchActiveIndex}
+                  className={`nx-co-sheet__search-suggestion${index === searchActiveIndex ? ' is-active' : ''}`}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    confirmSearchSuggestion(suggestion);
+                  }}
+                >
+                  <span className="nx-co-sheet__search-suggestion-name">{suggestion.client_name}</span>
+                  {suggestion.identifier ? (
+                    <span className="nx-co-sheet__search-suggestion-id">{suggestion.identifier}</span>
+                  ) : null}
+                </button>
+              ))
+            )}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -4686,6 +4812,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             ? rows.map((row) => (
             <tr
               key={row.client_id}
+              data-client-id={row.client_id}
               className={[
                 selectedRowId === row.client_id ? 'is-selected' : '',
                 row.reporting?.row_tone ? `is-reporting-row-${row.reporting.row_tone}` : '',

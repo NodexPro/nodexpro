@@ -849,6 +849,8 @@
     "searchPlaceholder": "Search the table…",
     "searchClients": "Search clients",
     "searching": "Searching…",
+    "searchSuggestions": "Matching clients",
+    "searchNoMatches": "No matches found",
     "sheetTools": "Spreadsheet tools",
     "undo": "Undo",
     "redo": "Redo",

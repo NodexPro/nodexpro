@@ -108,7 +108,7 @@ test('FE binds copy menu to backend user_period_data_copy_source_periods only', 
 test('13-18 regressions retained for periods/search/folder/manual/custom', () => {
   assert.match(viewSource, /ClientOperationsPeriodSheetTabs/);
   assert.match(viewSource, /applyLiveSearch/);
-  assert.match(viewSource, /120/);
+  assert.match(viewSource, /matchClientOperationsRegistrySuggestions/);
   assert.match(viewSource, /openClientModal|ClientOperationsFolderIcon|nx-co-sheet__folder/);
   assert.match(viewSource, /manualRows/);
   assert.match(viewSource, /set_client_operations_custom_column_value/);

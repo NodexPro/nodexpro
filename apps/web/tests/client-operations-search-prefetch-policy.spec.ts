@@ -2,8 +2,8 @@
  * Client Operations — search performance (frontend side).
  * Adjacent-period prefetch is skipped while a free-text search is active and resumes when q is
  * empty. Existing period guards (renderedAggregatePeriodKey, loadSeq, AbortController, bootstrap,
- * cache-miss skeleton, response-period guards), the 120ms debounce and the מחפש... pending
- * indicator are untouched.
+ * cache-miss skeleton, response-period guards). Typing updates suggestions only;
+ * a confirmed query still drives the localized pending indicator.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -79,10 +79,10 @@ test('page: period / load guards untouched', () => {
   assert.match(pageSource, /if \(!selected \|\| viewedPeriodKeyRef\.current !== selected\) return;/);
 });
 
-test('search pending spinner מחפש... and 120ms debounce preserved', () => {
-  assert.match(viewSource, /מחפש\.\.\./);
-  assert.match(viewSource, /applyLiveSearch\(value\);\s*\}, 120\)/);
-  assert.match(viewSource, /const searchBusy = searchDebouncePending \|\| searchPending;/);
+test('search pending follows a confirmed query, not each keystroke', () => {
+  assert.match(viewSource, /t\('clientOperations\.searching'\)/);
+  assert.doesNotMatch(viewSource, /setTimeout\(\(\) => \{\s*applyLiveSearch/);
+  assert.match(viewSource, /const searchBusy = searchPending;/);
   assert.match(pageSource, /if \(\(next\.q \?\? null\) !== \(query\.q \?\? null\)\) setQueryRefreshPending\(true\);/);
   assert.match(pageSource, /searchPending=\{queryRefreshPending\}/);
 });

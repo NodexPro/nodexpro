@@ -71,18 +71,18 @@ test('unified amber tokens cover search X, folders, and מוכן paint indicator
   assert.match(sheetCss, /\.nx-co-sheet__table td\.is-manual-status-ready/);
 });
 
-test('header search pending indicator: spinner + מחפש... + no layout shift contract', () => {
+test('header search pending indicator: spinner + localized searching label + no layout shift', () => {
   assert.match(pageSource, /const \[queryRefreshPending, setQueryRefreshPending\] = useState\(false\)/);
   assert.match(pageSource, /searchPending=\{queryRefreshPending\}/);
-  assert.match(viewSource, /searchDebouncePending \|\| searchPending/);
+  assert.match(viewSource, /const searchBusy = searchPending;/);
   assert.match(viewSource, /data-testid="client-operations-search-pending"/);
-  assert.match(viewSource, /מחפש\.\.\./);
+  assert.match(viewSource, /t\('clientOperations\.searching'\)/);
+  assert.doesNotMatch(viewSource, /מחפש\.\.\./);
   assert.match(viewSource, /role="status"/);
   assert.match(viewSource, /aria-live="polite"/);
   assert.match(sheetCss, /\.nx-co-sheet__search-pending/);
   assert.match(sheetCss, /\.nx-co-sheet__search-spinner/);
-  // Debounce unchanged.
-  assert.match(viewSource, /}, 120\);/);
+  assert.doesNotMatch(viewSource, /setTimeout\(\(\) => \{\s*applyLiveSearch/);
 });
 
 test('search matching remains backend post-filter over client_name + cells (incl. tax_id)', () => {
