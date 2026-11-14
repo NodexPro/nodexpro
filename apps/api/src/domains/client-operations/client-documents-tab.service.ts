@@ -6,11 +6,16 @@ import { requireGuardedUpload } from '../../shared/file-content-guard.js';
 import { assertFileAssetDownloadable } from '../../shared/document-download-guard.js';
 import { CO_UI, documentFolderLabelKey } from './client-operations-ui-labels.pure.js';
 import { formatReportingPeriodDisplayLabel } from './client-operations-reporting-dashboard.pure.js';
-import { FILING_EVIDENCE_FOLDER_SYSTEM_KEY, clientDocumentDeliveryPresentation } from './client-operations-filing-evidence.pure.js';
+import {
+  CLIENT_DOCUMENT_STORAGE_BUCKET,
+  FILING_EVIDENCE_FOLDER_SYSTEM_KEY,
+  clientDocumentDeliveryPresentation,
+  clientDocumentStorageReadOrder,
+} from './client-operations-filing-evidence.pure.js';
 import { beginAttempt, finalizeAttempt, listAttempts, sendEmail } from '../delivery/index.js';
 import { assertCanAccessClientFromContext } from './organization-client-access.js';
 
-const BUCKET = 'client-files';
+const BUCKET = CLIENT_DOCUMENT_STORAGE_BUCKET;
 const MAX_B64 = 12_000_000;
 const MAX_FILE = 8_000_000;
 
@@ -181,14 +186,28 @@ async function ensureDocumentProfile(orgId: string, clientId: string): Promise<{
   return { read_model_version: Number((ins as { read_model_version: number }).read_model_version ?? 1) };
 }
 
-/** Idempotent: insert missing system folders only (no duplicates). One round-trip via upsert. */
+/** Idempotent: insert only system folders that are still missing. */
 export async function ensureClientDocumentFolders(orgId: string, clientId: string): Promise<void> {
-  const rows = CLIENT_DOCUMENT_DEFAULT_FOLDERS.map((t) => ({
+  const { data: existing, error: existingError } = await supabaseAdmin
+    .from('client_document_folders')
+    .select('system_key')
+    .eq('organization_id', orgId)
+    .eq('client_id', clientId)
+    .not('system_key', 'is', null);
+  if (existingError) throw new AppError(500, existingError.message ?? 'folder lookup failed', 'SUPABASE_ERROR');
+  const present = new Set(
+    ((existing ?? []) as Array<{ system_key: string | null }>)
+      .map((row) => row.system_key)
+      .filter((key): key is string => Boolean(key)),
+  );
+  const missing = CLIENT_DOCUMENT_DEFAULT_FOLDERS.filter((folder) => !present.has(folder.system_key));
+  if (missing.length === 0) return;
+  const rows = missing.map((folder) => ({
     organization_id: orgId,
     client_id: clientId,
-    system_key: t.system_key,
-    name_he: t.name_he,
-    sort_order: t.sort_order,
+    system_key: folder.system_key,
+    name_he: folder.name_he,
+    sort_order: folder.sort_order,
     archived_at: null as string | null,
   }));
   const { error } = await supabaseAdmin.from('client_document_folders').upsert(rows, {
@@ -211,13 +230,20 @@ async function assertExpectedVersion(orgId: string, clientId: string, expected: 
   }
 }
 
-async function bumpReadModelVersion(orgId: string, clientId: string, expected: number, userId: string): Promise<void> {
+async function bumpReadModelVersion(
+  orgId: string,
+  clientId: string,
+  expected: number,
+  userId: string,
+  extra?: Record<string, unknown> | null,
+): Promise<void> {
   const { data: updated, error } = await supabaseAdmin
     .from('client_document_profiles')
     .update({
       read_model_version: expected + 1,
       updated_at: new Date().toISOString(),
       updated_by: userId,
+      ...(extra ?? {}),
     })
     .eq('organization_id', orgId)
     .eq('client_id', clientId)
@@ -340,25 +366,51 @@ export async function getClientDocumentsTabReadModel(
     openFolderId = null;
   }
 
+  const openFolderMeta = openFolderId ? folders.find((f) => f.id === openFolderId) ?? null : null;
+  const filingFolder = Boolean(
+    openFolderMeta?.system_key &&
+      Object.values(FILING_EVIDENCE_FOLDER_SYSTEM_KEY).includes(openFolderMeta.system_key),
+  );
+  const [docAggResult, openDocsResult, deliveryAttempts] = await Promise.all([
+    folderIds.length > 0
+      ? supabaseAdmin
+          .from('client_documents')
+          .select('folder_id, updated_at')
+          .eq('organization_id', orgId)
+          .eq('client_id', clientId)
+          .is('deleted_at', null)
+          .in('folder_id', folderIds)
+      : Promise.resolve({ data: [] as Array<{ folder_id: string; updated_at: string }> | null }),
+    openFolderMeta
+      ? supabaseAdmin
+          .from('client_documents')
+          .select('id, file_asset_id, display_label_he, created_at, evidence_kind, reporting_period_key, file_assets(file_name)')
+          .eq('organization_id', orgId)
+          .eq('client_id', clientId)
+          .eq('folder_id', openFolderMeta.id)
+          .is('deleted_at', null)
+          .order('created_at', { ascending: false })
+      : Promise.resolve(null),
+    filingFolder
+      ? listAttempts({
+          organizationId: orgId,
+          representedClientId: clientId,
+          sourceModule: 'client-operations',
+          sourceEntityType: 'client_document',
+          channel: 'email',
+          limit: 200,
+        }).catch(() => [])
+      : Promise.resolve([]),
+  ]);
+
   const counts = new Map<string, { n: number; lastDoc: string | null }>();
   for (const fid of folderIds) counts.set(fid, { n: 0, lastDoc: null });
-
-  if (folderIds.length > 0) {
-    const { data: docAgg } = await supabaseAdmin
-      .from('client_documents')
-      .select('folder_id, updated_at')
-      .eq('organization_id', orgId)
-      .eq('client_id', clientId)
-      .is('deleted_at', null)
-      .in('folder_id', folderIds);
-
-    for (const r of (docAgg ?? []) as Array<{ folder_id: string; updated_at: string }>) {
-      const cur = counts.get(r.folder_id);
-      if (!cur) continue;
-      cur.n += 1;
-      const ts = new Date(r.updated_at).getTime();
-      if (!cur.lastDoc || ts > new Date(cur.lastDoc).getTime()) cur.lastDoc = r.updated_at;
-    }
+  for (const r of (docAggResult.data ?? []) as Array<{ folder_id: string; updated_at: string }>) {
+    const cur = counts.get(r.folder_id);
+    if (!cur) continue;
+    cur.n += 1;
+    const ts = new Date(r.updated_at).getTime();
+    if (!cur.lastDoc || ts > new Date(cur.lastDoc).getTime()) cur.lastDoc = r.updated_at;
   }
 
   const folderCards: ClientDocumentsTabFolderCardDto[] = folders.map((f, idx) => {
@@ -389,51 +441,27 @@ export async function getClientDocumentsTabReadModel(
   });
 
   let open_folder: ClientDocumentsTabResponse['open_folder'] = null;
-  if (openFolderId) {
-    const folderMeta = folders.find((f) => f.id === openFolderId);
-    if (folderMeta) {
-      const extended = await supabaseAdmin
-        .from('client_documents')
-        .select('id, file_asset_id, display_label_he, created_at, evidence_kind, reporting_period_key, file_assets(file_name)')
-        .eq('organization_id', orgId)
-        .eq('client_id', clientId)
-        .eq('folder_id', openFolderId)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false });
-      const base = extended.error
+  if (openFolderMeta) {
+    const folderMeta = openFolderMeta;
+    {
+      const extended = openDocsResult;
+      const base = extended?.error
         ? await supabaseAdmin
             .from('client_documents')
             .select('id, file_asset_id, display_label_he, created_at, file_assets(file_name)')
             .eq('organization_id', orgId)
             .eq('client_id', clientId)
-            .eq('folder_id', openFolderId)
+            .eq('folder_id', openFolderMeta.id)
             .is('deleted_at', null)
             .order('created_at', { ascending: false })
         : extended;
-      const docRows = base.data;
+      const docRows = base?.data;
       const deliveryByDocument = new Map<string, 'pending' | 'sent' | 'failed'>();
-      try {
-        const attempts = await listAttempts({
-          organizationId: orgId,
-          representedClientId: clientId,
-          sourceModule: 'client-operations',
-          sourceEntityType: 'client_document',
-          channel: 'email',
-          limit: 200,
-        });
-        for (const attempt of attempts) {
-          if (!deliveryByDocument.has(attempt.sourceEntityId)) {
-            deliveryByDocument.set(attempt.sourceEntityId, attempt.result);
-          }
+      for (const attempt of deliveryAttempts) {
+        if (!deliveryByDocument.has(attempt.sourceEntityId)) {
+          deliveryByDocument.set(attempt.sourceEntityId, attempt.result);
         }
-      } catch {
-        // Delivery history stays empty when the ledger cannot be read. The folder still opens.
       }
-
-      const filingFolder = Boolean(
-        folderMeta.system_key &&
-          Object.values(FILING_EVIDENCE_FOLDER_SYSTEM_KEY).includes(folderMeta.system_key),
-      );
       const mapped = ((docRows ?? []) as Array<{
         id: string;
         file_asset_id: string;
@@ -481,7 +509,7 @@ export async function getClientDocumentsTabReadModel(
       const defaultOpenName = CLIENT_DOCUMENT_DEFAULT_FOLDERS.find((d) => d.system_key === folderMeta.system_key)?.name_he;
       const openRenamed = Boolean(folderMeta.system_key && defaultOpenName && folderMeta.name_he !== defaultOpenName);
       open_folder = {
-        folder_id: openFolderId,
+        folder_id: openFolderMeta.id,
         folder_name_he: folderMeta.name_he,
         folder_name_key: openRenamed ? undefined : documentFolderLabelKey(folderMeta.system_key),
         documents,
@@ -555,17 +583,25 @@ export async function getClientDocumentFileOpenUrl(
   await assertClientDocumentFileOpenAllowed(orgId, clientId, fileAssetId);
   const { data: fileAsset, error } = await supabaseAdmin
     .from('file_assets')
-    .select('storage_key, organization_id, scan_status')
+    .select('storage_key, storage_bucket, organization_id, scan_status')
     .eq('id', fileAssetId)
     .single();
   if (error || !fileAsset || (fileAsset as { organization_id?: string }).organization_id !== orgId) {
     throw forbidden('File not found');
   }
-  assertFileAssetDownloadable((fileAsset as { scan_status?: string | null }).scan_status);
-  const { data: signed, error: se } = await supabaseAdmin.storage
-    .from(BUCKET)
-    .createSignedUrl((fileAsset as { storage_key: string }).storage_key, SIGNED_URL_SEC);
-  if (se || !signed?.signedUrl) throw new AppError(500, se?.message ?? 'signed url failed', 'SUPABASE_ERROR');
+  const assetRow = fileAsset as { storage_key: string; storage_bucket?: string | null; scan_status?: string | null };
+  assertFileAssetDownloadable(assetRow.scan_status);
+  let signedUrl: string | null = null;
+  for (const bucket of clientDocumentStorageReadOrder(assetRow.storage_bucket)) {
+    const { data: signed, error: se } = await supabaseAdmin.storage
+      .from(bucket)
+      .createSignedUrl(assetRow.storage_key, SIGNED_URL_SEC);
+    if (!se && signed?.signedUrl) {
+      signedUrl = signed.signedUrl;
+      break;
+    }
+  }
+  if (!signedUrl) throw badRequest('document file is not available', 'document_file_unavailable');
   await writeAudit({
     organizationId: orgId,
     actorUserId: ctx.user.id,
@@ -575,7 +611,7 @@ export async function getClientDocumentFileOpenUrl(
     action: AUDIT_ACTIONS.FILE_OPENED,
     payload: { client_id: clientId, file_asset_id: fileAssetId },
   });
-  return { url: signed.signedUrl };
+  return { url: signedUrl };
 }
 
 let documentsBucketEnsured = false;
@@ -623,6 +659,7 @@ export async function uploadClientWorkspaceDocument(
     .insert({
       organization_id: orgId,
       storage_provider: 'supabase',
+      storage_bucket: BUCKET,
       storage_key: storageKey,
       file_name: guarded.fileName,
       mime_type: guarded.mime,
@@ -695,6 +732,7 @@ export async function executeClientDocumentsTabCommand(ctx: RequestContext, clie
   await assertExpectedVersion(orgId, clientId, expected);
   const payload = asObj(body.payload);
   const cmd = body.type as ClientDocumentsCommandType;
+  let profilePatch: Record<string, unknown> | null = null;
 
   switch (cmd) {
     case 'initialize_client_document_folders': {
@@ -769,8 +807,17 @@ export async function executeClientDocumentsTabCommand(ctx: RequestContext, clie
     }
     case 'upload_client_document': {
       const folderId = String(payload.folder_id ?? '');
-      const fileAssetId = String(payload.file_asset_id ?? '');
-      if (!folderId || !fileAssetId) throw badRequest('folder_id וקובץ נדרשים');
+      let fileAssetId = String(payload.file_asset_id ?? '');
+      if (!folderId) throw badRequest('folder_id וקובץ נדרשים');
+      if (!fileAssetId && typeof payload.file_base64 === 'string' && payload.file_base64.length > 0) {
+        const uploaded = await uploadClientWorkspaceDocument(ctx, orgId, clientId, {
+          file_base64: payload.file_base64,
+          file_name: typeof payload.file_name === 'string' ? payload.file_name : '',
+          mime_type: typeof payload.mime_type === 'string' ? payload.mime_type : null,
+        });
+        fileAssetId = uploaded.file_asset_id;
+      }
+      if (!fileAssetId) throw badRequest('folder_id וקובץ נדרשים');
       const folder = await fetchFolder(orgId, clientId, folderId);
       if (!folder || folder.archived_at) throw badRequest('תיקייה לא נמצאה');
       await assertClientDocumentFileOpenAllowed(orgId, clientId, fileAssetId);
@@ -853,9 +900,17 @@ export async function executeClientDocumentsTabCommand(ctx: RequestContext, clie
         throw forbidden('File not linked to this client documents workspace');
       }
       assertFileAssetDownloadable(fileAsset.scan_status);
-      const bucket = fileAsset.storage_bucket?.trim() || BUCKET;
-      const { data: fileData, error: downloadError } = await supabaseAdmin.storage.from(bucket).download(storageKey);
-      if (downloadError || !fileData) throw badRequest('document file is not available');
+      let fileData: { arrayBuffer: () => Promise<ArrayBuffer> } | null = null;
+      let bucket = BUCKET;
+      for (const candidate of clientDocumentStorageReadOrder(fileAsset.storage_bucket)) {
+        const downloaded = await supabaseAdmin.storage.from(candidate).download(storageKey);
+        if (!downloaded.error && downloaded.data) {
+          fileData = downloaded.data;
+          bucket = candidate;
+          break;
+        }
+      }
+      if (!fileData) throw badRequest('document file is not available', 'document_file_unavailable');
       const contentBase64 = Buffer.from(await fileData.arrayBuffer()).toString('base64');
       const fileName = fileAsset.file_name?.trim() || 'document';
       const english = ctx.user.uiLanguage === 'en';
@@ -928,17 +983,12 @@ export async function executeClientDocumentsTabCommand(ctx: RequestContext, clie
         const folder = await fetchFolder(orgId, clientId, folderId);
         if (!folder || folder.archived_at) throw badRequest('תיקייה לא נמצאה');
       }
-      const { error } = await supabaseAdmin
-        .from('client_document_profiles')
-        .update({ open_folder_id: folderId, updated_at: new Date().toISOString(), updated_by: ctx.user.id })
-        .eq('organization_id', orgId)
-        .eq('client_id', clientId);
-      if (error) throw new AppError(500, error.message ?? 'open folder failed', 'SUPABASE_ERROR');
+      profilePatch = { open_folder_id: folderId };
       break;
     }
     default:
       throw badRequest('סוג פקודה לא מוכר');
   }
 
-  await bumpReadModelVersion(orgId, clientId, expected, ctx.user.id);
+  await bumpReadModelVersion(orgId, clientId, expected, ctx.user.id, profilePatch);
 }

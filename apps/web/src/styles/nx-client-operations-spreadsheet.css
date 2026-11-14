@@ -1242,6 +1242,64 @@
   margin: 0;
 }
 
+/* NI deductions evidence clip stays on the checkbox line, at the inline start (right in RTL). */
+.nx-co-sheet__ni-forms {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.nx-co-sheet__ni-forms .nx-co-sheet__material {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.nx-co-sheet__material-header.is-ni-evidence .nx-co-sheet__material-header-subs {
+  box-sizing: border-box;
+  padding-inline-start: 20px;
+}
+
+.nx-co-sheet__ni-clip {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 22px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+button.nx-co-sheet__ni-clip {
+  appearance: none;
+  cursor: pointer;
+}
+
+button.nx-co-sheet__ni-clip:hover {
+  color: #123756;
+}
+
+button.nx-co-sheet__ni-clip:focus-visible {
+  outline: 2px solid #123756;
+  outline-offset: 1px;
+}
+
+button.nx-co-sheet__ni-clip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .nx-co-sheet__material-slot.is-na {
   display: inline;
   min-height: 0;
@@ -2873,6 +2931,16 @@
   margin: 8px 0 0;
   font-size: 13px;
   line-height: 1.35;
+}
+
+.nx-co-filing-modal__notice.is-ok {
+  color: #166534;
+  font-weight: 700;
+}
+
+.nx-co-filing-modal__notice.is-err {
+  color: #b91c1c;
+  font-weight: 700;
 }
 
 .nx-co-filing-modal__evidence-row {

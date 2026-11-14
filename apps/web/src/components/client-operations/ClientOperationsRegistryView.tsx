@@ -1063,6 +1063,12 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   } | null>(null);
   const [filingEvidenceKind, setFilingEvidenceKind] = useState<'filing' | 'payment'>('filing');
   const filingEvidenceInputRef = useRef<HTMLInputElement | null>(null);
+  const [filingActionPending, setFilingActionPending] = useState(false);
+  const [filingFeedback, setFilingFeedback] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+  const filingActionLockRef = useRef(false);
+  const [evidencePending, setEvidencePending] = useState(false);
+  const [evidenceFeedback, setEvidenceFeedback] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+  const evidenceLockRef = useRef(false);
   const [niEvidencePrompt, setNiEvidencePrompt] = useState<{ clientId: string } | null>(null);
   const niEvidenceInputRef = useRef<HTMLInputElement | null>(null);
   const [niModal, setNiModal] = useState<{
@@ -3289,10 +3295,23 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const openFilingDetailModal = (row: ClientOperationsRegistryRow, columnKey: string) => {
     const detail = row.reporting?.cells?.[columnKey]?.filing_detail;
     if (!detail?.openable) return;
+    setFilingFeedback(null);
+    setEvidenceFeedback(null);
     setFilingModal({ row, columnKey });
   };
+  const readEvidenceFile = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = String(reader.result ?? '');
+        resolve(dataUrl.includes(',') ? dataUrl.split(',')[1] ?? '' : '');
+      };
+      reader.onerror = () => reject(new Error('read failed'));
+      reader.readAsDataURL(file);
+    });
   const runFilingAction = async (action: 'report' | 'report_and_pay' | 'paid') => {
     if (!filingModal || !canEdit || !onRegistryCommand) return;
+    if (filingActionLockRef.current || evidenceLockRef.current) return;
     const reportingCell = filingModal.row.reporting?.cells?.[filingModal.columnKey];
     const detail = reportingCell?.filing_detail;
     if (!reportingCell?.obligation_id || !detail) return;
@@ -3305,58 +3324,74 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     if (!allowed) return;
     const clientId = filingModal.row.client_id;
     const columnKey = filingModal.columnKey;
-    const obligationId = reportingCell.obligation_id;
-    const canonicalId = reportingCell.canonical_id;
-    setFilingModal(null);
+    const markKey = `${clientId}:reporting:${columnKey}`;
+    if (pendingMarkKeysRef.current.has(markKey)) return;
+    pendingMarkKeysRef.current.add(markKey);
+    filingActionLockRef.current = true;
+    setPendingMarkKeys(new Set(pendingMarkKeysRef.current));
+    setFilingActionPending(true);
+    setFilingFeedback(null);
+    setCommandError('');
     const period = query?.operational_period_key ?? null;
-    if (action === 'report') {
-      await runMarkCommand(
-        `${clientId}:reporting:${columnKey}`,
-        {
-          command: 'mark_client_operations_obligation_reported',
-          client_id: clientId,
-          obligation_id: obligationId,
-          operational_period_key: period,
-          query,
-        },
-        t('clientOperations.registry.errors.saveFailed'),
-      );
-      return;
+    const body =
+      action === 'report'
+        ? {
+            command: 'mark_client_operations_obligation_reported',
+            client_id: clientId,
+            obligation_id: reportingCell.obligation_id,
+            operational_period_key: period,
+            query,
+          }
+        : {
+            command:
+              action === 'report_and_pay'
+                ? 'confirm_client_operations_obligation_filed_with_payment'
+                : 'confirm_client_operations_obligation_tax_payment',
+            client_id: clientId,
+            obligation_id: reportingCell.obligation_id,
+            canonical_id: reportingCell.canonical_id,
+            payment_classification: 'paid_in_full',
+            operational_period_key: period,
+            query,
+          };
+    try {
+      await onRegistryCommand(body);
+      setFilingFeedback({
+        tone: 'ok',
+        text: t(
+          action === 'report'
+            ? 'clientOperations.registry.reporting.filing.reported'
+            : action === 'report_and_pay'
+              ? 'clientOperations.registry.reporting.filing.reportedAndPaid'
+              : 'clientOperations.registry.reporting.filing.paidRecorded',
+        ),
+      });
+    } catch (error) {
+      setFilingFeedback({
+        tone: 'err',
+        text: localizeRegistryCommandError(error, t('clientOperations.registry.errors.saveFailed')),
+      });
+    } finally {
+      pendingMarkKeysRef.current.delete(markKey);
+      setPendingMarkKeys(new Set(pendingMarkKeysRef.current));
+      filingActionLockRef.current = false;
+      setFilingActionPending(false);
     }
-    await runMarkCommand(
-      `${clientId}:reporting:${columnKey}`,
-      {
-        command:
-          action === 'report_and_pay'
-            ? 'confirm_client_operations_obligation_filed_with_payment'
-            : 'confirm_client_operations_obligation_tax_payment',
-        client_id: clientId,
-        obligation_id: obligationId,
-        canonical_id: canonicalId,
-        payment_classification: 'paid_in_full',
-        operational_period_key: period,
-        query,
-      },
-      t('clientOperations.registry.errors.saveFailed'),
-    );
   };
   const attachFilingEvidence = async (list: FileList | null) => {
     if (!list?.length || !filingModal || !canEdit || !onRegistryCommand) return;
+    if (evidenceLockRef.current || filingActionLockRef.current) return;
     const liveRow = rows.find((row) => row.client_id === filingModal.row.client_id) ?? filingModal.row;
     const reportingCell = liveRow.reporting?.cells?.[filingModal.columnKey];
     if (!reportingCell?.obligation_id) return;
+    const files = Array.from(list);
+    evidenceLockRef.current = true;
+    setEvidencePending(true);
+    setEvidenceFeedback(null);
     setCommandError('');
     try {
-      for (const file of Array.from(list)) {
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const dataUrl = String(reader.result ?? '');
-            resolve(dataUrl.includes(',') ? dataUrl.split(',')[1] ?? '' : '');
-          };
-          reader.onerror = () => reject(new Error('read failed'));
-          reader.readAsDataURL(file);
-        });
+      for (const file of files) {
+        const base64 = await readEvidenceFile(file);
         await onRegistryCommand({
           command: 'attach_client_operations_filing_evidence',
           client_id: liveRow.client_id,
@@ -3368,37 +3403,56 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           mime_type: file.type || null,
         });
       }
+      setEvidenceFeedback({
+        tone: 'ok',
+        text: t('clientOperations.registry.reporting.filing.documentSaved'),
+      });
     } catch (error) {
-      setCommandError(localizeRegistryCommandError(error, t('clientOperations.registry.errors.saveFailed')));
+      setEvidenceFeedback({
+        tone: 'err',
+        text: localizeRegistryCommandError(error, t('clientOperations.registry.errors.saveFailed')),
+      });
+    } finally {
+      evidenceLockRef.current = false;
+      setEvidencePending(false);
     }
   };
   const attachNiEvidence = async (list: FileList | null) => {
     if (!list?.length || !niEvidencePrompt || !canEdit || !onRegistryCommand) return;
+    if (evidenceLockRef.current || filingActionLockRef.current) return;
+    const files = Array.from(list);
+    const clientId = niEvidencePrompt.clientId;
+    const evidenceKind = filingEvidenceKind;
+    evidenceLockRef.current = true;
+    setEvidencePending(true);
+    setEvidenceFeedback(null);
     setCommandError('');
     try {
-      for (const file of Array.from(list)) {
-        const base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const dataUrl = String(reader.result ?? '');
-            resolve(dataUrl.includes(',') ? dataUrl.split(',')[1] ?? '' : '');
-          };
-          reader.onerror = () => reject(new Error('read failed'));
-          reader.readAsDataURL(file);
-        });
+      for (const file of files) {
+        const base64 = await readEvidenceFile(file);
         await onRegistryCommand({
           command: 'attach_client_operations_filing_evidence',
-          client_id: niEvidencePrompt.clientId,
+          client_id: clientId,
           filing_target: 'national_insurance_deductions',
-          evidence_kind: filingEvidenceKind,
+          evidence_kind: evidenceKind,
           operational_period_key: query?.operational_period_key ?? null,
           file_base64: base64,
           file_name: file.name,
           mime_type: file.type || null,
         });
       }
+      setEvidenceFeedback({
+        tone: 'ok',
+        text: t('clientOperations.registry.reporting.filing.documentSaved'),
+      });
     } catch (error) {
-      setCommandError(localizeRegistryCommandError(error, t('clientOperations.registry.errors.saveFailed')));
+      setEvidenceFeedback({
+        tone: 'err',
+        text: localizeRegistryCommandError(error, t('clientOperations.registry.errors.saveFailed')),
+      });
+    } finally {
+      evidenceLockRef.current = false;
+      setEvidencePending(false);
     }
   };
   const openSelfEmployedNiModal = (row: ClientOperationsRegistryRow) => {
@@ -4494,8 +4548,30 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         { key: '100', labelHe: '100' },
         { key: '126', labelHe: '126' },
       ];
+      const attachLabel = t('clientOperations.registry.reporting.filing.attach');
       return (
-        <div className="nx-co-sheet__material" role="group" aria-label={`${t('clientOperations.niDeductionsShort')} — ${clientLabel}`}>
+        <div className="nx-co-sheet__ni-forms" role="group" aria-label={`${t('clientOperations.niDeductionsShort')} — ${clientLabel}`}>
+          {niCell?.applicable ? (
+            <button
+              type="button"
+              className="nx-co-sheet__ni-clip"
+              title={attachLabel}
+              aria-label={attachLabel}
+              disabled={!canEdit || !onRegistryCommand}
+              onClick={(event) => {
+                event.stopPropagation();
+                setEvidenceFeedback(null);
+                setNiEvidencePrompt({ clientId: r.client_id });
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+                <path fill="currentColor" d="M16.5 6.5v9.2a4.5 4.5 0 1 1-9 0V6.8a3 3 0 0 1 6 0v8.2a1.5 1.5 0 0 1-3 0V7.2h-1.5v7.8a3 3 0 0 0 6 0V6.8a4.5 4.5 0 0 0-9 0v8.9a6 6 0 0 0 12 0V6.5h-1.5Z" />
+              </svg>
+            </button>
+          ) : (
+            <span className="nx-co-sheet__ni-clip" aria-hidden="true" />
+          )}
+          <div className="nx-co-sheet__material">
           {forms.map((form) => {
             const item = niCell!.items[form.key];
             const itemConfigured = Boolean(item?.configured ?? item?.applicable ?? niConfigured);
@@ -4551,22 +4627,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               </label>
             );
           })}
-          {niCell?.applicable ? (
-            <button
-              type="button"
-              className="nx-co-filing-modal__clip"
-              aria-label={t('clientOperations.registry.reporting.filing.attach')}
-              disabled={!canEdit || !onRegistryCommand}
-              onClick={(event) => {
-                event.stopPropagation();
-                setNiEvidencePrompt({ clientId: r.client_id });
-              }}
-            >
-              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-                <path fill="currentColor" d="M16.5 6.5v9.2a4.5 4.5 0 1 1-9 0V6.8a3 3 0 0 1 6 0v8.2a1.5 1.5 0 0 1-3 0V7.2h-1.5v7.8a3 3 0 0 0 6 0V6.8a4.5 4.5 0 0 0-9 0v8.9a6 6 0 0 0 12 0V6.5h-1.5Z" />
-              </svg>
-            </button>
-          ) : null}
+          </div>
         </div>
       );
     }
@@ -4828,7 +4889,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   </div>
                 </div>
               ) : column.key === 'national_insurance_deductions' ? (
-                <div className="nx-co-sheet__material-header">
+                <div className="nx-co-sheet__material-header is-ni-evidence">
                   <span className="nx-co-sheet__material-header-title">{t('clientOperations.niDeductionsShort')}</span>
                   <div className="nx-co-sheet__material-header-subs" aria-hidden="true">
                     <span>102</span>
@@ -5295,7 +5356,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             >
               <div className="nx-clients-modal__head">
                 <h3>{t(attachment.filing_label_key)}</h3>
-                <button type="button" className="nx-clients-modal__close" onClick={() => setNiEvidencePrompt(null)} aria-label={t('clientOperations.registry.reporting.filing.cancel')}>×</button>
+                <button type="button" className="nx-clients-modal__close" disabled={evidencePending} onClick={() => setNiEvidencePrompt(null)} aria-label={t('clientOperations.registry.reporting.filing.cancel')}>×</button>
               </div>
               <div className="nx-clients-form__body nx-co-ni-modal__body">
                 <p className="nx-co-filing-modal__notice">
@@ -5305,17 +5366,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   })}
                 </p>
                 <div className="nx-co-filing-modal__evidence-row">
-                  <button type="button" className="nx-co-filing-modal__clip" aria-label={t('clientOperations.registry.reporting.filing.attach')} onClick={() => niEvidenceInputRef.current?.click()}>
+                  <button type="button" className="nx-co-filing-modal__clip" aria-label={t('clientOperations.registry.reporting.filing.attach')} disabled={evidencePending} onClick={() => niEvidenceInputRef.current?.click()}>
                     <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
                       <path fill="currentColor" d="M16.5 6.5v9.2a4.5 4.5 0 1 1-9 0V6.8a3 3 0 0 1 6 0v8.2a1.5 1.5 0 0 1-3 0V7.2h-1.5v7.8a3 3 0 0 0 6 0V6.8a4.5 4.5 0 0 0-9 0v8.9a6 6 0 0 0 12 0V6.5h-1.5Z" />
                     </svg>
                   </button>
                   <label className="nx-co-filing-modal__kind">
-                    <input type="radio" name="ni-evidence-kind" checked={filingEvidenceKind === 'filing'} onChange={() => setFilingEvidenceKind('filing')} />
+                    <input type="radio" name="ni-evidence-kind" checked={filingEvidenceKind === 'filing'} disabled={evidencePending} onChange={() => setFilingEvidenceKind('filing')} />
                     {t('clientOperations.registry.reporting.filing.evidenceFiling')}
                   </label>
                   <label className="nx-co-filing-modal__kind">
-                    <input type="radio" name="ni-evidence-kind" checked={filingEvidenceKind === 'payment'} onChange={() => setFilingEvidenceKind('payment')} />
+                    <input type="radio" name="ni-evidence-kind" checked={filingEvidenceKind === 'payment'} disabled={evidencePending} onChange={() => setFilingEvidenceKind('payment')} />
                     {t('clientOperations.registry.reporting.filing.evidencePayment')}
                   </label>
                   <input
@@ -5323,12 +5384,25 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     type="file"
                     multiple
                     hidden
+                    disabled={evidencePending}
                     onChange={(event) => {
+                      if (evidenceLockRef.current) {
+                        event.target.value = '';
+                        return;
+                      }
                       void attachNiEvidence(event.target.files);
                       event.target.value = '';
                     }}
                   />
                 </div>
+                {evidencePending ? (
+                  <p className="nx-co-filing-modal__notice" role="status">{t('clientOperations.registry.reporting.filing.uploading')}</p>
+                ) : null}
+                {evidenceFeedback ? (
+                  <p className={`nx-co-filing-modal__notice is-${evidenceFeedback.tone}`} role={evidenceFeedback.tone === 'err' ? 'alert' : 'status'}>
+                    {evidenceFeedback.text}
+                  </p>
+                ) : null}
                 {attachment.evidence.length ? (
                   <ul className="nx-co-filing-modal__files">
                     {attachment.evidence.map((item) => (
@@ -5351,7 +5425,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           { key: filingModal.columnKey, label: '', cell_kind: 'text', value_field: null, visible: true, system: true, editable: false, freeze_default: false, align: 'center' },
           t,
         );
-        const canAct = Boolean(canEdit && onRegistryCommand && reportingCell?.obligation_id);
+        const canAct = Boolean(canEdit && onRegistryCommand && reportingCell?.obligation_id && !filingActionPending && !evidencePending);
         return (
           <div className="nx-clients-overlay nx-co-ni-overlay">
             <div
@@ -5369,6 +5443,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   onClick={() => setFilingModal(null)}
                   className="nx-clients-modal__close"
                   aria-label={t(detail.cancel_key)}
+                  disabled={filingActionPending || evidencePending}
                 >
                   ×
                 </button>
@@ -5437,11 +5512,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                         </svg>
                       </button>
                       <label className="nx-co-filing-modal__kind">
-                        <input type="radio" name="filing-evidence-kind" checked={filingEvidenceKind === 'filing'} onChange={() => setFilingEvidenceKind('filing')} />
+                        <input type="radio" name="filing-evidence-kind" checked={filingEvidenceKind === 'filing'} disabled={evidencePending || filingActionPending} onChange={() => setFilingEvidenceKind('filing')} />
                         {t('clientOperations.registry.reporting.filing.evidenceFiling')}
                       </label>
                       <label className="nx-co-filing-modal__kind">
-                        <input type="radio" name="filing-evidence-kind" checked={filingEvidenceKind === 'payment'} onChange={() => setFilingEvidenceKind('payment')} />
+                        <input type="radio" name="filing-evidence-kind" checked={filingEvidenceKind === 'payment'} disabled={evidencePending || filingActionPending} onChange={() => setFilingEvidenceKind('payment')} />
                         {t('clientOperations.registry.reporting.filing.evidencePayment')}
                       </label>
                       <input
@@ -5449,12 +5524,25 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                         type="file"
                         multiple
                         hidden
+                        disabled={evidencePending || filingActionPending}
                         onChange={(event) => {
+                          if (evidenceLockRef.current || filingActionLockRef.current) {
+                            event.target.value = '';
+                            return;
+                          }
                           void attachFilingEvidence(event.target.files);
                           event.target.value = '';
                         }}
                       />
                     </div>
+                    {evidencePending ? (
+                      <p className="nx-co-filing-modal__notice" role="status">{t('clientOperations.registry.reporting.filing.uploading')}</p>
+                    ) : null}
+                    {evidenceFeedback ? (
+                      <p className={`nx-co-filing-modal__notice is-${evidenceFeedback.tone}`} role={evidenceFeedback.tone === 'err' ? 'alert' : 'status'}>
+                        {evidenceFeedback.text}
+                      </p>
+                    ) : null}
                     {(detail.evidence ?? []).length ? (
                       <ul className="nx-co-filing-modal__files">
                         {(detail.evidence ?? []).map((item) => (
@@ -5471,6 +5559,14 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   </div>
                   </section>
                 </div>
+                {filingActionPending ? (
+                  <p className="nx-co-filing-modal__notice" role="status">{t('clientOperations.registry.reporting.filing.saving')}</p>
+                ) : null}
+                {filingFeedback ? (
+                  <p className={`nx-co-filing-modal__notice is-${filingFeedback.tone}`} role={filingFeedback.tone === 'err' ? 'alert' : 'status'}>
+                    {filingFeedback.text}
+                  </p>
+                ) : null}
                 <div className="nx-clients-form__footer nx-co-ni-modal__footer nx-co-ops-modal__actions">
                   <button
                     type="button"
@@ -5502,6 +5598,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   <button
                     type="button"
                     className="nx-glass-btn nx-glass-btn--secondary"
+                    disabled={filingActionPending || evidencePending}
                     onClick={() => setFilingModal(null)}
                   >
                     {t(detail.cancel_key)}

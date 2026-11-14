@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import {
   canManuallyConfirmFiling,
   clientDocumentDeliveryPresentation,
+  clientDocumentStorageReadOrder,
   evidenceForCanonical,
   filingEvidenceFolderSystemKey,
   filingMaterialWarning,
@@ -68,6 +69,13 @@ test('payroll NI evidence uses the selected month and stays out of self-employed
   ];
   assert.equal(evidenceForCanonical(rows, 'national_insurance_deductions::2026-10').length, 1);
   assert.equal(evidenceForCanonical(rows, 'national_insurance::2026-10').length, 0);
+});
+
+test('client document reads use the upload bucket before the column default', () => {
+  assert.deepEqual(clientDocumentStorageReadOrder('organization-assets'), ['client-files', 'organization-assets']);
+  assert.deepEqual(clientDocumentStorageReadOrder(null), ['client-files']);
+  assert.deepEqual(clientDocumentStorageReadOrder(''), ['client-files']);
+  assert.deepEqual(clientDocumentStorageReadOrder('client-files'), ['client-files']);
 });
 
 test('provider acceptance is not confirmed delivery', () => {

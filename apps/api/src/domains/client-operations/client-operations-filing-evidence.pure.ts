@@ -78,6 +78,20 @@ export function clientDocumentDeliveryPresentation(result: 'pending' | 'sent' | 
   return { provider_confirmed: false, status_key: null };
 }
 
+/** Client-document uploads are written here. `file_assets.storage_bucket` defaults to another bucket. */
+export const CLIENT_DOCUMENT_STORAGE_BUCKET = 'client-files';
+
+/**
+ * The stored bucket is often the column default, not the bucket that received the object.
+ * The upload bucket is tried first. A different stored bucket is only a fallback.
+ */
+export function clientDocumentStorageReadOrder(storedBucket: string | null | undefined): string[] {
+  const stored = (storedBucket ?? '').trim();
+  const order = [CLIENT_DOCUMENT_STORAGE_BUCKET];
+  if (stored && stored !== CLIENT_DOCUMENT_STORAGE_BUCKET) order.push(stored);
+  return order;
+}
+
 /** Accountant may record a filing that already happened, even without client material. */
 export function canManuallyConfirmFiling(status: string | null | undefined): boolean {
   return MANUAL_CONFIRM_STATUSES.has(String(status ?? '').trim());

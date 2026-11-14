@@ -69,6 +69,17 @@
   font-size: 14px;
 }
 
+.nx-cdocs-notice {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #166534;
+  font-weight: 600;
+  font-size: 14px;
+}
+
 .nx-cdocs-empty {
   margin: 12px 0 0;
   font-size: 14px;
@@ -254,6 +265,10 @@
   margin-top: 8px;
 }
 
+.nx-cdocs-folder-panel.is-filing {
+  width: min(920px, 100%);
+}
+
 .nx-cdocs-folder-panel-head {
   display: flex;
   flex-wrap: wrap;
@@ -398,6 +413,70 @@
   outline: none;
   border-color: #6366f1;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.nx-cdocs-file-table-wrap {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.nx-cdocs-file-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.nx-cdocs-file-table th,
+.nx-cdocs-file-table td {
+  padding: 6px 8px;
+  text-align: start;
+  vertical-align: middle;
+  border-bottom: 1px solid #dbe3ee;
+}
+
+.nx-cdocs-file-table th {
+  background: #0b1f33;
+  color: #e8f1f8;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.nx-cdocs-file-table__name {
+  display: block;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+  padding: 0;
+}
+
+.nx-cdocs-file-table__name.is-expanded {
+  max-width: 420px;
+  white-space: normal;
+  overflow: visible;
+}
+
+.nx-cdocs-file-table__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.nx-cdocs-icon-action.is-compact {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 @media (max-width: 640px) {

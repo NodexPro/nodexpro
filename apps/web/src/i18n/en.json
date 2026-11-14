@@ -1421,6 +1421,20 @@
       "deliveryHandedToProvider": "The mail provider accepted the message. Delivery to the client is not confirmed.",
       "deliveryFailed": "The mail provider did not accept the message.",
       "deliveryPending": "Delivery is still in progress.",
+      "deliveryUnknown": "The send result is not confirmed.",
+      "fileUnavailable": "The document file is not available.",
+      "opening": "Opening the document…",
+      "previewBlocked": "The browser blocked the document window.",
+      "saved": "Document saved",
+      "uploading": "Uploading the document…",
+      "showFullName": "Show full name",
+      "columns": {
+        "name": "Document name",
+        "evidenceType": "Evidence type",
+        "date": "Date",
+        "period": "Period",
+        "actions": "Actions"
+      },
       "name": "Name",
       "documentCount": "{{count}} documents",
       "tabTitle": "Documents",
@@ -2138,7 +2152,13 @@
           "attachmentNotice": "This document will be attached to {{filing}} for {{period}}.",
           "evidenceFiling": "Filing",
           "evidencePayment": "Payment",
-          "attach": "Attach evidence"
+          "attach": "Attach evidence",
+          "reported": "Filing was recorded",
+          "reportedAndPaid": "Filing and payment were recorded",
+          "paidRecorded": "Payment was recorded",
+          "documentSaved": "Document saved",
+          "uploading": "Uploading the document…",
+          "saving": "Saving…"
         },
         "ni": {
           "title": "Self-employed National Insurance",

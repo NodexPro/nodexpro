@@ -1421,6 +1421,20 @@
       "deliveryHandedToProvider": "ספק הדואר קיבל את ההודעה. המסירה ללקוח עדיין לא אושרה.",
       "deliveryFailed": "ספק הדואר לא קיבל את ההודעה.",
       "deliveryPending": "השליחה עדיין בתהליך.",
+      "deliveryUnknown": "תוצאת השליחה לא אושרה.",
+      "fileUnavailable": "קובץ המסמך אינו זמין.",
+      "opening": "פותח את המסמך…",
+      "previewBlocked": "הדפדפן חסם את חלון המסמך.",
+      "saved": "המסמך נשמר",
+      "uploading": "מעלה את המסמך…",
+      "showFullName": "הצגת השם המלא",
+      "columns": {
+        "name": "שם המסמך",
+        "evidenceType": "סוג אסמכתא",
+        "date": "תאריך",
+        "period": "תקופה",
+        "actions": "פעולות"
+      },
       "name": "שם",
       "documentCount": "{{count}} מסמכים",
       "tabTitle": "מסמכים",
@@ -2138,7 +2152,13 @@
           "attachmentNotice": "המסמך יצורף ל{{filing}} עבור {{period}}.",
           "evidenceFiling": "דיווח",
           "evidencePayment": "תשלום",
-          "attach": "צרף אסמכתא"
+          "attach": "צרף אסמכתא",
+          "reported": "הדיווח נשמר",
+          "reportedAndPaid": "הדיווח והתשלום נשמרו",
+          "paidRecorded": "התשלום נשמר",
+          "documentSaved": "המסמך נשמר",
+          "uploading": "מעלה את המסמך…",
+          "saving": "שומר…"
         },
         "ni": {
           "title": "ביטוח לאומי עצמאים",

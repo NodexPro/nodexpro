@@ -178,6 +178,25 @@
   color: rgba(238, 246, 255, 0.78);
 }
 
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-file-table {
+  color: #e8f4ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-file-table th {
+  background: rgba(4, 21, 47, 0.72);
+  color: #d2eeff;
+  border-bottom-color: rgba(70, 213, 255, 0.35);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-file-table td {
+  border-bottom-color: rgba(210, 238, 255, 0.16);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-file-table__name,
+.nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-icon-action.is-compact {
+  color: #e8f4ff;
+}
+
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-doc-row {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
   border: 1px solid rgba(255, 255, 255, 0.72);

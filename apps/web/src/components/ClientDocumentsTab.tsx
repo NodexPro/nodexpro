@@ -3,7 +3,6 @@ import { ApiError, apiJson, userFacingApiMessage } from '../api/client';
 import {
   moduleClientOperationsDocumentsCommands,
   moduleClientOperationsDocumentsFileOpen,
-  moduleClientOperationsDocumentsUpload,
 } from '../api/endpoints';
 import { useI18n } from '../i18n/I18nProvider';
 import { fillI18n, localizeSystemLabel } from '../lib/co-display-label.pure';
@@ -63,6 +62,30 @@ type FolderDialog =
   | { mode: 'create' }
   | { mode: 'rename'; folder: ClientDocumentsTabFolderCardDto };
 
+function documentCommandMessage(e: unknown, t: (key: string) => string): string {
+  if (e instanceof ApiError) {
+    const message = e.message ?? '';
+    if (e.code === 'missing_client_email') return t('clientOperations.documents.missingEmail');
+    if (
+      e.code === 'document_file_unavailable' ||
+      message === 'document file is not available' ||
+      message === 'File is not available for download'
+    ) {
+      return t('clientOperations.documents.fileUnavailable');
+    }
+  }
+  return userFacingApiMessage(e);
+}
+
+function deliveryOutcome(
+  out: ClientOperationsCaseResponse,
+  documentId: string,
+): 'sent' | 'failed' | 'pending' | 'unknown' {
+  const result = out.client_documents_tab?.open_folder?.documents.find((row) => row.document_id === documentId)?.delivery?.result;
+  if (result === 'sent' || result === 'failed' || result === 'pending') return result;
+  return 'unknown';
+}
+
 export function ClientDocumentsTab({
   clientId,
   documentsTab,
@@ -74,14 +97,23 @@ export function ClientDocumentsTab({
 }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState('');
+  const [notice, setNotice] = useState('');
   const [folderDlg, setFolderDlg] = useState<FolderDialog>(null);
   const [folderNameDraft, setFolderNameDraft] = useState('');
   const [pendingOpenFolder, setPendingOpenFolder] = useState<{ folder_id: string; folder_name_he: string } | null>(null);
   /** Hide folder panel immediately on סגירה; server case catches up in background. */
   const [folderPanelDismissed, setFolderPanelDismissed] = useState(false);
   const [selectedPeriodKey, setSelectedPeriodKey] = useState<string | null>(null);
+  const [openingFileId, setOpeningFileId] = useState<string | null>(null);
+  const [sendingDocumentId, setSendingDocumentId] = useState<string | null>(null);
+  const [expandedDocumentId, setExpandedDocumentId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const uploadLockRef = useRef(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const savedScrollRef = useRef(0);
+  const openedFolderRef = useRef<string | null>(null);
   const canEdit = documentsTab.permissions.can_edit;
 
   useEffect(() => {
@@ -95,14 +127,32 @@ export function ClientDocumentsTab({
   useEffect(() => {
     setPendingOpenFolder(null);
     setFolderPanelDismissed(false);
-    setSelectedPeriodKey(serverPeriodKey);
+    if (openedFolderRef.current !== serverOpenFolderId) {
+      openedFolderRef.current = serverOpenFolderId;
+      setSelectedPeriodKey(serverPeriodKey);
+      savedScrollRef.current = 0;
+      setExpandedDocumentId(null);
+    }
   }, [serverOpenFolderId, serverPeriodKey]);
+
+  useEffect(() => {
+    const top = savedScrollRef.current;
+    const frame = window.requestAnimationFrame(() => {
+      if (panelRef.current) panelRef.current.scrollTop = top;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [documentsTab.read_model_version, serverOpenFolderId]);
+
+  const rememberPanel = () => {
+    if (panelRef.current) savedScrollRef.current = panelRef.current.scrollTop;
+  };
 
   const runCommand = async (
     type: string,
     payload: Record<string, unknown>,
     opts?: { skipBusy?: boolean }
   ): Promise<boolean> => {
+    rememberPanel();
     if (!opts?.skipBusy) setBusy(true);
     setErr('');
     try {
@@ -117,7 +167,7 @@ export function ClientDocumentsTab({
       onCaseUpdated(out);
       return true;
     } catch (e) {
-      setErr(userFacingApiMessage(e));
+      setErr(documentCommandMessage(e, t));
       return false;
     } finally {
       if (!opts?.skipBusy) setBusy(false);
@@ -149,14 +199,24 @@ export function ClientDocumentsTab({
   };
 
   const openFile = async (fileAssetId: string) => {
+    if (openingFileId) return;
+    setOpeningFileId(fileAssetId);
     setErr('');
+    setNotice('');
     try {
       const { url } = await apiJson<{ url: string }>(moduleClientOperationsDocumentsFileOpen(clientId, fileAssetId), {
         method: 'GET',
       });
-      window.open(url, '_blank', 'noopener,noreferrer');
+      if (!url) {
+        setErr(t('clientOperations.documents.fileUnavailable'));
+        return;
+      }
+      const opened = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!opened) setErr(t('clientOperations.documents.previewBlocked'));
     } catch (e) {
-      setErr(userFacingApiMessage(e));
+      setErr(documentCommandMessage(e, t));
+    } finally {
+      setOpeningFileId(null);
     }
   };
 
@@ -168,31 +228,36 @@ export function ClientDocumentsTab({
     const file = e.target.files?.[0];
     e.target.value = '';
     const of = documentsTab.open_folder;
-    if (!file || !of || !canEdit) return;
+    if (!file || !of || !canEdit || uploadLockRef.current) return;
+    rememberPanel();
+    uploadLockRef.current = true;
+    setUploading(true);
     setBusy(true);
     setErr('');
+    setNotice('');
     try {
       const file_base64 = await fileToBase64(file);
-      const { file_asset_id } = await apiJson<{ file_asset_id: string }>(moduleClientOperationsDocumentsUpload(clientId), {
-        method: 'POST',
-        body: JSON.stringify({
-          file_name: file.name,
-          mime_type: file.type || null,
-          file_base64,
-        }),
-      });
       const out = await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsDocumentsCommands(clientId), {
         method: 'POST',
         body: JSON.stringify({
           type: 'upload_client_document',
-          payload: { folder_id: of.folder_id, file_asset_id, display_label_he: null },
+          payload: {
+            folder_id: of.folder_id,
+            file_base64,
+            file_name: file.name,
+            mime_type: file.type || null,
+            display_label_he: file.name,
+          },
           expected_version: documentsTab.read_model_version,
         }),
       });
       onCaseUpdated(out);
+      setNotice(t('clientOperations.documents.saved'));
     } catch (err2) {
-      setErr(userFacingApiMessage(err2));
+      setErr(documentCommandMessage(err2, t));
     } finally {
+      uploadLockRef.current = false;
+      setUploading(false);
       setBusy(false);
     }
   };
@@ -214,8 +279,12 @@ export function ClientDocumentsTab({
   };
 
   const sendDocument = async (documentId: string) => {
+    if (sendingDocumentId || uploadLockRef.current) return;
+    rememberPanel();
+    setSendingDocumentId(documentId);
     setBusy(true);
     setErr('');
+    setNotice('');
     try {
       const out = await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsDocumentsCommands(clientId), {
         method: 'POST',
@@ -226,13 +295,21 @@ export function ClientDocumentsTab({
         }),
       });
       onCaseUpdated(out);
+      const outcome = deliveryOutcome(out, documentId);
+      const text =
+        outcome === 'sent'
+          ? t('clientOperations.documents.deliveryHandedToProvider')
+          : outcome === 'failed'
+            ? t('clientOperations.documents.deliveryFailed')
+            : outcome === 'pending'
+              ? t('clientOperations.documents.deliveryPending')
+              : t('clientOperations.documents.deliveryUnknown');
+      if (outcome === 'failed') setErr(text);
+      else setNotice(text);
     } catch (e) {
-      setErr(
-        e instanceof ApiError && e.code === 'missing_client_email'
-          ? t('clientOperations.documents.missingEmail')
-          : userFacingApiMessage(e),
-      );
+      setErr(documentCommandMessage(e, t));
     } finally {
+      setSendingDocumentId(null);
       setBusy(false);
     }
   };
@@ -250,15 +327,21 @@ export function ClientDocumentsTab({
     openFolderView?.folder_name_he ?? pendingOpenFolder?.folder_name_he ?? '',
   );
   const showFolderPanel = Boolean((openFolderView || pendingOpenFolder) && !folderPanelDismissed);
-  const folderPanelLoading = !openFolderView && Boolean(pendingOpenFolder);
+  const folderSwitching = Boolean(pendingOpenFolder && pendingOpenFolder.folder_id !== openFolderView?.folder_id);
+  const folderPanelLoading = folderSwitching || (!openFolderView && Boolean(pendingOpenFolder));
 
   return (
     <div className="nx-cdocs-root nx-ws-documents">
-      <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={onFileChange} />
+      <input ref={fileRef} type="file" style={{ display: 'none' }} disabled={uploading || busy} onChange={(event) => void onFileChange(event)} />
 
       {err ? (
         <p className="nx-cdocs-err" role="alert">
           {err}
+        </p>
+      ) : null}
+      {notice ? (
+        <p className="nx-cdocs-notice" role="status">
+          {notice}
         </p>
       ) : null}
 
@@ -341,7 +424,13 @@ export function ClientDocumentsTab({
 
       {showFolderPanel ? (
         <div className="nx-cdocs-folder-overlay" role="presentation">
-          <div className="nx-cdocs-folder-panel" role="dialog" aria-modal="true" aria-labelledby="nx-cdocs-folder-panel-title">
+          <div
+            ref={panelRef}
+            className={`nx-cdocs-folder-panel${openFolderView?.period_navigation ? ' is-filing' : ''}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="nx-cdocs-folder-panel-title"
+          >
             <div className="nx-cdocs-folder-panel-head">
               <div>
                 <h3 id="nx-cdocs-folder-panel-title" className="nx-cdocs-folder-panel-title">
@@ -362,6 +451,9 @@ export function ClientDocumentsTab({
               </div>
             </div>
 
+            {uploading ? (
+              <p className="nx-cdocs-panel-loading" role="status">{t('clientOperations.documents.uploading')}</p>
+            ) : null}
             {folderPanelLoading ? (
               <p className="nx-cdocs-panel-loading">{t('clientOperations.documents.loading')}</p>
             ) : openFolderView && openFolderView.period_navigation ? (
@@ -378,48 +470,98 @@ export function ClientDocumentsTab({
                     </button>
                   ))}
                 </nav>
-                <ul className="nx-cdocs-doc-list">
-                  {openFolderView.documents.filter((d) => !selectedPeriodKey || d.reporting_period_key === selectedPeriodKey || !d.reporting_period_key).length === 0 ? (
-                    <li className="nx-cdocs-empty nx-cdocs-empty--in-panel">
+                {(() => {
+                  const filingDocs = openFolderView.documents.filter(
+                    (d) => !selectedPeriodKey || d.reporting_period_key === selectedPeriodKey || !d.reporting_period_key,
+                  );
+                  return filingDocs.length === 0 ? (
+                    <p className="nx-cdocs-empty nx-cdocs-empty--in-panel">
                       {localizeSystemLabel(t, documentsTab.ui.empty_documents_state_key, documentsTab.ui.empty_documents_state_he)}
-                    </li>
-                  ) : null}
-                  {openFolderView.documents
-                    .filter((d) => !selectedPeriodKey || d.reporting_period_key === selectedPeriodKey || !d.reporting_period_key)
-                    .map((d) => {
-                      const label = d.display_label_he?.trim() || d.file_name_he?.trim() || '—';
-                      return (
-                        <li key={d.document_id} className="nx-cdocs-doc-row">
-                          <div className="nx-cdocs-doc-main">
-                            <span className="nx-cdocs-doc-label">{label}</span>
-                            <span className="nx-cdocs-doc-sub">
-                              {d.evidence_kind_key ? t(d.evidence_kind_key) : ''}
-                              {d.reporting_period_display ? ` · ${d.reporting_period_display}` : ''}
-                              {` · ${d.uploaded_display_he}`}
-                              {d.delivery?.status_key ? ` · ${t(d.delivery.status_key)}` : ''}
-                            </span>
-                          </div>
-                          <div className="nx-cdocs-doc-actions">
-                            {d.actions.can_view && d.file_asset_id ? (
-                              <button type="button" className="nx-cdocs-icon-action" disabled={busy || !d.file_open_allowed} onClick={() => void openFile(d.file_asset_id!)} aria-label={t('clientOperations.documents.viewDocument')}>
-                                <IconEyeBlue />
-                              </button>
-                            ) : null}
-                            {d.actions.can_send ? (
-                              <button type="button" className="nx-cdocs-icon-action" disabled={busy} onClick={() => void sendDocument(d.document_id)} aria-label={t('clientOperations.documents.sendDocument')}>
-                                @
-                              </button>
-                            ) : null}
-                            {d.actions.can_delete ? (
-                              <button type="button" className="nx-cdocs-icon-action" disabled={busy} onClick={() => confirmDeleteDocument(d.document_id)} aria-label={t('clientOperations.documents.deleteDocument')}>
-                                ×
-                              </button>
-                            ) : null}
-                          </div>
-                        </li>
-                      );
-                    })}
-                </ul>
+                    </p>
+                  ) : (
+                    <div className="nx-cdocs-file-table-wrap">
+                      <table className="nx-cdocs-file-table">
+                        <thead>
+                          <tr>
+                            <th>{t('clientOperations.documents.columns.name')}</th>
+                            <th>{t('clientOperations.documents.columns.evidenceType')}</th>
+                            <th>{t('clientOperations.documents.columns.date')}</th>
+                            <th>{t('clientOperations.documents.columns.period')}</th>
+                            <th>{t('clientOperations.documents.columns.actions')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filingDocs.map((d) => {
+                            const label = d.display_label_he?.trim() || d.file_name_he?.trim() || '—';
+                            const expanded = expandedDocumentId === d.document_id;
+                            const opening = Boolean(d.file_asset_id && openingFileId === d.file_asset_id);
+                            const sending = sendingDocumentId === d.document_id;
+                            return (
+                              <tr key={d.document_id}>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className={`nx-cdocs-file-table__name${expanded ? ' is-expanded' : ''}`}
+                                    title={label}
+                                    aria-label={t('clientOperations.documents.showFullName')}
+                                    onClick={() => setExpandedDocumentId(expanded ? null : d.document_id)}
+                                  >
+                                    {label}
+                                  </button>
+                                </td>
+                                <td>{d.evidence_kind_key ? t(d.evidence_kind_key) : '—'}</td>
+                                <td>{d.uploaded_display_he}</td>
+                                <td>{d.reporting_period_display || '—'}</td>
+                                <td>
+                                  <div className="nx-cdocs-file-table__actions">
+                                    {d.actions.can_view && d.file_asset_id ? (
+                                      <button
+                                        type="button"
+                                        className="nx-cdocs-icon-action is-compact"
+                                        disabled={opening || !d.file_open_allowed}
+                                        aria-busy={opening}
+                                        onClick={() => void openFile(d.file_asset_id!)}
+                                        aria-label={opening ? t('clientOperations.documents.opening') : t('clientOperations.documents.viewDocument')}
+                                        title={opening ? t('clientOperations.documents.opening') : t('clientOperations.documents.viewDocument')}
+                                      >
+                                        {opening ? '…' : <IconEyeBlue />}
+                                      </button>
+                                    ) : null}
+                                    {d.actions.can_send ? (
+                                      <button
+                                        type="button"
+                                        className="nx-cdocs-icon-action is-compact"
+                                        disabled={busy || sending}
+                                        aria-busy={sending}
+                                        onClick={() => void sendDocument(d.document_id)}
+                                        aria-label={t('clientOperations.documents.sendDocument')}
+                                        title={d.delivery?.status_key ? t(d.delivery.status_key) : t('clientOperations.documents.sendDocument')}
+                                      >
+                                        @
+                                      </button>
+                                    ) : null}
+                                    {d.actions.can_delete ? (
+                                      <button
+                                        type="button"
+                                        className="nx-cdocs-icon-action is-compact"
+                                        disabled={busy}
+                                        onClick={() => confirmDeleteDocument(d.document_id)}
+                                        aria-label={t('clientOperations.documents.deleteDocument')}
+                                        title={t('clientOperations.documents.deleteDocument')}
+                                      >
+                                        ×
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
               </div>
             ) : openFolderView && openFolderView.documents.length === 0 ? (
               <p className="nx-cdocs-empty nx-cdocs-empty--in-panel">
@@ -443,12 +585,13 @@ export function ClientDocumentsTab({
                           <button
                             type="button"
                             className="nx-cdocs-icon-action"
-                            disabled={busy || !d.file_open_allowed}
+                            disabled={openingFileId === d.file_asset_id || !d.file_open_allowed}
+                            aria-busy={openingFileId === d.file_asset_id}
                             onClick={() => void openFile(d.file_asset_id!)}
-                            aria-label={t('clientOperations.documents.viewDocument')}
-                            title={t('clientOperations.documents.view')}
+                            aria-label={openingFileId === d.file_asset_id ? t('clientOperations.documents.opening') : t('clientOperations.documents.viewDocument')}
+                            title={openingFileId === d.file_asset_id ? t('clientOperations.documents.opening') : t('clientOperations.documents.view')}
                           >
-                            <IconEyeBlue />
+                            {openingFileId === d.file_asset_id ? '…' : <IconEyeBlue />}
                           </button>
                         ) : null}
                         {d.actions.can_delete ? (
