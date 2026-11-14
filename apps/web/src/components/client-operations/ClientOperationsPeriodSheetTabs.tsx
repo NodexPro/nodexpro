@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react';
+﻿import { useMemo, useState, type ReactNode } from 'react';
 import { useI18n } from '../../i18n/I18nProvider';
 import {
   buildClientOperationsOperationalPeriodKey,
@@ -13,6 +13,8 @@ export type ClientOperationsPeriodSheetTabsProps = {
   defaultPeriodKey: string | null;
   disabled?: boolean;
   onSelectPeriod: (operationalPeriodKey: string) => void;
+  /** Existing period control rendered beside the month tabs. Presentation only. */
+  trailing?: ReactNode;
 };
 
 /**
@@ -21,7 +23,7 @@ export type ClientOperationsPeriodSheetTabsProps = {
  * that requests another YYYY-MM via the parent (GET registry).
  */
 export function ClientOperationsPeriodSheetTabs(props: ClientOperationsPeriodSheetTabsProps) {
-  const { availablePeriods, selectedPeriodKey, defaultPeriodKey, disabled, onSelectPeriod } = props;
+  const { availablePeriods, selectedPeriodKey, defaultPeriodKey, disabled, onSelectPeriod, trailing } = props;
   const { t } = useI18n();
   const [plusOpen, setPlusOpen] = useState(false);
 
@@ -97,6 +99,7 @@ export function ClientOperationsPeriodSheetTabs(props: ClientOperationsPeriodShe
           +
         </button>
       </div>
+      {trailing ? <div className="nx-co-sheet__period-tabs-extra">{trailing}</div> : null}
 
       {plusOpen ? (
         <div className="nx-co-sheet__period-opener" role="dialog" aria-label={t('clientOperations.periods.chooseMonth')}>

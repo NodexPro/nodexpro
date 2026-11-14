@@ -3946,75 +3946,75 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
   const renderPreviousPeriods = () => {
     if (!reportingDashboard) return null;
-    const activeSort = query?.sort_by ?? reportingDashboard.active_sort ?? 'priority';
     const previous = reportingDashboard.previous_periods;
     return (
-      <section className="nx-co-registry__previous" data-testid="client-operations-previous-periods-section">
-        <div className="nx-co-sheet__reporting-meta">
-          <div className="nx-co-sheet__reporting-previous">
-            <button
-              type="button"
-              className="nx-co-sheet__reporting-previous-btn"
-              data-testid="client-operations-previous-periods"
-              aria-haspopup="listbox"
-              title={previous.periods.map((p) => p.display_label).join(' · ') || undefined}
-              disabled={!previous.incomplete_count}
-            >
-              {t('clientOperations.registry.reporting.previousIncomplete')}
-              <strong> {previous.incomplete_count} {t('clientOperations.registry.reporting.previousIncompleteCount')}</strong>
-              {previous.overdue_count > 0 ? (
-                <span className="is-overdue">
-                  {' · '}
-                  {previous.overdue_count} {t('clientOperations.registry.reporting.overduePeriods')}
-                </span>
-              ) : null}
-            </button>
-            {previous.periods.length ? (
-              <div className="nx-co-sheet__reporting-previous-list" role="listbox" aria-label={t('clientOperations.registry.reporting.previousIncomplete')}>
-                {previous.periods.map((item) => (
-                  <button
-                    key={item.period_key}
-                    type="button"
-                    role="option"
-                    className={item.overdue ? 'is-overdue' : undefined}
-                    onClick={() => onPeriodChange?.(item.navigate_period_key)}
-                  >
-                    {item.display_label}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </div>
-          {reportingDashboard.sort_options.length ? (
-            <label className="nx-co-sheet__reporting-sort">
-              <span>{t('clientOperations.registry.reporting.sortLabel')}</span>
-              <select
-                value={activeSort === 'client_name' ? 'client_name' : 'priority'}
-                disabled={!onQueryChange}
-                onChange={(event) => {
-                  if (!onQueryChange) return;
-                  onQueryChange({
-                    q: query?.q ?? null,
-                    sort_by: event.target.value,
-                    sort_dir: query?.sort_dir ?? null,
-                    filter_operational_reporting: query?.filter_operational_reporting ?? null,
-                    filter_material: query?.filter_material ?? null,
-                    filter_payroll: query?.filter_payroll ?? null,
-                    filter_reporting_type: query?.filter_reporting_type ?? null,
-                    filter_business_type: query?.filter_business_type ?? null,
-                    filter_handler: query?.filter_handler ?? null,
-                    filter_reporting_kpi: query?.filter_reporting_kpi ?? null,
-                  }, { quiet: true });
-                }}
-              >
-                {reportingDashboard.sort_options.map((opt) => (
-                  <option key={opt.id} value={opt.id}>{t(opt.label_key)}</option>
-                ))}
-              </select>
-            </label>
+      <div className="nx-co-registry__previous nx-co-sheet__reporting-previous" data-testid="client-operations-previous-periods-section">
+        <button
+          type="button"
+          className="nx-co-sheet__reporting-previous-btn"
+          data-testid="client-operations-previous-periods"
+          aria-haspopup="listbox"
+          title={previous.periods.map((p) => p.display_label).join(' · ') || undefined}
+          disabled={!previous.incomplete_count}
+        >
+          {t('clientOperations.registry.reporting.previousIncomplete')}
+          <strong> {previous.incomplete_count} {t('clientOperations.registry.reporting.previousIncompleteCount')}</strong>
+          {previous.overdue_count > 0 ? (
+            <span className="is-overdue">
+              {' · '}
+              {previous.overdue_count} {t('clientOperations.registry.reporting.overduePeriods')}
+            </span>
           ) : null}
-        </div>
-      </section>
+        </button>
+        {previous.periods.length ? (
+          <div className="nx-co-sheet__reporting-previous-list" role="listbox" aria-label={t('clientOperations.registry.reporting.previousIncomplete')}>
+            {previous.periods.map((item) => (
+              <button
+                key={item.period_key}
+                type="button"
+                role="option"
+                className={item.overdue ? 'is-overdue' : undefined}
+                onClick={() => onPeriodChange?.(item.navigate_period_key)}
+              >
+                {item.display_label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
+  const renderRegistrySort = () => {
+    if (!reportingDashboard?.sort_options.length) return null;
+    const activeSort = query?.sort_by ?? reportingDashboard.active_sort ?? 'priority';
+    return (
+      <label className="nx-co-sheet__reporting-sort">
+        <span>{t('clientOperations.registry.reporting.sortLabel')}</span>
+        <select
+          value={activeSort === 'client_name' ? 'client_name' : 'priority'}
+          disabled={!onQueryChange}
+          onChange={(event) => {
+            if (!onQueryChange) return;
+            onQueryChange({
+              q: query?.q ?? null,
+              sort_by: event.target.value,
+              sort_dir: query?.sort_dir ?? null,
+              filter_operational_reporting: query?.filter_operational_reporting ?? null,
+              filter_material: query?.filter_material ?? null,
+              filter_payroll: query?.filter_payroll ?? null,
+              filter_reporting_type: query?.filter_reporting_type ?? null,
+              filter_business_type: query?.filter_business_type ?? null,
+              filter_handler: query?.filter_handler ?? null,
+              filter_reporting_kpi: query?.filter_reporting_kpi ?? null,
+            }, { quiet: true });
+          }}
+        >
+          {reportingDashboard.sort_options.map((opt) => (
+            <option key={opt.id} value={opt.id}>{t(opt.label_key)}</option>
+          ))}
+        </select>
+      </label>
     );
   };
 
@@ -5790,10 +5790,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         {headerSearchSlot && !fullscreenOpen
           ? createPortal(renderReportingKpis(), headerSearchSlot)
           : null}
-        {renderPreviousPeriods()}
         <div className={`nx-co-sheet${fullscreenOpen ? ' nx-co-sheet--app-fullscreen' : ''}`}>
         {/* Inner sheet title removed — module title renders once in the route header. */}
         {headerSearchSlot && !fullscreenOpen ? null : renderReportingKpis()}
+        {renderRegistrySort()}
         {renderSpreadsheetToolbar()}
         {renderFilterBar()}
         {error ? <div className="nx-co-sheet__error">{error}</div> : null}
@@ -5820,6 +5820,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           defaultPeriodKey={period?.default_period_key ?? null}
           disabled={loading}
           onSelectPeriod={(key) => flushDirtyBeforePeriodChange(key)}
+          trailing={renderPreviousPeriods()}
         />
         </div>
         {periodCopyFeedback ? (

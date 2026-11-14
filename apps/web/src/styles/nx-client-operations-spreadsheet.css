@@ -22,8 +22,7 @@
   max-height: none;
 }
 
-.nx-co-registry__kpis,
-.nx-co-registry__previous {
+.nx-co-registry__kpis {
   flex: 0 0 auto;
   width: 100%;
   min-width: 0;
@@ -1728,28 +1727,41 @@
   font-size: 12px;
 }
 
-/* Excel worksheet tabs — thin strip directly under the grid. Tab colors stay the current palette. */
+/* Excel worksheet tabs — thin dark strip directly under the grid. */
 .nx-co-sheet__period-tabs {
   position: relative;
   bottom: auto;
-  z-index: 6;
+  z-index: 8;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
   flex: 0 0 auto;
-  gap: 0;
+  gap: 6px;
   margin-top: 0;
   min-width: 0;
-  background: var(--nx-table-header);
-  border: 1px solid var(--nx-grid);
+  overflow: visible;
+  background: linear-gradient(180deg, #0d3764 0%, #082447 100%);
+  border: 1px solid rgba(54, 169, 198, 0.42);
   border-top: 0;
   border-radius: 0;
   min-height: 0;
-  padding: 0 4px;
+  padding: 4px 6px 0;
   box-shadow: none;
+}
+
+.nx-co-sheet__period-tabs-extra {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  margin-bottom: 2px;
+  z-index: 2;
 }
 
 .nx-co-sheet__period-tabs-scroll {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: row;
   flex-wrap: nowrap;
   align-items: flex-end;
@@ -1758,6 +1770,7 @@
   /* Horizontal only: vertical auto here creates the bottom-left ▲▼ stub. */
   overflow-x: auto;
   overflow-y: hidden;
+  min-width: 0;
   min-height: 28px;
   max-height: 40px;
   scrollbar-width: thin;
@@ -1785,11 +1798,9 @@
 
 .nx-co-sheet__period-tab {
   appearance: none;
-  border: 1px solid rgba(54, 169, 198, 0.58);
-  background:
-    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
-    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%);
-  color: #ffffff;
+  border: 1px solid rgba(66, 165, 255, 0.38);
+  background: #123756;
+  color: #d7f3ff;
   font-size: 14px;
   font-weight: 600;
   line-height: 1;
@@ -1802,13 +1813,13 @@
   white-space: nowrap;
   flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  box-shadow: none;
   transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease, color 120ms ease;
 }
 
 .nx-co-sheet__period-tab:hover:not(:disabled) {
-  border-color: rgba(19, 191, 208, 0.7);
-  background: rgba(23, 84, 122, 0.38);
+  border-color: rgba(66, 165, 255, 0.62);
+  background: #17547a;
   color: #ffffff;
 }
 
@@ -1857,22 +1868,21 @@
   padding-inline: 8px;
   font-size: 16px;
   font-weight: 700;
-  color: #ffffff;
-  background:
-    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
-    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%);
-  border: 1px solid rgba(54, 169, 198, 0.58);
+  color: #d7f3ff;
+  background: #123756;
+  border: 1px solid rgba(66, 165, 255, 0.38);
   margin-inline-start: auto;
 }
 
 .nx-co-sheet__period-tab--plus:hover:not(:disabled) {
   color: #ffffff;
-  border-color: rgba(19, 191, 208, 0.7);
-  background: rgba(23, 84, 122, 0.38);
+  border-color: rgba(66, 165, 255, 0.62);
+  background: #17547a;
 }
 
 .nx-co-sheet__period-opener {
   display: flex;
+  flex: 1 1 100%;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 8px;
@@ -2643,32 +2653,28 @@
   color: #fb923c;
 }
 
-.nx-co-sheet__reporting-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 12px;
-  width: 100%;
-}
-
 .nx-co-sheet__reporting-previous {
   position: relative;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .nx-co-sheet__reporting-previous-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(247, 250, 255, 0.12);
-  color: rgba(255, 255, 255, 0.94);
+  max-width: 100%;
+  padding: 2px 10px;
+  border-radius: 6px 6px 0 0;
+  border: 1px solid rgba(66, 165, 255, 0.38);
+  background: #123756;
+  color: #d7f3ff;
   font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
-  height: auto;
+  height: 26px;
+  box-sizing: border-box;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -2690,10 +2696,13 @@
 .nx-co-sheet__reporting-previous-list {
   display: none;
   position: absolute;
-  z-index: 20;
-  inset-inline-start: 0;
-  top: calc(100% + 4px);
+  z-index: 30;
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  top: auto;
+  bottom: calc(100% + 4px);
   min-width: 148px;
+  max-width: min(240px, calc(100vw - 24px));
   padding: 6px;
   border-radius: 8px;
   border: 1px solid rgba(54, 169, 198, 0.55);
@@ -2733,8 +2742,9 @@
   color: #fca5a5;
 }
 
+/* Sort contract stays mounted. display:none keeps it out of the toolbar flow. */
 .nx-co-sheet__reporting-sort {
-  display: inline-flex;
+  display: none;
   align-items: center;
   gap: 6px;
   color: rgba(255, 255, 255, 0.9);
@@ -2753,6 +2763,20 @@
   font-weight: 600;
   line-height: 1.2;
   height: auto;
+}
+
+@media (max-width: 720px) {
+  .nx-co-sheet__period-tabs-scroll,
+  .nx-co-sheet__period-tabs-extra {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+
+  .nx-co-sheet__reporting-previous-btn {
+    white-space: normal;
+    height: auto;
+    min-height: 26px;
+  }
 }
 
 .nx-co-sheet__frequency-cell,
