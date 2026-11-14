@@ -399,6 +399,13 @@ function operationalPeriodKeyFrom(value: unknown): string {
   return resolveRegistryOperationalPeriodKey(value);
 }
 
+function requiredOperationalPeriodKeyFrom(value: unknown): string {
+  if (value == null || (typeof value === 'string' && !value.trim())) {
+    throw badRequest('operational_period_key required');
+  }
+  return operationalPeriodKeyFrom(value);
+}
+
 const MATERIAL_REGISTRY_COMMANDS = new Set([
   'set_material_brought',
   'set_income_tax_advance_material_brought',
@@ -1148,7 +1155,7 @@ export async function executeClientOperationsRegistryCommand(
     );
   } else if (command === 'save_client_operations_self_employed_ni') {
     const clientId = idFrom(body.client_id, 'client_id');
-    const periodKey = operationalPeriodKeyFrom(
+    const periodKey = requiredOperationalPeriodKeyFrom(
       body.operational_period_key ??
         (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
     );

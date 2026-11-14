@@ -509,6 +509,10 @@ test('monthly October VAT uses 2026-10 identity and calendar 2026-11-16, not ove
     vatFilingPeriodIdentityForOperationalPeriod({ vat_frequency: 'monthly', operational_period_key: '2026-10' }),
     { period_key: '2026-10' },
   );
+  assert.deepEqual(
+    vatFilingPeriodIdentityForOperationalPeriod({ vat_frequency: 'חודשי', operational_period_key: '2026-10' }),
+    { period_key: '2026-10' },
+  );
   const built = buildReportingCellInputFromFacts({
     kind: 'vat',
     applicable: true,

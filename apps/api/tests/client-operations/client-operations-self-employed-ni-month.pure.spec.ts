@@ -259,10 +259,41 @@ test('12 old and new NI commands cannot corrupt monthly history', () => {
     command.indexOf("command === 'archive_client_operations_custom_column'"),
   );
   assert.match(saveCase, /persistSelfEmployedNiMonthSetting/);
+  assert.match(saveCase, /requiredOperationalPeriodKeyFrom/);
+  assert.match(command, /operational_period_key required/);
   assert.doesNotMatch(saveCase, /national_insurance_standing_order_until:/);
   assert.doesNotMatch(saveCase, /national_insurance_self_employed_handling_year/);
   assert.match(obligations, /computed_status: 'not_paid'/);
   assert.doesNotMatch(obligations, /niStandingOrderOverridesNotPaid/);
+});
+
+test('14 standing-order save on an inherited October month becomes an explicit 2026-10 row', () => {
+  const before = resolveMonth('2026-10', [{ period_key: '2026-09', handling_method: 'standing_order' }]);
+  assert.equal(before.method, 'standing_order');
+  assert.equal(before.source, 'inherited');
+  const afterSave = resolveMonth('2026-10', [
+    { period_key: '2026-09', handling_method: 'standing_order' },
+    { period_key: '2026-10', handling_method: 'standing_order' },
+  ]);
+  assert.equal(afterSave.method, 'standing_order');
+  assert.equal(afterSave.source, 'explicit');
+  const reopenNovember = resolveMonth('2026-11', [
+    { period_key: '2026-09', handling_method: 'standing_order' },
+    { period_key: '2026-10', handling_method: 'standing_order' },
+  ]);
+  assert.equal(reopenNovember.method, 'standing_order');
+  assert.equal(reopenNovember.source, 'inherited');
+  const persist = readSrc('../../src/domains/client-operations/client-operations-self-employed-ni-month.service.ts');
+  assert.match(persist, /period_key: input\.periodKey/);
+  assert.match(persist, /onConflict: 'organization_id,client_id,period_key'/);
+  const view = readSrc('../../../../apps/web/src/components/client-operations/ClientOperationsRegistryView.tsx');
+  const confirm = view.slice(
+    view.indexOf('const confirmSelfEmployedNiModal'),
+    view.indexOf('const setOperationalTargetDate'),
+  );
+  assert.match(confirm, /ops\.period_key/);
+  assert.match(confirm, /requireApplied: true/);
+  assert.doesNotMatch(confirm, /setNiModal\(null\)/);
 });
 
 test('13 filing KPIs still ignore national insurance', () => {

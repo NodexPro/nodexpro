@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  ensureMutatedClientsInRegistryRows,
   runExclusiveByKey,
   spliceClientRowIntoRegistryMaterialization,
   SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS,
@@ -88,7 +89,19 @@ test('command path rematerializes one client and still returns a full aggregate'
   assert.ok(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has('confirm_client_operations_obligation_filed_with_payment'));
   assert.ok(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has('confirm_client_operations_obligation_tax_payment'));
   assert.ok(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has('attach_client_operations_filing_evidence'));
+  assert.ok(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has('save_client_operations_self_employed_ni'));
   assert.equal(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has('copy_client_operations_user_period_data'), false);
+});
+
+test('mutated client stays in the command aggregate after search or KPI filter-out', () => {
+  const service = read('../../src/domains/client-operations/client-operations.service.ts');
+  assert.match(service, /ensureMutatedClientsInRegistryRows/);
+  const filtered = [{ client_id: 'kept' }];
+  const built = [{ client_id: 'kept' }, { client_id: 'test4' }];
+  assert.deepEqual(
+    ensureMutatedClientsInRegistryRows(filtered, built, ['test4']).map((row) => row.client_id),
+    ['test4', 'kept'],
+  );
 });
 
 test('no-op ensure slots reuses the GET materialization instead of rebuilding', () => {

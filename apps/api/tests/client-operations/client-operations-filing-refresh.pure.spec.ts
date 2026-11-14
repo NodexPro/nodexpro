@@ -4,13 +4,18 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { obligationWritePersisted } from '../../src/domains/client-operations/client-operations-filing-command.pure.js';
-import { SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS } from '../../src/domains/client-operations/client-operations-registry-incremental.pure.js';
+import {
+  ensureMutatedClientsInRegistryRows,
+  SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS,
+} from '../../src/domains/client-operations/client-operations-registry-incremental.pure.js';
 import { vatFilingPeriodIdentityForOperationalPeriod } from '../../src/domains/client-operations/client-operations-reporting-dashboard.pure.js';
 import {
   canStartFilingAction,
   filingAggregateConfirmsAction,
   filingCellPresentationClass,
   filingChromeConfirmsAction,
+  selfEmployedNiAggregateConfirmsMethod,
+  selfEmployedNiShouldPersistSelection,
 } from '../../../web/src/lib/client-operations-filing-result.pure.ts';
 
 const dir = dirname(fileURLToPath(import.meta.url));
@@ -45,6 +50,27 @@ test('selected tab period maps to the VAT filing identity before a report is acc
   });
   assert.equal(monthly?.period_key, '2026-10');
   assert.equal(bimonthly?.period_key, '2026-09-10');
+  assert.equal(
+    vatFilingPeriodIdentityForOperationalPeriod({
+      vat_frequency: 'חודשי',
+      operational_period_key: '2026-10',
+    })?.period_key,
+    '2026-10',
+  );
+  assert.equal(
+    vatFilingPeriodIdentityForOperationalPeriod({
+      vat_frequency: 'דו חודשי',
+      operational_period_key: '2026-10',
+    })?.period_key,
+    '2026-09-10',
+  );
+  assert.equal(
+    vatFilingPeriodIdentityForOperationalPeriod({
+      vat_frequency: 'bimonthly',
+      operational_period_key: '2026-10',
+    })?.period_key,
+    '2026-09-10',
+  );
 });
 
 test('success is allowed only when the refreshed aggregate chrome matches the action', () => {
@@ -95,6 +121,59 @@ test('success is allowed only when the refreshed aggregate chrome matches the ac
   );
 });
 
+test('report confirmation finds chrome by obligation id when the column key is missing after refresh', () => {
+  const aggregate = {
+    rows: [
+      {
+        client_id: 'test4',
+        reporting: {
+          cells: {
+            vat_report: {
+              obligation_id: 'ob-vat-oct',
+              filing_detail: { chrome: 'filed_unpaid' },
+            },
+          },
+        },
+      },
+    ],
+  };
+  assert.equal(
+    filingAggregateConfirmsAction({
+      action: 'report',
+      clientId: 'test4',
+      columnKey: 'vat',
+      obligationId: 'ob-vat-oct',
+      aggregate,
+    }),
+    true,
+  );
+  assert.equal(
+    filingAggregateConfirmsAction({
+      action: 'report',
+      clientId: 'test4',
+      columnKey: 'vat',
+      obligationId: 'other',
+      aggregate,
+    }),
+    false,
+  );
+});
+
+test('command aggregate keeps the mutated client even when search or KPI hid the row', () => {
+  const built = [
+    { client_id: 'other', mark: 0 },
+    { client_id: 'test4', mark: 1 },
+  ];
+  const filtered = [{ client_id: 'other', mark: 0 }];
+  const rows = ensureMutatedClientsInRegistryRows(filtered, built, ['test4']);
+  assert.equal(rows[0]?.client_id, 'test4');
+  assert.equal(rows[0]?.mark, 1);
+  assert.deepEqual(
+    ensureMutatedClientsInRegistryRows(filtered, built, []),
+    filtered,
+  );
+});
+
 test('filed chrome paints a cell state and an open cell does not invent one', () => {
   assert.equal(
     filingCellPresentationClass({ filing_detail: { chrome: 'filed_unpaid' }, tone: 'warning' }),
@@ -118,6 +197,7 @@ test('the filing modal stays open and success depends on the refreshed aggregate
   const action = view.slice(view.indexOf('const runFilingAction'), view.indexOf('const attachFilingEvidence'));
   assert.match(action, /requireApplied: true/);
   assert.match(action, /filingAggregateConfirmsAction/);
+  assert.match(action, /obligationId: reportingCell\.obligation_id/);
   assert.match(action, /filing\.notConfirmed/);
   assert.doesNotMatch(action, /setFilingModal\(null\)/);
   assert.match(view, /data-testid="client-operations-filing-result"/);
@@ -128,6 +208,63 @@ test('the filing modal stays open and success depends on the refreshed aggregate
   assert.doesNotMatch(css, /rgba\(234, 179, 8/);
   assert.match(css, /is-filing-chrome-filed_unpaid/);
   assert.match(css, /rgba\(19, 191, 208, 0\.12\)/);
+});
+
+test('self-employed NI standing-order save stays on the viewed month and confirms from the aggregate', () => {
+  assert.equal(selfEmployedNiShouldPersistSelection({ selectedMethod: 'standing_order' }), true);
+  assert.equal(selfEmployedNiShouldPersistSelection({ selectedMethod: null }), false);
+  const saved = {
+    rows: [
+      {
+        client_id: 'test4',
+        national_insurance_operations: {
+          handling_method: 'standing_order',
+          period_key: '2026-10',
+        },
+      },
+    ],
+  };
+  assert.equal(
+    selfEmployedNiAggregateConfirmsMethod({
+      clientId: 'test4',
+      periodKey: '2026-10',
+      method: 'standing_order',
+      aggregate: saved,
+    }),
+    true,
+  );
+  assert.equal(
+    selfEmployedNiAggregateConfirmsMethod({
+      clientId: 'test4',
+      periodKey: '2026-10',
+      method: 'standing_order',
+      aggregate: { rows: [] },
+    }),
+    false,
+  );
+  assert.equal(
+    selfEmployedNiAggregateConfirmsMethod({
+      clientId: 'test4',
+      periodKey: '2026-11',
+      method: 'standing_order',
+      aggregate: saved,
+    }),
+    false,
+  );
+  const view = read('../../../web/src/components/client-operations/ClientOperationsRegistryView.tsx');
+  const confirm = view.slice(
+    view.indexOf('const confirmSelfEmployedNiModal'),
+    view.indexOf('const setOperationalTargetDate'),
+  );
+  assert.match(confirm, /save_client_operations_self_employed_ni/);
+  assert.match(confirm, /ops\.period_key/);
+  assert.match(confirm, /requireApplied: true/);
+  assert.match(confirm, /selfEmployedNiAggregateConfirmsMethod/);
+  assert.match(confirm, /selfEmployedNiShouldPersistSelection/);
+  assert.doesNotMatch(confirm, /setNiModal\(null\)/);
+  assert.doesNotMatch(confirm, /methodChanged/);
+  assert.match(view, /data-testid="client-operations-ni-result"/);
+  assert.match(view, /clientOperations\.registry\.reporting\.ni\.saved/);
 });
 
 test('mark reported rejects a write that did not update a row', () => {

@@ -1440,18 +1440,15 @@ export function vatFilingPeriodIdentityForOperationalPeriod(input: {
   vat_frequency: string | null | undefined;
   operational_period_key: string;
 }): { period_key: string } | null {
-  const freq = String(input.vat_frequency ?? '').trim().toLowerCase();
+  const freq = normalizeVatFrequency(input.vat_frequency);
   const parsed = parseReportingPeriodKey(input.operational_period_key);
-  if (!parsed) return null;
+  if (!parsed || !freq) return null;
   if (freq === 'monthly') return { period_key: input.operational_period_key };
-  if (freq === 'bi_monthly') {
-    if (parsed.month % 2 !== 0) return null;
-    const startMonth = parsed.month - 1;
-    return {
-      period_key: `${parsed.year}-${String(startMonth).padStart(2, '0')}-${String(parsed.month).padStart(2, '0')}`,
-    };
-  }
-  return null;
+  if (parsed.month % 2 !== 0) return null;
+  const startMonth = parsed.month - 1;
+  return {
+    period_key: `${parsed.year}-${String(startMonth).padStart(2, '0')}-${String(parsed.month).padStart(2, '0')}`,
+  };
 }
 
 export function canonicalVatObligationId(input: {

@@ -2182,6 +2182,8 @@
           "confirmResolution": "This month’s handling is complete",
           "monthHandled": "This month’s handling is complete",
           "save": "Save",
+          "saved": "The selection was saved",
+          "notConfirmed": "The selection was not confirmed in the updated registry.",
           "cancel": "Cancel"
         }
       }

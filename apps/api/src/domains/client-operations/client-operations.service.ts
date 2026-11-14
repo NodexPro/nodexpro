@@ -119,6 +119,7 @@ import {
   clientOperationsRegistryMaterializationCache,
 } from './client-operations-registry-materialization-cache.js';
 import {
+  ensureMutatedClientsInRegistryRows,
   runExclusiveByKey,
   spliceClientRowIntoRegistryMaterialization,
 } from './client-operations-registry-incremental.pure.js';
@@ -728,13 +729,17 @@ export async function listClientOperationsRegistry(
     ? query.filter_reporting_kpi
     : null;
   // Business filters already applied via early facet matching; search/sort/KPI still apply.
-  const rows = applyRegistryQueryToRows(materialization.built_rows, {
-    q,
-    sort_by,
-    sort_dir,
-    filter_reporting_kpi,
-    operational_period_key: selectedPeriodKey,
-  });
+  const rows = ensureMutatedClientsInRegistryRows(
+    applyRegistryQueryToRows(materialization.built_rows, {
+      q,
+      sort_by,
+      sort_dir,
+      filter_reporting_kpi,
+      operational_period_key: selectedPeriodKey,
+    }),
+    materialization.built_rows,
+    incrementalClientIds,
+  );
   const reporting_dashboard = buildReportingDashboard({
     rows: materialization.built_rows,
     previous_periods: materialization.reporting_previous_periods,

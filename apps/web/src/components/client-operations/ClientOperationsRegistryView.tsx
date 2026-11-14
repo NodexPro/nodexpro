@@ -6,6 +6,8 @@ import {
   canStartFilingAction,
   filingAggregateConfirmsAction,
   filingCellPresentationClass,
+  selfEmployedNiAggregateConfirmsMethod,
+  selfEmployedNiShouldPersistSelection,
 } from '../../lib/client-operations-filing-result.pure';
 import {
   beginOptimisticCheckbox,
@@ -1081,6 +1083,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     handlingMethod: SelfEmployedNiHandlingMethod | null;
     confirmMonthHandled: boolean;
   } | null>(null);
+  const [niFeedback, setNiFeedback] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
   const statusPaintSlotsRef = useRef<Map<string, ManualStatusPaintSlot>>(new Map());
   const statusOverlaysRef = useRef<Map<string, ManualStatusOverlay>>(new Map());
   const statusOverlayGenRef = useRef(0);
@@ -3370,11 +3373,15 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           action,
           clientId,
           columnKey,
+          obligationId: reportingCell.obligation_id,
           aggregate: aggregate as {
             rows?: Array<{
               client_id?: string;
               reporting?: {
-                cells?: Record<string, { filing_detail?: { chrome?: string | null } | null } | null> | null;
+                cells?: Record<
+                  string,
+                  { obligation_id?: string | null; filing_detail?: { chrome?: string | null } | null } | null
+                > | null;
               } | null;
             }>;
           },
@@ -3486,44 +3493,81 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     }
   };
   const openSelfEmployedNiModal = (row: ClientOperationsRegistryRow) => {
-    const ops = row.national_insurance_operations;
+    const liveRow = rows.find((item) => item.client_id === row.client_id) ?? row;
+    const ops = liveRow.national_insurance_operations;
     if (!ops?.openable) return;
+    setNiFeedback(null);
     setNiModal({
-      row,
+      row: liveRow,
       handlingMethod: ops.handling_method,
       confirmMonthHandled: false,
     });
   };
   const confirmSelfEmployedNiModal = async () => {
     if (!niModal || !onRegistryCommand) return;
-    const ops = niModal.row.national_insurance_operations;
+    const liveRow = rows.find((row) => row.client_id === niModal.row.client_id) ?? niModal.row;
+    const ops = liveRow.national_insurance_operations;
     const method = niModal.handlingMethod;
-    if (!ops || !method) {
-      setNiModal(null);
-      return;
-    }
-    const methodChanged = method !== ops.handling_method;
-    const persistInherited =
-      ops.handling_method_source === 'inherited' ||
-      ops.handling_method_source === 'standing_until' ||
-      ops.january_confirmation_required;
+    if (!ops || !method || !selfEmployedNiShouldPersistSelection({ selectedMethod: method })) return;
     const resolve = Boolean(
       method === 'manual_monthly' && niModal.confirmMonthHandled && ops.can_confirm_month_handled,
     );
-    setNiModal(null);
-    if (!methodChanged && !persistInherited && !resolve) return;
-    await runMarkCommand(
-      `${niModal.row.client_id}:ni-self`,
-      {
-        command: 'save_client_operations_self_employed_ni',
-        client_id: niModal.row.client_id,
-        handling_method: method,
-        confirm_month_handled: resolve,
-        operational_period_key: query?.operational_period_key ?? null,
-        query,
-      },
-      t('clientOperations.registry.errors.saveFailed'),
-    );
+    const periodKey = ops.period_key || query?.operational_period_key || null;
+    const markKey = `${liveRow.client_id}:ni-self`;
+    if (pendingMarkKeysRef.current.has(markKey)) return;
+    pendingMarkKeysRef.current.add(markKey);
+    setPendingMarkKeys(new Set(pendingMarkKeysRef.current));
+    setNiFeedback(null);
+    setCommandError('');
+    try {
+      const aggregate = await onRegistryCommand(
+        {
+          command: 'save_client_operations_self_employed_ni',
+          client_id: liveRow.client_id,
+          handling_method: method,
+          confirm_month_handled: resolve,
+          operational_period_key: periodKey,
+          query,
+        },
+        { requireApplied: true },
+      );
+      const confirmed = selfEmployedNiAggregateConfirmsMethod({
+        clientId: liveRow.client_id,
+        periodKey: String(periodKey ?? ''),
+        method,
+        aggregate: aggregate as {
+          rows?: Array<{
+            client_id?: string;
+            national_insurance_operations?: { handling_method?: string | null; period_key?: string | null } | null;
+          }>;
+        },
+      });
+      const nextRow =
+        (aggregate as { rows?: ClientOperationsRegistryRow[] })?.rows?.find(
+          (row) => row.client_id === liveRow.client_id,
+        ) ?? liveRow;
+      setNiModal({
+        row: nextRow,
+        handlingMethod: nextRow.national_insurance_operations?.handling_method ?? method,
+        confirmMonthHandled: false,
+      });
+      setNiFeedback({
+        tone: confirmed ? 'ok' : 'err',
+        text: t(
+          confirmed
+            ? 'clientOperations.registry.reporting.ni.saved'
+            : 'clientOperations.registry.reporting.ni.notConfirmed',
+        ),
+      });
+    } catch (error) {
+      setNiFeedback({
+        tone: 'err',
+        text: localizeRegistryCommandError(error, t('clientOperations.registry.reporting.ni.notConfirmed')),
+      });
+    } finally {
+      pendingMarkKeysRef.current.delete(markKey);
+      setPendingMarkKeys(new Set(pendingMarkKeysRef.current));
+    }
   };
   const setOperationalTargetDate = async (
     row: ClientOperationsRegistryRow,
@@ -5662,22 +5706,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         if (!ops) return null;
         const amount = niModal.row.cells?.national_insurance || niModal.row.national_insurance_status || '—';
         const selectedMethod = niModal.handlingMethod;
-        const methodChanged = selectedMethod !== ops.handling_method;
-        const persistInherited =
-          ops.handling_method_source === 'inherited' ||
-          ops.handling_method_source === 'standing_until' ||
-          ops.january_confirmation_required;
-        const resolve = Boolean(
-          selectedMethod === 'manual_monthly' &&
-            niModal.confirmMonthHandled &&
-            ops.can_confirm_month_handled,
-        );
         const canSave = Boolean(
           canEdit &&
             onRegistryCommand &&
             ops.can_set_handling_method &&
-            selectedMethod &&
-            (methodChanged || persistInherited || resolve),
+            selfEmployedNiShouldPersistSelection({ selectedMethod }),
         );
         const monthHandledChecked = Boolean(ops.action_resolved || niModal.confirmMonthHandled);
         return (
@@ -5789,11 +5822,24 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     </fieldset>
                   </div>
                 </div>
+                {niFeedback ? (
+                  <div
+                    className={`nx-co-filing-modal__result is-${niFeedback.tone}`}
+                    role={niFeedback.tone === 'err' ? 'alert' : 'status'}
+                    aria-live="polite"
+                    data-testid="client-operations-ni-result"
+                  >
+                    <span className="nx-co-filing-modal__result-icon" aria-hidden="true">
+                      {niFeedback.tone === 'ok' ? '✓' : '!'}
+                    </span>
+                    <span>{niFeedback.text}</span>
+                  </div>
+                ) : null}
                 <div className="nx-clients-form__footer nx-co-ni-modal__footer">
                   <button
                     type="submit"
                     className="nx-glass-btn nx-glass-btn--purple"
-                    disabled={!canSave}
+                    disabled={!canSave || pendingMarkKeys.has(`${niModal.row.client_id}:ni-self`)}
                   >
                     {t(ops.save_key)}
                   </button>

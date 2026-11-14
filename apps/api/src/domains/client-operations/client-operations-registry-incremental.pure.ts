@@ -39,6 +39,25 @@ export function spliceClientRowIntoRegistryMaterialization<
   };
 }
 
+/**
+ * Command responses stay a full aggregate. Search/KPI may hide the mutated client;
+ * keep that rematerialized row in `rows` so the UI can confirm the write from backend chrome.
+ */
+export function ensureMutatedClientsInRegistryRows<T extends { client_id: string }>(
+  filtered: readonly T[],
+  builtRows: readonly T[],
+  mutatedClientIds: readonly string[],
+): T[] {
+  const next = filtered.slice();
+  for (const rawId of mutatedClientIds) {
+    const id = String(rawId ?? '').trim();
+    if (!id || next.some((row) => row.client_id === id)) continue;
+    const rebuilt = builtRows.find((row) => row.client_id === id);
+    if (rebuilt) next.unshift(rebuilt);
+  }
+  return next;
+}
+
 const exclusiveTails = new Map<string, Promise<unknown>>();
 
 /** Serialize incremental write-through per cache key so concurrent staff splices cannot clobber each other. */
