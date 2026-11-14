@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { apiJson, userFacingApiMessage } from '../api/client';
+import { ApiError, apiJson, userFacingApiMessage } from '../api/client';
 import {
   moduleClientOperationsDocumentsCommands,
   moduleClientOperationsDocumentsFileOpen,
@@ -80,6 +80,7 @@ export function ClientDocumentsTab({
   const [pendingOpenFolder, setPendingOpenFolder] = useState<{ folder_id: string; folder_name_he: string } | null>(null);
   /** Hide folder panel immediately on סגירה; server case catches up in background. */
   const [folderPanelDismissed, setFolderPanelDismissed] = useState(false);
+  const [selectedPeriodKey, setSelectedPeriodKey] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const canEdit = documentsTab.permissions.can_edit;
 
@@ -90,10 +91,12 @@ export function ClientDocumentsTab({
   }, [folderDlg]);
 
   const serverOpenFolderId = documentsTab.open_folder?.folder_id ?? null;
+  const serverPeriodKey = documentsTab.open_folder?.period_navigation?.selected_period_key ?? null;
   useEffect(() => {
     setPendingOpenFolder(null);
     setFolderPanelDismissed(false);
-  }, [serverOpenFolderId]);
+    setSelectedPeriodKey(serverPeriodKey);
+  }, [serverOpenFolderId, serverPeriodKey]);
 
   const runCommand = async (
     type: string,
@@ -208,6 +211,30 @@ export function ClientDocumentsTab({
     if (!folder.actions.can_archive_or_delete) return;
     if (!window.confirm(t('clientOperations.documents.deleteFolderConfirm'))) return;
     void runCommand('archive_or_delete_client_document_folder', { folder_id: folder.folder_id });
+  };
+
+  const sendDocument = async (documentId: string) => {
+    setBusy(true);
+    setErr('');
+    try {
+      const out = await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsDocumentsCommands(clientId), {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'send_client_document_to_client',
+          payload: { document_id: documentId },
+          expected_version: documentsTab.read_model_version,
+        }),
+      });
+      onCaseUpdated(out);
+    } catch (e) {
+      setErr(
+        e instanceof ApiError && e.code === 'missing_client_email'
+          ? t('clientOperations.documents.missingEmail')
+          : userFacingApiMessage(e),
+      );
+    } finally {
+      setBusy(false);
+    }
   };
 
   const confirmDeleteDocument = (documentId: string) => {
@@ -337,6 +364,63 @@ export function ClientDocumentsTab({
 
             {folderPanelLoading ? (
               <p className="nx-cdocs-panel-loading">{t('clientOperations.documents.loading')}</p>
+            ) : openFolderView && openFolderView.period_navigation ? (
+              <div className="nx-cdocs-period-browser">
+                <nav className="nx-cdocs-period-nav" aria-label={t('clientOperations.registry.reporting.filing.period')}>
+                  {openFolderView.period_navigation.periods.map((period) => (
+                    <button
+                      key={period.period_key}
+                      type="button"
+                      className={`nx-cdocs-period-tab${(selectedPeriodKey ?? openFolderView.period_navigation?.selected_period_key) === period.period_key ? ' is-active' : ''}`}
+                      onClick={() => setSelectedPeriodKey(period.period_key)}
+                    >
+                      {period.display_label}
+                    </button>
+                  ))}
+                </nav>
+                <ul className="nx-cdocs-doc-list">
+                  {openFolderView.documents.filter((d) => !selectedPeriodKey || d.reporting_period_key === selectedPeriodKey || !d.reporting_period_key).length === 0 ? (
+                    <li className="nx-cdocs-empty nx-cdocs-empty--in-panel">
+                      {localizeSystemLabel(t, documentsTab.ui.empty_documents_state_key, documentsTab.ui.empty_documents_state_he)}
+                    </li>
+                  ) : null}
+                  {openFolderView.documents
+                    .filter((d) => !selectedPeriodKey || d.reporting_period_key === selectedPeriodKey || !d.reporting_period_key)
+                    .map((d) => {
+                      const label = d.display_label_he?.trim() || d.file_name_he?.trim() || '—';
+                      return (
+                        <li key={d.document_id} className="nx-cdocs-doc-row">
+                          <div className="nx-cdocs-doc-main">
+                            <span className="nx-cdocs-doc-label">{label}</span>
+                            <span className="nx-cdocs-doc-sub">
+                              {d.evidence_kind_key ? t(d.evidence_kind_key) : ''}
+                              {d.reporting_period_display ? ` · ${d.reporting_period_display}` : ''}
+                              {` · ${d.uploaded_display_he}`}
+                              {d.delivery?.status_key ? ` · ${t(d.delivery.status_key)}` : ''}
+                            </span>
+                          </div>
+                          <div className="nx-cdocs-doc-actions">
+                            {d.actions.can_view && d.file_asset_id ? (
+                              <button type="button" className="nx-cdocs-icon-action" disabled={busy || !d.file_open_allowed} onClick={() => void openFile(d.file_asset_id!)} aria-label={t('clientOperations.documents.viewDocument')}>
+                                <IconEyeBlue />
+                              </button>
+                            ) : null}
+                            {d.actions.can_send ? (
+                              <button type="button" className="nx-cdocs-icon-action" disabled={busy} onClick={() => void sendDocument(d.document_id)} aria-label={t('clientOperations.documents.sendDocument')}>
+                                @
+                              </button>
+                            ) : null}
+                            {d.actions.can_delete ? (
+                              <button type="button" className="nx-cdocs-icon-action" disabled={busy} onClick={() => confirmDeleteDocument(d.document_id)} aria-label={t('clientOperations.documents.deleteDocument')}>
+                                ×
+                              </button>
+                            ) : null}
+                          </div>
+                        </li>
+                      );
+                    })}
+                </ul>
+              </div>
             ) : openFolderView && openFolderView.documents.length === 0 ? (
               <p className="nx-cdocs-empty nx-cdocs-empty--in-panel">
                 {localizeSystemLabel(t, documentsTab.ui.empty_documents_state_key, documentsTab.ui.empty_documents_state_he)}

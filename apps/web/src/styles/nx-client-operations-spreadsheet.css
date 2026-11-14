@@ -2869,6 +2869,47 @@
   flex: 1 1 120px;
 }
 
+.nx-co-filing-modal__notice {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.nx-co-filing-modal__evidence-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.nx-co-filing-modal__clip {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.nx-co-filing-modal__kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.nx-co-filing-modal__files {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
 button.nx-co-sheet__date-open {
   appearance: none;
   margin: 0;

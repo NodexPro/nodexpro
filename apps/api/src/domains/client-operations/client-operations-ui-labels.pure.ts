@@ -128,6 +128,11 @@ export const CO_UI = {
       notRecorded: 'clientOperations.registry.reporting.filing.notRecorded',
       save: 'clientOperations.registry.reporting.filing.save',
       cancel: 'clientOperations.registry.reporting.filing.cancel',
+      materialWarning: 'clientOperations.registry.reporting.filing.materialWarning',
+      attachmentNotice: 'clientOperations.registry.reporting.filing.attachmentNotice',
+      evidenceFiling: 'clientOperations.registry.reporting.filing.evidenceFiling',
+      evidencePayment: 'clientOperations.registry.reporting.filing.evidencePayment',
+      attach: 'clientOperations.registry.reporting.filing.attach',
     },
     ni: {
       title: 'clientOperations.registry.reporting.ni.title',
@@ -293,6 +298,9 @@ export const CO_UI = {
       assessments: 'clientOperations.documents.folders.assessments',
       payroll: 'clientOperations.documents.folders.payroll',
       case_closure: 'clientOperations.documents.folders.caseClosure',
+      vat_filings: 'clientOperations.documents.folders.vatFilings',
+      income_tax_advance_filings: 'clientOperations.documents.folders.incomeTaxAdvanceFilings',
+      ni_deductions_filings: 'clientOperations.documents.folders.niDeductionsFilings',
     },
   },
   workspace: {

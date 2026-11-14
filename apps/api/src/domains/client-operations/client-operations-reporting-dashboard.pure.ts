@@ -8,6 +8,7 @@
  * DocFlow delivery is not government filing proof.
  */
 
+import { canManuallyConfirmFiling, filingMaterialWarning, type FilingEvidenceRow } from './client-operations-filing-evidence.pure.js';
 import { CO_UI } from './client-operations-ui-labels.pure.js';
 import {
   incomeTaxAdvancesObligationKey,
@@ -329,6 +330,9 @@ export type ClientOperationsFilingDetail = {
   can_report: boolean;
   can_report_and_pay: boolean;
   can_mark_paid: boolean;
+  material_warning_key: string | null;
+  attachment_notice_key: string;
+  evidence: FilingEvidenceRow[];
   report_key: string;
   report_and_paid_key: string;
   paid_key: string;
@@ -424,6 +428,9 @@ export type ClientOperationsReportingCellInput = {
   payment_classification?: TaxObligationPaymentClassification | null;
   payment_due_date?: string | null;
   payment_applies?: boolean;
+  /** Backend warning: material/income is missing. Does not block manual filing. */
+  material_warning?: boolean;
+  evidence?: readonly FilingEvidenceRow[];
 };
 
 export type ClientOperationsReportingCellPresentation = {
@@ -458,6 +465,13 @@ export type ClientOperationsReportingCellPresentation = {
   allowed_actions: ClientOperationsReportingAllowedAction[];
   payment_modal: ClientOperationsReportingPaymentModal | null;
   filing_detail: ClientOperationsFilingDetail | null;
+  evidence_attachment?: {
+    notice_key: string;
+    filing_label_key: string;
+    period_key: string;
+    period_display: string;
+    evidence: FilingEvidenceRow[];
+  };
 };
 
 export type ClientOperationsReportingRowPresentation = {
@@ -716,18 +730,34 @@ export function buildReportingCellPresentation(
     bank_verified: false,
     allowed_actions,
     payment_modal: paymentModal,
+    evidence_attachment:
+      input.kind === 'national_insurance_deductions' && applicable
+        ? {
+            notice_key: CO_UI.reporting.filing.attachmentNotice,
+            filing_label_key: CO_UI.columns.niDeductions,
+            period_key: input.operational_period_key ?? '',
+            period_display: input.operational_period_key
+              ? formatReportingPeriodDisplayLabel(input.operational_period_key)
+              : '',
+            evidence: [...(input.evidence ?? [])],
+          }
+        : undefined,
     filing_detail: buildFilingDetail({
       kind: input.kind,
       applicable,
       submitted: input.submitted,
       tone,
-      periodKey: input.operational_period_key ?? '',
+      periodKey: input.canonical_id?.includes('::')
+        ? input.canonical_id.slice(input.canonical_id.indexOf('::') + 2)
+        : (input.operational_period_key ?? ''),
       lastReportedAt: input.last_reported_at,
       paymentClassification: input.payment_classification ?? null,
       paymentState,
       paymentApplies,
       canConfirmFiling: Boolean(!informational && input.can_mark_submitted),
       canClearFiling: Boolean(!informational && input.can_mark_not_submitted),
+      materialWarning: Boolean(input.material_warning),
+      evidence: input.evidence ?? [],
     }),
   };
 }
@@ -964,6 +994,8 @@ export function buildPaymentsOutstandingKpi(input: {
 export function formatReportingPeriodDisplayLabel(periodKey: string): string {
   const month = PERIOD_KEY_RE.exec(periodKey.trim());
   if (month) return `${month[2]}.${month[1]!.slice(2)}`;
+  const pair = BIMONTHLY_VAT_PERIOD_RE.exec(periodKey.trim());
+  if (pair) return `${pair[2]}.${pair[1]!.slice(2)}–${pair[3]}.${pair[1]!.slice(2)}`;
   const year = YEAR_KEY_RE.exec(periodKey.trim());
   if (year) return year[1]!;
   return periodKey;
@@ -991,6 +1023,8 @@ function buildFilingDetail(input: {
   paymentApplies: boolean;
   canConfirmFiling: boolean;
   canClearFiling: boolean;
+  materialWarning?: boolean;
+  evidence?: readonly FilingEvidenceRow[];
 }): ClientOperationsFilingDetail | null {
   if (input.kind !== 'vat' && input.kind !== 'income_tax_advance') return null;
   const paid = !input.paymentApplies || filingPaymentSettled(input.paymentState);
@@ -1024,6 +1058,11 @@ function buildFilingDetail(input: {
     can_report: canReport,
     can_report_and_pay: canReport && input.paymentApplies,
     can_mark_paid: input.applicable && input.submitted && input.paymentApplies && !paid,
+    material_warning_key: input.materialWarning && input.applicable && !input.submitted
+      ? CO_UI.reporting.filing.materialWarning
+      : null,
+    attachment_notice_key: CO_UI.reporting.filing.attachmentNotice,
+    evidence: [...(input.evidence ?? [])],
     report_key: CO_UI.reporting.filing.report,
     report_and_paid_key: CO_UI.reporting.filing.reportAndPaid,
     paid_key: CO_UI.reporting.filing.paid,
@@ -1566,7 +1605,19 @@ export function buildReportingCellInputFromFacts(input: {
     due_date: applicable ? dueDate : null,
     canonical_id: canonicalId,
     obligation_id: fact?.obligation_id ?? null,
-    can_mark_submitted: Boolean(applicable && fact?.obligation_id && canMarkObligationSubmitted(fact.status) && !submitted),
+    can_mark_submitted: Boolean(
+      applicable &&
+        fact?.obligation_id &&
+        !submitted &&
+        (input.kind === 'vat' || input.kind === 'income_tax_advance'
+          ? canManuallyConfirmFiling(fact.status)
+          : canMarkObligationSubmitted(fact.status)),
+    ),
+    material_warning: Boolean(
+      applicable &&
+        (input.kind === 'vat' || input.kind === 'income_tax_advance') &&
+        filingMaterialWarning(fact?.status),
+    ),
     can_mark_not_submitted: Boolean(applicable && fact?.obligation_id && submitted),
     last_reported_at: fact?.last_reported_at ?? null,
     operational_period_key: input.operationalPeriodKey,

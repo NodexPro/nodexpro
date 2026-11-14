@@ -1415,6 +1415,12 @@
       "rename": "Rename",
       "view": "View",
       "viewDocument": "View document",
+      "sendDocument": "Send to client",
+      "missingEmail": "This client has no email in the client details.",
+      "deliveryRecorded": "Delivery was recorded. The provider has not confirmed it yet.",
+      "deliveryHandedToProvider": "The mail provider accepted the message. Delivery to the client is not confirmed.",
+      "deliveryFailed": "The mail provider did not accept the message.",
+      "deliveryPending": "Delivery is still in progress.",
       "name": "Name",
       "documentCount": "{{count}} documents",
       "tabTitle": "Documents",
@@ -1431,7 +1437,10 @@
         "forms": "Forms",
         "assessments": "Assessments",
         "payroll": "Payroll",
-        "caseClosure": "Case closure"
+        "caseClosure": "Case closure",
+        "vatFilings": "VAT filings",
+        "incomeTaxAdvanceFilings": "Income-tax advance filings",
+        "niDeductionsFilings": "Payroll NI filings"
       }
     },
     "history": {
@@ -2124,7 +2133,12 @@
           "paymentStatus": "Payment status",
           "notRecorded": "Not recorded",
           "save": "Save",
-          "cancel": "Cancel"
+          "cancel": "Cancel",
+          "materialWarning": "Client material is still missing. You can still record a filing that already happened.",
+          "attachmentNotice": "This document will be attached to {{filing}} for {{period}}.",
+          "evidenceFiling": "Filing",
+          "evidencePayment": "Payment",
+          "attach": "Attach evidence"
         },
         "ni": {
           "title": "Self-employed National Insurance",

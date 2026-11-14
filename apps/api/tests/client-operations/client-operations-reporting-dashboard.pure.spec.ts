@@ -10,6 +10,7 @@ import {
   annualAppliesToOperationalPeriod,
   buildPreviousIncompletePeriods,
   buildReportingCellInputFromFacts,
+  buildReportingCellPresentation,
   buildPaymentsOutstandingKpi,
   buildReportingDashboard,
   buildReportingKpiCards,
@@ -262,6 +263,7 @@ test('bimonthly VAT matches pair-end month once', () => {
     }),
     'vat_report::2026-09-10',
   );
+  assert.equal(formatReportingPeriodDisplayLabel('2026-09-10'), '09.26–10.26');
   assert.equal(resolveVatCalendarLookupPeriodKey({ vat_frequency: 'bi_monthly', operational_period_key: '2026-10' }), '2026-10');
   assert.equal(resolveVatCalendarLookupPeriodKey({ vat_frequency: 'bi_monthly', operational_period_key: '2026-09' }), null);
 });
@@ -886,7 +888,12 @@ test('November recompute identity matches tab 10.26; stale Test/Test4 keys canno
     calendarDueDate: '2026-11-16',
   });
   assert.equal(missingMaterial.obligation_id, 'ob-test4-oct');
-  assert.equal(missingMaterial.can_mark_submitted, false);
+  assert.equal(missingMaterial.can_mark_submitted, true);
+  assert.equal(missingMaterial.material_warning, true);
+  const missingDetail = buildReportingCellPresentation(missingMaterial, '2026-11-14').filing_detail;
+  assert.equal(missingDetail?.can_report, true);
+  assert.equal(missingDetail?.material_warning_key, 'clientOperations.registry.reporting.filing.materialWarning');
+  assert.equal(missingDetail?.period_display, '10.26');
 });
 
 test('legacy UTC bimonthly helper in October kept Jul–Aug; operational October is Sep–Oct', () => {

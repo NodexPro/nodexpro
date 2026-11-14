@@ -5,6 +5,10 @@ import { AppError, badRequest, conflict, forbidden } from '../../shared/errors.j
 import { requireGuardedUpload } from '../../shared/file-content-guard.js';
 import { assertFileAssetDownloadable } from '../../shared/document-download-guard.js';
 import { CO_UI, documentFolderLabelKey } from './client-operations-ui-labels.pure.js';
+import { formatReportingPeriodDisplayLabel } from './client-operations-reporting-dashboard.pure.js';
+import { FILING_EVIDENCE_FOLDER_SYSTEM_KEY, clientDocumentDeliveryPresentation } from './client-operations-filing-evidence.pure.js';
+import { beginAttempt, finalizeAttempt, listAttempts, sendEmail } from '../delivery/index.js';
+import { assertCanAccessClientFromContext } from './organization-client-access.js';
 
 const BUCKET = 'client-files';
 const MAX_B64 = 12_000_000;
@@ -21,6 +25,9 @@ export const CLIENT_DOCUMENT_DEFAULT_FOLDERS: ReadonlyArray<{ system_key: string
   { system_key: 'assessments', name_he: 'שומות', sort_order: 70 },
   { system_key: 'payroll', name_he: 'שכר', sort_order: 80 },
   { system_key: 'case_closure', name_he: 'סגירת תיק', sort_order: 90 },
+  { system_key: 'vat_filings', name_he: 'דיווח מע״מ', sort_order: 100 },
+  { system_key: 'income_tax_advance_filings', name_he: 'דיווח מקדמות', sort_order: 110 },
+  { system_key: 'ni_deductions_filings', name_he: 'דיווחי ב״ל', sort_order: 120 },
 ];
 
 export type ClientDocumentsBrandVariant = 'primary' | 'secondary' | 'neutral';
@@ -50,7 +57,16 @@ export type ClientDocumentsTabDocumentRowDto = {
   display_label_he: string | null;
   uploaded_display_he: string;
   file_open_allowed: boolean;
-  actions: { can_view: boolean; can_delete: boolean };
+  actions: { can_view: boolean; can_delete: boolean; can_send: boolean };
+  evidence_kind?: 'filing' | 'payment' | null;
+  evidence_kind_key?: string | null;
+  reporting_period_key?: string | null;
+  reporting_period_display?: string | null;
+  delivery?: {
+    result: 'pending' | 'sent' | 'failed' | null;
+    provider_confirmed: false;
+    status_key: string | null;
+  };
 };
 
 export type ClientDocumentsTabResponse = {
@@ -78,6 +94,10 @@ export type ClientDocumentsTabResponse = {
     folder_name_he: string;
     folder_name_key?: string;
     documents: ClientDocumentsTabDocumentRowDto[];
+    period_navigation?: null | {
+      selected_period_key: string | null;
+      periods: Array<{ period_key: string; display_label: string }>;
+    };
   };
   file_open_path_template: string;
 };
@@ -95,6 +115,7 @@ export type ClientDocumentsCommandType =
   | 'archive_or_delete_client_document_folder'
   | 'upload_client_document'
   | 'delete_client_document'
+  | 'send_client_document_to_client'
   | 'open_client_document_folder';
 
 function assertOrg(ctx: RequestContext): string {
@@ -371,24 +392,62 @@ export async function getClientDocumentsTabReadModel(
   if (openFolderId) {
     const folderMeta = folders.find((f) => f.id === openFolderId);
     if (folderMeta) {
-      const { data: docRows } = await supabaseAdmin
+      const extended = await supabaseAdmin
         .from('client_documents')
-        .select('id, file_asset_id, display_label_he, created_at, file_assets(file_name)')
+        .select('id, file_asset_id, display_label_he, created_at, evidence_kind, reporting_period_key, file_assets(file_name)')
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .eq('folder_id', openFolderId)
         .is('deleted_at', null)
         .order('created_at', { ascending: false });
+      const base = extended.error
+        ? await supabaseAdmin
+            .from('client_documents')
+            .select('id, file_asset_id, display_label_he, created_at, file_assets(file_name)')
+            .eq('organization_id', orgId)
+            .eq('client_id', clientId)
+            .eq('folder_id', openFolderId)
+            .is('deleted_at', null)
+            .order('created_at', { ascending: false })
+        : extended;
+      const docRows = base.data;
+      const deliveryByDocument = new Map<string, 'pending' | 'sent' | 'failed'>();
+      try {
+        const attempts = await listAttempts({
+          organizationId: orgId,
+          representedClientId: clientId,
+          sourceModule: 'client-operations',
+          sourceEntityType: 'client_document',
+          channel: 'email',
+          limit: 200,
+        });
+        for (const attempt of attempts) {
+          if (!deliveryByDocument.has(attempt.sourceEntityId)) {
+            deliveryByDocument.set(attempt.sourceEntityId, attempt.result);
+          }
+        }
+      } catch {
+        // Delivery history stays empty when the ledger cannot be read. The folder still opens.
+      }
 
-      const documents: ClientDocumentsTabDocumentRowDto[] = ((docRows ?? []) as Array<{
+      const filingFolder = Boolean(
+        folderMeta.system_key &&
+          Object.values(FILING_EVIDENCE_FOLDER_SYSTEM_KEY).includes(folderMeta.system_key),
+      );
+      const mapped = ((docRows ?? []) as Array<{
         id: string;
         file_asset_id: string;
         display_label_he: string | null;
         created_at: string;
+        evidence_kind?: string | null;
+        reporting_period_key?: string | null;
         file_assets: { file_name: string | null } | { file_name: string | null }[] | null;
       }>).map((d) => {
         const fa = d.file_assets;
         const fn = Array.isArray(fa) ? fa[0]?.file_name : fa?.file_name;
+        const evidenceKind: 'filing' | 'payment' | null =
+          d.evidence_kind === 'filing' || d.evidence_kind === 'payment' ? d.evidence_kind : null;
+        const periodKey = d.reporting_period_key ? String(d.reporting_period_key) : null;
         return {
           document_id: d.id,
           file_asset_id: d.file_asset_id ?? null,
@@ -396,12 +455,28 @@ export async function getClientDocumentsTabReadModel(
           display_label_he: d.display_label_he,
           uploaded_display_he: formatDateTimeHe(d.created_at),
           file_open_allowed: Boolean(d.file_asset_id),
+          evidence_kind: evidenceKind,
+          evidence_kind_key: evidenceKind === 'payment'
+            ? CO_UI.reporting.filing.evidencePayment
+            : evidenceKind === 'filing'
+              ? CO_UI.reporting.filing.evidenceFiling
+              : null,
+          reporting_period_key: periodKey,
+          reporting_period_display: periodKey ? formatReportingPeriodDisplayLabel(periodKey) : null,
+          delivery: {
+            result: deliveryByDocument.get(d.id) ?? null,
+            ...clientDocumentDeliveryPresentation(deliveryByDocument.get(d.id) ?? null),
+          },
           actions: {
             can_view: canViewDocumentsTab(ctx) && Boolean(d.file_asset_id),
             can_delete: canEdit,
+            can_send: canEdit && Boolean(d.file_asset_id),
           },
         };
       });
+      const periodKeys = [...new Set(mapped.map((d) => d.reporting_period_key).filter((k): k is string => Boolean(k)))].sort();
+      const selectedPeriod = periodKeys.length ? periodKeys[periodKeys.length - 1]! : null;
+      const documents = mapped;
 
       const defaultOpenName = CLIENT_DOCUMENT_DEFAULT_FOLDERS.find((d) => d.system_key === folderMeta.system_key)?.name_he;
       const openRenamed = Boolean(folderMeta.system_key && defaultOpenName && folderMeta.name_he !== defaultOpenName);
@@ -410,6 +485,15 @@ export async function getClientDocumentsTabReadModel(
         folder_name_he: folderMeta.name_he,
         folder_name_key: openRenamed ? undefined : documentFolderLabelKey(folderMeta.system_key),
         documents,
+        period_navigation: filingFolder
+          ? {
+              selected_period_key: selectedPeriod,
+              periods: periodKeys.map((period_key) => ({
+                period_key,
+                display_label: formatReportingPeriodDisplayLabel(period_key),
+              })),
+            }
+          : null,
       };
     }
   }
@@ -467,6 +551,7 @@ export async function getClientDocumentFileOpenUrl(
   clientId: string,
   fileAssetId: string
 ): Promise<{ url: string }> {
+  await assertCanAccessClientFromContext(ctx, clientId);
   await assertClientDocumentFileOpenAllowed(orgId, clientId, fileAssetId);
   const { data: fileAsset, error } = await supabaseAdmin
     .from('file_assets')
@@ -599,6 +684,7 @@ async function countActiveDocsInFolder(orgId: string, clientId: string, folderId
 export async function executeClientDocumentsTabCommand(ctx: RequestContext, clientId: string, body: ClientDocumentsTabCommandBody): Promise<void> {
   const orgId = assertOrg(ctx);
   if (!canEditDocumentsTab(ctx)) throw forbidden('Insufficient permission');
+  await assertCanAccessClientFromContext(ctx, clientId);
   await ensureClientInOrg(orgId, clientId);
   await ensureDocumentProfile(orgId, clientId);
   await ensureClientDocumentFolders(orgId, clientId);
@@ -724,6 +810,115 @@ export async function executeClientDocumentsTabCommand(ctx: RequestContext, clie
         .eq('client_id', clientId);
       if (error) throw new AppError(500, error.message ?? 'delete document failed', 'SUPABASE_ERROR');
       await auditDocuments(ctx, orgId, clientId, cmd, { document_id: documentId });
+      break;
+    }
+    case 'send_client_document_to_client': {
+      const documentId = String(payload.document_id ?? '');
+      if (!documentId) throw badRequest('document_id נדרש');
+      const { data: doc } = await supabaseAdmin
+        .from('client_documents')
+        .select('id, file_asset_id')
+        .eq('id', documentId)
+        .eq('organization_id', orgId)
+        .eq('client_id', clientId)
+        .is('deleted_at', null)
+        .maybeSingle();
+      if (!doc) throw badRequest('מסמך לא נמצא');
+      const fileAssetId = String((doc as { file_asset_id?: string }).file_asset_id ?? '');
+      if (!fileAssetId) throw badRequest('מסמך לא נמצא');
+      const { data: client } = await supabaseAdmin
+        .from('clients')
+        .select('email, display_name')
+        .eq('organization_id', orgId)
+        .eq('id', clientId)
+        .maybeSingle();
+      const email = String((client as { email?: string | null } | null)?.email ?? '').trim();
+      if (!email) throw badRequest('client email is required', 'missing_client_email');
+      const { data: asset, error: assetError } = await supabaseAdmin
+        .from('file_assets')
+        .select('id, organization_id, storage_bucket, storage_key, file_name, mime_type, scan_status')
+        .eq('id', fileAssetId)
+        .eq('organization_id', orgId)
+        .maybeSingle();
+      if (assetError || !asset) throw forbidden('File not found');
+      const fileAsset = asset as {
+        storage_bucket?: string | null;
+        storage_key: string;
+        file_name: string | null;
+        mime_type: string | null;
+        scan_status?: string | null;
+      };
+      const storageKey = String(fileAsset.storage_key ?? '');
+      if (!storageKey.startsWith(`${orgId}/client-documents/${clientId}/`)) {
+        throw forbidden('File not linked to this client documents workspace');
+      }
+      assertFileAssetDownloadable(fileAsset.scan_status);
+      const bucket = fileAsset.storage_bucket?.trim() || BUCKET;
+      const { data: fileData, error: downloadError } = await supabaseAdmin.storage.from(bucket).download(storageKey);
+      if (downloadError || !fileData) throw badRequest('document file is not available');
+      const contentBase64 = Buffer.from(await fileData.arrayBuffer()).toString('base64');
+      const fileName = fileAsset.file_name?.trim() || 'document';
+      const english = ctx.user.uiLanguage === 'en';
+      const subject = english ? 'Document from the office' : 'מסמך מהמשרד';
+      const text = english
+        ? `A document is attached: ${fileName}`
+        : `מצורף מסמך: ${fileName}`;
+      const html = english
+        ? `<p>A document is attached: ${fileName}</p>`
+        : `<div dir="rtl"><p>מצורף מסמך: ${fileName}</p></div>`;
+      const attempt = await beginAttempt({
+        organizationId: orgId,
+        representedClientId: clientId,
+        sourceModule: 'client-operations',
+        sourceEntityType: 'client_document',
+        sourceEntityId: documentId,
+        channel: 'email',
+        recipientEmail: email,
+        senderSnapshotJson: { module: 'client-operations' },
+        messageSnapshotJson: { subject, text },
+        attachmentRefsJson: [
+          {
+            asset_id: fileAssetId,
+            storage_ref: `${bucket}/${storageKey}`,
+            filename: fileName,
+            content_type: fileAsset.mime_type,
+          },
+        ],
+        idempotencyKey: `client-document:${documentId}:${crypto.randomUUID()}`,
+        sentByUserId: ctx.user.id,
+      });
+      const sendResult = await sendEmail({
+        organizationId: orgId,
+        to: email,
+        subject,
+        body_text: text,
+        body_html: html,
+        attachments: [
+          {
+            filename: fileName,
+            content_type: fileAsset.mime_type,
+            content_base64: contentBase64,
+          },
+        ],
+      });
+      const finalized = await finalizeAttempt({
+        attemptId: attempt.id,
+        organizationId: orgId,
+        result: sendResult.status,
+        failureReason: sendResult.failure_reason,
+        providerMessageId: sendResult.provider_message_id,
+      });
+      await auditDocuments(ctx, orgId, clientId, cmd, {
+        document_id: documentId,
+        file_asset_id: fileAssetId,
+        delivery_attempt_id: finalized.id,
+        delivery_channel: 'email',
+        recipient_email: email,
+        provider_message_id: finalized.providerMessageId,
+        provider_confirmed: false,
+        delivery_result: finalized.result,
+        failure_reason: finalized.failureReason,
+      });
       break;
     }
     case 'open_client_document_folder': {

@@ -1415,6 +1415,12 @@
       "rename": "שינוי שם",
       "view": "צפייה",
       "viewDocument": "צפייה במסמך",
+      "sendDocument": "שליחה ללקוח",
+      "missingEmail": "ללקוח אין אימייל בפרטי הלקוח.",
+      "deliveryRecorded": "ניסיון השליחה נרשם. הספק עדיין לא אישר מסירה.",
+      "deliveryHandedToProvider": "ספק הדואר קיבל את ההודעה. המסירה ללקוח עדיין לא אושרה.",
+      "deliveryFailed": "ספק הדואר לא קיבל את ההודעה.",
+      "deliveryPending": "השליחה עדיין בתהליך.",
       "name": "שם",
       "documentCount": "{{count}} מסמכים",
       "tabTitle": "מסמכים",
@@ -1431,7 +1437,10 @@
         "forms": "טפסים",
         "assessments": "שומות",
         "payroll": "שכר",
-        "caseClosure": "סגירת תיק"
+        "caseClosure": "סגירת תיק",
+        "vatFilings": "דיווח מע״מ",
+        "incomeTaxAdvanceFilings": "דיווח מקדמות",
+        "niDeductionsFilings": "דיווחי ב״ל"
       }
     },
     "history": {
@@ -2124,7 +2133,12 @@
           "paymentStatus": "סטטוס תשלום",
           "notRecorded": "לא נרשם",
           "save": "שמירה",
-          "cancel": "ביטול"
+          "cancel": "ביטול",
+          "materialWarning": "עדיין חסר חומר מהלקוח. אפשר לרשום דיווח שכבר בוצע.",
+          "attachmentNotice": "המסמך יצורף ל{{filing}} עבור {{period}}.",
+          "evidenceFiling": "דיווח",
+          "evidencePayment": "תשלום",
+          "attach": "צרף אסמכתא"
         },
         "ni": {
           "title": "ביטוח לאומי עצמאים",

@@ -276,6 +276,14 @@ export type ClientOperationsReportingCellPresentation = {
     can_report: boolean;
     can_report_and_pay: boolean;
     can_mark_paid: boolean;
+    material_warning_key?: string | null;
+    attachment_notice_key?: string;
+    evidence?: Array<{
+      document_id: string;
+      file_name: string | null;
+      evidence_kind: 'filing' | 'payment';
+      reporting_period_display: string;
+    }>;
     report_key: string;
     report_and_paid_key: string;
     paid_key: string;
@@ -292,6 +300,18 @@ export type ClientOperationsReportingCellPresentation = {
     save_key: string;
     cancel_key: string;
   } | null;
+  evidence_attachment?: {
+    notice_key: string;
+    filing_label_key: string;
+    period_key: string;
+    period_display: string;
+    evidence: Array<{
+      document_id: string;
+      file_name: string | null;
+      evidence_kind: 'filing' | 'payment';
+      reporting_period_display: string;
+    }>;
+  };
 };
 
 export type SelfEmployedNiHandlingMethod = 'standing_order' | 'client_pays' | 'manual_monthly';
@@ -1041,6 +1061,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     row: ClientOperationsRegistryRow;
     columnKey: string;
   } | null>(null);
+  const [filingEvidenceKind, setFilingEvidenceKind] = useState<'filing' | 'payment'>('filing');
+  const filingEvidenceInputRef = useRef<HTMLInputElement | null>(null);
+  const [niEvidencePrompt, setNiEvidencePrompt] = useState<{ clientId: string } | null>(null);
+  const niEvidenceInputRef = useRef<HTMLInputElement | null>(null);
   const [niModal, setNiModal] = useState<{
     row: ClientOperationsRegistryRow;
     handlingMethod: SelfEmployedNiHandlingMethod | null;
@@ -3316,6 +3340,67 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       t('clientOperations.registry.errors.saveFailed'),
     );
   };
+  const attachFilingEvidence = async (list: FileList | null) => {
+    if (!list?.length || !filingModal || !canEdit || !onRegistryCommand) return;
+    const liveRow = rows.find((row) => row.client_id === filingModal.row.client_id) ?? filingModal.row;
+    const reportingCell = liveRow.reporting?.cells?.[filingModal.columnKey];
+    if (!reportingCell?.obligation_id) return;
+    setCommandError('');
+    try {
+      for (const file of Array.from(list)) {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = String(reader.result ?? '');
+            resolve(dataUrl.includes(',') ? dataUrl.split(',')[1] ?? '' : '');
+          };
+          reader.onerror = () => reject(new Error('read failed'));
+          reader.readAsDataURL(file);
+        });
+        await onRegistryCommand({
+          command: 'attach_client_operations_filing_evidence',
+          client_id: liveRow.client_id,
+          obligation_id: reportingCell.obligation_id,
+          evidence_kind: filingEvidenceKind,
+          operational_period_key: query?.operational_period_key ?? null,
+          file_base64: base64,
+          file_name: file.name,
+          mime_type: file.type || null,
+        });
+      }
+    } catch (error) {
+      setCommandError(localizeRegistryCommandError(error, t('clientOperations.registry.errors.saveFailed')));
+    }
+  };
+  const attachNiEvidence = async (list: FileList | null) => {
+    if (!list?.length || !niEvidencePrompt || !canEdit || !onRegistryCommand) return;
+    setCommandError('');
+    try {
+      for (const file of Array.from(list)) {
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const dataUrl = String(reader.result ?? '');
+            resolve(dataUrl.includes(',') ? dataUrl.split(',')[1] ?? '' : '');
+          };
+          reader.onerror = () => reject(new Error('read failed'));
+          reader.readAsDataURL(file);
+        });
+        await onRegistryCommand({
+          command: 'attach_client_operations_filing_evidence',
+          client_id: niEvidencePrompt.clientId,
+          filing_target: 'national_insurance_deductions',
+          evidence_kind: filingEvidenceKind,
+          operational_period_key: query?.operational_period_key ?? null,
+          file_base64: base64,
+          file_name: file.name,
+          mime_type: file.type || null,
+        });
+      }
+    } catch (error) {
+      setCommandError(localizeRegistryCommandError(error, t('clientOperations.registry.errors.saveFailed')));
+    }
+  };
   const openSelfEmployedNiModal = (row: ClientOperationsRegistryRow) => {
     const ops = row.national_insurance_operations;
     if (!ops?.openable) return;
@@ -4466,6 +4551,22 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               </label>
             );
           })}
+          {niCell?.applicable ? (
+            <button
+              type="button"
+              className="nx-co-filing-modal__clip"
+              aria-label={t('clientOperations.registry.reporting.filing.attach')}
+              disabled={!canEdit || !onRegistryCommand}
+              onClick={(event) => {
+                event.stopPropagation();
+                setNiEvidencePrompt({ clientId: r.client_id });
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                <path fill="currentColor" d="M16.5 6.5v9.2a4.5 4.5 0 1 1-9 0V6.8a3 3 0 0 1 6 0v8.2a1.5 1.5 0 0 1-3 0V7.2h-1.5v7.8a3 3 0 0 0 6 0V6.8a4.5 4.5 0 0 0-9 0v8.9a6 6 0 0 0 12 0V6.5h-1.5Z" />
+              </svg>
+            </button>
+          ) : null}
         </div>
       );
     }
@@ -5180,12 +5281,73 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           </div>
         </div>
       ) : null}
+      {niEvidencePrompt ? (() => {
+        const liveRow = rows.find((row) => row.client_id === niEvidencePrompt.clientId);
+        const attachment = liveRow?.reporting?.cells?.national_insurance_deductions?.evidence_attachment;
+        if (!attachment) return null;
+        return (
+          <div className="nx-clients-overlay nx-co-ni-overlay">
+            <div
+              className="nx-glass-card nx-clients-modal nx-co-ops-modal nx-co-ni-modal nx-co-filing-modal"
+              role="dialog"
+              aria-modal="true"
+              dir={lang === 'he' ? 'rtl' : 'ltr'}
+            >
+              <div className="nx-clients-modal__head">
+                <h3>{t(attachment.filing_label_key)}</h3>
+                <button type="button" className="nx-clients-modal__close" onClick={() => setNiEvidencePrompt(null)} aria-label={t('clientOperations.registry.reporting.filing.cancel')}>×</button>
+              </div>
+              <div className="nx-clients-form__body nx-co-ni-modal__body">
+                <p className="nx-co-filing-modal__notice">
+                  {fillI18n(t(attachment.notice_key), {
+                    filing: t(attachment.filing_label_key),
+                    period: attachment.period_display || attachment.period_key,
+                  })}
+                </p>
+                <div className="nx-co-filing-modal__evidence-row">
+                  <button type="button" className="nx-co-filing-modal__clip" aria-label={t('clientOperations.registry.reporting.filing.attach')} onClick={() => niEvidenceInputRef.current?.click()}>
+                    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                      <path fill="currentColor" d="M16.5 6.5v9.2a4.5 4.5 0 1 1-9 0V6.8a3 3 0 0 1 6 0v8.2a1.5 1.5 0 0 1-3 0V7.2h-1.5v7.8a3 3 0 0 0 6 0V6.8a4.5 4.5 0 0 0-9 0v8.9a6 6 0 0 0 12 0V6.5h-1.5Z" />
+                    </svg>
+                  </button>
+                  <label className="nx-co-filing-modal__kind">
+                    <input type="radio" name="ni-evidence-kind" checked={filingEvidenceKind === 'filing'} onChange={() => setFilingEvidenceKind('filing')} />
+                    {t('clientOperations.registry.reporting.filing.evidenceFiling')}
+                  </label>
+                  <label className="nx-co-filing-modal__kind">
+                    <input type="radio" name="ni-evidence-kind" checked={filingEvidenceKind === 'payment'} onChange={() => setFilingEvidenceKind('payment')} />
+                    {t('clientOperations.registry.reporting.filing.evidencePayment')}
+                  </label>
+                  <input
+                    ref={niEvidenceInputRef}
+                    type="file"
+                    multiple
+                    hidden
+                    onChange={(event) => {
+                      void attachNiEvidence(event.target.files);
+                      event.target.value = '';
+                    }}
+                  />
+                </div>
+                {attachment.evidence.length ? (
+                  <ul className="nx-co-filing-modal__files">
+                    {attachment.evidence.map((item) => (
+                      <li key={item.document_id}>{item.file_name || item.document_id}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        );
+      })() : null}
       {filingModal ? (() => {
-        const reportingCell = filingModal.row.reporting?.cells?.[filingModal.columnKey];
+        const liveRow = rows.find((row) => row.client_id === filingModal.row.client_id) ?? filingModal.row;
+        const reportingCell = liveRow.reporting?.cells?.[filingModal.columnKey];
         const detail = reportingCell?.filing_detail;
         if (!detail) return null;
         const frequencyText = displayForColumn(
-          filingModal.row,
+          liveRow,
           { key: filingModal.columnKey, label: '', cell_kind: 'text', value_field: null, visible: true, system: true, editable: false, freeze_default: false, align: 'center' },
           t,
         );
@@ -5221,7 +5383,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   <dl className="nx-co-ni-modal__facts">
                     <div className="nx-co-ni-modal__row">
                       <dt>{t(detail.client_key)}</dt>
-                      <dd>{filingModal.row.client_name ?? filingModal.row.client_id}</dd>
+                      <dd>{liveRow.client_name ?? liveRow.client_id}</dd>
                     </div>
                     <div className="nx-co-ni-modal__row">
                       <dt>{t(detail.period_label_key)}</dt>
@@ -5252,6 +5414,61 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       </div>
                     ) : null}
                   </dl>
+                  {detail.material_warning_key ? (
+                    <p className="nx-co-filing-modal__notice" role="status">{t(detail.material_warning_key)}</p>
+                  ) : null}
+                  <div className="nx-co-filing-modal__evidence">
+                    <p className="nx-co-filing-modal__notice">
+                      {fillI18n(t(detail.attachment_notice_key ?? 'clientOperations.registry.reporting.filing.attachmentNotice'), {
+                        filing: t(detail.title_key),
+                        period: detail.period_display || detail.period_key,
+                      })}
+                    </p>
+                    <div className="nx-co-filing-modal__evidence-row">
+                      <button
+                        type="button"
+                        className="nx-co-filing-modal__clip"
+                        aria-label={t('clientOperations.registry.reporting.filing.attach')}
+                        disabled={!canAct}
+                        onClick={() => filingEvidenceInputRef.current?.click()}
+                      >
+                        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                          <path fill="currentColor" d="M16.5 6.5v9.2a4.5 4.5 0 1 1-9 0V6.8a3 3 0 0 1 6 0v8.2a1.5 1.5 0 0 1-3 0V7.2h-1.5v7.8a3 3 0 0 0 6 0V6.8a4.5 4.5 0 0 0-9 0v8.9a6 6 0 0 0 12 0V6.5h-1.5Z" />
+                        </svg>
+                      </button>
+                      <label className="nx-co-filing-modal__kind">
+                        <input type="radio" name="filing-evidence-kind" checked={filingEvidenceKind === 'filing'} onChange={() => setFilingEvidenceKind('filing')} />
+                        {t('clientOperations.registry.reporting.filing.evidenceFiling')}
+                      </label>
+                      <label className="nx-co-filing-modal__kind">
+                        <input type="radio" name="filing-evidence-kind" checked={filingEvidenceKind === 'payment'} onChange={() => setFilingEvidenceKind('payment')} />
+                        {t('clientOperations.registry.reporting.filing.evidencePayment')}
+                      </label>
+                      <input
+                        ref={filingEvidenceInputRef}
+                        type="file"
+                        multiple
+                        hidden
+                        onChange={(event) => {
+                          void attachFilingEvidence(event.target.files);
+                          event.target.value = '';
+                        }}
+                      />
+                    </div>
+                    {(detail.evidence ?? []).length ? (
+                      <ul className="nx-co-filing-modal__files">
+                        {(detail.evidence ?? []).map((item) => (
+                          <li key={item.document_id}>
+                            {item.file_name || item.document_id}
+                            {' · '}
+                            {t(item.evidence_kind === 'payment'
+                              ? 'clientOperations.registry.reporting.filing.evidencePayment'
+                              : 'clientOperations.registry.reporting.filing.evidenceFiling')}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
                   </section>
                 </div>
                 <div className="nx-clients-form__footer nx-co-ni-modal__footer nx-co-ops-modal__actions">

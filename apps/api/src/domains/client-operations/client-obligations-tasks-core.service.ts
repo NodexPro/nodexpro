@@ -20,6 +20,7 @@ import {
   resolveVatCalendarLookupPeriodKey,
   vatFilingPeriodIdentityForOperationalPeriod,
 } from './client-operations-reporting-dashboard.pure.js';
+import { canManuallyConfirmFiling } from './client-operations-filing-evidence.pure.js';
 import {
   loadSelfEmployedNiMonthSettings,
   persistSelfEmployedNiMonthSetting,
@@ -3712,19 +3713,13 @@ export async function executeClientObligationsCommand(
       const obRow = (ob ?? null) as Record<string, unknown> | null;
       if (!obRow) throw badRequest('obligation not found');
       const currentState = String(obRow.status ?? '') as ObligationStatus;
-      if (currentState !== 'ready_to_report' && currentState !== 'ready_to_process') {
+      if (!canManuallyConfirmFiling(currentState)) {
         throw badRequest('obligation is not ready to report');
       }
       const obligationType = String(obRow.obligation_type ?? '');
       const p = (profile ?? {}) as Record<string, unknown>;
-      if (obligationType === 'vat_report' && !Boolean(p.material_brought_flag)) {
-        throw badRequest('cannot report VAT without material');
-      }
       if (obligationType === 'payroll_data' && !Boolean(p.salary_data_received_flag)) {
         throw badRequest('cannot report payroll without salary data');
-      }
-      if (obligationType === 'income_tax_advance' && !Boolean(p.income_data_received_flag)) {
-        throw badRequest('cannot report income advances without income data');
       }
       const dueDate = String(obRow.due_date ?? '');
       const reportDate = businessYmd(new Date(nowIso));

@@ -287,6 +287,35 @@
   justify-content: flex-end;
 }
 
+.nx-cdocs-period-browser {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.nx-cdocs-period-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 72px;
+}
+
+.nx-cdocs-period-tab {
+  border: 1px solid #1e3a5f;
+  border-radius: 6px;
+  background: #0b1f33;
+  color: #e8f1f8;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.nx-cdocs-period-tab.is-active {
+  background: #123756;
+}
+
 .nx-cdocs-doc-list {
   list-style: none;
   margin: 0;
@@ -369,4 +398,15 @@
   outline: none;
   border-color: #6366f1;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+@media (max-width: 640px) {
+  .nx-cdocs-period-browser {
+    flex-direction: column;
+  }
+
+  .nx-cdocs-period-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
 }

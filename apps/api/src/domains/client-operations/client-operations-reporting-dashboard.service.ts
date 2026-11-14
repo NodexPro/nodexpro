@@ -12,6 +12,7 @@ import { REPORTING_OBLIGATION_KEYS } from '../country-pack/reporting-calendar.pu
 import {
   loadTaxObligationPaymentFactsForClients,
 } from '../accounting-base/accounting-base-tax-obligation-payment.service.js';
+import { evidenceForCanonical, type FilingEvidenceRow } from './client-operations-filing-evidence.pure.js';
 import {
   paymentClassificationIsOutstanding,
   type AccountingTaxObligationPaymentFact,
@@ -277,6 +278,7 @@ export function attachReportingPresentationToRegistryRow<T extends RegistryRepor
   niApplicable?: boolean;
   niStandingOrderUntil?: string | null;
   niMonthSettings?: readonly SelfEmployedNiMonthSettingInput[] | null;
+  evidenceRows?: readonly FilingEvidenceRow[];
 }): T & {
   reporting: ClientOperationsReportingRowPresentation;
   reporting_kpi: ReportingKpiClientFacts;
@@ -398,7 +400,11 @@ export function attachReportingPresentationToRegistryRow<T extends RegistryRepor
     ),
   ];
 
-  const reporting: ClientOperationsReportingRowPresentation = buildReportingRowPresentation(cells, input.today);
+  const cellsWithEvidence = cells.map((cell) => ({
+    ...cell,
+    evidence: evidenceForCanonical(input.evidenceRows ?? [], cell.canonical_id),
+  }));
+  const reporting: ClientOperationsReportingRowPresentation = buildReportingRowPresentation(cellsWithEvidence, input.today);
   const reporting_kpi: ReportingKpiClientFacts = input.reportingKpi ?? {
     annual_required: false,
     annual_submitted: false,

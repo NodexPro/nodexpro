@@ -79,6 +79,11 @@ import {
   type ClientOperationsReportingObligationKind,
 } from './client-operations-reporting-dashboard.pure.js';
 import { persistSelfEmployedNiMonthSetting } from './client-operations-self-employed-ni-month.service.js';
+import { paymentAlreadyConfirmedInFull } from './client-operations-filing-evidence.pure.js';
+import {
+  assertSelectedTabMatchesObligation,
+  attachClientOperationsFilingEvidence,
+} from './client-operations-filing-evidence.service.js';
 
 export type RegistryCustomColumnDefinition = {
   id: string;
@@ -129,6 +134,11 @@ export type ClientOperationsRegistryCommandBody = {
   standing_order_active?: unknown;
   handling_method?: unknown;
   confirm_manual_resolution?: unknown;
+  evidence_kind?: unknown;
+  filing_target?: unknown;
+  file_base64?: unknown;
+  file_name?: unknown;
+  mime_type?: unknown;
   confirm_month_handled?: unknown;
   manual_row_slot?: unknown;
   source_operational_period_key?: unknown;
@@ -418,6 +428,7 @@ const FILING_REGISTRY_COMMANDS = new Set([
   'confirm_client_operations_obligation_filed_with_payment',
   'confirm_client_operations_obligation_tax_payment',
   'save_client_operations_self_employed_ni',
+  'attach_client_operations_filing_evidence',
 ]);
 
 function reportingKindFromObligationType(
@@ -996,6 +1007,15 @@ export async function executeClientOperationsRegistryCommand(
       .maybeSingle();
     assertQueryError(existingError, 'Failed to load obligation for registry filing command');
     if (!existing) throw badRequest('obligation not found');
+    await assertSelectedTabMatchesObligation({
+      organizationId: orgId,
+      clientId,
+      obligationType: String((existing as { obligation_type?: string }).obligation_type ?? ''),
+      obligationPeriodKey: String((existing as { period_key?: string }).period_key ?? ''),
+      operationalPeriodKey: operationalPeriodKeyFrom(
+        body.operational_period_key ?? (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
+      ),
+    });
     const currentStatus = String((existing as { status?: string }).status ?? '');
     const alreadySubmitted = isFilingSubmittedStatus(currentStatus);
     if (command === 'mark_client_operations_obligation_reported') {
@@ -1044,6 +1064,13 @@ export async function executeClientOperationsRegistryCommand(
       .maybeSingle();
     assertQueryError(existingError, 'Failed to load obligation for registry payment command');
     if (!existing) throw badRequest('obligation not found');
+    await assertSelectedTabMatchesObligation({
+      organizationId: orgId,
+      clientId,
+      obligationType: String((existing as { obligation_type?: string }).obligation_type ?? ''),
+      obligationPeriodKey: String((existing as { period_key?: string }).period_key ?? ''),
+      operationalPeriodKey,
+    });
     const obligationType = String((existing as { obligation_type?: string }).obligation_type ?? '');
     const periodKey = String((existing as { period_key?: string }).period_key ?? '');
     const kind = reportingKindFromObligationType(obligationType);
@@ -1074,6 +1101,9 @@ export async function executeClientOperationsRegistryCommand(
     const existingClassification = (existingFacts.get(clientId) ?? []).find(
       (fact) => fact.obligation_canonical_id === canonicalId,
     )?.payment_classification;
+    if (paymentAlreadyConfirmedInFull(existingClassification, classificationRaw)) {
+      throw badRequest('payment already confirmed');
+    }
     const paymentChanged =
       paymentAppliesForReportingKind(kind) && existingClassification !== classificationRaw;
     if (paymentChanged) {
@@ -1204,6 +1234,8 @@ export async function executeClientOperationsRegistryCommand(
         });
       }
     }
+  } else if (command === 'attach_client_operations_filing_evidence') {
+    await attachClientOperationsFilingEvidence(ctx, body);
   } else if (command === 'archive_client_operations_custom_column') {
     const column = await loadOwnedColumn(orgId, body.column_id);
     const { error } = await supabaseAdmin

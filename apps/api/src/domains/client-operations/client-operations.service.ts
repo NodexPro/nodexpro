@@ -27,6 +27,7 @@ import {
   type AnnualTabResponse,
 } from './client-annual-report-tab.service.js';
 import { getClientDocumentsTabReadModel, type ClientDocumentsTabResponse } from './client-documents-tab.service.js';
+import { loadClientOperationsFilingEvidenceByClient } from './client-operations-filing-evidence.service.js';
 import {
   getClientHistoryTabReadModel,
   type ClientHistoryOpenSectionOptions,
@@ -1631,6 +1632,13 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     }
   }
 
+  const filingEvidenceByClient = matchingClientIds.length
+    ? await loadClientOperationsFilingEvidenceByClient({
+        organizationId: orgId,
+        clientIds: matchingClientIds,
+      })
+    : new Map();
+
   const presentationMs = Date.now();
   const builtRows: ClientOperationsRegistryRow[] = facetSeeds.flatMap((seed) => {
     const c = seed.client;
@@ -1837,6 +1845,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
         niApplicable: niConfigured,
         niStandingOrderUntil: tax?.national_insurance_standing_order_until ?? null,
         niMonthSettings: niMonthSettingsByClient.get(c.id) ?? [],
+        evidenceRows: filingEvidenceByClient.get(c.id) ?? [],
         reportingKpi: (() => {
           const annual = resolveAnnualReportKpiFact({
             hasSubmissionForTaxYear: annualSubmissionsByClient.has(c.id),

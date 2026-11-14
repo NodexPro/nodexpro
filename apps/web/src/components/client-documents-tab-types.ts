@@ -26,7 +26,16 @@ export type ClientDocumentsTabDocumentRowDto = {
   display_label_he: string | null;
   uploaded_display_he: string;
   file_open_allowed: boolean;
-  actions: { can_view: boolean; can_delete: boolean };
+  actions: { can_view: boolean; can_delete: boolean; can_send?: boolean };
+  evidence_kind?: 'filing' | 'payment' | null;
+  evidence_kind_key?: string | null;
+  reporting_period_key?: string | null;
+  reporting_period_display?: string | null;
+  delivery?: {
+    result: 'pending' | 'sent' | 'failed' | null;
+    provider_confirmed: false;
+    status_key: string | null;
+  };
 };
 
 export type ClientDocumentsTabModel = {
@@ -54,6 +63,10 @@ export type ClientDocumentsTabModel = {
     folder_name_he: string;
     folder_name_key?: string;
     documents: ClientDocumentsTabDocumentRowDto[];
+    period_navigation?: null | {
+      selected_period_key: string | null;
+      periods: Array<{ period_key: string; display_label: string }>;
+    };
   };
   file_open_path_template: string;
 };
