@@ -5369,10 +5369,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                         </div>
                       </dl>
                     </section>
-                    <fieldset className="nx-co-ni-modal__col nx-co-ni-modal__handling">
-                      <legend id="nx-co-ni-handling-col" className="nx-co-ni-modal__col-title">
+                    <fieldset className="nx-co-ni-modal__col" aria-labelledby="nx-co-ni-handling-col">
+                      <h4 id="nx-co-ni-handling-col" className="nx-co-ni-modal__col-title">
                         {t(ops.handling_title_key)}
-                      </legend>
+                      </h4>
+                      <div className="nx-co-ni-modal__options">
                       {ops.handling_options.map((option) => (
                         <label
                           key={option.id}
@@ -5419,6 +5420,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                           <span>{t(ops.month_handled_key)}</span>
                         </label>
                       ) : null}
+                      </div>
                     </fieldset>
                   </div>
                 </div>

@@ -3020,15 +3020,19 @@
   box-shadow: none;
 }
 
-.nx-co-ni-modal__handling {
-  align-items: flex-start;
-  gap: 4px;
-  padding: 0 10px 8px;
+.nx-co-ni-modal__options {
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .nx-co-ni-overlay .nx-co-ni-modal .nx-clients-form h4.nx-co-ni-modal__col-title,
-.nx-co-ni-modal__col-title,
-.nx-co-ni-modal__handling > legend.nx-co-ni-modal__col-title {
+.nx-co-ni-modal__col-title {
   display: block;
   float: none;
   position: static;
@@ -3043,10 +3047,6 @@
   font-weight: 600;
   line-height: 1.2;
   text-align: start;
-}
-
-.nx-co-ni-modal__handling > legend.nx-co-ni-modal__col-title {
-  padding-top: 8px;
 }
 
 .nx-co-ni-modal__facts {
@@ -3074,14 +3074,16 @@
   display: flex;
   flex-direction: row;
   align-items: center;
-  align-self: flex-start;
+  align-self: stretch;
   justify-content: flex-start;
   gap: 6px;
-  width: fit-content;
+  box-sizing: border-box;
+  width: 100%;
   max-width: 100%;
   min-height: 0;
   margin: 0;
-  padding: 3px 8px;
+  padding: 4px 8px;
+  white-space: nowrap;
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 8px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
