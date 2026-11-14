@@ -1329,17 +1329,25 @@
   min-width: 8px;
 }
 
+.nx-co-sheet__date-field--capital,
+.nx-co-sheet__date-open.nx-co-sheet__date-field {
+  width: 104px;
+  min-width: 104px;
+  max-width: 104px;
+  height: 28px;
+  min-height: 28px;
+  padding: 2px 6px;
+  justify-content: space-between;
+  border: 1px solid rgba(14, 116, 144, 0.35);
+  border-radius: 6px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+}
+
 .nx-co-sheet__date-open {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid rgba(14, 116, 144, 0.35);
-  border-radius: 6px;
-  background: rgba(247, 250, 255, 0.9);
-  color: #0e7490;
   cursor: pointer;
 }
 
@@ -2829,6 +2837,51 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
+}
+
+.nx-co-filing-modal .nx-co-ops-modal__actions .nx-glass-btn {
+  flex: 1 1 120px;
+  min-width: 96px;
+  min-height: 36px;
+  height: auto;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.nx-co-filing-modal .nx-co-ni-modal__row {
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+}
+
+.nx-co-filing-modal .nx-co-ni-modal__row dt {
+  white-space: nowrap;
+}
+
+.nx-co-filing-modal .nx-co-ni-modal__row dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.nx-co-filing-modal .nx-co-ni-modal__footer .nx-glass-btn {
+  flex: 1 1 120px;
+}
+
+button.nx-co-sheet__date-open {
+  appearance: none;
+  margin: 0;
+}
+
+@media (max-width: 560px) {
+  .nx-co-filing-modal.nx-clients-modal {
+    width: min(580px, calc(100vw - 24px));
+  }
+
+  .nx-co-filing-modal .nx-co-ops-modal__actions .nx-glass-btn {
+    flex-basis: 100%;
+  }
 }
 
 .nx-co-sheet__ni-amount.is-office-reminder,

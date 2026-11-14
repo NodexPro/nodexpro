@@ -4212,7 +4212,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         return (
           <button
             type="button"
-            className="nx-co-sheet__date-open"
+            className="nx-co-sheet__date-open nx-co-sheet__date-field nx-co-sheet__date-field--capital"
             disabled={!canEdit || !onRegistryCommand}
             title={t('clientOperations.openCapitalDeclaration')}
             aria-label={`${t('clientOperations.openCapitalDeclaration')} — ${r.client_name ?? r.client_id}`}
@@ -4221,7 +4221,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               void openCapitalDeclaration(r);
             }}
           >
-            <ClientOperationsCalendarIcon />
+            <span className="nx-co-sheet__date-field-value is-empty">{'\u00a0'}</span>
+            <span className="nx-co-sheet__date-field-icon" aria-hidden="true">
+              <ClientOperationsCalendarIcon />
+            </span>
           </button>
         );
       }
@@ -4232,7 +4235,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       const dateInputName = `co_${col.key}_operational_target_date`;
       return (
         <label
-          className={`nx-co-sheet__date-field${disabled ? ' is-disabled' : ''}`}
+          className={`nx-co-sheet__date-field${disabled ? ' is-disabled' : ''}${col.key === 'capital_declaration' ? ' nx-co-sheet__date-field--capital' : ''}`}
           htmlFor={dateInputId}
           onClick={(event) => {
             // Prevent row/folder navigation; native input owns the hit target.
@@ -5188,9 +5191,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         );
         const canAct = Boolean(canEdit && onRegistryCommand && reportingCell?.obligation_id);
         return (
-          <div className="nx-clients-overlay nx-client-create nx-client-create--deep-ocean-glass">
+          <div className="nx-clients-overlay nx-co-ni-overlay">
             <div
-              className="nx-glass-card nx-clients-modal nx-co-ops-modal"
+              className="nx-glass-card nx-clients-modal nx-co-ops-modal nx-co-ni-modal nx-co-filing-modal"
               role="dialog"
               aria-modal="true"
               aria-labelledby="nx-co-filing-title"
@@ -5213,72 +5216,72 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 onSubmit={(event) => event.preventDefault()}
                 noValidate
               >
-                <div className="nx-clients-form__body nx-co-ops-modal__body">
-                  <dl className="nx-co-ops-modal__facts">
-                    <div>
+                <div className="nx-clients-form__body nx-co-ni-modal__body">
+                  <section className="nx-co-ni-modal__col" aria-labelledby="nx-co-filing-title">
+                  <dl className="nx-co-ni-modal__facts">
+                    <div className="nx-co-ni-modal__row">
                       <dt>{t(detail.client_key)}</dt>
                       <dd>{filingModal.row.client_name ?? filingModal.row.client_id}</dd>
                     </div>
-                    <div>
+                    <div className="nx-co-ni-modal__row">
                       <dt>{t(detail.period_label_key)}</dt>
                       <dd>{detail.period_display || detail.period_key}</dd>
                     </div>
-                    <div>
+                    <div className="nx-co-ni-modal__row">
                       <dt>{t(detail.frequency_key)}</dt>
                       <dd>{frequencyText}</dd>
                     </div>
-                    <div>
+                    <div className="nx-co-ni-modal__row">
                       <dt>{t(detail.status_key)}</dt>
                       <dd>{t(detail.filing_status_key)}</dd>
                     </div>
-                    <div>
+                    <div className="nx-co-ni-modal__row">
                       <dt>{t(detail.filed_on_key)}</dt>
                       <dd>{detail.filed_on_display || t(detail.not_recorded_key)}</dd>
                     </div>
                     {detail.submission_reference ? (
-                      <div>
+                      <div className="nx-co-ni-modal__row">
                         <dt>{t(detail.reference_key)}</dt>
                         <dd>{detail.submission_reference}</dd>
                       </div>
                     ) : null}
                     {detail.can_record_payment ? (
-                      <div>
+                      <div className="nx-co-ni-modal__row">
                         <dt>{t(detail.payment_status_key)}</dt>
                         <dd>{t(reportingPaymentStateLabelKey(detail.payment_state))}</dd>
                       </div>
                     ) : null}
                   </dl>
-                  <div className="nx-co-ops-modal__actions">
-                    <button
-                      type="button"
-                      className="nx-glass-btn nx-glass-btn--secondary"
-                      data-testid="client-operations-filing-report"
-                      disabled={!canAct || !detail.can_report}
-                      onClick={() => void runFilingAction('report')}
-                    >
-                      {t(detail.report_key)}
-                    </button>
-                    <button
-                      type="button"
-                      className="nx-glass-btn nx-glass-btn--secondary"
-                      data-testid="client-operations-filing-report-paid"
-                      disabled={!canAct || !detail.can_report_and_pay}
-                      onClick={() => void runFilingAction('report_and_pay')}
-                    >
-                      {t(detail.report_and_paid_key)}
-                    </button>
-                    <button
-                      type="button"
-                      className="nx-glass-btn nx-glass-btn--purple"
-                      data-testid="client-operations-filing-paid"
-                      disabled={!canAct || !detail.can_mark_paid}
-                      onClick={() => void runFilingAction('paid')}
-                    >
-                      {t(detail.paid_key)}
-                    </button>
-                  </div>
+                  </section>
                 </div>
-                <div className="nx-clients-form__footer">
+                <div className="nx-clients-form__footer nx-co-ni-modal__footer nx-co-ops-modal__actions">
+                  <button
+                    type="button"
+                    className="nx-glass-btn nx-glass-btn--secondary"
+                    data-testid="client-operations-filing-report"
+                    disabled={!canAct || !detail.can_report}
+                    onClick={() => void runFilingAction('report')}
+                  >
+                    {t(detail.report_key)}
+                  </button>
+                  <button
+                    type="button"
+                    className="nx-glass-btn nx-glass-btn--secondary"
+                    data-testid="client-operations-filing-report-paid"
+                    disabled={!canAct || !detail.can_report_and_pay}
+                    onClick={() => void runFilingAction('report_and_pay')}
+                  >
+                    {t(detail.report_and_paid_key)}
+                  </button>
+                  <button
+                    type="button"
+                    className="nx-glass-btn nx-glass-btn--purple"
+                    data-testid="client-operations-filing-paid"
+                    disabled={!canAct || !detail.can_mark_paid}
+                    onClick={() => void runFilingAction('paid')}
+                  >
+                    {t(detail.paid_key)}
+                  </button>
                   <button
                     type="button"
                     className="nx-glass-btn nx-glass-btn--secondary"
