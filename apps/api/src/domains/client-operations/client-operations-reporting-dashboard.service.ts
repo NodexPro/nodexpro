@@ -91,14 +91,29 @@ export async function loadClientOperationsReportingDashboardInputs(input: {
   if (!input.clientIds.length) return empty;
 
   const periodKeys = [...new Set([input.selectedPeriodKey, ...input.previousPeriodKeys])];
-  const [factsResult, ruleset, previousSnapshotsResult, itdResult, niResult, paymentFactsByClient] = await Promise.all([
+  const calendarLookups: Array<{ obligation_key: string; reporting_period_key: string }> = [];
+  for (const periodKey of periodKeys) {
+    for (const obligationKey of REPORTING_OBLIGATION_KEYS) {
+      calendarLookups.push({ obligation_key: obligationKey, reporting_period_key: periodKey });
+    }
+  }
+  const rulesetPromise = resolveOrganizationActiveRuleset(input.organizationId, today);
+  const calendarPromise = rulesetPromise.then((ruleset) =>
+    resolveReportingDueDatesBatch({
+      country_code: ruleset.country_code,
+      country_pack_ruleset_id: ruleset.ruleset_id,
+      lookups: calendarLookups,
+    }),
+  );
+  const [factsResult, , previousSnapshotsResult, itdResult, niResult, paymentFactsByClient, calendarResolved] =
+    await Promise.all([
     supabaseAdmin
       .from('client_obligations')
       .select('id, client_id, obligation_type, period_key, status, due_date, last_reported_at, is_active')
       .eq('organization_id', input.organizationId)
       .in('client_id', input.clientIds)
       .eq('is_active', true),
-    resolveOrganizationActiveRuleset(input.organizationId, today),
+    rulesetPromise,
     input.previousPeriodKeys.length
       ? supabaseAdmin
           .from('client_operations_period_applicability_snapshots')
@@ -125,6 +140,7 @@ export async function loadClientOperationsReportingDashboardInputs(input: {
       organizationId: input.organizationId,
       clientIds: input.clientIds,
     }),
+    calendarPromise,
   ]);
 
   assertQueryError(factsResult.error, 'Failed to load client obligations for reporting dashboard');
@@ -154,17 +170,6 @@ export async function loadClientOperationsReportingDashboardInputs(input: {
     factsByClient.set(row.client_id, list);
   }
 
-  const lookups: Array<{ obligation_key: string; reporting_period_key: string }> = [];
-  for (const periodKey of periodKeys) {
-    for (const obligationKey of REPORTING_OBLIGATION_KEYS) {
-      lookups.push({ obligation_key: obligationKey, reporting_period_key: periodKey });
-    }
-  }
-  const calendarResolved = await resolveReportingDueDatesBatch({
-    country_code: ruleset.country_code,
-    country_pack_ruleset_id: ruleset.ruleset_id,
-    lookups,
-  });
   const calendarDueByKey = new Map<string, string>();
   for (const [key, resolution] of calendarResolved) {
     if (resolution.resolved && resolution.filing_due_date) {

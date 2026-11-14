@@ -1242,39 +1242,44 @@
   margin: 0;
 }
 
-/* NI deductions evidence clip stays on the checkbox line, at the inline start (right in RTL). */
+/* NI deductions clip is taken out of flow so the 102/100/126 grid stays one row. */
+.nx-co-sheet__table td[data-col='national_insurance_deductions'] {
+  position: relative;
+}
+
 .nx-co-sheet__ni-forms {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 2px;
+  display: block;
   min-width: 0;
   max-width: 100%;
 }
 
 .nx-co-sheet__ni-forms .nx-co-sheet__material {
-  flex: 1 1 auto;
   min-width: 0;
+  width: auto;
+  margin-inline-start: 22px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .nx-co-sheet__material-header.is-ni-evidence .nx-co-sheet__material-header-subs {
   box-sizing: border-box;
-  padding-inline-start: 20px;
+  padding-inline-start: 22px;
 }
 
 .nx-co-sheet__ni-clip {
-  flex: 0 0 18px;
-  width: 18px;
-  height: 22px;
+  position: absolute;
+  z-index: 2;
+  top: 2px;
+  inset-inline-start: 2px;
+  width: 20px;
+  height: 20px;
   min-height: 0;
   margin: 0;
   padding: 0;
   border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  color: inherit;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 0 0 1px rgba(18, 55, 86, 0.35);
+  color: #123756;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2890,6 +2895,30 @@ button.nx-co-sheet__ni-clip:disabled {
   font-weight: 700;
 }
 
+.nx-co-sheet__frequency-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.nx-co-sheet__filing-mark {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.nx-co-sheet__filing-mark.is-filed_unpaid {
+  background: #ea580c;
+  box-shadow: 0 0 6px rgba(234, 88, 12, 0.85);
+}
+
+.nx-co-sheet__filing-mark.is-filed_paid {
+  background: #16a34a;
+  box-shadow: 0 0 6px rgba(22, 163, 74, 0.85);
+}
+
 .nx-co-ops-modal__actions {
   display: flex;
   flex-wrap: wrap;
@@ -2934,13 +2963,73 @@ button.nx-co-sheet__ni-clip:disabled {
 }
 
 .nx-co-filing-modal__notice.is-ok {
-  color: #166534;
+  color: #bbf7d0;
   font-weight: 700;
 }
 
 .nx-co-filing-modal__notice.is-err {
-  color: #b91c1c;
+  color: #fecaca;
   font-weight: 700;
+}
+
+.nx-co-filing-modal__result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 16px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.nx-co-filing-modal__result.is-ok {
+  color: #052e16;
+  background: #dcfce7;
+  border: 1px solid #16a34a;
+}
+
+.nx-co-filing-modal__result.is-err {
+  color: #7f1d1d;
+  background: #fee2e2;
+  border: 1px solid #dc2626;
+}
+
+.nx-co-filing-modal__result.is-pending {
+  color: #0b2248;
+  background: #e0f2fe;
+  border: 1px solid #0284c7;
+}
+
+.nx-co-filing-modal__result-icon {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #16a34a;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.nx-co-filing-modal__result.is-err .nx-co-filing-modal__result-icon {
+  background: #dc2626;
+}
+
+.nx-co-filing-modal__result.is-pending .nx-co-filing-modal__result-icon {
+  background: #0284c7;
+}
+
+.nx-co-filing-modal__evidence {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
 }
 
 .nx-co-filing-modal__evidence-row {
@@ -3458,7 +3547,7 @@ button.nx-co-sheet__date-open {
 
 .nx-co-sheet__table tbody tr.is-reporting-row-warning td,
 .nx-co-sheet__table tbody tr.is-reporting-row-warning:nth-child(even) td {
-  background: rgba(234, 179, 8, 0.08);
+  background: rgba(19, 191, 208, 0.12);
 }
 
 .nx-co-sheet__table tbody tr.is-reporting-row-payment_outstanding td,
@@ -3501,7 +3590,7 @@ button.nx-co-sheet__date-open {
 .nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-warning td[data-freeze='true'],
 .nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-warning:nth-child(even) td[data-freeze='true'] {
   background:
-    linear-gradient(rgba(234, 179, 8, 0.08), rgba(234, 179, 8, 0.08)),
+    linear-gradient(rgba(19, 191, 208, 0.12), rgba(19, 191, 208, 0.12)),
     var(--nx-table-bg);
 }
 
@@ -3530,7 +3619,35 @@ button.nx-co-sheet__date-open {
 }
 
 .nx-co-sheet__table tbody td.is-reporting-cell-warning {
-  background: rgba(234, 179, 8, 0.22);
+  background: rgba(19, 191, 208, 0.22);
+  box-shadow: inset 0 0 10px rgba(19, 191, 208, 0.28);
+}
+
+.nx-co-sheet__table tbody tr td.is-filing-chrome-filed_unpaid,
+.nx-co-sheet__table tbody tr.is-reporting-row-warning td.is-filing-chrome-filed_unpaid,
+.nx-co-sheet__table tbody tr.is-reporting-row-neutral td.is-filing-chrome-filed_unpaid {
+  background: rgba(249, 115, 22, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(234, 88, 12, 0.55);
+}
+
+.nx-co-sheet__table tbody tr td.is-filing-chrome-filed_paid,
+.nx-co-sheet__table tbody tr.is-reporting-row-warning td.is-filing-chrome-filed_paid,
+.nx-co-sheet__table tbody tr.is-reporting-row-neutral td.is-filing-chrome-filed_paid,
+.nx-co-sheet__table tbody tr.is-reporting-row-complete td.is-filing-chrome-filed_paid {
+  background: rgba(34, 197, 94, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(22, 163, 74, 0.5);
+}
+
+.nx-co-sheet__table tbody tr.is-selected td.is-filing-chrome-filed_unpaid {
+  background:
+    linear-gradient(rgba(249, 115, 22, 0.28), rgba(249, 115, 22, 0.28)),
+    var(--nx-co-select);
+}
+
+.nx-co-sheet__table tbody tr.is-selected td.is-filing-chrome-filed_paid {
+  background:
+    linear-gradient(rgba(34, 197, 94, 0.24), rgba(34, 197, 94, 0.24)),
+    var(--nx-co-select);
 }
 
 .nx-co-sheet__table tbody td.is-reporting-cell-submitted {

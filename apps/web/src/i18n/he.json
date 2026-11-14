@@ -2158,7 +2158,10 @@
           "paidRecorded": "התשלום נשמר",
           "documentSaved": "המסמך נשמר",
           "uploading": "מעלה את המסמך…",
-          "saving": "שומר…"
+          "saving": "שומר…",
+          "notConfirmed": "הדיווח לא אושר ברישום המעודכן.",
+          "detailsTitle": "פרטי דיווח",
+          "actionsTitle": "פעולות ומסמכים"
         },
         "ni": {
           "title": "ביטוח לאומי עצמאים",

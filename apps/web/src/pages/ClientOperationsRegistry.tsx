@@ -761,7 +761,7 @@ export function ClientOperationsRegistry() {
   }, []);
 
   const onRegistryCommand = useCallback(
-    (body: Record<string, unknown>, options?: { applyAggregate?: boolean }) => {
+    (body: Record<string, unknown>, options?: { applyAggregate?: boolean; requireApplied?: boolean }) => {
       commandInFlightRef.current += 1;
       return apiJson<RegistryAggregate>(moduleClientOperationsRegistryCommands(), {
         method: 'POST',
@@ -776,8 +776,12 @@ export function ClientOperationsRegistry() {
         }),
       })
         .then((data) => {
-          if (options?.applyAggregate !== false) applyAggregate(data);
-          // Deferred paint/custom-cell responses: do not poison period cache with mid-flight siblings.
+          const applied = options?.applyAggregate === false ? true : applyAggregate(data);
+          if (options?.requireApplied && !applied) {
+            const error = new Error('registry aggregate was not applied to the selected period');
+            (error as Error & { code?: string }).code = 'AGGREGATE_NOT_APPLIED';
+            throw error;
+          }
           return data;
         })
         .finally(() => {

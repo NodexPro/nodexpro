@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError, badRequest, forbidden } from '../../shared/errors.js';
+import { obligationWritePersisted } from './client-operations-filing-command.pure.js';
 import { businessDayOfMonth, businessMonthKey, businessPreviousMonthKey, businessYmd } from '../../shared/business-time.js';
 import { emitObligationDocumentsMissingIfMapped } from './client-obligations-work-engine-bridge.js';
 import {
@@ -3724,33 +3725,45 @@ export async function executeClientObligationsCommand(
       const dueDate = String(obRow.due_date ?? '');
       const reportDate = businessYmd(new Date(nowIso));
       const nextStatus: ObligationStatus = dueDate && reportDate > dueDate ? 'reported_late' : 'reported';
-      await supabaseAdmin
+      const updated = await supabaseAdmin
         .from('client_obligations')
         .update({ status: nextStatus, last_reported_at: nowIso, updated_at: nowIso })
         .eq('id', id)
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
-        .eq('status', currentState);
+        .eq('status', currentState)
+        .select('id');
+      if (!obligationWritePersisted({ error: updated.error, rowCount: updated.data?.length ?? 0 })) {
+        throw badRequest('obligation filing was not recorded', 'OBLIGATION_FILING_NOT_RECORDED');
+      }
       break;
     }
     case 'mark_obligation_reported_and_paid': {
       const id = readObligationId(payload);
-      await supabaseAdmin
+      const updated = await supabaseAdmin
         .from('client_obligations')
         .update({ status: 'reported_and_paid', closed_at: nowIso, last_reported_at: nowIso, updated_at: nowIso })
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
-        .eq('id', id);
+        .eq('id', id)
+        .select('id');
+      if (!obligationWritePersisted({ error: updated.error, rowCount: updated.data?.length ?? 0 })) {
+        throw badRequest('obligation filing was not recorded', 'OBLIGATION_FILING_NOT_RECORDED');
+      }
       break;
     }
     case 'mark_obligation_not_reported': {
       const id = readObligationId(payload);
-      await supabaseAdmin
+      const updated = await supabaseAdmin
         .from('client_obligations')
         .update({ status: 'not_reported', updated_at: nowIso })
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
-        .eq('id', id);
+        .eq('id', id)
+        .select('id');
+      if (!obligationWritePersisted({ error: updated.error, rowCount: updated.data?.length ?? 0 })) {
+        throw badRequest('obligation filing was not recorded', 'OBLIGATION_FILING_NOT_RECORDED');
+      }
       break;
     }
     case 'notify_client_payment_amount': {

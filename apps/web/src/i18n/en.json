@@ -2158,7 +2158,10 @@
           "paidRecorded": "Payment was recorded",
           "documentSaved": "Document saved",
           "uploading": "Uploading the document…",
-          "saving": "Saving…"
+          "saving": "Saving…",
+          "notConfirmed": "Filing was not confirmed in the updated registry.",
+          "detailsTitle": "Filing details",
+          "actionsTitle": "Actions and documents"
         },
         "ni": {
           "title": "Self-employed National Insurance",

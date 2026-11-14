@@ -3,6 +3,11 @@ import { createPortal } from 'react-dom';
 import { apiFetch, apiJson, ApiError, userFacingApiMessage } from '../../api/client';
 import { localizeClientOperationsRegistryCommandError } from '../../lib/client-operations-registry-command-error.pure';
 import {
+  canStartFilingAction,
+  filingAggregateConfirmsAction,
+  filingCellPresentationClass,
+} from '../../lib/client-operations-filing-result.pure';
+import {
   beginOptimisticCheckbox,
   canStartOptimisticCheckboxCommand,
   checkboxOptimisticMarkKey,
@@ -861,7 +866,7 @@ export type ClientOperationsRegistryViewProps = {
   ) => void;
   onRegistryCommand?: (
     body: Record<string, unknown>,
-    options?: { applyAggregate?: boolean },
+    options?: { applyAggregate?: boolean; requireApplied?: boolean },
   ) => Promise<unknown>;
   onApplyAggregate?: (aggregate: any) => void;
   /** Bump parent load generation so in-flight quiet GETs cannot wipe newer writes. */
@@ -3034,9 +3039,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         fallback,
       );
     }
-    return error instanceof Error && error.message
-      ? localizeClientOperationsRegistryCommandError({ message: error.message }, t, fallback)
-      : fallback;
+    if (error instanceof Error && error.message) {
+      const code = (error as Error & { code?: string }).code;
+      return localizeClientOperationsRegistryCommandError({ code, message: error.message }, t, fallback);
+    }
+    return fallback;
   };
 
   const runMarkCommand = async (
@@ -3311,8 +3318,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     });
   const runFilingAction = async (action: 'report' | 'report_and_pay' | 'paid') => {
     if (!filingModal || !canEdit || !onRegistryCommand) return;
-    if (filingActionLockRef.current || evidenceLockRef.current) return;
-    const reportingCell = filingModal.row.reporting?.cells?.[filingModal.columnKey];
+    if (!canStartFilingAction(filingActionLockRef.current || evidenceLockRef.current)) return;
+    const liveRow = rows.find((row) => row.client_id === filingModal.row.client_id) ?? filingModal.row;
+    const reportingCell = liveRow.reporting?.cells?.[filingModal.columnKey];
     const detail = reportingCell?.filing_detail;
     if (!reportingCell?.obligation_id || !detail) return;
     const allowed =
@@ -3322,7 +3330,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           ? detail.can_report_and_pay
           : detail.can_mark_paid;
     if (!allowed) return;
-    const clientId = filingModal.row.client_id;
+    const clientId = liveRow.client_id;
     const columnKey = filingModal.columnKey;
     const markKey = `${clientId}:reporting:${columnKey}`;
     if (pendingMarkKeysRef.current.has(markKey)) return;
@@ -3339,6 +3347,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             command: 'mark_client_operations_obligation_reported',
             client_id: clientId,
             obligation_id: reportingCell.obligation_id,
+            canonical_id: reportingCell.canonical_id,
             operational_period_key: period,
             query,
           }
@@ -3355,7 +3364,28 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             query,
           };
     try {
-      await onRegistryCommand(body);
+      const aggregate = await onRegistryCommand(body, { requireApplied: true });
+      if (
+        !filingAggregateConfirmsAction({
+          action,
+          clientId,
+          columnKey,
+          aggregate: aggregate as {
+            rows?: Array<{
+              client_id?: string;
+              reporting?: {
+                cells?: Record<string, { filing_detail?: { chrome?: string | null } | null } | null> | null;
+              } | null;
+            }>;
+          },
+        })
+      ) {
+        setFilingFeedback({
+          tone: 'err',
+          text: t('clientOperations.registry.reporting.filing.notConfirmed'),
+        });
+        return;
+      }
       setFilingFeedback({
         tone: 'ok',
         text: t(
@@ -3369,7 +3399,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     } catch (error) {
       setFilingFeedback({
         tone: 'err',
-        text: localizeRegistryCommandError(error, t('clientOperations.registry.errors.saveFailed')),
+        text: localizeRegistryCommandError(error, t('clientOperations.registry.reporting.filing.notConfirmed')),
       });
     } finally {
       pendingMarkKeysRef.current.delete(markKey);
@@ -4564,13 +4594,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 setNiEvidencePrompt({ clientId: r.client_id });
               }}
             >
-              <svg viewBox="0 0 24 24" width="13" height="13" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
                 <path fill="currentColor" d="M16.5 6.5v9.2a4.5 4.5 0 1 1-9 0V6.8a3 3 0 0 1 6 0v8.2a1.5 1.5 0 0 1-3 0V7.2h-1.5v7.8a3 3 0 0 0 6 0V6.8a4.5 4.5 0 0 0-9 0v8.9a6 6 0 0 0 12 0V6.5h-1.5Z" />
               </svg>
             </button>
-          ) : (
-            <span className="nx-co-sheet__ni-clip" aria-hidden="true" />
-          )}
+          ) : null}
           <div className="nx-co-sheet__material">
           {forms.map((form) => {
             const item = niCell!.items[form.key];
@@ -4757,13 +4785,16 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         );
       }
       const text = displayForColumn(r, col, t);
+      const filed = filingDetail.chrome === 'filed_unpaid' || filingDetail.chrome === 'filed_paid';
+      const statusLabel = t(filingDetail.filing_status_key);
       return (
         <button
           type="button"
           className={`nx-co-sheet__frequency-cell is-${filingDetail.chrome}`}
           data-testid="client-operations-frequency-cell"
           data-chrome={filingDetail.chrome}
-          title={t(reportingCell?.tooltip_key || filingDetail.filing_status_key)}
+          title={filed ? `${text} — ${statusLabel}` : t(reportingCell?.tooltip_key || filingDetail.filing_status_key)}
+          aria-label={filed ? `${col.label} — ${text} — ${statusLabel}` : undefined}
           onClick={(event) => {
             event.stopPropagation();
             if (statusPaintMode) {
@@ -4773,7 +4804,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             openFilingDetailModal(r, col.key);
           }}
         >
-          {text}
+          <span className="nx-co-sheet__frequency-label">{text}</span>
+          {filed ? <span className={`nx-co-sheet__filing-mark is-${filingDetail.chrome}`} aria-hidden="true" /> : null}
         </button>
       );
     }
@@ -5021,11 +5053,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       statusPaintMode ? 'is-paint-mode' : '',
                       paintBlocked ? 'is-paint-blocked' : '',
                       obligationApplicable(row, column.key) === false ? 'is-not-applicable' : '',
-                      reportingCell?.filing_detail
-                        ? ''
-                        : reportingCell
-                          ? `is-reporting-cell-${reportingCell.tone}`
-                          : '',
+                      filingCellPresentationClass(reportingCell),
                       column.key === 'national_insurance' &&
                       row.national_insurance_operations?.ni_indicator_alert
                         ? 'is-ni-office-reminder'
@@ -5435,6 +5463,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               aria-labelledby="nx-co-filing-title"
               dir={lang === 'he' ? 'rtl' : 'ltr'}
               data-testid="client-operations-filing-modal"
+              aria-busy={filingActionPending || evidencePending}
             >
               <div className="nx-clients-modal__head">
                 <h3 id="nx-co-filing-title">{t(detail.title_key)}</h3>
@@ -5454,7 +5483,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 noValidate
               >
                 <div className="nx-clients-form__body nx-co-ni-modal__body">
-                  <section className="nx-co-ni-modal__col" aria-labelledby="nx-co-filing-title">
+                  <div className="nx-co-ni-modal__grid">
+                  <section className="nx-co-ni-modal__col" aria-labelledby="nx-co-filing-details">
+                  <h4 id="nx-co-filing-details" className="nx-co-ni-modal__col-title">
+                    {t('clientOperations.registry.reporting.filing.detailsTitle')}
+                  </h4>
                   <dl className="nx-co-ni-modal__facts">
                     <div className="nx-co-ni-modal__row">
                       <dt>{t(detail.client_key)}</dt>
@@ -5492,6 +5525,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   {detail.material_warning_key ? (
                     <p className="nx-co-filing-modal__notice" role="status">{t(detail.material_warning_key)}</p>
                   ) : null}
+                  </section>
+                  <section className="nx-co-ni-modal__col" aria-labelledby="nx-co-filing-actions">
+                  <h4 id="nx-co-filing-actions" className="nx-co-ni-modal__col-title">
+                    {t('clientOperations.registry.reporting.filing.actionsTitle')}
+                  </h4>
                   <div className="nx-co-filing-modal__evidence">
                     <p className="nx-co-filing-modal__notice">
                       {fillI18n(t(detail.attachment_notice_key ?? 'clientOperations.registry.reporting.filing.attachmentNotice'), {
@@ -5558,14 +5596,24 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     ) : null}
                   </div>
                   </section>
+                  </div>
                 </div>
-                {filingActionPending ? (
-                  <p className="nx-co-filing-modal__notice" role="status">{t('clientOperations.registry.reporting.filing.saving')}</p>
-                ) : null}
-                {filingFeedback ? (
-                  <p className={`nx-co-filing-modal__notice is-${filingFeedback.tone}`} role={filingFeedback.tone === 'err' ? 'alert' : 'status'}>
-                    {filingFeedback.text}
-                  </p>
+                {filingActionPending || filingFeedback ? (
+                  <div
+                    className={`nx-co-filing-modal__result is-${filingActionPending ? 'pending' : filingFeedback?.tone}`}
+                    role={filingFeedback?.tone === 'err' ? 'alert' : 'status'}
+                    aria-live="polite"
+                    data-testid="client-operations-filing-result"
+                  >
+                    <span className="nx-co-filing-modal__result-icon" aria-hidden="true">
+                      {filingActionPending ? '…' : filingFeedback?.tone === 'ok' ? '✓' : '!'}
+                    </span>
+                    <span>
+                      {filingActionPending
+                        ? t('clientOperations.registry.reporting.filing.saving')
+                        : filingFeedback?.text}
+                    </span>
+                  </div>
                 ) : null}
                 <div className="nx-clients-form__footer nx-co-ni-modal__footer nx-co-ops-modal__actions">
                   <button

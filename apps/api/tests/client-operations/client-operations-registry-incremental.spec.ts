@@ -84,6 +84,10 @@ test('command path rematerializes one client and still returns a full aggregate'
   assert.doesNotMatch(custom, /invalidateClientOperationsRegistryMaterializationCache\(orgId\);\s*const responseQuery/);
   assert.ok(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has('set_material_brought'));
   assert.ok(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has('complete_ni_deductions_126_cycle'));
+  assert.ok(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has('mark_client_operations_obligation_reported'));
+  assert.ok(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has('confirm_client_operations_obligation_filed_with_payment'));
+  assert.ok(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has('confirm_client_operations_obligation_tax_payment'));
+  assert.ok(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has('attach_client_operations_filing_evidence'));
   assert.equal(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has('copy_client_operations_user_period_data'), false);
 });
 

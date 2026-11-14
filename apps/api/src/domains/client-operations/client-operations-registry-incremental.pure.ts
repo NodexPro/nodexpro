@@ -69,4 +69,10 @@ export const SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS = new Set([
   'set_income_tax_deductions_reported',
   'set_client_operations_custom_column_value',
   'set_client_operations_cell_manual_status',
+  'mark_client_operations_obligation_reported',
+  'mark_client_operations_obligation_not_reported',
+  'confirm_client_operations_obligation_filed_with_payment',
+  'confirm_client_operations_obligation_tax_payment',
+  'attach_client_operations_filing_evidence',
+  'save_client_operations_self_employed_ni',
 ]);
