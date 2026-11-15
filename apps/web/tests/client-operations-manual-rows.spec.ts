@@ -20,7 +20,7 @@ const activeCellSource = readFileSync(
 const printSource = readFileSync(join(dir, '../src/lib/client-operations-print.pure.ts'), 'utf8');
 
 test('עוד toolbar button is hidden (menu implementation retained)', () => {
-  assert.match(viewSource, /עוד…/);
+  assert.match(viewSource, /clientOperations\.more/);
   assert.match(viewSource, /data-testid="co-toolbar-more"/);
   const moreBtnIdx = viewSource.indexOf('data-testid="co-toolbar-more"');
   assert.ok(moreBtnIdx > 0);
@@ -28,7 +28,7 @@ test('עוד toolbar button is hidden (menu implementation retained)', () => {
   assert.match(slice, /\bhidden\b/);
   // Underlying more menu (fill / number / borders) must remain in source.
   assert.match(viewSource, /nx-co-sheet__more-menu/);
-  assert.match(viewSource, /צבע רקע/);
+  assert.match(viewSource, /clientOperations\.fillColor/);
   assert.match(viewSource, /clientOperations\.numberFormat/);
   assert.match(viewSource, /clientOperations\.borders/);
   assert.match(viewSource, /setMoreOpen/);

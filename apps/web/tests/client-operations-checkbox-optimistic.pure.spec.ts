@@ -149,14 +149,20 @@ test('VAT / income-tax / payroll material checkboxes share the optimistic overla
   assert.match(view, /set_payroll_material_brought/);
 });
 
-test('checked material checkbox is a solid fill without native tick, gradient or ::after stripe', () => {
+test('empty table squares are white with a thin cyan border; checked squares use filing-paid green', () => {
+  assert.match(css, /\.nx-co-sheet__table td \.nx-co-sheet__checkbox[\s\S]*background-color:\s*#fff/);
+  assert.match(css, /\.nx-co-sheet__table td \.nx-co-sheet__checkbox[\s\S]*rgba\(57,\s*230,\s*244/);
   assert.match(
     css,
-    /\.nx-co-sheet__material-slot \.nx-co-sheet__checkbox:checked[\s\S]*background-color:\s*#268cff/,
+    /\.nx-co-sheet__material-slot \.nx-co-sheet__checkbox:checked[\s\S]*background-color:\s*rgba\(34,\s*197,\s*94,\s*0\.2\)/,
   );
   assert.match(
     css,
-    /\.nx-co-sheet__material-slot \.nx-co-sheet__checkbox:checked::after[\s\S]*content:\s*none/,
+    /\.nx-co-sheet__itd-slot \.nx-co-sheet__checkbox:checked[\s\S]*background-color:\s*rgba\(34,\s*197,\s*94,\s*0\.2\)/,
+  );
+  assert.match(
+    css,
+    /\.nx-co-sheet__material-slot \.nx-co-sheet__checkbox:checked::after[\s\S]*background:\s*#16a34a/,
   );
   assert.match(
     css,
@@ -165,7 +171,11 @@ test('checked material checkbox is a solid fill without native tick, gradient or
   assert.match(css, /\.nx-co-sheet__material-slot \.nx-co-sheet__checkbox:focus-visible/);
   assert.doesNotMatch(
     css,
-    /\.nx-co-sheet__material-slot \.nx-co-sheet__checkbox:checked[^{]*\{[^}]*linear-gradient/,
+    /\.nx-co-sheet__material-slot \.nx-co-sheet__checkbox:checked[^{]*\{[^}]*#268cff/,
+  );
+  assert.doesNotMatch(
+    css,
+    /\.nx-co-sheet__table td \.nx-co-sheet__checkbox:checked[^{]*\{[^}]*#268cff/,
   );
   assert.match(premium, /appearance:\s*none/);
 });

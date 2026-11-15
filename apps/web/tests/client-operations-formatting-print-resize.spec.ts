@@ -43,6 +43,7 @@ const undoSource = readFileSync(
   join(dir, '../src/lib/client-operations-undo-stack.pure.ts'),
   'utf8',
 );
+const heSource = readFileSync(join(dir, '../src/i18n/he.json'), 'utf8');
 
 // ── Palette: exactly 12 swatches ─────────────────────────────────────────────
 
@@ -264,8 +265,10 @@ test('toolbar: print button calls handlePrint', () => {
 });
 
 test('toolbar: text color moved out of עוד menu to A-color button in main toolbar', () => {
-  // The עוד menu now only has fill/number/borders
-  assert.match(viewSource, /צבע רקע/);
+  // The עוד menu now only has fill/number/borders. Fill label is i18n, not hardcoded Hebrew.
+  assert.match(viewSource, /clientOperations\.fillColor/);
+  assert.doesNotMatch(viewSource, /צבע רקע/);
+  assert.match(heSource, /"fillColor": "צבע רקע"/);
   assert.match(viewSource, /clientOperations\.numberFormat/);
   assert.match(viewSource, /clientOperations\.borders/);
   // Text color is now via palette swatches (commitPresentationOrToolDefault) not a native color picker in more menu
@@ -294,7 +297,8 @@ test('view: undoLastAction handles column_width', () => {
 
 test('view: beginResize uses computeClientOperationsColumnResizeDelta (not manual arithmetic)', () => {
   assert.match(viewSource, /computeClientOperationsColumnResizeDelta\(\{/);
-  assert.match(viewSource, /handleEdge: CLIENT_OPERATIONS_RESIZE_HANDLE_EDGE/);
+  assert.match(viewSource, /CLIENT_OPERATIONS_RESIZE_HANDLE_EDGE/);
+  assert.match(viewSource, /handleEdge,/);
   // Must NOT have the old manual arithmetic pattern
   assert.doesNotMatch(
     viewSource,

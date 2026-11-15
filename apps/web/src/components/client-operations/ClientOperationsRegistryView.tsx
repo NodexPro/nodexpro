@@ -55,8 +55,11 @@ import {
   type ClientOperationsClientQuickProfileAggregate,
 } from './ClientOperationsClientQuickProfilePopover';
 import {
+  CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_DEFAULT,
   clampClientOperationsColumnWidth,
+  clampClientOperationsCustomColumnWidth,
   loadClientOperationsColumnWidths,
+  omitClientOperationsCustomColumnKeys,
   saveClientOperationsColumnWidths,
 } from '../../lib/client-operations-column-widths.pure';
 import {
@@ -87,7 +90,12 @@ import {
 import {
   computeClientOperationsColumnResizeDelta,
   CLIENT_OPERATIONS_RESIZE_HANDLE_EDGE,
+  type ClientOperationsResizeHandleEdge,
 } from '../../lib/client-operations-column-resize.pure';
+import {
+  listClientOperationsExcelEditableCells,
+  nextClientOperationsExcelEditableCell,
+} from '../../lib/client-operations-excel-nav.pure';
 import {
   toggleClientOperationsHiddenColumn,
   isClientOperationsMandatoryVisibleColumn,
@@ -660,7 +668,12 @@ function obligationApplicable(
 }
 
 /** USER/custom Excel cells: empty renders blank (never em-dash / placeholder). */
-function displayCustomColumnValue(r: ClientOperationsRegistryRow, col: ClientOperationsRegistryColumn): string {
+function displayCustomColumnValue(
+  r: ClientOperationsRegistryRow,
+  col: ClientOperationsRegistryColumn,
+  draft?: string | null,
+): string {
+  if (draft != null) return formatCustomExcelCellDisplay(draft);
   return formatCustomExcelCellDisplay(r.cells?.[col.key]);
 }
 
@@ -1025,6 +1038,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [addColumnLabel, setAddColumnLabel] = useState('');
   const [addColumnDataType, setAddColumnDataType] = useState<'text' | 'number' | 'date' | 'boolean'>('text');
   const [commandError, setCommandError] = useState('');
+  const [customCellDirtyEpoch, setCustomCellDirtyEpoch] = useState(0);
   const [pendingMarkKeys, setPendingMarkKeys] = useState<ReadonlySet<string>>(() => new Set());
   const pendingMarkKeysRef = useRef<Set<string>>(new Set());
   const optimisticChecksRef = useRef<Map<string, OptimisticCheckboxEntry>>(new Map());
@@ -1319,6 +1333,12 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     }
   };
 
+  const customColumnKeySignature = columns
+    .filter((column) => column.cell_kind === 'custom')
+    .map((column) => column.key)
+    .sort()
+    .join('|');
+
   useEffect(() => {
     if (!widthScope?.userId || !widthScope.organizationId) {
       setColumnWidths({});
@@ -1327,11 +1347,20 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       setFocusedCell(null);
       return;
     }
-    setColumnWidths(loadClientOperationsColumnWidths(widthScope.userId, widthScope.organizationId));
     setCellPresentation(loadClientOperationsCellPresentation(widthScope.userId, widthScope.organizationId));
     setHiddenColumns(loadClientOperationsHiddenColumns(widthScope.userId, widthScope.organizationId));
     setFocusedCell(null);
   }, [widthScope?.organizationId, widthScope?.userId]);
+
+  useEffect(() => {
+    if (!widthScope?.userId || !widthScope.organizationId) {
+      setColumnWidths({});
+      return;
+    }
+    const stored = loadClientOperationsColumnWidths(widthScope.userId, widthScope.organizationId);
+    const customKeys = customColumnKeySignature ? customColumnKeySignature.split('|') : [];
+    setColumnWidths(omitClientOperationsCustomColumnKeys(stored, customKeys));
+  }, [widthScope?.organizationId, widthScope?.userId, customColumnKeySignature]);
 
   useEffect(() => {
     clearManualStatusOverlays(statusOverlaysRef.current);
@@ -1822,14 +1851,59 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     const reason = localizeSystemLabel(t, c.reason_key, c.reason_he ?? t('clientOperations.unavailable'));
     return `${label}: ${reason}`;
   };
+  const clampWidthForColumn = (col: ClientOperationsRegistryColumn, width: number) =>
+    col.cell_kind === 'custom'
+      ? clampClientOperationsCustomColumnWidth(width)
+      : clampClientOperationsColumnWidth(width);
   const widthForColumn = (col: ClientOperationsRegistryColumn) =>
-    columnWidths[col.key] ?? col.default_width_px ?? (col.cell_kind === 'folder' ? 44 : col.cell_kind === 'custom' ? 140 : 110);
-  const saveColumnWidth = (key: string, width: number) => {
-    const next = { ...columnWidths, [key]: width };
+    clampWidthForColumn(
+      col,
+      columnWidths[col.key] ??
+        col.default_width_px ??
+        (col.cell_kind === 'folder'
+          ? 44
+          : col.cell_kind === 'custom'
+            ? CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_DEFAULT
+            : 110),
+    );
+  const persistLocalColumnWidths = (next: Record<string, number>) => {
+    if (!widthScope?.userId || !widthScope.organizationId) return;
+    const customKeys = columns.filter((column) => column.cell_kind === 'custom').map((column) => column.key);
+    saveClientOperationsColumnWidths(
+      widthScope.userId,
+      widthScope.organizationId,
+      omitClientOperationsCustomColumnKeys(next, customKeys),
+    );
+  };
+  const persistCustomColumnWidth = (column: ClientOperationsRegistryColumn, width: number) => {
+    if (!canEdit || !column.custom_column_id || !onRegistryCommand) return;
+    void (async () => {
+      try {
+        await onRegistryCommand({
+          command: 'set_client_operations_custom_column_width',
+          column_id: column.custom_column_id,
+          width_px: width,
+        });
+      } catch (error) {
+        setCommandError(
+          error instanceof ApiError
+            ? localizeClientOperationsRegistryCommandError(
+                { code: error.code, message: error.message },
+                t,
+                t('clientOperations.resizeColumnFailed'),
+              )
+            : error instanceof Error
+              ? error.message
+              : t('clientOperations.resizeColumnFailed'),
+        );
+      }
+    })();
+  };
+  const saveColumnWidth = (column: ClientOperationsRegistryColumn, width: number) => {
+    const next = { ...columnWidths, [column.key]: width };
     setColumnWidths(next);
-    if (widthScope?.userId && widthScope.organizationId) {
-      saveClientOperationsColumnWidths(widthScope.userId, widthScope.organizationId, next);
-    }
+    persistLocalColumnWidths(next);
+    if (column.cell_kind === 'custom') persistCustomColumnWidth(column, width);
   };
   const toggleHiddenColumn = (columnKey: string) => {
     const next = toggleClientOperationsHiddenColumn(hiddenColumns, columnKey);
@@ -1843,7 +1917,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     persistHiddenColumns(next);
   };
 
-  const beginResize = (event: ReactMouseEvent, column: ClientOperationsRegistryColumn) => {
+  const beginResize = (
+    event: ReactMouseEvent,
+    column: ClientOperationsRegistryColumn,
+    handleEdge: ClientOperationsResizeHandleEdge = CLIENT_OPERATIONS_RESIZE_HANDLE_EDGE,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
     const startX = event.clientX;
@@ -1856,23 +1934,23 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       const delta = computeClientOperationsColumnResizeDelta({
         startClientX: startX,
         currentClientX: moveEvent.clientX,
-        handleEdge: CLIENT_OPERATIONS_RESIZE_HANDLE_EDGE,
+        handleEdge,
         direction,
       });
       setColumnWidths((previous) => ({
         ...previous,
-        [column.key]: clampClientOperationsColumnWidth(startWidth + delta),
+        [column.key]: clampWidthForColumn(column, startWidth + delta),
       }));
     };
     const onUp = (upEvent: MouseEvent) => {
       const delta = computeClientOperationsColumnResizeDelta({
         startClientX: startX,
         currentClientX: upEvent.clientX,
-        handleEdge: CLIENT_OPERATIONS_RESIZE_HANDLE_EDGE,
+        handleEdge,
         direction,
       });
-      const finalWidth = clampClientOperationsColumnWidth(startWidth + delta);
-      saveColumnWidth(column.key, finalWidth);
+      const finalWidth = clampWidthForColumn(column, startWidth + delta);
+      saveColumnWidth(column, finalWidth);
       if (finalWidth !== startWidth) {
         setCoUndoStack((history) =>
           pushClientOperationsUndoEntry(history, {
@@ -2014,6 +2092,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     const columnId = column.custom_column_id?.trim() ?? '';
     if (!organizationId || !clientId || !columnId || !operationalPeriodKey) return null;
     return { organizationId, clientId, columnId, operationalPeriodKey };
+  };
+
+  const customCellDraftForDisplay = (
+    row: ClientOperationsRegistryRow,
+    column: ClientOperationsRegistryColumn,
+  ): string | null => {
+    void customCellDirtyEpoch;
+    const periodKey = query?.operational_period_key ?? period?.selected_period_key ?? '';
+    const identity = makeCustomCellIdentity(row.client_id, column, periodKey);
+    if (!identity) return null;
+    return getCustomCellSlot(customCellSlotsRef.current, customCellSaveKey(identity)).latestDraft;
   };
 
   /** Slot identity for manual free-text cells — uses row_key (never a fabricated client UUID). */
@@ -2218,7 +2307,18 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       completeCustomCellSaveFailure(customCellSlotsRef.current, start.key);
       preserveEditorDraftIfNeeded(start.key, meta);
       notifyCustomCellFlightSettled(start.key);
-      setCommandError(error instanceof Error ? error.message : t('clientOperations.saveValueFailed'));
+      setCustomCellDirtyEpoch((epoch) => epoch + 1);
+      setCommandError(
+        error instanceof ApiError
+          ? localizeClientOperationsRegistryCommandError(
+              { code: error.code, message: error.message },
+              t,
+              t('clientOperations.saveValueFailed'),
+            )
+          : error instanceof Error
+            ? error.message
+            : t('clientOperations.saveValueFailed'),
+      );
     }
   };
 
@@ -2313,7 +2413,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     selectActiveFormatCell(row.client_id, column);
     if (editingCellKeyRef.current === pk) return;
     setEditingCellKey(pk);
-    setCellDraft(displayCustomColumnValue(row, column));
+    setCellDraft(displayCustomColumnValue(row, column, customCellDraftForDisplay(row, column)));
   };
 
   const scheduleManualRowCellAutosave = (
@@ -2388,6 +2488,31 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     setCellDraft(
       overlay != null ? overlay : formatCustomExcelCellDisplay(row.cells?.[column.key]),
     );
+  };
+
+  const moveExcelEditToNextCell = (current: {
+    rowKind: 'client' | 'manual';
+    rowId: string;
+    columnKey: string;
+  }) => {
+    const next = nextClientOperationsExcelEditableCell({
+      current,
+      cells: listClientOperationsExcelEditableCells({
+        clientRows: rows,
+        manualRows,
+        columns: visibleColumns,
+      }),
+    });
+    if (!next) return;
+    if (next.rowKind === 'client') {
+      const nextRow = rows.find((row) => row.client_id === next.rowId);
+      const nextColumn = visibleColumns.find((column) => column.key === next.columnKey);
+      if (nextRow && nextColumn) beginCustomCellEdit(nextRow, nextColumn);
+      return;
+    }
+    const nextRow = manualRows.find((row) => row.row_key === next.rowId);
+    const nextColumn = visibleColumns.find((column) => column.key === next.columnKey);
+    if (nextRow && nextColumn) beginManualRowCellEdit(nextRow, nextColumn);
   };
 
   const cancelManualRowCellEdit = (
@@ -2702,8 +2827,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     if (entry.kind === 'column_width') {
       const restoredWidths = { ...columnWidths, [entry.columnKey]: entry.previousWidth };
       setColumnWidths(restoredWidths);
-      if (widthScope?.userId && widthScope.organizationId) {
-        saveClientOperationsColumnWidths(widthScope.userId, widthScope.organizationId, restoredWidths);
+      persistLocalColumnWidths(restoredWidths);
+      const restoredColumn = columns.find((column) => column.key === entry.columnKey);
+      if (restoredColumn?.cell_kind === 'custom') {
+        persistCustomColumnWidth(restoredColumn, entry.previousWidth);
       }
     }
   };
@@ -4391,7 +4518,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       );
     }
     if (col.cell_kind === 'custom') {
-      const value = displayCustomColumnValue(r, col);
+      const value = displayCustomColumnValue(r, col, customCellDraftForDisplay(r, col));
       return canEdit && col.editable ? (
         <button
           type="button"
@@ -4999,9 +5126,14 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       type="button"
                       className={`nx-co-sheet__header-label${column.label.trim() ? '' : ' is-blank'}`}
                       disabled={!canEdit || !column.custom_column_id}
-                      title={canEdit ? t('clientOperations.clickToRenameColumn') : undefined}
-                      onClick={(event) => {
+                      title={
+                        column.label.trim() ||
+                        (canEdit ? t('clientOperations.doubleClickToRenameColumn') : undefined)
+                      }
+                      onClick={(event) => event.stopPropagation()}
+                      onDoubleClick={(event) => {
                         event.stopPropagation();
+                        event.preventDefault();
                         if (!canEdit || !column.custom_column_id) return;
                         setEditingHeaderColumnId(column.custom_column_id);
                         setHeaderDraft(column.label.trim());
@@ -5044,7 +5176,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               ) : (
                 systemColumnHeaderLabel(column, t)
               )}
-              <span className="nx-co-sheet__resize-handle" role="separator" aria-label={`${t('clientOperations.resizeColumn')} ${systemColumnHeaderLabel(column, t)}`} onMouseDown={(event) => beginResize(event, column)} />
+              <span className="nx-co-sheet__resize-handle" role="separator" aria-label={`${t('clientOperations.resizeColumn')} ${systemColumnHeaderLabel(column, t)}`} onMouseDown={(event) => beginResize(event, column, 'inline-start')} />
+              <span className="nx-co-sheet__resize-handle is-end" role="separator" aria-label={`${t('clientOperations.resizeColumn')} ${systemColumnHeaderLabel(column, t)}`} onMouseDown={(event) => beginResize(event, column, 'inline-end')} />
             </th>
           ))}
         </tr></thead>
@@ -5170,15 +5303,24 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                                   event.preventDefault();
                                   cancelCustomCellEdit(row, column);
                                 }
+                                if (event.key === 'Tab') {
+                                  event.preventDefault();
+                                  void commitCustomCellEdit(row, column, cellDraft);
+                                  moveExcelEditToNextCell({
+                                    rowKind: 'client',
+                                    rowId: row.client_id,
+                                    columnKey: column.key,
+                                  });
+                                }
                               }}
                             />
                           )
                           : (
                             <span
-                              className={`nx-co-sheet__custom-cell${displayCustomColumnValue(row, column) ? '' : ' is-blank'}`}
+                              className={`nx-co-sheet__custom-cell${displayCustomColumnValue(row, column, customCellDraftForDisplay(row, column)) ? '' : ' is-blank'}`}
                             >
                               {formatPresentationValue(
-                                displayCustomColumnValue(row, column),
+                                displayCustomColumnValue(row, column, customCellDraftForDisplay(row, column)),
                                 column,
                                 presentation,
                               )}
@@ -5186,7 +5328,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                           )
                         : (
                           formatPresentationValue(
-                            displayCustomColumnValue(row, column),
+                            displayCustomColumnValue(row, column, customCellDraftForDisplay(row, column)),
                             column,
                             presentation,
                           )
@@ -5302,6 +5444,15 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                             if (event.key === 'Escape') {
                               event.preventDefault();
                               cancelManualRowCellEdit(row, column);
+                            }
+                            if (event.key === 'Tab') {
+                              event.preventDefault();
+                              void commitManualRowCellEdit(row, column, cellDraft);
+                              moveExcelEditToNextCell({
+                                rowKind: 'manual',
+                                rowId: row.row_key,
+                                columnKey: column.key,
+                              });
                             }
                           }}
                         />

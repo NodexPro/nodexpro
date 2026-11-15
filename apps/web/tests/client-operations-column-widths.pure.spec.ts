@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   clampClientOperationsColumnWidth,
+  clampClientOperationsCustomColumnWidth,
   clientOperationsColumnWidthsStorageKey,
   loadClientOperationsColumnWidths,
+  omitClientOperationsCustomColumnKeys,
   saveClientOperationsColumnWidths,
 } from '../src/lib/client-operations-column-widths.pure.js';
 
@@ -34,4 +36,17 @@ test('column widths clamp and contain widths only', () => {
     custom_due: 480,
   });
   assert.equal(clampClientOperationsColumnWidth(140.7), 141);
+});
+
+test('custom column widths clamp independently of system localStorage min', () => {
+  assert.equal(clampClientOperationsCustomColumnWidth(10), 96);
+  assert.equal(clampClientOperationsCustomColumnWidth(160), 160);
+  assert.equal(clampClientOperationsCustomColumnWidth(999), 480);
+  assert.deepEqual(
+    omitClientOperationsCustomColumnKeys(
+      { client_name: 120, user_slot_01: 48, notes: 90 },
+      ['user_slot_01'],
+    ),
+    { client_name: 120, notes: 90 },
+  );
 });

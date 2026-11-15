@@ -8,6 +8,10 @@ import {
   buildClientOperationsToolbarCapabilities,
   buildCustomColumnsCapability,
   CLIENT_OPERATIONS_CUSTOM_COLUMNS_MAX,
+  CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_DEFAULT,
+  CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_MAX,
+  CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_MIN,
+  clampClientOperationsCustomColumnWidth,
   formatCustomCellDisplayHe,
   mergeCustomCellsIntoRow,
   slugifyCustomColumnKey,
@@ -93,6 +97,8 @@ test('create enforces max 10 with stable code and returns refreshed registry agg
   assert.match(commandServiceSource, /listClientOperationsRegistry\(ctx/);
   assert.match(commandServiceSource, /create_client_operations_custom_column/);
   assert.match(commandServiceSource, /set_client_operations_custom_column_value/);
+  assert.match(commandServiceSource, /set_client_operations_custom_column_width/);
+  assert.match(commandServiceSource, /CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_SET/);
   assert.match(commandServiceSource, /hide_client_operations_custom_column/);
   assert.match(commandServiceSource, /show_client_operations_custom_column/);
   assert.match(commandServiceSource, /reorder_client_operations_custom_column/);
@@ -106,4 +112,26 @@ test('create enforces max 10 with stable code and returns refreshed registry agg
 test('value loads are batched by org + client ids (no N\+1)', () => {
   assert.match(commandServiceSource, /\.in\('client_id', clientIds\)/);
   assert.match(commandServiceSource, /One org-and-client-batched value query/);
+});
+
+test('custom column width is clamped and org-scoped via named command', () => {
+  assert.equal(CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_MIN, 96);
+  assert.equal(CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_DEFAULT, 160);
+  assert.equal(CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_MAX, 480);
+  assert.equal(clampClientOperationsCustomColumnWidth(10), 96);
+  assert.equal(clampClientOperationsCustomColumnWidth(999), 480);
+  assert.equal(clampClientOperationsCustomColumnWidth('220.4'), 220);
+  assert.equal(clampClientOperationsCustomColumnWidth(undefined), 160);
+  assert.match(commandServiceSource, /width_px is required/);
+  assert.match(commandServiceSource, /\.eq\('organization_id', orgId\)/);
+  const migration = readFileSync(
+    join(dir, '../../../../supabase/migrations/212_client_operations_custom_column_width.sql'),
+    'utf8',
+  );
+  assert.match(migration, /add column if not exists width_px integer not null default 160/);
+  assert.match(migration, /drop constraint if exists client_operations_registry_custom_columns_width_px_check/);
+  assert.match(migration, /width_px >= 96 and width_px <= 480/);
+  assert.match(migration, /Does not rewrite labels, keys, period values, or RLS/);
+  assert.doesNotMatch(migration, /value_text|period_values|update\s+.*label/i);
+  assert.doesNotMatch(migration, /disable row level security/i);
 });

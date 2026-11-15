@@ -21,6 +21,19 @@ import {
 export type RegistryColumnCellKind = 'folder' | 'text' | 'notes' | 'custom' | 'checkbox' | 'operational_date';
 export type ClientOperationsCustomColumnDataType = 'text' | 'number' | 'date' | 'boolean';
 
+export const CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_MIN = 96;
+export const CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_DEFAULT = 160;
+export const CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_MAX = 480;
+
+export function clampClientOperationsCustomColumnWidth(width: unknown): number {
+  const n = typeof width === 'number' ? width : typeof width === 'string' ? Number(width) : NaN;
+  if (!Number.isFinite(n)) return CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_DEFAULT;
+  return Math.min(
+    CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_MAX,
+    Math.max(CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_MIN, Math.round(n)),
+  );
+}
+
 export type ClientOperationsRegistryColumn = {
   key: string;
   label: string;

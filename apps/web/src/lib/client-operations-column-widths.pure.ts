@@ -1,6 +1,9 @@
 export const CLIENT_OPERATIONS_COLUMN_WIDTHS_STORAGE_PREFIX = 'nx.client-operations.column-widths.v1';
 export const CLIENT_OPERATIONS_COLUMN_WIDTH_MIN = 48;
 export const CLIENT_OPERATIONS_COLUMN_WIDTH_MAX = 480;
+export const CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_MIN = 96;
+export const CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_DEFAULT = 160;
+export const CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_MAX = 480;
 
 export function clientOperationsColumnWidthsStorageKey(userId: string, organizationId: string): string {
   return `${CLIENT_OPERATIONS_COLUMN_WIDTHS_STORAGE_PREFIX}:${userId}:${organizationId}`;
@@ -9,6 +12,23 @@ export function clientOperationsColumnWidthsStorageKey(userId: string, organizat
 export function clampClientOperationsColumnWidth(width: number): number {
   if (!Number.isFinite(width)) return CLIENT_OPERATIONS_COLUMN_WIDTH_MIN;
   return Math.min(CLIENT_OPERATIONS_COLUMN_WIDTH_MAX, Math.max(CLIENT_OPERATIONS_COLUMN_WIDTH_MIN, Math.round(width)));
+}
+
+export function clampClientOperationsCustomColumnWidth(width: number): number {
+  if (!Number.isFinite(width)) return CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_DEFAULT;
+  return Math.min(
+    CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_MAX,
+    Math.max(CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_MIN, Math.round(width)),
+  );
+}
+
+export function omitClientOperationsCustomColumnKeys(
+  widths: Record<string, number>,
+  customKeys: Iterable<string>,
+): Record<string, number> {
+  const skip = new Set(customKeys);
+  if (skip.size === 0) return widths;
+  return Object.fromEntries(Object.entries(widths).filter(([key]) => !skip.has(key)));
 }
 
 export function loadClientOperationsColumnWidths(

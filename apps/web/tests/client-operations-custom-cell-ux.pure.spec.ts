@@ -60,7 +60,7 @@ test('6-8: single click activates editor with immediate focus/value', () => {
   assert.match(viewSource, /beginCustomCellEdit/);
   assert.match(viewSource, /beginCustomCellEdit\(row, column\)/);
   assert.match(viewSource, /autoFocus/);
-  assert.match(viewSource, /setCellDraft\(displayCustomColumnValue\(row, column\)\)/);
+  assert.match(viewSource, /setCellDraft\(displayCustomColumnValue\(row, column, customCellDraftForDisplay\(row, column\)\)\)/);
   // Spreadsheet path: single-click via td → beginCustomCellEdit (no button chrome).
   assert.match(viewSource, /is-editing-custom/);
   assert.doesNotMatch(viewSource, /nx-co-sheet__custom-cell-input[\s\S]{0,200}title="לחיצה לעריכה"/);
@@ -94,11 +94,35 @@ test('16-18: gear only on custom columns; isolated from rename/resize', () => {
   assert.match(viewSource, /cell_kind === 'custom'[\s\S]*nx-co-sheet__col-gear/);
   assert.match(viewSource, /openColumnSettings\(column\)/);
   assert.match(viewSource, /nx-co-sheet__resize-handle/);
-  assert.match(viewSource, /beginResize\(event, column\)/);
+  assert.match(viewSource, /beginResize\(event, column,/);
   assert.match(cssSource, /\.nx-co-sheet__col-gear-icon\s*\{[^}]*width:\s*17px/s);
   assert.match(cssSource, /\.nx-co-sheet__col-gear\s*\{[^}]*width:\s*28px/s);
   assert.match(cssSource, /\.nx-co-sheet__col-gear\s*\{[^}]*height:\s*28px/s);
   assert.match(cssSource, /#123756|var\(--nx-co-brand\)/);
+});
+
+test('19: Tab moves to the next editable Excel cell after save', () => {
+  assert.match(viewSource, /event\.key === 'Tab'/);
+  assert.match(viewSource, /moveExcelEditToNextCell/);
+  assert.match(viewSource, /nextClientOperationsExcelEditableCell/);
+  assert.match(viewSource, /listClientOperationsExcelEditableCells/);
+});
+
+test('20: save failure keeps latest draft and shows a command error', () => {
+  assert.match(viewSource, /completeCustomCellSaveFailure/);
+  assert.match(viewSource, /setCustomCellDirtyEpoch/);
+  assert.match(viewSource, /localizeClientOperationsRegistryCommandError/);
+  assert.match(viewSource, /customCellDraftForDisplay/);
+  assert.match(savePureSource, /leave latest draft intact/);
+});
+
+test('21: double-click header renames; tooltip shows the full label', () => {
+  assert.match(viewSource, /onDoubleClick=\{\(event\) => \{/);
+  assert.match(viewSource, /setEditingHeaderColumnId\(column\.custom_column_id\)/);
+  assert.match(viewSource, /doubleClickToRenameColumn/);
+  assert.match(viewSource, /column\.label\.trim\(\) \|\|/);
+  assert.match(viewSource, /beginResize\(event, column, 'inline-start'\)/);
+  assert.match(viewSource, /beginResize\(event, column, 'inline-end'\)/);
 });
 
 test('blank custom display never falls back to NBSP content', () => {

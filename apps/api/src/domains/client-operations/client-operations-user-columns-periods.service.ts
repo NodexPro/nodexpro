@@ -6,7 +6,10 @@ import { supabaseAdmin } from '../../db/client.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AppError, badRequest, forbidden } from '../../shared/errors.js';
-import { isBlankCustomColumnLabel } from './client-operations-registry-presentation.pure.js';
+import {
+  clampClientOperationsCustomColumnWidth,
+  isBlankCustomColumnLabel,
+} from './client-operations-registry-presentation.pure.js';
 import {
   isMeaningfulTypedValue,
   latestEarlierPeriodKey,
@@ -22,6 +25,7 @@ export type RegistryCustomColumnDefinitionExtended = {
   data_type: 'text' | 'number' | 'date' | 'boolean';
   position: number;
   visible: boolean;
+  width_px?: number;
   auto_extend_to_future: boolean;
   auto_extend_from_period_key: string | null;
   legacy_baseline_period_key: string | null;
@@ -44,7 +48,7 @@ export async function loadActiveCustomColumnsExtended(
   const { data, error } = await supabaseAdmin
     .from('client_operations_registry_custom_columns')
     .select(
-      'id, organization_id, key, label, data_type, position, visible, auto_extend_to_future, auto_extend_from_period_key, legacy_baseline_period_key, legacy_baseline_completed_at',
+      'id, organization_id, key, label, data_type, position, visible, width_px, auto_extend_to_future, auto_extend_from_period_key, legacy_baseline_period_key, legacy_baseline_completed_at',
     )
     .eq('organization_id', orgId)
     .is('archived_at', null)
@@ -53,6 +57,7 @@ export async function loadActiveCustomColumnsExtended(
   assertQueryError(error, 'Failed to load custom registry columns');
   return ((data ?? []) as RegistryCustomColumnDefinitionExtended[]).map((row) => ({
     ...row,
+    width_px: clampClientOperationsCustomColumnWidth(row.width_px),
     auto_extend_to_future: Boolean(row.auto_extend_to_future),
     auto_extend_from_period_key: row.auto_extend_from_period_key ?? null,
     legacy_baseline_period_key: row.legacy_baseline_period_key ?? null,

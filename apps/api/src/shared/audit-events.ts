@@ -144,6 +144,7 @@ export const AUDIT_ACTIONS = {
   CLIENT_OPERATIONS_TODO_REOPENED: 'client_operations.todo.reopened',
   CLIENT_OPERATIONS_CUSTOM_COLUMN_CREATED: 'client_operations.custom_column.created',
   CLIENT_OPERATIONS_CUSTOM_COLUMN_RENAMED: 'client_operations.custom_column.renamed',
+  CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_SET: 'client_operations.custom_column.width_set',
   CLIENT_OPERATIONS_CUSTOM_COLUMN_HIDDEN: 'client_operations.custom_column.hidden',
   CLIENT_OPERATIONS_CUSTOM_COLUMN_SHOWN: 'client_operations.custom_column.shown',
   CLIENT_OPERATIONS_CUSTOM_COLUMN_REORDERED: 'client_operations.custom_column.reordered',

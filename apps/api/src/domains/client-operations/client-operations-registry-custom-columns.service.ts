@@ -7,6 +7,7 @@ import {
   buildCustomColumnsCapability,
   CLIENT_OPERATIONS_CUSTOM_COLUMNS_MAX,
   CLIENT_OPERATIONS_REGISTRY_COLUMNS,
+  clampClientOperationsCustomColumnWidth,
   isSystemRegistryColumnKey,
   planClientOperationsUserSlotKeysToCreate,
   slugifyCustomColumnKey,
@@ -93,6 +94,7 @@ export type RegistryCustomColumnDefinition = {
   data_type: ClientOperationsCustomColumnDataType;
   position: number;
   visible: boolean;
+  width_px?: number;
   auto_extend_to_future?: boolean;
   auto_extend_from_period_key?: string | null;
   legacy_baseline_period_key?: string | null;
@@ -144,6 +146,7 @@ export type ClientOperationsRegistryCommandBody = {
   source_operational_period_key?: unknown;
   target_operational_period_key?: unknown;
   mode?: unknown;
+  width_px?: unknown;
 };
 
 function assertOrg(ctx: RequestContext): string {
@@ -192,10 +195,17 @@ function booleanFrom(value: unknown, name: string): boolean {
   return value;
 }
 
+function widthPxFrom(value: unknown): number {
+  if (value === null || value === undefined || value === '') throw badRequest('width_px is required');
+  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  if (!Number.isFinite(n)) throw badRequest('width_px must be a finite number');
+  return clampClientOperationsCustomColumnWidth(n);
+}
+
 export async function loadActiveClientOperationsRegistryCustomColumns(orgId: string): Promise<RegistryCustomColumnDefinition[]> {
   const { data, error } = await supabaseAdmin
     .from('client_operations_registry_custom_columns')
-    .select('id, organization_id, key, label, data_type, position, visible')
+    .select('id, organization_id, key, label, data_type, position, visible, width_px')
     .eq('organization_id', orgId)
     .is('archived_at', null)
     .order('position', { ascending: true })
@@ -247,7 +257,7 @@ async function loadOwnedColumn(orgId: string, rawColumnId: unknown): Promise<Reg
   const columnId = idFrom(rawColumnId, 'column_id');
   const { data, error } = await supabaseAdmin
     .from('client_operations_registry_custom_columns')
-    .select('id, organization_id, key, label, data_type, position, visible')
+    .select('id, organization_id, key, label, data_type, position, visible, width_px')
     .eq('organization_id', orgId)
     .eq('id', columnId)
     .is('archived_at', null)
@@ -620,6 +630,20 @@ export async function executeClientOperationsRegistryCommand(
       .eq('id', column.id);
     assertQueryError(error, 'Failed to rename custom registry column');
     await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_CUSTOM_COLUMN_RENAMED, column.id, { key: column.key, before: column.label, after: label });
+  } else if (command === 'set_client_operations_custom_column_width') {
+    const column = await loadOwnedColumn(orgId, body.column_id);
+    const widthPx = widthPxFrom(body.width_px);
+    const { error } = await supabaseAdmin
+      .from('client_operations_registry_custom_columns')
+      .update({ width_px: widthPx, updated_at: new Date().toISOString() })
+      .eq('organization_id', orgId)
+      .eq('id', column.id);
+    assertQueryError(error, 'Failed to set custom registry column width');
+    await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_SET, column.id, {
+      key: column.key,
+      before: column.width_px ?? null,
+      after: widthPx,
+    });
   } else if (command === 'hide_client_operations_custom_column' || command === 'show_client_operations_custom_column') {
     const column = await loadOwnedColumn(orgId, body.column_id);
     const visible = command === 'show_client_operations_custom_column';

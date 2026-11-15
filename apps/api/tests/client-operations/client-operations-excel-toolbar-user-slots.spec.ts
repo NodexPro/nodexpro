@@ -145,3 +145,11 @@ test('RESIZE — all headers keep resize handle; localStorage key reused', () =>
   assert.match(widthsPure, /COLUMN_WIDTH_MAX = 480/);
   assert.doesNotMatch(viewSource, /beginResize[\s\S]{0,80}onRegistryCommand/);
 });
+
+test('RESIZE — custom column width persists via named command and org aggregate', () => {
+  assert.match(viewSource, /set_client_operations_custom_column_width/);
+  assert.match(viewSource, /clampClientOperationsCustomColumnWidth/);
+  assert.match(viewSource, /omitClientOperationsCustomColumnKeys/);
+  assert.match(commandService, /set_client_operations_custom_column_width/);
+  assert.match(registryService, /clampClientOperationsCustomColumnWidth\(column\.width_px\)/);
+});

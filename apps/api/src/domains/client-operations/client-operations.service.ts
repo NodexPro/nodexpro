@@ -47,6 +47,7 @@ import {
   buildRegistryRowCells,
   buildRegistryRowCellLabelKeys,
   CLIENT_OPERATIONS_REGISTRY_COLUMNS,
+  clampClientOperationsCustomColumnWidth,
   formatAssignedFileEmployeesDisplay,
   formatIncomeTaxAdvanceRegistryFrequencyDisplayHe,
   formatPcnRegistryDisplay,
@@ -480,6 +481,7 @@ function buildRegistryColumnsForAggregate(input: {
     key: string;
     label: string;
     data_type: 'text' | 'number' | 'date' | 'boolean';
+    width_px?: number;
     auto_extend_to_future: boolean;
     auto_extend_from_period_key: string | null;
     legacy_baseline_period_key: string | null;
@@ -498,7 +500,7 @@ function buildRegistryColumnsForAggregate(input: {
       value_field: null,
       data_type: column.data_type,
       custom_column_id: column.id,
-      default_width_px: 160,
+      default_width_px: clampClientOperationsCustomColumnWidth(column.width_px),
       visible: true,
       system: false,
       editable: true,
