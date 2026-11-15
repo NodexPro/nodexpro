@@ -185,6 +185,11 @@ test('filed chrome paints a cell state and an open cell does not invent one', ()
   );
   assert.equal(filingCellPresentationClass({ filing_detail: { chrome: 'pending' }, tone: 'warning' }), '');
   assert.equal(filingCellPresentationClass({ tone: 'warning' }), 'is-reporting-cell-warning');
+  assert.equal(
+    filingCellPresentationClass({ filing_detail: { chrome: 'action_required' }, tone: 'overdue' }),
+    'is-reporting-cell-overdue',
+  );
+  assert.equal(filingCellPresentationClass({ filing_detail: { chrome: 'pending' }, tone: 'urgent' }), '');
 });
 
 test('a filing action already in flight cannot start a second command', () => {

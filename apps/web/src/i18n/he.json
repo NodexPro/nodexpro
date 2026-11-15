@@ -940,6 +940,7 @@
     "all": "הכל",
     "confirm": "אישור",
     "columnSettingsSubtitle": "הצגה בתקופות",
+    "columnStartPeriod": "תקופת התחלה",
     "existingDataStartPeriod": "תקופת התחלה למידע הקיים",
     "fromCurrentPeriodOn": "מהתקופה הנוכחית והלאה",
     "addColumn": "הוספת עמודה",

@@ -143,3 +143,44 @@ export function mapEligibleColumnsForPeriodSetupDialog(input: {
     }),
   }));
 }
+
+const PERIOD_KEY_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** First operational month the custom column may appear. Hard floor — never show earlier tabs. */
+export function customColumnStartPeriodKey(column: {
+  auto_extend_from_period_key?: string | null;
+  legacy_baseline_period_key?: string | null;
+}): string | null {
+  const from = String(column.auto_extend_from_period_key ?? '').trim();
+  if (PERIOD_KEY_RE.test(from)) return from;
+  const baseline = String(column.legacy_baseline_period_key ?? '').trim();
+  if (PERIOD_KEY_RE.test(baseline)) return baseline;
+  return null;
+}
+
+export function periodsOnOrAfterStart(periodKeys: readonly string[], startPeriodKey: string | null): string[] {
+  if (!startPeriodKey) return [...periodKeys];
+  return periodKeys.filter((key) => key >= startPeriodKey);
+}
+
+/**
+ * Backend visibility for one operational tab.
+ * Start period is a hard floor. Explicit visibility rows still apply after that floor.
+ * Auto-extend does not resurrect months the user unchecked.
+ */
+export function isCustomColumnVisibleInPeriod(input: {
+  columnVisible: boolean;
+  startPeriodKey: string | null;
+  operationalPeriodKey: string;
+  hasVisibilityRow: boolean;
+  needsLegacyBaseline: boolean;
+  setupComplete: boolean;
+  blankLabel: boolean;
+}): boolean {
+  if (!input.columnVisible) return false;
+  if (input.startPeriodKey && input.operationalPeriodKey < input.startPeriodKey) return false;
+  if (input.needsLegacyBaseline) return true;
+  if (input.hasVisibilityRow) return true;
+  if (!input.setupComplete && input.blankLabel) return true;
+  return false;
+}

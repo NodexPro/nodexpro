@@ -1031,7 +1031,7 @@ function buildFilingDetail(input: {
   const chrome: ClientOperationsFrequencyCellChrome = !input.applicable
     ? 'not_applicable'
     : !input.submitted
-      ? input.tone === 'overdue' || input.tone === 'urgent'
+      ? input.tone === 'overdue'
         ? 'action_required'
         : 'pending'
       : paid
@@ -1401,10 +1401,22 @@ export function historicalObligationIdentitiesToPreserve(input: {
   return input.existingKeys.filter((key) => !input.currentRelevantKeys.has(key));
 }
 
-function normalizeVatFrequency(vatFrequency: string | null | undefined): 'monthly' | 'bi_monthly' | null {
-  const freq = String(vatFrequency ?? '').trim().toLowerCase();
+export function normalizeVatFrequency(vatFrequency: string | null | undefined): 'monthly' | 'bi_monthly' | null {
+  const freq = String(vatFrequency ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[־–—]/g, '-')
+    .replace(/\s+/g, ' ');
   if (freq === 'monthly' || freq === 'חודשי') return 'monthly';
-  if (freq === 'bi_monthly' || freq === 'bimonthly' || freq === 'דו חודשי' || freq === 'דו-חודשי') return 'bi_monthly';
+  if (
+    freq === 'bi_monthly' ||
+    freq === 'bimonthly' ||
+    freq === 'bi-monthly' ||
+    freq === 'דו חודשי' ||
+    freq === 'דו-חודשי'
+  ) {
+    return 'bi_monthly';
+  }
   return null;
 }
 
@@ -1423,7 +1435,10 @@ export function pickVatObligationFactForFrequency<T extends { obligation_type: s
       matches.find((f) =>
         BIMONTHLY_VAT_PERIOD_RE.test(f.period_key) &&
         vatBimonthlyObligationMatchesOperationalPeriod(f.period_key, operationalPeriodKey),
-      ) ?? null
+      ) ??
+      // Recover a pair-end YYYY-MM row written before the 09-10 identity existed.
+      matches.find((f) => f.period_key === operationalPeriodKey) ??
+      null
     );
   }
   return (
@@ -1471,7 +1486,7 @@ export function resolveVatCalendarLookupPeriodKey(input: {
   vat_frequency: string | null | undefined;
   operational_period_key: string;
 }): string | null {
-  const freq = String(input.vat_frequency ?? '').trim().toLowerCase();
+  const freq = normalizeVatFrequency(input.vat_frequency);
   if (freq === 'monthly') return input.operational_period_key;
   if (freq === 'bi_monthly') {
     const parsed = parseReportingPeriodKey(input.operational_period_key);

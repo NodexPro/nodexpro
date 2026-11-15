@@ -8,9 +8,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   formatUserCustomCellDisplayHe,
+  isCustomColumnVisibleInPeriod,
   isMeaningfulTypedValue,
   latestEarlierPeriodKey,
   mapEligibleColumnsForPeriodSetupDialog,
+  periodsOnOrAfterStart,
   shouldPrecheckAutoExtend,
 } from '../../src/domains/client-operations/client-operations-user-columns-periods.pure.js';
 
@@ -66,7 +68,7 @@ test('6 — stale save response protection', () => {
   assert.match(viewSource, /applyAggregate:\s*false/);
   assert.match(viewSource, /shouldApplyCellSaveAggregate/);
   assert.match(viewSource, /preserveEditorDraftIfNeeded/);
-  assert.match(pageSource, /options\?\.applyAggregate !== false/);
+  assert.match(pageSource, /options\?\.applyAggregate === false/);
   assert.doesNotMatch(viewSource, /customCellSaveSeqRef/);
 });
 
@@ -110,7 +112,7 @@ test('13-17 — new-period eligibility + precheck + הכל', () => {
   });
   assert.equal(eligible[0]!.preselected, true);
   assert.equal(eligible[1]!.preselected, false);
-  assert.match(viewSource, /הכל/);
+  assert.match(viewSource, /clientOperations\.all/);
   assert.match(viewSource, /initialize_client_operations_user_columns_for_period/);
   assert.match(periodsService, /isBlankCustomColumnLabel/);
 });
@@ -139,7 +141,7 @@ test('21-24 — CASE B legacy baseline', () => {
   assert.doesNotMatch(migration, /insert into public\.client_operations_registry_custom_column_period_values/);
   assert.match(periodsService, /applyLegacyBaselineTransition/);
   assert.match(periodsService, /isMeaningfulTypedValue/);
-  assert.match(viewSource, /תקופת התחלה למידע הקיים/);
+  assert.match(viewSource, /clientOperations\.existingDataStartPeriod/);
 });
 
 test('25-29 — max 10, gear only user, rename/resize retained', () => {
@@ -167,4 +169,30 @@ test('meaningful typed value helper', () => {
     auto_extend_from_period_key: '2026-09',
     operational_period_key: '2026-08',
   }), false);
+});
+
+test('custom column start 10.26 is hidden in 09.26 and visible in 10.26/11.26', () => {
+  const base = {
+    columnVisible: true,
+    startPeriodKey: '2026-10',
+    hasVisibilityRow: true,
+    needsLegacyBaseline: false,
+    setupComplete: true,
+    blankLabel: false,
+  };
+  assert.equal(isCustomColumnVisibleInPeriod({ ...base, operationalPeriodKey: '2026-09' }), false);
+  assert.equal(isCustomColumnVisibleInPeriod({ ...base, operationalPeriodKey: '2026-10' }), true);
+  assert.equal(isCustomColumnVisibleInPeriod({ ...base, operationalPeriodKey: '2026-11' }), true);
+  assert.deepEqual(periodsOnOrAfterStart(['2026-09', '2026-10', '2026-11'], '2026-10'), ['2026-10', '2026-11']);
+  assert.match(viewSource, /nx-co-column-settings-modal/);
+  assert.match(viewSource, /nx-co-ni-modal__grid/);
+  assert.match(viewSource, /start_period_key/);
+  assert.match(periodsService, /customColumnStartPeriodKey/);
+  assert.match(periodsService, /selectedPeriodKey: input.selectedPeriodKey/);
+});
+
+test('period values stay independent — visibility never copies cells', () => {
+  assert.match(periodsService, /Visibility\/config only/);
+  assert.doesNotMatch(periodsService, /period_values[\s\S]{0,80}\.delete\(/);
+  assert.match(viewSource, /operational_period_key: query\?\.operational_period_key/);
 });

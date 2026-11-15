@@ -104,7 +104,7 @@ export function resolveVatObligationConfigured(input: {
   vat_frequency: string | null | undefined;
 }): boolean {
   const vatType = norm(input.vat_type);
-  const frequency = norm(input.vat_frequency);
+  const frequency = vatFrequencyToken(input.vat_frequency);
   if (!vatType && !frequency) return false;
   if (vatType === 'no' || vatType === 'not_relevant') return false;
   if (frequency === 'not_relevant' && vatType !== 'patur') return false;
@@ -194,6 +194,25 @@ function norm(value: string | null | undefined): string {
     .toLowerCase();
 }
 
+function vatFrequencyToken(value: string | null | undefined): string {
+  const raw = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[־–—]/g, '-')
+    .replace(/\s+/g, ' ');
+  if (raw === 'monthly' || raw === 'חודשי') return 'monthly';
+  if (
+    raw === 'bi_monthly' ||
+    raw === 'bimonthly' ||
+    raw === 'bi-monthly' ||
+    raw === 'דו חודשי' ||
+    raw === 'דו-חודשי'
+  ) {
+    return 'bi_monthly';
+  }
+  return raw;
+}
+
 /** VAT חודשי → every operational month. */
 export function isVatMonthlyApplicableForOperationalPeriod(_periodKey: string): boolean {
   return true;
@@ -219,7 +238,7 @@ export function resolveVatApplicabilityForOperationalPeriod(input: {
   operational_period_key: string;
 }): boolean {
   const vatType = norm(input.vat_type);
-  const frequency = norm(input.vat_frequency);
+  const frequency = vatFrequencyToken(input.vat_frequency);
   if (vatType === 'patur') {
     return isVatPaturApplicableForOperationalPeriod(input.operational_period_key);
   }

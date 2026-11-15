@@ -125,6 +125,19 @@ test('21: double-click header renames; tooltip shows the full label', () => {
   assert.match(viewSource, /beginResize\(event, column, 'inline-end'\)/);
 });
 
+test('column settings modal uses the NI deep-ocean two-column RTL layout', () => {
+  const modal = viewSource.slice(viewSource.indexOf('nx-co-column-settings-modal'));
+  assert.match(viewSource, /nx-co-ni-overlay/);
+  assert.match(viewSource, /nx-co-column-settings-modal/);
+  assert.match(viewSource, /nx-co-ni-modal__grid/);
+  assert.match(modal, /nx-co-ni-modal__col/);
+  assert.match(modal, /columnStartPeriod/);
+  assert.match(modal, /columnSettingsSubtitle/);
+  assert.match(modal, /dir=\{lang === 'he' \? 'rtl' : 'ltr'\}/);
+  assert.match(cssSource, /nx-co-column-settings-modal/);
+  assert.match(viewSource, /start_period_key: settingsStartPeriod/);
+});
+
 test('blank custom display never falls back to NBSP content', () => {
   assert.doesNotMatch(
     viewSource,

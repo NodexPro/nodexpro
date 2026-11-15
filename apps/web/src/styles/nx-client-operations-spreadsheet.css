@@ -3497,6 +3497,41 @@ button.nx-co-sheet__date-open {
   box-shadow: none;
 }
 
+.nx-co-column-settings-modal.nx-co-ni-modal.nx-clients-modal,
+.nx-co-ni-overlay .nx-co-column-settings-modal.nx-co-ni-modal.nx-clients-modal.nx-glass-card {
+  width: min(720px, calc(100vw - 24px));
+  max-height: min(88vh, 720px);
+}
+
+.nx-co-column-settings-modal .nx-co-ni-modal__field {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  color: #eef6ff;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: start;
+}
+
+.nx-co-column-settings-modal .nx-co-ni-modal__field select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(232, 244, 255, 0.9));
+  color: #0b2248;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.nx-co-column-settings-modal .nx-co-column-settings-periods {
+  width: 100%;
+  max-height: min(46vh, 360px);
+  overflow: auto;
+}
+
 .nx-co-ni-overlay .nx-co-ni-modal__footer .nx-glass-btn--secondary:hover:not(:disabled) {
   border-color: #cbd5e1;
   color: #1e293b;

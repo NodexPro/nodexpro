@@ -976,6 +976,14 @@ test('monthly and bimonthly VAT identities never collide for the selected tab', 
   ];
   assert.equal(pickVatObligationFactForFrequency(mixed, '2026-10', 'monthly')?.obligation_id, 'ob-monthly');
   assert.equal(pickVatObligationFactForFrequency(mixed, '2026-10', 'bi_monthly')?.obligation_id, 'ob-bimonthly');
+  assert.equal(
+    pickVatObligationFactForFrequency(
+      [{ obligation_type: 'vat_report', period_key: '2026-10', obligation_id: 'ob-end-month' }],
+      '2026-10',
+      'bi_monthly',
+    )?.obligation_id,
+    'ob-end-month',
+  );
   const monthlyCell = buildReportingCellInputFromFacts({
     kind: 'vat',
     applicable: true,
@@ -1386,6 +1394,50 @@ test('reporting dashboard wiring stays presentation-owned: payroll workflow, tax
   assert.match(registryService, /loadAnnualReportSubmissionsForTaxYear/);
   assert.match(registryService, /loadCapitalDeclarationKpiInstances/);
   assert.match(registryService, /taxByClient:/);
+});
+
+test('VAT 10.26 monthly/bimonthly keeps obligation identity and only paints overdue red', () => {
+  assert.equal(resolveVatCalendarLookupPeriodKey({ vat_frequency: 'דו-חודשי', operational_period_key: '2026-10' }), '2026-10');
+  assert.equal(resolveVatCalendarLookupPeriodKey({ vat_frequency: 'bi-monthly', operational_period_key: '2026-10' }), '2026-10');
+  assert.equal(resolveVatCalendarLookupPeriodKey({ vat_frequency: 'חודשי', operational_period_key: '2026-10' }), '2026-10');
+
+  const waiting = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-10',
+    vatFrequency: 'bi_monthly',
+    facts: [
+      {
+        obligation_id: 'ob-sep-oct',
+        obligation_type: 'vat_report',
+        period_key: '2026-09-10',
+        status: 'waiting_client_response',
+        due_date: '2026-11-19',
+        last_reported_at: null,
+      },
+    ],
+    calendarDueDate: '2026-11-19',
+  });
+  assert.equal(waiting.obligation_id, 'ob-sep-oct');
+  assert.equal(waiting.can_mark_submitted, true);
+  const waitingDetail = buildReportingCellPresentation(waiting, '2026-11-15').filing_detail;
+  assert.equal(waitingDetail?.can_report, true);
+  assert.equal(waitingDetail?.can_report_and_pay, true);
+  assert.equal(waitingDetail?.can_mark_paid, false);
+  assert.equal(waitingDetail?.chrome, 'pending');
+
+  const overdue = buildReportingCellPresentation(
+    {
+      ...waiting,
+      due_date: '2026-11-01',
+    },
+    '2026-11-15',
+  );
+  assert.equal(overdue.tone, 'overdue');
+  assert.equal(overdue.filing_detail?.chrome, 'action_required');
+  const notYetDue = buildReportingCellPresentation(waiting, '2026-11-15');
+  assert.notEqual(notYetDue.tone, 'overdue');
+  assert.equal(notYetDue.filing_detail?.chrome, 'pending');
 });
 
 

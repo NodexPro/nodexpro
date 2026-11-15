@@ -2731,9 +2731,7 @@ async function buildRelevantObligations(orgId: string, clientId: string, now: Da
   const businessType = String(p.business_type ?? '');
 
   if (String(t.vat_type ?? '') === 'yes') {
-    const vatFrequencyRaw = String(t.vat_frequency ?? '');
-    const vatFrequency =
-      vatFrequencyRaw === 'דו חודשי' ? 'bi_monthly' : vatFrequencyRaw === 'חודשי' ? 'monthly' : vatFrequencyRaw;
+    const vatFrequency = String(t.vat_frequency ?? '');
     const operationalPeriodKey = businessPreviousMonthKey(now);
     const identity = vatFilingPeriodIdentityForOperationalPeriod({
       vat_frequency: vatFrequency,

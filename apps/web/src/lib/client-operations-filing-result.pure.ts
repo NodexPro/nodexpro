@@ -100,6 +100,7 @@ export function filingCellPresentationClass(
 ): string {
   const chrome = cell?.filing_detail?.chrome;
   if (chrome === 'filed_unpaid' || chrome === 'filed_paid') return `is-filing-chrome-${chrome}`;
+  if (cell?.tone === 'overdue') return 'is-reporting-cell-overdue';
   if (cell?.filing_detail) return '';
   if (cell?.tone) return `is-reporting-cell-${cell.tone}`;
   return '';

@@ -126,6 +126,8 @@ export type ClientOperationsRegistryCommandBody = {
   query?: RegistryQueryInput;
   selected_periods?: unknown;
   auto_extend_to_future?: unknown;
+  start_period_key?: unknown;
+  auto_extend_from_period_key?: unknown;
   legacy_baseline_period_key?: unknown;
   column_ids?: unknown;
   column_key?: unknown;
@@ -749,6 +751,12 @@ export async function executeClientOperationsRegistryCommand(
       ),
       selectedPeriods,
       autoExtendToFuture: booleanFrom(body.auto_extend_to_future ?? false, 'auto_extend_to_future'),
+      startPeriodKey:
+        body.start_period_key == null || body.start_period_key === ''
+          ? body.auto_extend_from_period_key == null || body.auto_extend_from_period_key === ''
+            ? null
+            : String(body.auto_extend_from_period_key)
+          : String(body.start_period_key),
       legacyBaselinePeriodKey:
         body.legacy_baseline_period_key == null || body.legacy_baseline_period_key === ''
           ? null

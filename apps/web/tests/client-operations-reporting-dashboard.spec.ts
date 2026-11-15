@@ -49,7 +49,7 @@ test('KPI click is a quiet query change, filing mark is a named command', () => 
 
 test('row/cell tones, overdue marker, KPI and previous-period chrome exist', () => {
   assert.match(viewSource, /is-reporting-row-\$\{row\.reporting\.row_tone\}/);
-  assert.match(viewSource, /is-reporting-cell-\$\{reportingCell\.tone\}/);
+  assert.match(viewSource, /filingCellPresentationClass\(reportingCell\)/);
   assert.match(viewSource, /nx-co-sheet__reporting-overdue/);
   assert.match(viewSource, /onPeriodChange\?\.\(item\.navigate_period_key\)/);
   assert.match(cssSource, /\.nx-co-sheet__plain-dash\b/);
@@ -148,7 +148,7 @@ test('EN/HE reporting dashboard keys exist without hardcoded Hebrew chrome in th
 
 test('10.26 row chrome renders backend tones; previous KPI overdue is not applied to rows', () => {
   assert.match(viewSource, /is-reporting-row-\$\{row\.reporting\.row_tone\}/);
-  assert.match(viewSource, /is-reporting-cell-\$\{reportingCell\.tone\}/);
+  assert.match(viewSource, /filingCellPresentationClass\(reportingCell\)/);
   assert.match(viewSource, /previous\.overdue_count/);
   const rowClassSlice = viewSource.slice(
     viewSource.indexOf('is-reporting-row-${row.reporting.row_tone}'),
@@ -204,7 +204,6 @@ test('self-employed NI modal is a compact two-column command surface', () => {
   assert.match(viewSource, /handling_method:\s*method/);
   assert.match(viewSource, /confirm_month_handled:\s*resolve/);
   assert.match(viewSource, /data-handling-method=\{ops\.handling_method \?\? 'unresolved'\}/);
-  assert.match(viewSource, /persistInherited/);
   assert.match(viewSource, /ops\.ni_indicator_alert/);
   assert.match(viewSource, /data-january-confirmation/);
   assert.doesNotMatch(viewSource, /SELF_EMPLOYED_NI_OFFICE_REMINDER_DAY/);

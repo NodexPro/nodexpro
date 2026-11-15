@@ -20,6 +20,9 @@ test('manual filing stays available when material is missing and stays closed af
   assert.equal(canManuallyConfirmFiling('missing_data'), true);
   assert.equal(canManuallyConfirmFiling('waiting_for_material'), true);
   assert.equal(canManuallyConfirmFiling('waiting_for_income_data'), true);
+  assert.equal(canManuallyConfirmFiling('waiting_client_response'), true);
+  assert.equal(canManuallyConfirmFiling(''), true);
+  assert.equal(canManuallyConfirmFiling(null), true);
   assert.equal(canManuallyConfirmFiling('reported'), false);
   assert.equal(filingMaterialWarning('missing_data'), true);
   assert.equal(filingMaterialWarning('ready_to_report'), false);

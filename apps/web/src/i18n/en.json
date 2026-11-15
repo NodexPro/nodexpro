@@ -940,6 +940,7 @@
     "all": "All",
     "confirm": "Confirm",
     "columnSettingsSubtitle": "Show in periods",
+    "columnStartPeriod": "Start period",
     "existingDataStartPeriod": "Start period for existing data",
     "fromCurrentPeriodOn": "From the current period onward",
     "addColumn": "Add column",

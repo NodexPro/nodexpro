@@ -11,9 +11,12 @@ import {
   isBlankCustomColumnLabel,
 } from './client-operations-registry-presentation.pure.js';
 import {
+  customColumnStartPeriodKey,
+  isCustomColumnVisibleInPeriod,
   isMeaningfulTypedValue,
   latestEarlierPeriodKey,
   mapEligibleColumnsForPeriodSetupDialog,
+  periodsOnOrAfterStart,
   type PeriodTypedValue,
 } from './client-operations-user-columns-periods.pure.js';
 
@@ -208,15 +211,19 @@ export function resolveVisibleCustomColumnsForPeriod(input: {
   visibilityIds: Set<string>;
   setupComplete: boolean;
   columnsNeedingLegacyBaseline: Set<string>;
+  selectedPeriodKey: string;
 }): RegistryCustomColumnDefinitionExtended[] {
-  return input.columns.filter((column) => {
-    if (!column.visible) return false;
-    if (input.columnsNeedingLegacyBaseline.has(column.id)) return true;
-    if (input.visibilityIds.has(column.id)) return true;
-    // Before first setup for this period, keep blank slots discoverable for gear/rename.
-    if (!input.setupComplete && isBlankCustomColumnLabel(column.label)) return true;
-    return false;
-  });
+  return input.columns.filter((column) =>
+    isCustomColumnVisibleInPeriod({
+      columnVisible: column.visible,
+      startPeriodKey: customColumnStartPeriodKey(column),
+      operationalPeriodKey: input.selectedPeriodKey,
+      hasVisibilityRow: input.visibilityIds.has(column.id),
+      needsLegacyBaseline: input.columnsNeedingLegacyBaseline.has(column.id),
+      setupComplete: input.setupComplete,
+      blankLabel: isBlankCustomColumnLabel(column.label),
+    }),
+  );
 }
 
 export async function buildUserColumnsPeriodAggregateExtras(input: {
@@ -300,6 +307,7 @@ export async function buildUserColumnsPeriodAggregateExtras(input: {
     visibilityIds,
     setupComplete,
     columnsNeedingLegacyBaseline: needingBaseline,
+    selectedPeriodKey: input.selectedPeriodKey,
   });
 
   let user_column_period_setup: {
@@ -309,12 +317,15 @@ export async function buildUserColumnsPeriodAggregateExtras(input: {
   } | null = null;
 
   if (!setupComplete) {
-    const eligibleDefs = input.columns.filter(
-      (column) =>
+    const eligibleDefs = input.columns.filter((column) => {
+      const start = customColumnStartPeriodKey(column);
+      if (start && input.selectedPeriodKey < start) return false;
+      return (
         meaningfulPrior.has(column.id) &&
         !needingBaseline.has(column.id) &&
-        !isBlankCustomColumnLabel(column.label),
-    );
+        !isBlankCustomColumnLabel(column.label)
+      );
+    });
     user_column_period_setup = {
       needed: true,
       operational_period_key: input.selectedPeriodKey,
@@ -437,10 +448,17 @@ export async function setCustomColumnPeriodSettings(input: {
   selectedPeriodKey: string;
   selectedPeriods: string[];
   autoExtendToFuture: boolean;
+  startPeriodKey?: string | null;
   legacyBaselinePeriodKey?: string | null;
 }): Promise<void> {
   const selectedPeriodKey = periodKeyFrom(input.selectedPeriodKey);
-  const selected = [...new Set(input.selectedPeriods.map((p) => periodKeyFrom(p)))].sort();
+  const startPeriodKey = periodKeyFrom(
+    input.startPeriodKey || input.column.auto_extend_from_period_key || selectedPeriodKey,
+  );
+  const selected = periodsOnOrAfterStart(
+    [...new Set(input.selectedPeriods.map((p) => periodKeyFrom(p)))].sort(),
+    startPeriodKey,
+  );
 
   const needsLegacy = await columnHasMeaningfulLegacyValues(input.organizationId, input.column.id);
   if (columnNeedsLegacyBaseline(input.column, needsLegacy)) {
@@ -459,7 +477,7 @@ export async function setCustomColumnPeriodSettings(input: {
     .from('client_operations_registry_custom_columns')
     .update({
       auto_extend_to_future: autoExtend,
-      auto_extend_from_period_key: autoExtend ? selectedPeriodKey : null,
+      auto_extend_from_period_key: startPeriodKey,
       updated_at: new Date().toISOString(),
     })
     .eq('organization_id', input.organizationId)
@@ -510,7 +528,7 @@ export async function setCustomColumnPeriodSettings(input: {
       key: input.column.key,
       selected_periods: selected,
       auto_extend_to_future: autoExtend,
-      auto_extend_from_period_key: autoExtend ? selectedPeriodKey : null,
+      auto_extend_from_period_key: startPeriodKey,
     },
   });
 }
@@ -545,7 +563,11 @@ export async function initializeUserColumnsForPeriod(input: {
   }
 
   // Visibility/config only — cell VALUES never silently propagate on period init.
+  // Named columns cannot appear before their start period.
   for (const columnId of selectedIds) {
+    const column = input.allColumns.find((c) => c.id === columnId);
+    const start = column ? customColumnStartPeriodKey(column) : null;
+    if (start && periodKey < start && column && !isBlankCustomColumnLabel(column.label)) continue;
     await ensureVisibilityRowForPeriod({
       organizationId: input.organizationId,
       columnId,

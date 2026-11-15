@@ -2987,6 +2987,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [columnSettingsTarget, setColumnSettingsTarget] = useState<ClientOperationsRegistryColumn | null>(null);
   const [settingsSelectedPeriods, setSettingsSelectedPeriods] = useState<string[]>([]);
   const [settingsAutoFuture, setSettingsAutoFuture] = useState(false);
+  const [settingsStartPeriod, setSettingsStartPeriod] = useState<string>('');
   const [settingsLegacyBaseline, setSettingsLegacyBaseline] = useState<string>('');
   const [periodSetupSelection, setPeriodSetupSelection] = useState<string[]>([]);
   const [periodSetupSelectAll, setPeriodSetupSelectAll] = useState(false);
@@ -2999,9 +3000,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   }, [userColumnPeriodSetup]);
 
   const openColumnSettings = (column: ClientOperationsRegistryColumn) => {
+    const start =
+      column.auto_extend_from_period_key ??
+      period?.selected_period_key ??
+      query?.operational_period_key ??
+      '';
     setColumnSettingsTarget(column);
-    setSettingsSelectedPeriods([...(column.visible_period_keys ?? [])]);
+    setSettingsStartPeriod(start);
     setSettingsAutoFuture(Boolean(column.auto_extend_to_future));
+    setSettingsSelectedPeriods(
+      [...(column.visible_period_keys ?? [])].filter((key) => !start || key >= start),
+    );
     setSettingsLegacyBaseline(column.legacy_baseline_period_key ?? period?.selected_period_key ?? '');
   };
 
@@ -3013,8 +3022,12 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         command: 'set_client_operations_custom_column_period_settings',
         column_id: columnSettingsTarget.custom_column_id,
         operational_period_key: query?.operational_period_key ?? period?.selected_period_key ?? null,
-        selected_periods: settingsSelectedPeriods,
+        selected_periods: settingsSelectedPeriods.filter(
+          (key) => !settingsStartPeriod || key >= settingsStartPeriod,
+        ),
         auto_extend_to_future: settingsAutoFuture,
+        start_period_key: settingsStartPeriod || null,
+        auto_extend_from_period_key: settingsStartPeriod || null,
         legacy_baseline_period_key: columnSettingsTarget.legacy_baseline_required
           ? settingsLegacyBaseline || null
           : null,
@@ -6587,57 +6600,158 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             </div>
           </div>
         ) : null}
-        {columnSettingsTarget ? (
-          <div className="nx-co-sheet__dialog-backdrop" role="presentation">
-            <div className="nx-co-sheet__dialog" role="dialog" aria-modal="true" aria-label={t('clientOperations.columnSettings')}>
-              <button type="button" className="nx-co-sheet__close" onClick={() => setColumnSettingsTarget(null)} aria-label={t('clientOperations.close')}>×</button>
-              <h2>{t('clientOperations.columnSettings')}</h2>
-              <p className="nx-co-sheet__dialog-subtitle">{t('clientOperations.columnSettingsSubtitle')}</p>
-              {columnSettingsTarget.legacy_baseline_required ? (
-                <label>
-                  {t('clientOperations.existingDataStartPeriod')}
-                  <select
-                    value={settingsLegacyBaseline}
-                    onChange={(event) => setSettingsLegacyBaseline(event.target.value)}
-                  >
-                    {(period?.available_periods ?? []).map((key) => (
-                      <option key={key} value={key}>
-                        {`${key.slice(5)}.${key.slice(2, 4)}`}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-              <label className="nx-co-sheet__check">
-                <input
-                  type="checkbox"
-                  checked={settingsAutoFuture}
-                  onChange={(event) => setSettingsAutoFuture(event.target.checked)}
-                />
-                {t('clientOperations.fromCurrentPeriodOn')}
-              </label>
-              {(period?.available_periods ?? []).map((key) => (
-                <label key={key} className="nx-co-sheet__check">
-                  <input
-                    type="checkbox"
-                    checked={settingsSelectedPeriods.includes(key)}
-                    onChange={(event) => {
-                      setSettingsSelectedPeriods((prev) => {
-                        if (event.target.checked) return [...new Set([...prev, key])].sort();
-                        return prev.filter((p) => p !== key);
-                      });
-                    }}
-                  />
-                  {`${key.slice(5)}.${key.slice(2, 4)}`}
-                </label>
-              ))}
-              <div className="nx-co-sheet__dialog-actions">
-                <button type="button" className="nx-co-sheet__btn" onClick={() => setColumnSettingsTarget(null)}>{t('clientOperations.cancel')}</button>
-                <button type="button" className="nx-co-sheet__btn is-active" onClick={() => void saveColumnSettings()}>{t('clientOperations.save')}</button>
+        {columnSettingsTarget ? (() => {
+          const availablePeriods = period?.available_periods ?? [];
+          const dataTypeKey =
+            columnSettingsTarget.data_type === 'number'
+              ? 'clientOperations.formatNumber'
+              : columnSettingsTarget.data_type === 'date'
+                ? 'clientOperations.formatDate'
+                : columnSettingsTarget.data_type === 'boolean'
+                  ? 'clientOperations.yesNo'
+                  : 'clientOperations.text';
+          const applyStartPeriod = (nextStart: string, autoFuture = settingsAutoFuture) => {
+            setSettingsStartPeriod(nextStart);
+            setSettingsSelectedPeriods((prev) => {
+              const floor = nextStart ? prev.filter((key) => key >= nextStart) : prev;
+              if (!autoFuture) return floor;
+              return availablePeriods.filter((key) => !nextStart || key >= nextStart);
+            });
+          };
+          return (
+          <div className="nx-clients-overlay nx-co-ni-overlay">
+            <div
+              className="nx-glass-card nx-clients-modal nx-co-ops-modal nx-co-ni-modal nx-co-column-settings-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="nx-co-column-settings-title"
+              dir={lang === 'he' ? 'rtl' : 'ltr'}
+              data-testid="client-operations-column-settings-modal"
+            >
+              <div className="nx-clients-modal__head">
+                <h3 id="nx-co-column-settings-title">{t('clientOperations.columnSettings')}</h3>
+                <button
+                  type="button"
+                  className="nx-clients-modal__close"
+                  onClick={() => setColumnSettingsTarget(null)}
+                  aria-label={t('clientOperations.close')}
+                >
+                  ×
+                </button>
               </div>
+              <form
+                className="nx-clients-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void saveColumnSettings();
+                }}
+                noValidate
+              >
+                <div className="nx-clients-form__body nx-co-ni-modal__body">
+                  <div className="nx-co-ni-modal__grid">
+                    <section className="nx-co-ni-modal__col" aria-labelledby="nx-co-column-settings-details">
+                      <h4 id="nx-co-column-settings-details" className="nx-co-ni-modal__col-title">
+                        {t('clientOperations.columnSettings')}
+                      </h4>
+                      <dl className="nx-co-ni-modal__facts">
+                        <div className="nx-co-ni-modal__row">
+                          <dt>{t('clientOperations.columnName')}</dt>
+                          <dd>{columnSettingsTarget.label}</dd>
+                        </div>
+                        <div className="nx-co-ni-modal__row">
+                          <dt>{t('clientOperations.dataType')}</dt>
+                          <dd>{t(dataTypeKey)}</dd>
+                        </div>
+                      </dl>
+                      <label className="nx-co-ni-modal__field">
+                        <span>{t('clientOperations.columnStartPeriod')}</span>
+                        <select
+                          value={settingsStartPeriod}
+                          onChange={(event) => applyStartPeriod(event.target.value)}
+                        >
+                          {availablePeriods.map((key) => (
+                            <option key={key} value={key}>
+                              {formatClientOperationsOperationalPeriodTabLabel(key)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {columnSettingsTarget.legacy_baseline_required ? (
+                        <label className="nx-co-ni-modal__field">
+                          <span>{t('clientOperations.existingDataStartPeriod')}</span>
+                          <select
+                            value={settingsLegacyBaseline}
+                            onChange={(event) => setSettingsLegacyBaseline(event.target.value)}
+                          >
+                            {availablePeriods.map((key) => (
+                              <option key={key} value={key}>
+                                {formatClientOperationsOperationalPeriodTabLabel(key)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
+                      <label className="nx-co-ni-modal__option">
+                        <input
+                          type="checkbox"
+                          checked={settingsAutoFuture}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            setSettingsAutoFuture(checked);
+                            applyStartPeriod(settingsStartPeriod, checked);
+                          }}
+                        />
+                        <span>{t('clientOperations.fromCurrentPeriodOn')}</span>
+                      </label>
+                    </section>
+                    <section className="nx-co-ni-modal__col" aria-labelledby="nx-co-column-settings-periods">
+                      <h4 id="nx-co-column-settings-periods" className="nx-co-ni-modal__col-title">
+                        {t('clientOperations.columnSettingsSubtitle')}
+                      </h4>
+                      <div className="nx-co-ni-modal__options nx-co-column-settings-periods">
+                        {availablePeriods.map((key) => {
+                          const beforeStart = Boolean(settingsStartPeriod && key < settingsStartPeriod);
+                          return (
+                            <label
+                              key={key}
+                              className={`nx-co-ni-modal__option${settingsSelectedPeriods.includes(key) ? ' is-selected' : ''}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={!beforeStart && settingsSelectedPeriods.includes(key)}
+                                disabled={beforeStart}
+                                onChange={(event) => {
+                                  setSettingsSelectedPeriods((prev) => {
+                                    if (event.target.checked) return [...new Set([...prev, key])].sort();
+                                    return prev.filter((p) => p !== key);
+                                  });
+                                }}
+                              />
+                              <span>{formatClientOperationsOperationalPeriodTabLabel(key)}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  </div>
+                </div>
+                <div className="nx-clients-form__footer nx-co-ni-modal__footer">
+                  <button type="submit" className="nx-glass-btn nx-glass-btn--purple">
+                    {t('clientOperations.save')}
+                  </button>
+                  <button
+                    type="button"
+                    className="nx-glass-btn nx-glass-btn--secondary"
+                    onClick={() => setColumnSettingsTarget(null)}
+                  >
+                    {t('clientOperations.cancel')}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
-        ) : null}
+          );
+        })() : null}
         {addColumnOpen ? (
           <div className="nx-co-sheet__dialog-backdrop" role="presentation">
             <div className="nx-co-sheet__dialog" role="dialog" aria-modal="true" aria-label={t('clientOperations.addColumn')}>

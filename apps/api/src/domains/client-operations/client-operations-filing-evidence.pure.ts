@@ -23,6 +23,7 @@ const MANUAL_CONFIRM_STATUSES = new Set([
   'missing_data',
   'waiting_for_material',
   'waiting_for_income_data',
+  'waiting_client_response',
   'not_reported',
 ]);
 
@@ -94,7 +95,9 @@ export function clientDocumentStorageReadOrder(storedBucket: string | null | und
 
 /** Accountant may record a filing that already happened, even without client material. */
 export function canManuallyConfirmFiling(status: string | null | undefined): boolean {
-  return MANUAL_CONFIRM_STATUSES.has(String(status ?? '').trim());
+  const normalized = String(status ?? '').trim();
+  if (!normalized) return true;
+  return MANUAL_CONFIRM_STATUSES.has(normalized);
 }
 
 export function filingMaterialWarning(status: string | null | undefined): boolean {
