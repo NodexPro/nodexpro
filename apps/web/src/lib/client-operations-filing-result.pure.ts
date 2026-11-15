@@ -23,6 +23,50 @@ export function canStartFilingAction(locked: boolean): boolean {
   return locked !== true;
 }
 
+export function filingModalActionEnabled(input: {
+  canMutate: boolean;
+  action: FilingActionKind;
+  can_report: boolean;
+  can_report_and_pay: boolean;
+  can_mark_paid: boolean;
+  hasObligation: boolean;
+}): boolean {
+  if (input.canMutate !== true) return false;
+  if (input.action === 'report') return input.can_report === true;
+  if (input.action === 'report_and_pay') return input.can_report_and_pay === true;
+  return input.hasObligation === true && input.can_mark_paid === true;
+}
+
+export function buildFilingActionCommandBody(input: {
+  action: FilingActionKind;
+  clientId: string;
+  columnKey: string;
+  obligationId?: string | null;
+  canonicalId?: string | null;
+  operationalPeriodKey: string | null;
+  query: unknown;
+}): Record<string, unknown> {
+  const shared = {
+    client_id: input.clientId,
+    obligation_id: input.obligationId ?? null,
+    canonical_id: input.canonicalId,
+    kind: input.columnKey,
+    operational_period_key: input.operationalPeriodKey,
+    query: input.query,
+  };
+  if (input.action === 'report') {
+    return { command: 'mark_client_operations_obligation_reported', ...shared };
+  }
+  return {
+    command:
+      input.action === 'report_and_pay'
+        ? 'confirm_client_operations_obligation_filed_with_payment'
+        : 'confirm_client_operations_obligation_tax_payment',
+    ...shared,
+    payment_classification: 'paid_in_full',
+  };
+}
+
 /** Backend chrome is the only confirmation that the refreshed aggregate recorded the action. */
 export function filingChromeConfirmsAction(
   action: FilingActionKind,

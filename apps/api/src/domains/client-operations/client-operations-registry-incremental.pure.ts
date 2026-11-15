@@ -94,4 +94,5 @@ export const SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS = new Set([
   'confirm_client_operations_obligation_tax_payment',
   'attach_client_operations_filing_evidence',
   'save_client_operations_self_employed_ni',
+  'ensure_client_operations_period_vat_obligation',
 ]);

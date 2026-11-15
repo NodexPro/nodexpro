@@ -99,7 +99,7 @@ test('payment modal is Create Client-styled, has no Yes preselect, and cancel do
   assert.match(viewSource, /data-testid="client-operations-payment-modal"/);
   assert.match(viewSource, /data-testid="client-operations-filing-paid"/);
   assert.match(viewSource, /detail\.can_mark_paid/);
-  assert.match(viewSource, /!canAct \|\| !detail\.can_mark_paid/);
+  assert.match(viewSource, /disabled=\{!paidEnabled\}/);
   assert.match(viewSource, /nx-client-create--deep-ocean-glass/);
   assert.match(viewSource, /selected: null/);
   assert.match(viewSource, /disabled=\{!paymentModal\.selected\}/);
@@ -242,11 +242,31 @@ test('self-employed NI modal is a compact two-column command surface', () => {
   assert.doesNotMatch(niCss, /background:\s*#fff;/);
 });
 
+test('filed VAT cell tooltip uses backend דווח / דווח ושולם keys and orange/green chrome', () => {
+  assert.match(viewSource, /title=\{cellTooltip\}/);
+  assert.doesNotMatch(viewSource, /filed \? `\$\{text\} — \$\{statusLabel\}`/);
+  assert.equal((he.clientOperations.registry.reporting.filing as { report: string }).report, 'דווח');
+  assert.equal(
+    (he.clientOperations.registry.reporting.filing as { reportAndPaid: string }).reportAndPaid,
+    'דווח ושולם',
+  );
+  assert.match(cssSource, /td\.is-filing-chrome-filed_unpaid[\s\S]*rgba\(249,\s*115,\s*22/);
+  assert.match(cssSource, /td\.is-filing-chrome-filed_paid[\s\S]*rgba\(34,\s*197,\s*94/);
+});
+
 test('VAT filing buttons stay command-gated; tab switch refreshes aggregate without local history writes', () => {
-  assert.match(viewSource, /const canAct = Boolean\(canEdit && onRegistryCommand && reportingCell\?\.obligation_id/);
-  assert.match(viewSource, /disabled=\{!canAct \|\| !detail\.can_report\}/);
-  assert.match(viewSource, /disabled=\{!canAct \|\| !detail\.can_report_and_pay\}/);
+  assert.match(viewSource, /const canMutate = Boolean\(canEdit && onRegistryCommand && !filingActionPending && !evidencePending\)/);
+  assert.match(viewSource, /disabled=\{!reportEnabled\}/);
+  assert.match(viewSource, /disabled=\{!reportAndPayEnabled\}/);
+  assert.match(viewSource, /buildFilingActionCommandBody/);
   assert.doesNotMatch(viewSource, /can_report\s*=\s*true/);
+  assert.doesNotMatch(viewSource, /runPreparePeriodVatObligation/);
+  assert.doesNotMatch(viewSource, /can_prepare_filing/);
+  assert.doesNotMatch(viewSource, /command: 'ensure_client_operations_period_vat_obligation'/);
+  assert.doesNotMatch(
+    viewSource,
+    /const openFilingDetailModal[\s\S]{0,900}ensure_client_operations_period_vat_obligation/,
+  );
   assert.match(pageSource, /operational_period_key: operationalPeriodKey/);
   assert.match(pageSource, /preferCache: true/);
   assert.doesNotMatch(pageSource, /setRows\(\(prev\)[\s\S]*filing_detail/);

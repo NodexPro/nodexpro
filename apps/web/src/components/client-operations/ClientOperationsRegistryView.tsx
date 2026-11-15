@@ -3,8 +3,10 @@ import { createPortal } from 'react-dom';
 import { apiFetch, apiJson, ApiError, userFacingApiMessage } from '../../api/client';
 import { localizeClientOperationsRegistryCommandError } from '../../lib/client-operations-registry-command-error.pure';
 import {
+  buildFilingActionCommandBody,
   canStartFilingAction,
   filingAggregateConfirmsAction,
+  filingModalActionEnabled,
   filingCellPresentationClass,
   selfEmployedNiAggregateConfirmsMethod,
   selfEmployedNiShouldPersistSelection,
@@ -3465,7 +3467,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     const liveRow = rows.find((row) => row.client_id === filingModal.row.client_id) ?? filingModal.row;
     const reportingCell = liveRow.reporting?.cells?.[filingModal.columnKey];
     const detail = reportingCell?.filing_detail;
-    if (!reportingCell?.obligation_id || !detail) return;
+    if (!detail) return;
+    if (action === 'paid' && !reportingCell?.obligation_id) return;
     const allowed =
       action === 'report'
         ? detail.can_report
@@ -3484,28 +3487,15 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     setFilingFeedback(null);
     setCommandError('');
     const period = query?.operational_period_key ?? null;
-    const body =
-      action === 'report'
-        ? {
-            command: 'mark_client_operations_obligation_reported',
-            client_id: clientId,
-            obligation_id: reportingCell.obligation_id,
-            canonical_id: reportingCell.canonical_id,
-            operational_period_key: period,
-            query,
-          }
-        : {
-            command:
-              action === 'report_and_pay'
-                ? 'confirm_client_operations_obligation_filed_with_payment'
-                : 'confirm_client_operations_obligation_tax_payment',
-            client_id: clientId,
-            obligation_id: reportingCell.obligation_id,
-            canonical_id: reportingCell.canonical_id,
-            payment_classification: 'paid_in_full',
-            operational_period_key: period,
-            query,
-          };
+    const body = buildFilingActionCommandBody({
+      action,
+      clientId,
+      columnKey,
+      obligationId: reportingCell?.obligation_id ?? null,
+      canonicalId: reportingCell?.canonical_id,
+      operationalPeriodKey: period,
+      query,
+    });
     try {
       const aggregate = await onRegistryCommand(body, { requireApplied: true });
       if (
@@ -3513,7 +3503,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           action,
           clientId,
           columnKey,
-          obligationId: reportingCell.obligation_id,
+          obligationId: reportingCell?.obligation_id ?? null,
           aggregate: aggregate as {
             rows?: Array<{
               client_id?: string;
@@ -4970,15 +4960,15 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       }
       const text = displayForColumn(r, col, t);
       const filed = filingDetail.chrome === 'filed_unpaid' || filingDetail.chrome === 'filed_paid';
-      const statusLabel = t(filingDetail.filing_status_key);
+      const cellTooltip = t(reportingCell?.tooltip_key || filingDetail.filing_status_key);
       return (
         <button
           type="button"
           className={`nx-co-sheet__frequency-cell is-${filingDetail.chrome}`}
           data-testid="client-operations-frequency-cell"
           data-chrome={filingDetail.chrome}
-          title={filed ? `${text} — ${statusLabel}` : t(reportingCell?.tooltip_key || filingDetail.filing_status_key)}
-          aria-label={filed ? `${col.label} — ${text} — ${statusLabel}` : undefined}
+          title={cellTooltip}
+          aria-label={filed ? `${col.label} — ${cellTooltip}` : undefined}
           onClick={(event) => {
             event.stopPropagation();
             if (statusPaintMode) {
@@ -5661,7 +5651,32 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           { key: filingModal.columnKey, label: '', cell_kind: 'text', value_field: null, visible: true, system: true, editable: false, freeze_default: false, align: 'center' },
           t,
         );
-        const canAct = Boolean(canEdit && onRegistryCommand && reportingCell?.obligation_id && !filingActionPending && !evidencePending);
+        const canMutate = Boolean(canEdit && onRegistryCommand && !filingActionPending && !evidencePending);
+        const hasObligation = Boolean(reportingCell?.obligation_id);
+        const reportEnabled = filingModalActionEnabled({
+          canMutate,
+          action: 'report',
+          can_report: detail.can_report,
+          can_report_and_pay: detail.can_report_and_pay,
+          can_mark_paid: detail.can_mark_paid,
+          hasObligation,
+        });
+        const reportAndPayEnabled = filingModalActionEnabled({
+          canMutate,
+          action: 'report_and_pay',
+          can_report: detail.can_report,
+          can_report_and_pay: detail.can_report_and_pay,
+          can_mark_paid: detail.can_mark_paid,
+          hasObligation,
+        });
+        const paidEnabled = filingModalActionEnabled({
+          canMutate,
+          action: 'paid',
+          can_report: detail.can_report,
+          can_report_and_pay: detail.can_report_and_pay,
+          can_mark_paid: detail.can_mark_paid,
+          hasObligation,
+        });
         return (
           <div className="nx-clients-overlay nx-co-ni-overlay">
             <div
@@ -5750,7 +5765,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                         type="button"
                         className="nx-co-filing-modal__clip"
                         aria-label={t('clientOperations.registry.reporting.filing.attach')}
-                        disabled={!canAct}
+                        disabled={!canMutate || !hasObligation}
                         onClick={() => filingEvidenceInputRef.current?.click()}
                       >
                         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
@@ -5828,7 +5843,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     type="button"
                     className="nx-glass-btn nx-glass-btn--secondary"
                     data-testid="client-operations-filing-report"
-                    disabled={!canAct || !detail.can_report}
+                    disabled={!reportEnabled}
                     onClick={() => void runFilingAction('report')}
                   >
                     {t(detail.report_key)}
@@ -5837,7 +5852,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     type="button"
                     className="nx-glass-btn nx-glass-btn--secondary"
                     data-testid="client-operations-filing-report-paid"
-                    disabled={!canAct || !detail.can_report_and_pay}
+                    disabled={!reportAndPayEnabled}
                     onClick={() => void runFilingAction('report_and_pay')}
                   >
                     {t(detail.report_and_paid_key)}
@@ -5846,7 +5861,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     type="button"
                     className="nx-glass-btn nx-glass-btn--purple"
                     data-testid="client-operations-filing-paid"
-                    disabled={!canAct || !detail.can_mark_paid}
+                    disabled={!paidEnabled}
                     onClick={() => void runFilingAction('paid')}
                   >
                     {t(detail.paid_key)}

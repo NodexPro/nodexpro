@@ -58,7 +58,11 @@ import {
   resolveAllowedManualStatusesForWrite,
   setClientOperationsCellManualStatus,
 } from './client-operations-cell-manual-status.service.js';
-import { executeClientObligationsCommand } from './client-obligations-tasks-core.service.js';
+import {
+  ensureClientOperationsPeriodVatObligation,
+  executeClientObligationsCommand,
+  fileClientOperationsPeriodVatObligation,
+} from './client-obligations-tasks-core.service.js';
 import {
   attestTaxObligationPaymentFact,
   loadTaxObligationPaymentFactsForClients,
@@ -72,6 +76,7 @@ import {
   emitObligationPaymentWorkEvent,
 } from './client-obligations-work-engine-bridge.js';
 import {
+  isFilingNotApplicableStatus,
   isFilingSubmittedStatus,
   parseSelfEmployedNiHandlingMethod,
   paymentAppliesForReportingKind,
@@ -190,6 +195,68 @@ function idFrom(value: unknown, name: string): string {
   const id = typeof value === 'string' ? value.trim() : '';
   if (!id) throw badRequest(`${name} is required`);
   return id;
+}
+
+function optionalIdFrom(value: unknown): string | null {
+  const id = typeof value === 'string' ? value.trim() : '';
+  return id || null;
+}
+
+type RegistryFilingObligationRow = {
+  id: string;
+  status: string;
+  obligation_type: string;
+  period_key: string;
+  is_active?: boolean | null;
+};
+
+async function resolveVatObligationForRegistryFiling(input: {
+  ctx: RequestContext;
+  orgId: string;
+  clientId: string;
+  obligationId: string | null;
+  operationalPeriodKey: string;
+  allowCreate: boolean;
+}): Promise<RegistryFilingObligationRow> {
+  if (input.obligationId) {
+    const { data: existing, error: existingError } = await supabaseAdmin
+      .from('client_obligations')
+      .select('id, status, obligation_type, period_key, is_active')
+      .eq('organization_id', input.orgId)
+      .eq('client_id', input.clientId)
+      .eq('id', input.obligationId)
+      .maybeSingle();
+    assertQueryError(existingError, 'Failed to load obligation for registry filing command');
+    if (!existing) throw badRequest('obligation not found');
+    const row = existing as RegistryFilingObligationRow;
+    if (row.is_active === false && !isFilingSubmittedStatus(row.status)) {
+      throw badRequest('obligation is not ready to report');
+    }
+    if (row.is_active === false && isFilingNotApplicableStatus(row.status)) {
+      throw badRequest('obligation is not ready to report');
+    }
+    return row;
+  }
+  if (!input.allowCreate) throw badRequest('obligation_id is required');
+  const ensured = await ensureClientOperationsPeriodVatObligation(input.ctx, {
+    clientId: input.clientId,
+    operationalPeriodKey: input.operationalPeriodKey,
+  });
+  if (!ensured.obligation_id) {
+    throw badRequest('cannot create VAT obligation for this period');
+  }
+  const { data: created, error: createdError } = await supabaseAdmin
+    .from('client_obligations')
+    .select('id, status, obligation_type, period_key, is_active')
+    .eq('organization_id', input.orgId)
+    .eq('client_id', input.clientId)
+    .eq('id', ensured.obligation_id)
+    .maybeSingle();
+  assertQueryError(createdError, 'Failed to load obligation after period ensure');
+  if (!created) throw badRequest('obligation not found');
+  const row = created as RegistryFilingObligationRow;
+  if (row.is_active === false) throw badRequest('obligation is not ready to report');
+  return row;
 }
 
 function booleanFrom(value: unknown, name: string): boolean {
@@ -441,6 +508,18 @@ const INCOME_TAX_DEDUCTIONS_REGISTRY_COMMANDS = new Set([
   'set_income_tax_deductions_reported',
 ]);
 
+function vatFilingCreateAllowed(body: Record<string, unknown>, command: string): boolean {
+  if (
+    command !== 'mark_client_operations_obligation_reported' &&
+    command !== 'confirm_client_operations_obligation_filed_with_payment'
+  ) {
+    return false;
+  }
+  const kind = String(body.kind ?? '').trim();
+  const canonicalId = String(body.canonical_id ?? '').trim();
+  return kind === 'vat' || canonicalId.startsWith('vat_report::');
+}
+
 const FILING_REGISTRY_COMMANDS = new Set([
   'mark_client_operations_obligation_reported',
   'mark_client_operations_obligation_not_reported',
@@ -448,6 +527,7 @@ const FILING_REGISTRY_COMMANDS = new Set([
   'confirm_client_operations_obligation_tax_payment',
   'save_client_operations_self_employed_ni',
   'attach_client_operations_filing_evidence',
+  'ensure_client_operations_period_vat_obligation',
 ]);
 
 function reportingKindFromObligationType(
@@ -1036,29 +1116,186 @@ export async function executeClientOperationsRegistryCommand(
     command === 'mark_client_operations_obligation_not_reported'
   ) {
     const clientId = idFrom(body.client_id, 'client_id');
-    const obligationId = idFrom(body.obligation_id, 'obligation_id');
-    const { data: existing, error: existingError } = await supabaseAdmin
-      .from('client_obligations')
-      .select('id, status, obligation_type, period_key')
-      .eq('organization_id', orgId)
-      .eq('client_id', clientId)
-      .eq('id', obligationId)
-      .maybeSingle();
-    assertQueryError(existingError, 'Failed to load obligation for registry filing command');
-    if (!existing) throw badRequest('obligation not found');
-    await assertSelectedTabMatchesObligation({
-      organizationId: orgId,
-      clientId,
-      obligationType: String((existing as { obligation_type?: string }).obligation_type ?? ''),
-      obligationPeriodKey: String((existing as { period_key?: string }).period_key ?? ''),
-      operationalPeriodKey: operationalPeriodKeyFrom(
-        body.operational_period_key ?? (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
-      ),
-    });
-    const currentStatus = String((existing as { status?: string }).status ?? '');
-    const alreadySubmitted = isFilingSubmittedStatus(currentStatus);
-    if (command === 'mark_client_operations_obligation_reported') {
-      if (!alreadySubmitted) {
+    if (command === 'mark_client_operations_obligation_reported' && vatFilingCreateAllowed(body, command)) {
+      const periodRaw =
+        body.operational_period_key ??
+        (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key;
+      const operationalPeriodKey = requiredOperationalPeriodKeyFrom(periodRaw);
+      const filed = await fileClientOperationsPeriodVatObligation(ctx, {
+        clientId,
+        operationalPeriodKey,
+        obligationId: optionalIdFrom(body.obligation_id),
+      });
+      await assertSelectedTabMatchesObligation({
+        organizationId: orgId,
+        clientId,
+        obligationType: 'vat_report',
+        obligationPeriodKey: filed.period_key,
+        operationalPeriodKey,
+      });
+      if (filed.filed) {
+        await emitObligationFiledWorkEvent({
+          ctx,
+          orgId,
+          clientId,
+          obligationId: filed.obligation_id,
+          obligationType: 'vat_report',
+          periodKey: filed.period_key,
+          canonicalId: `vat_report::${filed.period_key}`,
+        });
+      }
+    } else {
+      const obligationIdRaw = optionalIdFrom(body.obligation_id);
+      const operationalPeriodKey = operationalPeriodKeyFrom(
+        body.operational_period_key ??
+          (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
+      );
+      const existing = await resolveVatObligationForRegistryFiling({
+        ctx,
+        orgId,
+        clientId,
+        obligationId: obligationIdRaw,
+        operationalPeriodKey,
+        allowCreate: false,
+      });
+      const obligationId = existing.id;
+      await assertSelectedTabMatchesObligation({
+        organizationId: orgId,
+        clientId,
+        obligationType: String(existing.obligation_type ?? ''),
+        obligationPeriodKey: String(existing.period_key ?? ''),
+        operationalPeriodKey,
+      });
+      const currentStatus = String(existing.status ?? '');
+      const alreadySubmitted = isFilingSubmittedStatus(currentStatus);
+      if (command === 'mark_client_operations_obligation_reported') {
+        if (!alreadySubmitted) {
+          await executeClientObligationsCommand(ctx, clientId, {
+            type: 'mark_obligation_reported',
+            payload: { obligation_id: obligationId },
+          });
+          await emitObligationFiledWorkEvent({
+            ctx,
+            orgId,
+            clientId,
+            obligationId,
+            obligationType: String(existing.obligation_type ?? ''),
+            periodKey: String(existing.period_key ?? ''),
+            canonicalId: `${String(existing.obligation_type ?? '')}::${String(existing.period_key ?? '')}`,
+          });
+        }
+      } else if (alreadySubmitted) {
+        await executeClientObligationsCommand(ctx, clientId, {
+          type: 'mark_obligation_not_reported',
+          payload: { obligation_id: obligationId },
+        });
+      }
+    }
+  } else if (
+    command === 'confirm_client_operations_obligation_filed_with_payment' ||
+    command === 'confirm_client_operations_obligation_tax_payment'
+  ) {
+    const clientId = idFrom(body.client_id, 'client_id');
+    const canonicalId = String(body.canonical_id ?? '').trim();
+    if (!canonicalId) throw badRequest('canonical_id required');
+    const classificationRaw = String(body.payment_classification ?? '').trim();
+    if (!isTaxObligationPaymentClassification(classificationRaw)) {
+      throw badRequest('payment_classification required');
+    }
+    if (command === 'confirm_client_operations_obligation_filed_with_payment' && vatFilingCreateAllowed(body, command)) {
+      const operationalPeriodKey = requiredOperationalPeriodKeyFrom(
+        body.operational_period_key ??
+          (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
+      );
+      const existingFacts = await loadTaxObligationPaymentFactsForClients({
+        organizationId: orgId,
+        clientIds: [clientId],
+      });
+      const existingClassification = (existingFacts.get(clientId) ?? []).find(
+        (fact) => fact.obligation_canonical_id === canonicalId,
+      )?.payment_classification;
+      if (paymentAlreadyConfirmedInFull(existingClassification, classificationRaw)) {
+        throw badRequest('payment already confirmed');
+      }
+      const filed = await fileClientOperationsPeriodVatObligation(ctx, {
+        clientId,
+        operationalPeriodKey,
+        obligationId: optionalIdFrom(body.obligation_id),
+        pay: {
+          canonicalId,
+          classification: classificationRaw,
+        },
+      });
+      await assertSelectedTabMatchesObligation({
+        organizationId: orgId,
+        clientId,
+        obligationType: 'vat_report',
+        obligationPeriodKey: filed.period_key,
+        operationalPeriodKey,
+      });
+      if (filed.filed) {
+        await emitObligationFiledWorkEvent({
+          ctx,
+          orgId,
+          clientId,
+          obligationId: filed.obligation_id,
+          obligationType: 'vat_report',
+          periodKey: filed.period_key,
+          canonicalId: canonicalId.startsWith('vat_report::') ? canonicalId : `vat_report::${filed.period_key}`,
+        });
+      }
+      if (filed.paid) {
+        await emitObligationPaymentWorkEvent({
+          ctx,
+          orgId,
+          clientId,
+          obligationId: filed.obligation_id,
+          periodKey: operationalPeriodKey,
+          canonicalId,
+          paymentClassification: classificationRaw,
+        });
+      }
+      if (filed.filed || filed.paid) {
+        await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_OBLIGATION_FILED_WITH_PAYMENT, filed.obligation_id, {
+          client_id: clientId,
+          obligation_id: filed.obligation_id,
+          canonical_id: canonicalId,
+          payment_classification: classificationRaw,
+          refiled: false,
+          outstanding: paymentClassificationIsOutstanding(classificationRaw),
+        });
+      }
+    } else {
+      const obligationIdRaw = optionalIdFrom(body.obligation_id);
+      const operationalPeriodKey = operationalPeriodKeyFrom(
+        body.operational_period_key ??
+          (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
+      );
+      const existing = await resolveVatObligationForRegistryFiling({
+        ctx,
+        orgId,
+        clientId,
+        obligationId: obligationIdRaw,
+        operationalPeriodKey,
+        allowCreate: false,
+      });
+      const obligationId = existing.id;
+      await assertSelectedTabMatchesObligation({
+        organizationId: orgId,
+        clientId,
+        obligationType: String(existing.obligation_type ?? ''),
+        obligationPeriodKey: String(existing.period_key ?? ''),
+        operationalPeriodKey,
+      });
+      const obligationType = String(existing.obligation_type ?? '');
+      const periodKey = String(existing.period_key ?? '');
+      const kind = reportingKindFromObligationType(obligationType);
+      if (!kind) throw badRequest('obligation type does not support tax payment confirmation');
+      const alreadySubmitted = isFilingSubmittedStatus(String(existing.status ?? ''));
+      if (command === 'confirm_client_operations_obligation_tax_payment' && !alreadySubmitted) {
+        throw badRequest('cannot update payment on an unfiled obligation');
+      }
+      if (command === 'confirm_client_operations_obligation_filed_with_payment' && !alreadySubmitted) {
         await executeClientObligationsCommand(ctx, clientId, {
           type: 'mark_obligation_reported',
           payload: { obligation_id: obligationId },
@@ -1068,123 +1305,66 @@ export async function executeClientOperationsRegistryCommand(
           orgId,
           clientId,
           obligationId,
-          obligationType: String((existing as { obligation_type?: string }).obligation_type ?? ''),
-          periodKey: String((existing as { period_key?: string }).period_key ?? ''),
-          canonicalId: `${String((existing as { obligation_type?: string }).obligation_type ?? '')}::${String((existing as { period_key?: string }).period_key ?? '')}`,
+          obligationType,
+          periodKey,
+          canonicalId,
         });
       }
-    } else if (alreadySubmitted) {
-      await executeClientObligationsCommand(ctx, clientId, {
-        type: 'mark_obligation_not_reported',
-        payload: { obligation_id: obligationId },
-      });
-    }
-  } else if (
-    command === 'confirm_client_operations_obligation_filed_with_payment' ||
-    command === 'confirm_client_operations_obligation_tax_payment'
-  ) {
-    const clientId = idFrom(body.client_id, 'client_id');
-    const obligationId = idFrom(body.obligation_id, 'obligation_id');
-    const canonicalId = String(body.canonical_id ?? '').trim();
-    if (!canonicalId) throw badRequest('canonical_id required');
-    const classificationRaw = String(body.payment_classification ?? '').trim();
-    if (!isTaxObligationPaymentClassification(classificationRaw)) {
-      throw badRequest('payment_classification required');
-    }
-    const operationalPeriodKey = operationalPeriodKeyFrom(
-      body.operational_period_key ?? (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
-    );
-    const { data: existing, error: existingError } = await supabaseAdmin
-      .from('client_obligations')
-      .select('id, status, obligation_type, period_key')
-      .eq('organization_id', orgId)
-      .eq('client_id', clientId)
-      .eq('id', obligationId)
-      .maybeSingle();
-    assertQueryError(existingError, 'Failed to load obligation for registry payment command');
-    if (!existing) throw badRequest('obligation not found');
-    await assertSelectedTabMatchesObligation({
-      organizationId: orgId,
-      clientId,
-      obligationType: String((existing as { obligation_type?: string }).obligation_type ?? ''),
-      obligationPeriodKey: String((existing as { period_key?: string }).period_key ?? ''),
-      operationalPeriodKey,
-    });
-    const obligationType = String((existing as { obligation_type?: string }).obligation_type ?? '');
-    const periodKey = String((existing as { period_key?: string }).period_key ?? '');
-    const kind = reportingKindFromObligationType(obligationType);
-    if (!kind) throw badRequest('obligation type does not support tax payment confirmation');
-    const alreadySubmitted = isFilingSubmittedStatus(String((existing as { status?: string }).status ?? ''));
-    if (command === 'confirm_client_operations_obligation_tax_payment' && !alreadySubmitted) {
-      throw badRequest('cannot update payment on an unfiled obligation');
-    }
-    if (command === 'confirm_client_operations_obligation_filed_with_payment' && !alreadySubmitted) {
-      await executeClientObligationsCommand(ctx, clientId, {
-        type: 'mark_obligation_reported',
-        payload: { obligation_id: obligationId },
-      });
-      await emitObligationFiledWorkEvent({
-        ctx,
-        orgId,
-        clientId,
-        obligationId,
-        obligationType,
-        periodKey,
-        canonicalId,
-      });
-    }
-    const existingFacts = await loadTaxObligationPaymentFactsForClients({
-      organizationId: orgId,
-      clientIds: [clientId],
-    });
-    const existingClassification = (existingFacts.get(clientId) ?? []).find(
-      (fact) => fact.obligation_canonical_id === canonicalId,
-    )?.payment_classification;
-    if (paymentAlreadyConfirmedInFull(existingClassification, classificationRaw)) {
-      throw badRequest('payment already confirmed');
-    }
-    const paymentChanged =
-      paymentAppliesForReportingKind(kind) && existingClassification !== classificationRaw;
-    if (paymentChanged) {
-      await attestTaxObligationPaymentFact({
-        ctx,
+      const existingFacts = await loadTaxObligationPaymentFactsForClients({
         organizationId: orgId,
-        clientId,
-        obligationCanonicalId: canonicalId,
-        obligationKind: kind,
-        operationalPeriodKey,
-        obligationPeriodKey: periodKey,
-        sourceObligationId: obligationId,
-        paymentClassification: classificationRaw,
-        paymentDueDate: null,
+        clientIds: [clientId],
       });
-      await emitObligationPaymentWorkEvent({
-        ctx,
-        orgId,
-        clientId,
-        obligationId,
-        periodKey: operationalPeriodKey,
-        canonicalId,
-        paymentClassification: classificationRaw,
-      });
+      const existingClassification = (existingFacts.get(clientId) ?? []).find(
+        (fact) => fact.obligation_canonical_id === canonicalId,
+      )?.payment_classification;
+      if (paymentAlreadyConfirmedInFull(existingClassification, classificationRaw)) {
+        throw badRequest('payment already confirmed');
+      }
+      const paymentChanged =
+        paymentAppliesForReportingKind(kind) && existingClassification !== classificationRaw;
+      if (paymentChanged) {
+        await attestTaxObligationPaymentFact({
+          ctx,
+          organizationId: orgId,
+          clientId,
+          obligationCanonicalId: canonicalId,
+          obligationKind: kind,
+          operationalPeriodKey,
+          obligationPeriodKey: periodKey,
+          sourceObligationId: obligationId,
+          paymentClassification: classificationRaw,
+          paymentDueDate: null,
+        });
+        await emitObligationPaymentWorkEvent({
+          ctx,
+          orgId,
+          clientId,
+          obligationId,
+          periodKey: operationalPeriodKey,
+          canonicalId,
+          paymentClassification: classificationRaw,
+        });
+      }
+      const recordedFiling =
+        command === 'confirm_client_operations_obligation_filed_with_payment' && !alreadySubmitted;
+      if (recordedFiling || paymentChanged) {
+        await audit(
+          ctx,
+          command === 'confirm_client_operations_obligation_tax_payment'
+            ? AUDIT_ACTIONS.CLIENT_OPERATIONS_OBLIGATION_PAYMENT_UPDATED
+            : AUDIT_ACTIONS.CLIENT_OPERATIONS_OBLIGATION_FILED_WITH_PAYMENT,
+          obligationId,
+          {
+            client_id: clientId,
+            obligation_id: obligationId,
+            canonical_id: canonicalId,
+            payment_classification: classificationRaw,
+            refiled: false,
+            outstanding: paymentClassificationIsOutstanding(classificationRaw),
+          },
+        );
+      }
     }
-    const recordedFiling =
-      command === 'confirm_client_operations_obligation_filed_with_payment' && !alreadySubmitted;
-    if (recordedFiling || paymentChanged) await audit(
-      ctx,
-      command === 'confirm_client_operations_obligation_tax_payment'
-        ? AUDIT_ACTIONS.CLIENT_OPERATIONS_OBLIGATION_PAYMENT_UPDATED
-        : AUDIT_ACTIONS.CLIENT_OPERATIONS_OBLIGATION_FILED_WITH_PAYMENT,
-      obligationId,
-      {
-        client_id: clientId,
-        obligation_id: obligationId,
-        canonical_id: canonicalId,
-        payment_classification: classificationRaw,
-        refiled: false,
-        outstanding: paymentClassificationIsOutstanding(classificationRaw),
-      },
-    );
   } else if (command === 'save_client_operations_self_employed_ni') {
     const clientId = idFrom(body.client_id, 'client_id');
     const periodKey = requiredOperationalPeriodKeyFrom(
@@ -1275,6 +1455,17 @@ export async function executeClientOperationsRegistryCommand(
     }
   } else if (command === 'attach_client_operations_filing_evidence') {
     await attachClientOperationsFilingEvidence(ctx, body);
+  } else if (command === 'ensure_client_operations_period_vat_obligation') {
+    const clientId = idFrom(body.client_id, 'client_id');
+    const operationalPeriodKey = requiredOperationalPeriodKeyFrom(
+      body.operational_period_key ??
+        (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
+    );
+    const ensured = await ensureClientOperationsPeriodVatObligation(ctx, {
+      clientId,
+      operationalPeriodKey,
+    });
+    if (!ensured.created && !ensured.updated) reuseMaterializationCache = true;
   } else if (command === 'archive_client_operations_custom_column') {
     const column = await loadOwnedColumn(orgId, body.column_id);
     const { error } = await supabaseAdmin

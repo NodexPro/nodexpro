@@ -43,6 +43,8 @@ import {
   vatFilingPeriodIdentityForOperationalPeriod,
   vatObligationPeriodKeysForOperationalPeriod,
   vatReportingCanonicalAliases,
+  vatSelectedPeriodCanReport,
+  vatSelectedPeriodCanReportWithoutObligation,
   type ClientOperationsReportingCellInput,
   type ClientOperationsReportingFilingFact,
 } from '../../src/domains/client-operations/client-operations-reporting-dashboard.pure.js';
@@ -402,7 +404,9 @@ test('filing and payment are independent; unknown payment is not green paid', ()
     TODAY,
   ).cells.vat;
   assert.equal(partial?.tone, 'payment_outstanding');
-  assert.equal(partial?.tooltip_key.includes('paymentPartial'), true);
+  assert.equal(partial?.filing_detail?.chrome, 'filed_unpaid');
+  assert.equal(partial?.tooltip_key.includes('filing.report'), true);
+  assert.equal(partial?.tooltip_key.includes('paymentPartial'), false);
   assert.equal(paymentAppliesForReportingKind('payroll'), false);
   assert.equal(paymentAppliesForReportingKind('national_insurance'), false);
   assert.equal(paymentAppliesForReportingKind('vat'), true);
@@ -1666,7 +1670,8 @@ test('VAT identity aliases recover Country Pack pair-start rows without GET writ
   assert.equal(inactiveOpen.obligation_id, 'ob-inactive-open');
   assert.equal(inactiveOpen.submitted, false);
   assert.equal(inactiveOpen.can_mark_submitted, false);
-  assert.equal(buildReportingCellPresentation(inactiveOpen, TODAY).filing_detail?.can_report, false);
+  assert.equal(buildReportingCellPresentation(inactiveOpen, TODAY).filing_detail?.can_report, true);
+  assert.equal(buildReportingCellPresentation(inactiveOpen, TODAY).filing_detail?.can_report_and_pay, true);
 
   assert.equal(
     pickVatObligationFactForFrequency(
@@ -1690,6 +1695,245 @@ test('VAT identity aliases recover Country Pack pair-start rows without GET writ
       'bi_monthly',
     )?.obligation_id,
     'ob-active-pair',
+  );
+});
+
+function vatFact(
+  obligation_id: string,
+  period_key: string,
+  status = 'missing_data',
+): ClientOperationsReportingFilingFact {
+  return {
+    obligation_id,
+    obligation_type: 'vat_report',
+    period_key,
+    status,
+    due_date: '2026-11-16',
+    last_reported_at: null,
+    is_active: true,
+  };
+}
+
+test('monthly unfiled 08.26 does not block 09.26 or 10.26 can_report', () => {
+  const augustUnfiled = vatFact('ob-aug', '2026-08');
+  const septemberReady = vatFact('ob-sep', '2026-09', 'ready_to_report');
+  const octoberReady = vatFact('ob-oct', '2026-10', 'ready_to_report');
+  const sep = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-09',
+    vatFrequency: 'monthly',
+    facts: [augustUnfiled, septemberReady, octoberReady],
+    calendarDueDate: '2026-10-19',
+  });
+  const oct = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-10',
+    vatFrequency: 'monthly',
+    facts: [augustUnfiled, septemberReady, octoberReady],
+    calendarDueDate: '2026-11-16',
+  });
+  assert.equal(sep.obligation_id, 'ob-sep');
+  assert.equal(sep.can_mark_submitted, true);
+  assert.equal(oct.obligation_id, 'ob-oct');
+  assert.equal(oct.can_mark_submitted, true);
+  assert.equal(buildReportingRowPresentation([sep], OCT_TODAY).cells.vat?.filing_detail?.can_report, true);
+  assert.equal(buildReportingRowPresentation([oct], OCT_TODAY).cells.vat?.filing_detail?.can_report, true);
+});
+
+test('monthly unfiled 09.26 does not block 10.26 can_report', () => {
+  const septemberUnfiled = vatFact('ob-sep', '2026-09');
+  const octoberReady = vatFact('ob-oct', '2026-10', 'ready_to_report');
+  const oct = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-10',
+    vatFrequency: 'monthly',
+    facts: [septemberUnfiled, octoberReady],
+    calendarDueDate: '2026-11-16',
+  });
+  assert.equal(oct.obligation_id, 'ob-oct');
+  assert.equal(oct.can_mark_submitted, true);
+  assert.equal(pickObligationForKind([septemberUnfiled], 'vat', '2026-10', 'monthly'), null);
+});
+
+test('bimonthly unfiled 07–08 does not block 09–10 can_report', () => {
+  const julAugUnfiled = vatFact('ob-jul-aug', '2026-07-08');
+  const sepOctReady = vatFact('ob-sep-oct', '2026-09-10', 'ready_to_report');
+  const tab10 = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-10',
+    vatFrequency: 'bi_monthly',
+    facts: [julAugUnfiled, sepOctReady],
+    calendarDueDate: '2026-11-16',
+  });
+  assert.equal(tab10.obligation_id, 'ob-sep-oct');
+  assert.equal(tab10.can_mark_submitted, true);
+  assert.equal(pickObligationForKind([julAugUnfiled], 'vat', '2026-10', 'bi_monthly'), null);
+  assert.equal(
+    vatFilingPeriodIdentityForOperationalPeriod({
+      vat_frequency: 'bi_monthly',
+      operational_period_key: '2026-08',
+    })?.period_key,
+    '2026-07-08',
+  );
+});
+
+test('historical unfiled monthly 08.26 stays independently fileable after 10.26 exists', () => {
+  const augustUnfiled = vatFact('ob-aug', '2026-08', 'ready_to_report');
+  const octoberReady = vatFact('ob-oct', '2026-10', 'ready_to_report');
+  const hist = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-08',
+    vatFrequency: 'monthly',
+    facts: [augustUnfiled, octoberReady],
+    calendarDueDate: '2026-09-15',
+  });
+  assert.equal(hist.obligation_id, 'ob-aug');
+  assert.equal(hist.can_mark_submitted, true);
+  assert.equal(buildReportingRowPresentation([hist], OCT_TODAY).cells.vat?.filing_detail?.can_report, true);
+});
+
+test('applicable VAT tab with no obligation stays טרם הוגש and can report independently', () => {
+  const missing = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-09',
+    vatFrequency: 'monthly',
+    facts: [],
+    calendarDueDate: '2026-10-19',
+  });
+  assert.equal(missing.obligation_id, null);
+  assert.equal(missing.can_mark_submitted, false);
+  assert.equal(missing.submitted, false);
+  const row = buildReportingRowPresentation([missing], OCT_TODAY);
+  assert.equal(row.cells.vat?.filing_detail?.openable, true);
+  assert.equal(row.cells.vat?.filing_detail?.can_report, true);
+  assert.equal(row.cells.vat?.filing_detail?.can_report_and_pay, true);
+  assert.equal(row.cells.vat?.filing_detail?.filing_status_key, 'clientOperations.registry.reporting.cell.open');
+  assert.equal(
+    vatSelectedPeriodCanReportWithoutObligation({
+      applicable: true,
+      submitted: false,
+      obligation_id: null,
+    }),
+    true,
+  );
+  assert.equal(
+    vatSelectedPeriodCanReportWithoutObligation({
+      applicable: true,
+      submitted: false,
+      obligation_id: 'ob-inactive',
+    }),
+    false,
+  );
+  assert.equal(
+    vatSelectedPeriodCanReport({
+      applicable: true,
+      submitted: false,
+      obligation_id: 'ob-inactive',
+      status: 'ready_to_report',
+    }),
+    true,
+  );
+});
+
+test('missed monthly 08.26 with no obligation is independently reportable after 10.26 exists', () => {
+  const octoberReady = vatFact('ob-oct', '2026-10', 'ready_to_report');
+  const hist = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-08',
+    vatFrequency: 'monthly',
+    facts: [octoberReady],
+    calendarDueDate: '2026-09-15',
+  });
+  assert.equal(hist.obligation_id, null);
+  assert.equal(hist.can_mark_submitted, false);
+  const row = buildReportingRowPresentation([hist], OCT_TODAY);
+  assert.equal(row.cells.vat?.filing_detail?.can_report, true);
+  assert.equal(row.cells.vat?.filing_detail?.can_report_and_pay, true);
+});
+
+test('missed bimonthly 08.26 with no obligation is independently reportable', () => {
+  const laterPair = vatFact('ob-sep-oct', '2026-09-10', 'ready_to_report');
+  const hist = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-08',
+    vatFrequency: 'bi_monthly',
+    facts: [laterPair],
+    calendarDueDate: '2026-09-15',
+  });
+  assert.equal(hist.obligation_id, null);
+  assert.equal(hist.can_mark_submitted, false);
+  const row = buildReportingRowPresentation([hist], OCT_TODAY);
+  assert.equal(row.cells.vat?.filing_detail?.can_report, true);
+  assert.equal(row.cells.vat?.filing_detail?.can_report_and_pay, true);
+});
+
+test('missing calendar due date is not overdue and does not block report', () => {
+  const missingDue = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-08',
+    vatFrequency: 'monthly',
+    facts: [],
+    calendarDueDate: null,
+  });
+  assert.equal(missingDue.due_date, null);
+  assert.equal(missingDue.obligation_id, null);
+  const row = buildReportingRowPresentation([missingDue], OCT_TODAY);
+  assert.equal(isAuthoritativeLegalOverdue(null, OCT_TODAY), false);
+  assert.equal(row.cells.vat?.overdue, false);
+  assert.equal(row.cells.vat?.filing_detail?.can_report, true);
+  assert.equal(row.cells.vat?.filing_detail?.can_report_and_pay, true);
+});
+
+test('inactive unfiled historical VAT is reportable; submitted/paid/N/A stay preserved', () => {
+  const inactive = buildReportingCellInputFromFacts({
+    kind: 'vat',
+    applicable: true,
+    operationalPeriodKey: '2026-08',
+    vatFrequency: 'monthly',
+    facts: [
+      {
+        obligation_id: 'ob-inactive-aug',
+        obligation_type: 'vat_report',
+        period_key: '2026-08',
+        status: 'ready_to_report',
+        due_date: '2026-09-15',
+        last_reported_at: null,
+        is_active: false,
+      },
+    ],
+    calendarDueDate: '2026-09-15',
+  });
+  assert.equal(inactive.obligation_id, 'ob-inactive-aug');
+  assert.equal(inactive.can_mark_submitted, false);
+  const row = buildReportingRowPresentation([inactive], OCT_TODAY);
+  assert.equal(row.cells.vat?.filing_detail?.can_report, true);
+  assert.equal(row.cells.vat?.filing_detail?.can_report_and_pay, true);
+  assert.equal(
+    vatSelectedPeriodCanReport({
+      applicable: true,
+      submitted: true,
+      obligation_id: 'ob-filed',
+      status: 'reported',
+    }),
+    false,
+  );
+  assert.equal(
+    vatSelectedPeriodCanReport({
+      applicable: true,
+      submitted: false,
+      obligation_id: 'ob-na',
+      status: 'not_relevant',
+    }),
+    false,
   );
 });
 

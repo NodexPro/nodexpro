@@ -180,6 +180,12 @@ export const AUDIT_ACTIONS = {
     'client_operations.obligation.filed_with_payment',
   CLIENT_OPERATIONS_OBLIGATION_PAYMENT_UPDATED:
     'client_operations.obligation.payment_updated',
+  CLIENT_OPERATIONS_PERIOD_VAT_OBLIGATION_ENSURED:
+    'client_operations.period_vat_obligation.ensured',
+  CLIENT_OPERATIONS_PERIOD_VAT_OBLIGATION_FILED:
+    'client_operations.period_vat_obligation.filed',
+  CLIENT_OPERATIONS_PERIOD_VAT_OBLIGATION_FILING_COMPENSATED:
+    'client_operations.period_vat_obligation.filing_compensated',
   CLIENT_OPERATIONS_NI_STANDING_ORDER_SET: 'client_operations.ni_standing_order.set',
   CLIENT_OPERATIONS_NI_HANDLING_METHOD_SET: 'client_operations.ni_handling_method.set',
   CLIENT_OPERATIONS_NI_MANUAL_RESOLUTION_SET: 'client_operations.ni_manual_resolution.set',

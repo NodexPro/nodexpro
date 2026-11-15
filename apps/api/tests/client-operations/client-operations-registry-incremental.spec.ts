@@ -90,6 +90,7 @@ test('command path rematerializes one client and still returns a full aggregate'
   assert.ok(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has('confirm_client_operations_obligation_tax_payment'));
   assert.ok(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has('attach_client_operations_filing_evidence'));
   assert.ok(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has('save_client_operations_self_employed_ni'));
+  assert.ok(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has('ensure_client_operations_period_vat_obligation'));
   assert.equal(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has('copy_client_operations_user_period_data'), false);
 });
 

@@ -1,8 +1,13 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
-import { AppError, badRequest, forbidden } from '../../shared/errors.js';
-import { obligationWritePersisted } from './client-operations-filing-command.pure.js';
+import { AppError, badRequest, forbidden, serviceUnavailable } from '../../shared/errors.js';
+import {
+  isMissingVatPeriodFileRpc,
+  obligationWritePersisted,
+  vatFilingCompensationPlan,
+  vatPeriodFileRpcBusinessError,
+} from './client-operations-filing-command.pure.js';
 import { businessDayOfMonth, businessMonthKey, businessPreviousMonthKey, businessYmd } from '../../shared/business-time.js';
 import { emitObligationDocumentsMissingIfMapped } from './client-obligations-work-engine-bridge.js';
 import {
@@ -17,6 +22,7 @@ import {
   obligationColumnLabelKey,
 } from './client-operations-ui-labels.pure.js';
 import {
+  isFilingSubmittedStatus,
   resolveSelfEmployedNiHandlingMethod,
   resolveVatCalendarLookupPeriodKey,
   vatFilingPeriodIdentityForOperationalPeriod,
@@ -3148,6 +3154,372 @@ async function syncTasksFromObligations(orgId: string, clientId: string, now: Da
       .eq('source_id', obId)
       .eq('status', 'open');
   }
+}
+
+export type EnsurePeriodVatObligationResult = {
+  obligation_id: string | null;
+  period_key: string | null;
+  created: boolean;
+  updated: boolean;
+};
+
+/**
+ * Named command: VAT obligation for one explicit operational period.
+ * Independent of previous/next tabs. Does not run recompute (wall-clock previous month).
+ * Does not deactivate or overwrite other identities, filed statuses, or payments.
+ * Due date comes only from Reporting Calendar filing_due_date — never invented 19/23.
+ */
+export async function ensureClientOperationsPeriodVatObligation(
+  ctx: RequestContext,
+  input: { clientId: string; operationalPeriodKey: string; now?: Date },
+): Promise<EnsurePeriodVatObligationResult> {
+  const orgId = assertOrg(ctx);
+  await ensureClientInOrg(orgId, input.clientId);
+  const now = input.now ?? new Date();
+  const nowIso = now.toISOString();
+  const empty: EnsurePeriodVatObligationResult = {
+    obligation_id: null,
+    period_key: null,
+    created: false,
+    updated: false,
+  };
+
+  const [{ data: taxRow }, { data: profileRow }] = await Promise.all([
+    supabaseAdmin
+      .from('client_tax_settings')
+      .select('vat_type,vat_frequency,vat_due_type')
+      .eq('organization_id', orgId)
+      .eq('client_id', input.clientId)
+      .maybeSingle(),
+    supabaseAdmin
+      .from('client_operational_profiles')
+      .select('material_brought_flag')
+      .eq('organization_id', orgId)
+      .eq('client_id', input.clientId)
+      .maybeSingle(),
+  ]);
+  const tax = (taxRow ?? {}) as Record<string, unknown>;
+  if (String(tax.vat_type ?? '') !== 'yes') return empty;
+
+  const vatFrequency = String(tax.vat_frequency ?? '');
+  const identity = vatFilingPeriodIdentityForOperationalPeriod({
+    vat_frequency: vatFrequency,
+    operational_period_key: input.operationalPeriodKey,
+  });
+  if (!identity) return empty;
+
+  const loadExisting = async () =>
+    supabaseAdmin
+      .from('client_obligations')
+      .select('id, status, is_active, due_date, last_reported_at, closed_at')
+      .eq('organization_id', orgId)
+      .eq('client_id', input.clientId)
+      .eq('obligation_type', 'vat_report')
+      .eq('period_key', identity.period_key)
+      .maybeSingle();
+
+  const { data: existing, error: existingError } = await loadExisting();
+  if (existingError) {
+    throw new AppError(500, existingError.message ?? 'client_obligations read failed', 'SUPABASE_ERROR');
+  }
+
+  const finishExisting = (
+    row: Record<string, unknown>,
+  ): EnsurePeriodVatObligationResult => {
+    // INACTIVE_OBLIGATION_PRESERVED: legacy recompute deactivated identities that
+    // left the wall-clock relevant set. Do not auto-reactivate; do not mutate
+    // filed status, payments, or documents.
+    return {
+      obligation_id: String(row.id),
+      period_key: identity.period_key,
+      created: false,
+      updated: false,
+    };
+  };
+
+  if (existing) return finishExisting(existing as Record<string, unknown>);
+
+  const calendarLookup = resolveVatCalendarLookupPeriodKey({
+    vat_frequency: vatFrequency,
+    operational_period_key: input.operationalPeriodKey,
+  });
+  const due = calendarLookup
+    ? await resolveOfficialFilingDueDateIso({
+        organizationId: orgId,
+        kind: 'vat',
+        reportingPeriodKey: calendarLookup,
+        vat_type: String(tax.vat_type ?? ''),
+        vat_due_type: (tax.vat_due_type as string | null) ?? null,
+        vat_frequency: vatFrequency,
+        asOfDate: businessYmd(now),
+      })
+    : null;
+  // PERIOD_VAT_ENSURE_NULL_DUE_ALLOWED: missing Reporting Calendar filing_due_date
+  // must not block creation. Store NULL. Overdue stays false without a calendar date.
+
+  const materialBrought = Boolean((profileRow as Record<string, unknown> | null)?.material_brought_flag);
+  const day = businessDayOfMonth(now);
+  const missingMaterialState: ObligationStatus = day > 6 ? 'missing_data' : 'waiting_for_material';
+  const status: ObligationStatus = materialBrought ? 'ready_to_report' : missingMaterialState;
+  const { data: inserted, error: insErr } = await supabaseAdmin
+    .from('client_obligations')
+    .insert({
+      organization_id: orgId,
+      client_id: input.clientId,
+      obligation_type: 'vat_report',
+      period_key: identity.period_key,
+      due_date: due,
+      status,
+      blocking_reason: status === 'missing_data' ? 'חסר חומר מהלקוח' : null,
+      docflow_message_sent_at: null,
+      last_reported_at: null,
+      related_module: 'vat',
+      is_active: true,
+      closed_at: null,
+      updated_at: nowIso,
+    })
+    .select('id')
+    .single();
+  if (insErr?.code === '23505') {
+    const raced = await loadExisting();
+    if (raced.error) {
+      throw new AppError(500, raced.error.message ?? 'client_obligations read failed', 'SUPABASE_ERROR');
+    }
+    if (raced.data) return finishExisting(raced.data as Record<string, unknown>);
+  }
+  if (insErr) throw new AppError(500, insErr.message ?? 'client_obligations insert failed', 'SUPABASE_ERROR');
+  const obligationId = inserted ? String((inserted as { id: string }).id) : null;
+  if (!obligationId) return { ...empty, period_key: identity.period_key };
+  await writeAudit({
+    organizationId: orgId,
+    actorUserId: ctx.user.id,
+    moduleCode: 'client-operations',
+    entityType: 'client_obligations',
+    entityId: obligationId,
+    action: AUDIT_ACTIONS.CLIENT_OPERATIONS_PERIOD_VAT_OBLIGATION_ENSURED,
+    payload: {
+      client_id: input.clientId,
+      operational_period_key: input.operationalPeriodKey,
+      period_key: identity.period_key,
+      created: true,
+      updated: false,
+    },
+  });
+  return {
+    obligation_id: obligationId,
+    period_key: identity.period_key,
+    created: true,
+    updated: false,
+  };
+}
+
+export type FilePeriodVatObligationResult = {
+  obligation_id: string;
+  period_key: string;
+  created: boolean;
+  filed: boolean;
+  paid: boolean;
+  previous_status: string | null;
+  previous_is_active: boolean | null;
+  previous_last_reported_at: string | null;
+};
+
+function mapVatPeriodFileRpcResult(
+  data: unknown,
+  fallbackPeriodKey: string,
+): FilePeriodVatObligationResult {
+  const row = (data ?? {}) as Record<string, unknown>;
+  const obligationId = String(row.obligation_id ?? '').trim();
+  if (!obligationId) throw badRequest('cannot create VAT obligation for this period');
+  return {
+    obligation_id: obligationId,
+    period_key: String(row.period_key ?? fallbackPeriodKey),
+    created: row.created === true,
+    filed: row.filed === true,
+    paid: row.paid === true,
+    previous_status: row.previous_status == null ? null : String(row.previous_status),
+    previous_is_active:
+      typeof row.previous_is_active === 'boolean' ? row.previous_is_active : row.previous_is_active == null ? null : row.previous_is_active !== false,
+    previous_last_reported_at:
+      row.previous_last_reported_at == null ? null : String(row.previous_last_reported_at),
+  };
+}
+
+function throwVatPeriodFileRpcError(error: { code?: string; message?: string; details?: string }): never {
+  if (isMissingVatPeriodFileRpc(error) || error.code === '42P01' || error.code === 'PGRST205') {
+    throw serviceUnavailable(
+      'VAT period file RPC is not migrated',
+      'FILE_VAT_PERIOD_RPC_PENDING_MIGRATION',
+    );
+  }
+  const business = vatPeriodFileRpcBusinessError(`${error.message ?? ''} ${error.details ?? ''}`);
+  if (business) throw badRequest(business.httpMessage, business.code);
+  throw new AppError(500, error.message ?? 'VAT period file failed', 'SUPABASE_ERROR');
+}
+
+/**
+ * Named VAT filing for one explicit operational period. Create-as-reported and
+ * optional paid_in_full attestation run inside one DB function/transaction.
+ * Does not recompute other periods. due_date is calendar-or-null (PERIOD_VAT_FILE_NULL_DUE_ALLOWED).
+ */
+export async function fileClientOperationsPeriodVatObligation(
+  ctx: RequestContext,
+  input: {
+    clientId: string;
+    operationalPeriodKey: string;
+    obligationId?: string | null;
+    now?: Date;
+    pay?: { canonicalId: string; classification: string } | null;
+  },
+): Promise<FilePeriodVatObligationResult> {
+  const orgId = assertOrg(ctx);
+  await ensureClientInOrg(orgId, input.clientId);
+  // PERIOD_VAT_FILE_NULL_DUE_ALLOWED: calendar filing_due_date or null, never invented 19/23.
+  const now = input.now ?? new Date();
+  const nowIso = now.toISOString();
+  const reportDate = businessYmd(now);
+  const pay = input.pay ?? null;
+  const payCanonicalId = String(pay?.canonicalId ?? '').trim();
+  const payClassification = String(pay?.classification ?? '').trim();
+  const pPay = Boolean(pay);
+  if (pPay && (!payCanonicalId || payClassification !== 'paid_in_full')) {
+    throw badRequest(payCanonicalId ? 'payment_classification required' : 'canonical_id required');
+  }
+
+  const { data: taxRow, error: taxError } = await supabaseAdmin
+    .from('client_tax_settings')
+    .select('vat_type,vat_frequency,vat_due_type')
+    .eq('organization_id', orgId)
+    .eq('client_id', input.clientId)
+    .maybeSingle();
+  if (taxError) {
+    throw new AppError(500, taxError.message ?? 'client_tax_settings read failed', 'SUPABASE_ERROR');
+  }
+  const tax = (taxRow ?? {}) as Record<string, unknown>;
+  if (String(tax.vat_type ?? '') !== 'yes') {
+    throw badRequest('cannot create VAT obligation for this period');
+  }
+  const vatFrequency = String(tax.vat_frequency ?? '');
+  const identity = vatFilingPeriodIdentityForOperationalPeriod({
+    vat_frequency: vatFrequency,
+    operational_period_key: input.operationalPeriodKey,
+  });
+  if (!identity) throw badRequest('cannot create VAT obligation for this period');
+
+  const calendarLookup = resolveVatCalendarLookupPeriodKey({
+    vat_frequency: vatFrequency,
+    operational_period_key: input.operationalPeriodKey,
+  });
+  const due = calendarLookup
+    ? await resolveOfficialFilingDueDateIso({
+        organizationId: orgId,
+        kind: 'vat',
+        reportingPeriodKey: calendarLookup,
+        vat_type: String(tax.vat_type ?? ''),
+        vat_due_type: (tax.vat_due_type as string | null) ?? null,
+        vat_frequency: vatFrequency,
+        asOfDate: reportDate,
+      })
+    : null;
+
+  const requestedId = String(input.obligationId ?? '').trim() || null;
+  const { data, error } = await supabaseAdmin.rpc('file_client_operations_period_vat_obligation', {
+    p_organization_id: orgId,
+    p_client_id: input.clientId,
+    p_actor_user_id: ctx.user.id,
+    p_period_key: identity.period_key,
+    p_operational_period_key: input.operationalPeriodKey,
+    p_due_date: due,
+    p_obligation_id: requestedId,
+    p_report_date: reportDate,
+    p_now: nowIso,
+    p_pay: pPay,
+    p_canonical_id: pPay ? payCanonicalId : null,
+    p_payment_classification: pPay ? payClassification : null,
+  });
+  if (error) throwVatPeriodFileRpcError(error);
+  const result = mapVatPeriodFileRpcResult(data, identity.period_key);
+  if (result.filed) {
+    await writeAudit({
+      organizationId: orgId,
+      actorUserId: ctx.user.id,
+      moduleCode: 'client-operations',
+      entityType: 'client_obligations',
+      entityId: result.obligation_id,
+      action: AUDIT_ACTIONS.CLIENT_OPERATIONS_PERIOD_VAT_OBLIGATION_FILED,
+      payload: {
+        client_id: input.clientId,
+        operational_period_key: input.operationalPeriodKey,
+        period_key: identity.period_key,
+        created: result.created,
+        paid: result.paid,
+        previous_status: result.previous_status,
+        previous_is_active: result.previous_is_active,
+      },
+    });
+  }
+  return result;
+}
+
+export async function compensateClientOperationsPeriodVatFiling(
+  ctx: RequestContext,
+  input: {
+    clientId: string;
+    created: boolean;
+    filed: boolean;
+    obligation_id: string;
+    previous_status: string | null;
+    previous_is_active: boolean | null;
+    previous_last_reported_at: string | null;
+  },
+): Promise<void> {
+  const orgId = assertOrg(ctx);
+  const plan = vatFilingCompensationPlan({
+    created: input.created,
+    filed: input.filed,
+    obligation_id: input.obligation_id,
+    previous_status: input.previous_status,
+    previous_is_active: input.previous_is_active,
+    previous_last_reported_at: input.previous_last_reported_at,
+  });
+  if (plan.kind === 'none') return;
+  if (plan.kind === 'delete_created') {
+    const { error } = await supabaseAdmin
+      .from('client_obligations')
+      .delete()
+      .eq('organization_id', orgId)
+      .eq('client_id', input.clientId)
+      .eq('id', plan.obligation_id)
+      .eq('obligation_type', 'vat_report')
+      .in('status', ['reported', 'reported_late']);
+    if (error) throw new AppError(500, error.message ?? 'filing compensation delete failed', 'SUPABASE_ERROR');
+  } else {
+    const { error } = await supabaseAdmin
+      .from('client_obligations')
+      .update({
+        status: plan.previous_status,
+        is_active: plan.previous_is_active,
+        last_reported_at: plan.previous_last_reported_at,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('organization_id', orgId)
+      .eq('client_id', input.clientId)
+      .eq('id', plan.obligation_id);
+    if (error) throw new AppError(500, error.message ?? 'filing compensation revert failed', 'SUPABASE_ERROR');
+  }
+  await writeAudit({
+    organizationId: orgId,
+    actorUserId: ctx.user.id,
+    moduleCode: 'client-operations',
+    entityType: 'client_obligations',
+    entityId: input.obligation_id,
+    action: AUDIT_ACTIONS.CLIENT_OPERATIONS_PERIOD_VAT_OBLIGATION_FILING_COMPENSATED,
+    payload: {
+      client_id: input.clientId,
+      compensation: plan.kind,
+      obligation_id: input.obligation_id,
+    },
+  });
 }
 
 export async function getClientObligationsTabReadModel(ctx: RequestContext, clientId: string): Promise<ClientObligationsTabResponse | null> {

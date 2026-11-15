@@ -9,8 +9,10 @@ import {
   reportingKindAffectsFilingKpi,
   resolveSelfEmployedNiHandlingMethod,
   selfEmployedNiOfficeReminderActive,
+  vatFilingChromeTooltipKey,
   type ClientOperationsReportingCellInput,
 } from '../../src/domains/client-operations/client-operations-reporting-dashboard.pure.js';
+import { CO_UI } from '../../src/domains/client-operations/client-operations-ui-labels.pure.js';
 
 const TODAY = '2026-11-15';
 
@@ -32,12 +34,16 @@ function cell(
   };
 }
 
-test('שולם stays disabled until an authoritative filing exists', () => {
-  const pending = buildReportingCellPresentation(cell({ kind: 'vat' }), TODAY);
+test('three VAT buttons, chrome, and tooltip follow דווח / דווח ושולם / שולם', () => {
+  const pending = buildReportingCellPresentation(
+    cell({ kind: 'vat', obligation_id: null, can_mark_submitted: false }),
+    TODAY,
+  );
   assert.equal(pending.filing_detail?.chrome, 'pending');
   assert.equal(pending.filing_detail?.can_report, true);
   assert.equal(pending.filing_detail?.can_report_and_pay, true);
   assert.equal(pending.filing_detail?.can_mark_paid, false);
+  assert.equal(pending.filing_detail?.filing_status_key, CO_UI.reporting.cell.open);
   const overdue = buildReportingCellPresentation(
     cell({ kind: 'income_tax_advance', due_date: '2026-11-01' }),
     TODAY,
@@ -52,6 +58,8 @@ test('שולם stays disabled until an authoritative filing exists', () => {
   assert.equal(filedUnpaid.filing_detail?.can_report, false);
   assert.equal(filedUnpaid.filing_detail?.can_report_and_pay, false);
   assert.equal(filedUnpaid.filing_detail?.can_mark_paid, true);
+  assert.equal(filedUnpaid.tooltip_key, CO_UI.reporting.filing.report);
+  assert.equal(vatFilingChromeTooltipKey('filed_unpaid'), CO_UI.reporting.filing.report);
   const filedPaid = buildReportingCellPresentation(
     cell({
       kind: 'vat',
@@ -63,7 +71,10 @@ test('שולם stays disabled until an authoritative filing exists', () => {
   );
   assert.equal(filedPaid.filing_detail?.chrome, 'filed_paid');
   assert.equal(filedPaid.filing_detail?.can_report, false);
+  assert.equal(filedPaid.filing_detail?.can_report_and_pay, false);
   assert.equal(filedPaid.filing_detail?.can_mark_paid, false);
+  assert.equal(filedPaid.tooltip_key, CO_UI.reporting.filing.reportAndPaid);
+  assert.equal(vatFilingChromeTooltipKey('filed_paid'), CO_UI.reporting.filing.reportAndPaid);
   assert.equal(reportingKindAffectsFilingKpi('national_insurance'), false);
 });
 

@@ -34,6 +34,7 @@ test('filing commands refresh one client instead of rebuilding the registry', ()
     'confirm_client_operations_obligation_filed_with_payment',
     'confirm_client_operations_obligation_tax_payment',
     'attach_client_operations_filing_evidence',
+    'ensure_client_operations_period_vat_obligation',
   ]) {
     assert.equal(SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS.has(command), true, command);
   }
@@ -202,7 +203,7 @@ test('the filing modal stays open and success depends on the refreshed aggregate
   const action = view.slice(view.indexOf('const runFilingAction'), view.indexOf('const attachFilingEvidence'));
   assert.match(action, /requireApplied: true/);
   assert.match(action, /filingAggregateConfirmsAction/);
-  assert.match(action, /obligationId: reportingCell\.obligation_id/);
+  assert.match(action, /obligationId: reportingCell\?\.obligation_id \?\? null/);
   assert.match(action, /filing\.notConfirmed/);
   assert.doesNotMatch(action, /setFilingModal\(null\)/);
   assert.match(view, /data-testid="client-operations-filing-result"/);

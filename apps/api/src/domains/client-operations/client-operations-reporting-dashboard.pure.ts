@@ -423,6 +423,7 @@ export type ClientOperationsReportingCellInput = {
   due_date: string | null;
   canonical_id: string;
   obligation_id: string | null;
+  obligation_status?: string | null;
   can_mark_submitted: boolean;
   can_mark_not_submitted: boolean;
   last_reported_at: string | null;
@@ -706,6 +707,27 @@ export function buildReportingCellPresentation(
     paymentQuestionVisible && (input.can_mark_submitted || allowed_actions.includes('update_payment'))
       ? paymentModalFor(input.can_mark_submitted ? 'file_with_payment' : 'update_payment')
       : null;
+  const filing_detail = buildFilingDetail({
+    kind: input.kind,
+    applicable,
+    submitted: input.submitted,
+    tone,
+    periodKey: input.canonical_id?.includes('::')
+      ? input.canonical_id.slice(input.canonical_id.indexOf('::') + 2)
+      : (input.operational_period_key ?? ''),
+    lastReportedAt: input.last_reported_at,
+    paymentClassification: input.payment_classification ?? null,
+    paymentState,
+    paymentApplies,
+    canConfirmFiling: Boolean(!informational && input.can_mark_submitted),
+    canClearFiling: Boolean(!informational && input.can_mark_not_submitted),
+    obligationId: informational ? null : input.obligation_id,
+    obligationStatus: informational ? null : input.obligation_status ?? null,
+    materialWarning: Boolean(input.material_warning),
+    evidence: input.evidence ?? [],
+  });
+  const chromeTooltip = vatFilingChromeTooltipKey(filing_detail?.chrome);
+  if (chromeTooltip) tooltipKey = chromeTooltip;
   return {
     kind: input.kind,
     column_key: REPORTING_KIND_COLUMN_KEY[input.kind],
@@ -749,23 +771,7 @@ export function buildReportingCellPresentation(
             evidence: [...(input.evidence ?? [])],
           }
         : undefined,
-    filing_detail: buildFilingDetail({
-      kind: input.kind,
-      applicable,
-      submitted: input.submitted,
-      tone,
-      periodKey: input.canonical_id?.includes('::')
-        ? input.canonical_id.slice(input.canonical_id.indexOf('::') + 2)
-        : (input.operational_period_key ?? ''),
-      lastReportedAt: input.last_reported_at,
-      paymentClassification: input.payment_classification ?? null,
-      paymentState,
-      paymentApplies,
-      canConfirmFiling: Boolean(!informational && input.can_mark_submitted),
-      canClearFiling: Boolean(!informational && input.can_mark_not_submitted),
-      materialWarning: Boolean(input.material_warning),
-      evidence: input.evidence ?? [],
-    }),
+    filing_detail,
   };
 }
 
@@ -1018,6 +1024,15 @@ function filingPaymentSettled(state: ClientOperationsReportingPaymentState): boo
   return state === 'paid_in_full' || state === 'not_required';
 }
 
+/** Cell tooltip follows the three filing buttons: דווח / דווח ושולם. */
+export function vatFilingChromeTooltipKey(
+  chrome: ClientOperationsFrequencyCellChrome | null | undefined,
+): string | null {
+  if (chrome === 'filed_unpaid') return CO_UI.reporting.filing.report;
+  if (chrome === 'filed_paid') return CO_UI.reporting.filing.reportAndPaid;
+  return null;
+}
+
 function buildFilingDetail(input: {
   kind: ClientOperationsReportingObligationKind;
   applicable: boolean;
@@ -1030,6 +1045,8 @@ function buildFilingDetail(input: {
   paymentApplies: boolean;
   canConfirmFiling: boolean;
   canClearFiling: boolean;
+  obligationId?: string | null;
+  obligationStatus?: string | null;
   materialWarning?: boolean;
   evidence?: readonly FilingEvidenceRow[];
 }): ClientOperationsFilingDetail | null {
@@ -1044,7 +1061,17 @@ function buildFilingDetail(input: {
       : paid
         ? 'filed_paid'
         : 'filed_unpaid';
-  const canReport = input.applicable && !input.submitted && input.canConfirmFiling;
+  const canReport =
+    input.applicable &&
+    !input.submitted &&
+    (input.canConfirmFiling ||
+      (input.kind === 'vat' &&
+        vatSelectedPeriodCanReport({
+          applicable: input.applicable,
+          submitted: input.submitted,
+          obligation_id: input.obligationId ?? null,
+          status: input.obligationStatus ?? null,
+        })));
   return {
     openable: input.applicable,
     chrome,
@@ -1454,6 +1481,32 @@ export function historicalObligationIdentitiesToPreserve(input: {
   return input.existingKeys.filter((key) => !input.currentRelevantKeys.has(key));
 }
 
+/**
+ * Selected VAT tab is independently fileable. An unfiled prior period is never a gate.
+ * Missing obligation still allows דווח / דווח ושולם: the filing command creates that
+ * period's row already reported. Inactive unfiled rows are fileable by that same
+ * command; submitted, paid, closed, and N/A rows stay preserved.
+ */
+export function vatSelectedPeriodCanReport(input: {
+  applicable: boolean;
+  submitted: boolean;
+  obligation_id: string | null;
+  status?: string | null;
+}): boolean {
+  if (input.applicable !== true || input.submitted === true) return false;
+  if (isFilingNotApplicableStatus(input.status)) return false;
+  if (!input.obligation_id) return true;
+  return canManuallyConfirmFiling(input.status);
+}
+
+export function vatSelectedPeriodCanReportWithoutObligation(input: {
+  applicable: boolean;
+  submitted: boolean;
+  obligation_id: string | null;
+}): boolean {
+  return input.applicable === true && input.submitted !== true && !input.obligation_id;
+}
+
 export function normalizeVatFrequency(vatFrequency: string | null | undefined): 'monthly' | 'bi_monthly' | null {
   const freq = String(vatFrequency ?? '')
     .trim()
@@ -1668,6 +1721,7 @@ export function buildReportingCellInputFromFacts(input: {
     due_date: applicable ? dueDate : null,
     canonical_id: canonicalId,
     obligation_id: fact?.obligation_id ?? null,
+    obligation_status: fact?.status ?? null,
     can_mark_submitted: Boolean(
       applicable &&
         fact?.obligation_id &&
