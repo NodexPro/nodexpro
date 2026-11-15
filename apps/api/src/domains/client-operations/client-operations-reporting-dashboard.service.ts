@@ -33,6 +33,7 @@ import {
   resolveVatCalendarLookupPeriodKey,
   resolveVatCalendarObligationKey,
   pickVatObligationFactForFrequency,
+  vatReportingCanonicalAliases,
   payrollWorkflowCountsAsSubmitted,
   payrollWorkflowIsNotRelevant,
   nationalInsuranceDeductionsPeriodicSubmitted,
@@ -111,8 +112,7 @@ export async function loadClientOperationsReportingDashboardInputs(input: {
       .from('client_obligations')
       .select('id, client_id, obligation_type, period_key, status, due_date, last_reported_at, is_active')
       .eq('organization_id', input.organizationId)
-      .in('client_id', input.clientIds)
-      .eq('is_active', true),
+      .in('client_id', input.clientIds),
     rulesetPromise,
     input.previousPeriodKeys.length
       ? supabaseAdmin
@@ -157,6 +157,7 @@ export async function loadClientOperationsReportingDashboardInputs(input: {
     status: string | null;
     due_date: string | null;
     last_reported_at: string | null;
+    is_active: boolean | null;
   }>) {
     const list = factsByClient.get(row.client_id) ?? [];
     list.push({
@@ -166,6 +167,7 @@ export async function loadClientOperationsReportingDashboardInputs(input: {
       status: row.status,
       due_date: row.due_date ? String(row.due_date).slice(0, 10) : null,
       last_reported_at: row.last_reported_at,
+      is_active: row.is_active,
     });
     factsByClient.set(row.client_id, list);
   }
@@ -237,10 +239,15 @@ export function outstandingPaymentPeriodFactsFromLoad(
 
 function paymentFactForCanonical(
   facts: readonly AccountingTaxObligationPaymentFact[] | undefined,
-  canonicalId: string,
+  canonicalId: string | readonly string[],
 ): AccountingTaxObligationPaymentFact | null {
   if (!facts?.length) return null;
-  return facts.find((f) => f.obligation_canonical_id === canonicalId) ?? null;
+  const ids = new Set(
+    (Array.isArray(canonicalId) ? canonicalId : [canonicalId])
+      .map((value) => String(value ?? '').trim())
+      .filter(Boolean),
+  );
+  return facts.find((f) => ids.has(f.obligation_canonical_id)) ?? null;
 }
 
 type RegistryReportingRow = {
@@ -324,10 +331,19 @@ export function attachReportingPresentationToRegistryRow<T extends RegistryRepor
   const annualFact = input.facts.find((f) => f.obligation_type === 'annual_report') ?? null;
   const annualDue = annualFact?.due_date ?? null;
 
+  const vatCanonicalIds = (canonicalId: string) =>
+    vatReportingCanonicalAliases({
+      canonicalId,
+      vatFrequency: input.tax?.vat_frequency ?? null,
+      operationalPeriodKey: input.selectedPeriodKey,
+    });
   const withPayment = (
     cellInput: ReturnType<typeof buildReportingCellInputFromFacts>,
   ): ReturnType<typeof buildReportingCellInputFromFacts> => {
-    const payment = paymentFactForCanonical(input.paymentFacts, cellInput.canonical_id);
+    const payment = paymentFactForCanonical(
+      input.paymentFacts,
+      cellInput.kind === 'vat' ? vatCanonicalIds(cellInput.canonical_id) : cellInput.canonical_id,
+    );
     return {
       ...cellInput,
       payment_classification: payment?.payment_classification ?? cellInput.payment_classification ?? null,
@@ -407,7 +423,10 @@ export function attachReportingPresentationToRegistryRow<T extends RegistryRepor
 
   const cellsWithEvidence = cells.map((cell) => ({
     ...cell,
-    evidence: evidenceForCanonical(input.evidenceRows ?? [], cell.canonical_id),
+    evidence: evidenceForCanonical(
+      input.evidenceRows ?? [],
+      cell.kind === 'vat' ? vatCanonicalIds(cell.canonical_id) : cell.canonical_id,
+    ),
   }));
   const reporting: ClientOperationsReportingRowPresentation = buildReportingRowPresentation(cellsWithEvidence, input.today);
   const reporting_kpi: ReportingKpiClientFacts = input.reportingKpi ?? {

@@ -3697,7 +3697,7 @@ export async function executeClientObligationsCommand(
       const [{ data: ob }, { data: profile }] = await Promise.all([
         supabaseAdmin
           .from('client_obligations')
-          .select('due_date,obligation_type,status')
+          .select('due_date,obligation_type,status,is_active')
           .eq('organization_id', orgId)
           .eq('client_id', clientId)
           .eq('id', id)
@@ -3712,7 +3712,7 @@ export async function executeClientObligationsCommand(
       const obRow = (ob ?? null) as Record<string, unknown> | null;
       if (!obRow) throw badRequest('obligation not found');
       const currentState = String(obRow.status ?? '') as ObligationStatus;
-      if (!canManuallyConfirmFiling(currentState)) {
+      if (obRow.is_active === false || !canManuallyConfirmFiling(currentState)) {
         throw badRequest('obligation is not ready to report');
       }
       const obligationType = String(obRow.obligation_type ?? '');

@@ -241,3 +241,14 @@ test('self-employed NI modal is a compact two-column command surface', () => {
   assert.doesNotMatch(niCss, /background:\s*#f4f7fb/);
   assert.doesNotMatch(niCss, /background:\s*#fff;/);
 });
+
+test('VAT filing buttons stay command-gated; tab switch refreshes aggregate without local history writes', () => {
+  assert.match(viewSource, /const canAct = Boolean\(canEdit && onRegistryCommand && reportingCell\?\.obligation_id/);
+  assert.match(viewSource, /disabled=\{!canAct \|\| !detail\.can_report\}/);
+  assert.match(viewSource, /disabled=\{!canAct \|\| !detail\.can_report_and_pay\}/);
+  assert.doesNotMatch(viewSource, /can_report\s*=\s*true/);
+  assert.match(pageSource, /operational_period_key: operationalPeriodKey/);
+  assert.match(pageSource, /preferCache: true/);
+  assert.doesNotMatch(pageSource, /setRows\(\(prev\)[\s\S]*filing_detail/);
+  assert.match(pageSource, /setReportingDashboard\(data\?\.reporting_dashboard/);
+});

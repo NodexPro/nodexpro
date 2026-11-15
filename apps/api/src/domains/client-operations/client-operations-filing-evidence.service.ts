@@ -14,7 +14,10 @@ import {
   type FilingEvidenceObligationKind,
 } from './client-operations-filing-evidence.pure.js';
 import { isIncomeTaxFrequencyApplicableForOperationalPeriod } from './client-operations-operational-period.pure.js';
-import { formatReportingPeriodDisplayLabel, vatFilingPeriodIdentityForOperationalPeriod } from './client-operations-reporting-dashboard.pure.js';
+import {
+  formatReportingPeriodDisplayLabel,
+  vatObligationPeriodKeysForOperationalPeriod,
+} from './client-operations-reporting-dashboard.pure.js';
 import type { FilingEvidenceRow } from './client-operations-filing-evidence.pure.js';
 
 function assertOrg(ctx: RequestContext): string {
@@ -41,11 +44,11 @@ export async function assertSelectedTabMatchesObligation(input: {
     income_tax_advance_frequency?: string | null;
   } | null;
   if (input.obligationType === 'vat_report') {
-    const expected = vatFilingPeriodIdentityForOperationalPeriod({
-      vat_frequency: settings?.vat_frequency ?? null,
-      operational_period_key: input.operationalPeriodKey,
-    })?.period_key ?? null;
-    if (!expected || input.obligationPeriodKey !== expected) {
+    const allowed = vatObligationPeriodKeysForOperationalPeriod(
+      settings?.vat_frequency ?? null,
+      input.operationalPeriodKey,
+    );
+    if (!allowed.includes(input.obligationPeriodKey)) {
       throw badRequest('obligation does not match the selected reporting period');
     }
     return;

@@ -121,9 +121,13 @@ export type FilingEvidenceRow = {
 
 export function evidenceForCanonical(
   rows: readonly FilingEvidenceRow[],
-  canonicalId: string | null | undefined,
+  canonicalId: string | null | undefined | readonly string[],
 ): FilingEvidenceRow[] {
-  const id = String(canonicalId ?? '').trim();
-  if (!id) return [];
-  return rows.filter((row) => row.obligation_canonical_id === id);
+  const ids = new Set(
+    (Array.isArray(canonicalId) ? canonicalId : [canonicalId])
+      .map((value) => String(value ?? '').trim())
+      .filter(Boolean),
+  );
+  if (!ids.size) return [];
+  return rows.filter((row) => ids.has(row.obligation_canonical_id));
 }

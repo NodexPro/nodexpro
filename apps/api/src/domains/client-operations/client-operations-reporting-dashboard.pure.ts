@@ -305,6 +305,8 @@ export type ClientOperationsReportingFilingFact = {
   status: string | null;
   due_date: string | null;
   last_reported_at: string | null;
+  /** Historical deactivated rows remain readable; they are not a new-filing target. */
+  is_active?: boolean | null;
 };
 
 export type ClientOperationsFrequencyCellChrome =
@@ -551,6 +553,11 @@ export function isClientOperationsReportingFilterId(
 
 export function isFilingSubmittedStatus(status: string | null | undefined): boolean {
   return SUBMITTED_STATUSES.has(String(status ?? '').trim());
+}
+
+/** Missing/null is treated as active so legacy facts stay fileable. `false` is history-only. */
+export function obligationFactIsActive(isActive: boolean | null | undefined): boolean {
+  return isActive !== false;
 }
 
 export function isFilingNotApplicableStatus(status: string | null | undefined): boolean {
@@ -1389,6 +1396,52 @@ export function vatBimonthlyObligationMatchesOperationalPeriod(
   return endKey === operationalPeriodKey;
 }
 
+/**
+ * Period keys that may already exist in `client_obligations` for one operational tab.
+ * Canonical pair `YYYY-MM-MM` first, then pair-end `YYYY-MM`, then Country Pack pair-start `YYYY-MM`.
+ * Odd bimonthly months are not a VAT filing tab.
+ */
+export function vatObligationPeriodKeysForOperationalPeriod(
+  vatFrequency: string | null | undefined,
+  operationalPeriodKey: string,
+): string[] {
+  const parsed = parseReportingPeriodKey(operationalPeriodKey);
+  if (!parsed) return [];
+  const freq = normalizeVatFrequency(vatFrequency);
+  if (freq === 'monthly') return [operationalPeriodKey];
+  const evenMonth = parsed.month % 2 === 0;
+  if (freq === 'bi_monthly' && !evenMonth) return [];
+  if (freq === 'bi_monthly' || (!freq && evenMonth)) {
+    const start = String(parsed.month - 1).padStart(2, '0');
+    const end = String(parsed.month).padStart(2, '0');
+    const pair = `${parsed.year}-${start}-${end}`;
+    const pairStart = `${parsed.year}-${start}`;
+    return freq === 'bi_monthly'
+      ? [pair, operationalPeriodKey, pairStart]
+      : [operationalPeriodKey, pair, pairStart];
+  }
+  return [operationalPeriodKey];
+}
+
+export function vatReportingCanonicalAliases(input: {
+  canonicalId: string;
+  vatFrequency?: string | null;
+  operationalPeriodKey: string;
+  obligationPeriodKey?: string | null;
+}): string[] {
+  const ids = new Set<string>();
+  const add = (value: string | null | undefined) => {
+    const next = String(value ?? '').trim();
+    if (next) ids.add(next);
+  };
+  add(input.canonicalId);
+  if (input.obligationPeriodKey) add(`vat_report::${input.obligationPeriodKey}`);
+  for (const key of vatObligationPeriodKeysForOperationalPeriod(input.vatFrequency, input.operationalPeriodKey)) {
+    add(`vat_report::${key}`);
+  }
+  return [...ids];
+}
+
 export function obligationIdentityKey(obligationType: string, periodKey: string): string {
   return `${obligationType}::${periodKey}`;
 }
@@ -1420,35 +1473,33 @@ export function normalizeVatFrequency(vatFrequency: string | null | undefined): 
   return null;
 }
 
-export function pickVatObligationFactForFrequency<T extends { obligation_type: string; period_key: string }>(
+export function pickVatObligationFactForFrequency<
+  T extends {
+    obligation_type: string;
+    period_key: string;
+    status?: string | null;
+    is_active?: boolean | null;
+  },
+>(
   facts: readonly T[],
   operationalPeriodKey: string,
   vatFrequency?: string | null,
 ): T | null {
-  const matches = facts.filter((f) => f.obligation_type === 'vat_report');
-  const freq = normalizeVatFrequency(vatFrequency);
-  if (freq === 'monthly') {
-    return matches.find((f) => f.period_key === operationalPeriodKey) ?? null;
-  }
-  if (freq === 'bi_monthly') {
-    return (
-      matches.find((f) =>
-        BIMONTHLY_VAT_PERIOD_RE.test(f.period_key) &&
-        vatBimonthlyObligationMatchesOperationalPeriod(f.period_key, operationalPeriodKey),
-      ) ??
-      // Recover a pair-end YYYY-MM row written before the 09-10 identity existed.
-      matches.find((f) => f.period_key === operationalPeriodKey) ??
-      null
-    );
-  }
-  return (
-    matches.find((f) => f.period_key === operationalPeriodKey) ??
-    matches.find((f) =>
-      BIMONTHLY_VAT_PERIOD_RE.test(f.period_key) &&
-      vatBimonthlyObligationMatchesOperationalPeriod(f.period_key, operationalPeriodKey),
-    ) ??
-    null
+  const keys = vatObligationPeriodKeysForOperationalPeriod(vatFrequency, operationalPeriodKey);
+  if (!keys.length) return null;
+  const rank = new Map(keys.map((key, index) => [key, index]));
+  const matches = facts.filter(
+    (f) => f.obligation_type === 'vat_report' && rank.has(f.period_key),
   );
+  if (!matches.length) return null;
+  return [...matches].sort((a, b) => {
+    const submittedDelta =
+      Number(isFilingSubmittedStatus(b.status)) - Number(isFilingSubmittedStatus(a.status));
+    if (submittedDelta !== 0) return submittedDelta;
+    const activeDelta = Number(obligationFactIsActive(b.is_active)) - Number(obligationFactIsActive(a.is_active));
+    if (activeDelta !== 0) return activeDelta;
+    return (rank.get(a.period_key) ?? 99) - (rank.get(b.period_key) ?? 99);
+  })[0]!;
 }
 
 export function vatFilingPeriodIdentityForOperationalPeriod(input: {
@@ -1620,6 +1671,7 @@ export function buildReportingCellInputFromFacts(input: {
     can_mark_submitted: Boolean(
       applicable &&
         fact?.obligation_id &&
+        obligationFactIsActive(fact.is_active) &&
         !submitted &&
         (input.kind === 'vat' || input.kind === 'income_tax_advance'
           ? canManuallyConfirmFiling(fact.status)
@@ -1630,7 +1682,9 @@ export function buildReportingCellInputFromFacts(input: {
         (input.kind === 'vat' || input.kind === 'income_tax_advance') &&
         filingMaterialWarning(fact?.status),
     ),
-    can_mark_not_submitted: Boolean(applicable && fact?.obligation_id && submitted),
+    can_mark_not_submitted: Boolean(
+      applicable && fact?.obligation_id && obligationFactIsActive(fact.is_active) && submitted,
+    ),
     last_reported_at: fact?.last_reported_at ?? null,
     operational_period_key: input.operationalPeriodKey,
     payment_classification: input.paymentClassification ?? null,

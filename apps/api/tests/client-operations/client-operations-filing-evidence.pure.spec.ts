@@ -51,6 +51,7 @@ test('evidence follows the obligation, not the column label, and is not required
     },
   ];
   assert.equal(evidenceForCanonical(rows, 'vat_report::2026-10').length, 1);
+  assert.equal(evidenceForCanonical(rows, ['vat_report::2026-09-10', 'vat_report::2026-10', 'vat_report::2026-09']).length, 1);
   assert.equal(evidenceForCanonical(rows, 'income_tax_advance::2026-10').length, 0);
   assert.equal(evidenceForCanonical([], 'vat_report::2026-10').length, 0);
 });
