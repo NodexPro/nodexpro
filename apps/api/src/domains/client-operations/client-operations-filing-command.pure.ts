@@ -89,43 +89,90 @@ export function vatFilingCompensationPlan(input: {
   };
 }
 
+function isMissingNamedPeriodFileRpc(
+  error: {
+    code?: string | null;
+    message?: string | null;
+  } | null | undefined,
+  functionName: string,
+): boolean {
+  if (!error) return false;
+  const code = String(error.code ?? '');
+  const message = String(error.message ?? '');
+  const fn = functionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return (
+    code === 'PGRST202' ||
+    code === '42883' ||
+    ((new RegExp(fn, 'i').test(message) || /schema cache/i.test(message)) &&
+      /does not exist|could not find|schema cache/i.test(message))
+  );
+}
+
 export function isMissingVatPeriodFileRpc(error: {
   code?: string | null;
   message?: string | null;
 } | null | undefined): boolean {
-  if (!error) return false;
-  const code = String(error.code ?? '');
-  const message = String(error.message ?? '');
-  return (
-    code === 'PGRST202' ||
-    code === '42883' ||
-    ((/file_client_operations_period_vat_obligation/i.test(message) || /schema cache/i.test(message)) &&
-      /does not exist|could not find|schema cache/i.test(message))
+  return isMissingNamedPeriodFileRpc(error, 'file_client_operations_period_vat_obligation');
+}
+
+export function isMissingItaPeriodFileRpc(error: {
+  code?: string | null;
+  message?: string | null;
+} | null | undefined): boolean {
+  return isMissingNamedPeriodFileRpc(
+    error,
+    'file_client_operations_period_income_tax_advance_obligation',
   );
+}
+
+function periodFileRpcBusinessError(
+  message: string,
+  prefix: 'VAT_FILE' | 'ITA_FILE',
+  invalidArgsMessage: string,
+): {
+  httpMessage: string;
+  code: string;
+} | null {
+  const text = String(message ?? '');
+  if (text.includes(`${prefix}_PAYMENT_ALREADY_CONFIRMED`)) {
+    return { httpMessage: 'payment already confirmed', code: 'BAD_REQUEST' };
+  }
+  if (text.includes(`${prefix}_NOT_FOUND`)) {
+    return { httpMessage: 'obligation not found', code: 'BAD_REQUEST' };
+  }
+  if (text.includes(`${prefix}_PERIOD_MISMATCH`)) {
+    return { httpMessage: 'obligation does not match the selected reporting period', code: 'BAD_REQUEST' };
+  }
+  if (text.includes(`${prefix}_NOT_READY`)) {
+    return { httpMessage: 'obligation is not ready to report', code: 'BAD_REQUEST' };
+  }
+  if (text.includes(`${prefix}_PAY_REQUIRES_CLASSIFICATION`)) {
+    return { httpMessage: 'payment_classification required', code: 'BAD_REQUEST' };
+  }
+  if (text.includes(`${prefix}_INVALID_ARGS`)) {
+    return { httpMessage: invalidArgsMessage, code: 'BAD_REQUEST' };
+  }
+  return null;
 }
 
 export function vatPeriodFileRpcBusinessError(message: string): {
   httpMessage: string;
   code: string;
 } | null {
-  const text = String(message ?? '');
-  if (text.includes('VAT_FILE_PAYMENT_ALREADY_CONFIRMED')) {
-    return { httpMessage: 'payment already confirmed', code: 'BAD_REQUEST' };
-  }
-  if (text.includes('VAT_FILE_NOT_FOUND')) {
-    return { httpMessage: 'obligation not found', code: 'BAD_REQUEST' };
-  }
-  if (text.includes('VAT_FILE_PERIOD_MISMATCH')) {
-    return { httpMessage: 'obligation does not match the selected reporting period', code: 'BAD_REQUEST' };
-  }
-  if (text.includes('VAT_FILE_NOT_READY')) {
-    return { httpMessage: 'obligation is not ready to report', code: 'BAD_REQUEST' };
-  }
-  if (text.includes('VAT_FILE_PAY_REQUIRES_CLASSIFICATION')) {
-    return { httpMessage: 'payment_classification required', code: 'BAD_REQUEST' };
-  }
-  if (text.includes('VAT_FILE_INVALID_ARGS')) {
-    return { httpMessage: 'cannot create VAT obligation for this period', code: 'BAD_REQUEST' };
-  }
-  return null;
+  return periodFileRpcBusinessError(
+    message,
+    'VAT_FILE',
+    'cannot create VAT obligation for this period',
+  );
+}
+
+export function itaPeriodFileRpcBusinessError(message: string): {
+  httpMessage: string;
+  code: string;
+} | null {
+  return periodFileRpcBusinessError(
+    message,
+    'ITA_FILE',
+    'cannot create income-tax advance obligation for this period',
+  );
 }

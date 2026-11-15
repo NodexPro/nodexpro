@@ -37,6 +37,17 @@ export function filingModalActionEnabled(input: {
   return input.hasObligation === true && input.can_mark_paid === true;
 }
 
+export function filingActionDisabledReasonKey(input: {
+  enabled: boolean;
+  canMutate: boolean;
+  aggregateReasonKey: string | null | undefined;
+  noPermissionKey: string;
+}): string | null {
+  if (input.enabled) return null;
+  if (input.canMutate !== true) return input.noPermissionKey;
+  return input.aggregateReasonKey ?? null;
+}
+
 export function buildFilingActionCommandBody(input: {
   action: FilingActionKind;
   clientId: string;

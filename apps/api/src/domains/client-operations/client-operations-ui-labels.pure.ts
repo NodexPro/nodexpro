@@ -133,6 +133,12 @@ export const CO_UI = {
       evidenceFiling: 'clientOperations.registry.reporting.filing.evidenceFiling',
       evidencePayment: 'clientOperations.registry.reporting.filing.evidencePayment',
       attach: 'clientOperations.registry.reporting.filing.attach',
+      notApplicable: 'clientOperations.registry.reporting.filing.notApplicable',
+      alreadyFiled: 'clientOperations.registry.reporting.filing.alreadyFiled',
+      alreadyCompleted: 'clientOperations.registry.reporting.filing.alreadyCompleted',
+      payRequiresFiling: 'clientOperations.registry.reporting.filing.payRequiresFiling',
+      notReady: 'clientOperations.registry.reporting.filing.notReady',
+      noPermission: 'clientOperations.registry.reporting.filing.noPermission',
     },
     ni: {
       title: 'clientOperations.registry.reporting.ni.title',

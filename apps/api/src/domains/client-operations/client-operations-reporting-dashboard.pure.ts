@@ -201,7 +201,6 @@ const ROW_TONE_PRIORITY: Record<ClientOperationsReportingRowTone, number> = {
 const REPORTING_OVERLAY_KINDS = new Set<ClientOperationsReportingObligationKind>([
   'vat',
   'income_tax_advance',
-  'payroll',
   'annual',
 ]);
 
@@ -332,6 +331,9 @@ export type ClientOperationsFilingDetail = {
   can_report: boolean;
   can_report_and_pay: boolean;
   can_mark_paid: boolean;
+  report_disabled_reason_key: string | null;
+  report_and_pay_disabled_reason_key: string | null;
+  paid_disabled_reason_key: string | null;
   material_warning_key: string | null;
   attachment_notice_key: string;
   evidence: FilingEvidenceRow[];
@@ -1033,6 +1035,51 @@ export function vatFilingChromeTooltipKey(
   return null;
 }
 
+export function filingKindAllowsCreateOnReport(
+  kind: ClientOperationsReportingObligationKind,
+): boolean {
+  return kind === 'vat' || kind === 'income_tax_advance';
+}
+
+export function filingActionDisabledReasonKeys(input: {
+  applicable: boolean;
+  submitted: boolean;
+  paid: boolean;
+  can_report: boolean;
+  can_report_and_pay: boolean;
+  can_mark_paid: boolean;
+}): {
+  report_disabled_reason_key: string | null;
+  report_and_pay_disabled_reason_key: string | null;
+  paid_disabled_reason_key: string | null;
+} {
+  if (!input.applicable) {
+    const key = CO_UI.reporting.filing.notApplicable;
+    return {
+      report_disabled_reason_key: key,
+      report_and_pay_disabled_reason_key: key,
+      paid_disabled_reason_key: key,
+    };
+  }
+  return {
+    report_disabled_reason_key: input.can_report
+      ? null
+      : input.submitted
+        ? CO_UI.reporting.filing.alreadyFiled
+        : CO_UI.reporting.filing.notReady,
+    report_and_pay_disabled_reason_key: input.can_report_and_pay
+      ? null
+      : input.submitted
+        ? CO_UI.reporting.filing.alreadyFiled
+        : CO_UI.reporting.filing.notReady,
+    paid_disabled_reason_key: input.can_mark_paid
+      ? null
+      : input.submitted
+        ? CO_UI.reporting.filing.alreadyCompleted
+        : CO_UI.reporting.filing.payRequiresFiling,
+  };
+}
+
 function buildFilingDetail(input: {
   kind: ClientOperationsReportingObligationKind;
   applicable: boolean;
@@ -1061,17 +1108,24 @@ function buildFilingDetail(input: {
       : paid
         ? 'filed_paid'
         : 'filed_unpaid';
-  const canReport =
-    input.applicable &&
-    !input.submitted &&
-    (input.canConfirmFiling ||
-      (input.kind === 'vat' &&
-        vatSelectedPeriodCanReport({
-          applicable: input.applicable,
-          submitted: input.submitted,
-          obligation_id: input.obligationId ?? null,
-          status: input.obligationStatus ?? null,
-        })));
+  const canReport = selectedPeriodCanReport({
+    kind: input.kind,
+    applicable: input.applicable,
+    submitted: input.submitted,
+    obligation_id: input.obligationId ?? null,
+    status: input.obligationStatus ?? null,
+    canConfirmFiling: input.canConfirmFiling,
+  });
+  const canReportAndPay = canReport && input.paymentApplies;
+  const canMarkPaid = input.applicable && input.submitted && input.paymentApplies && !paid;
+  const disabledReasons = filingActionDisabledReasonKeys({
+    applicable: input.applicable,
+    submitted: input.submitted,
+    paid,
+    can_report: canReport,
+    can_report_and_pay: canReportAndPay,
+    can_mark_paid: canMarkPaid,
+  });
   return {
     openable: input.applicable,
     chrome,
@@ -1090,8 +1144,11 @@ function buildFilingDetail(input: {
     can_clear_filing: input.applicable && input.canClearFiling,
     can_record_payment: input.applicable && input.paymentApplies && input.submitted && !paid,
     can_report: canReport,
-    can_report_and_pay: canReport && input.paymentApplies,
-    can_mark_paid: input.applicable && input.submitted && input.paymentApplies && !paid,
+    can_report_and_pay: canReportAndPay,
+    can_mark_paid: canMarkPaid,
+    report_disabled_reason_key: disabledReasons.report_disabled_reason_key,
+    report_and_pay_disabled_reason_key: disabledReasons.report_and_pay_disabled_reason_key,
+    paid_disabled_reason_key: disabledReasons.paid_disabled_reason_key,
     material_warning_key: input.materialWarning && input.applicable && !input.submitted
       ? CO_UI.reporting.filing.materialWarning
       : null,
@@ -1482,21 +1539,40 @@ export function historicalObligationIdentitiesToPreserve(input: {
 }
 
 /**
- * Selected VAT tab is independently fileable. An unfiled prior period is never a gate.
- * Missing obligation still allows דווח / דווח ושולם: the filing command creates that
- * period's row already reported. Inactive unfiled rows are fileable by that same
- * command; submitted, paid, closed, and N/A rows stay preserved.
+ * Selected filing-modal tab is independently fileable. An unfiled prior period
+ * is never a gate. Missing obligation still allows דווח / דווח ושולם for kinds
+ * that create-on-report (VAT, income-tax advance). Inactive unfiled rows are
+ * fileable by that same command; submitted, paid, closed, and N/A stay preserved.
  */
+export function selectedPeriodCanReport(input: {
+  kind: ClientOperationsReportingObligationKind;
+  applicable: boolean;
+  submitted: boolean;
+  obligation_id: string | null;
+  status?: string | null;
+  canConfirmFiling?: boolean;
+}): boolean {
+  if (input.applicable !== true || input.submitted === true) return false;
+  if (isFilingNotApplicableStatus(input.status)) return false;
+  if (input.canConfirmFiling === true) return true;
+  if (!filingKindAllowsCreateOnReport(input.kind)) return false;
+  if (!input.obligation_id) return true;
+  return canManuallyConfirmFiling(input.status);
+}
+
 export function vatSelectedPeriodCanReport(input: {
   applicable: boolean;
   submitted: boolean;
   obligation_id: string | null;
   status?: string | null;
 }): boolean {
-  if (input.applicable !== true || input.submitted === true) return false;
-  if (isFilingNotApplicableStatus(input.status)) return false;
-  if (!input.obligation_id) return true;
-  return canManuallyConfirmFiling(input.status);
+  return selectedPeriodCanReport({
+    kind: 'vat',
+    applicable: input.applicable,
+    submitted: input.submitted,
+    obligation_id: input.obligation_id,
+    status: input.status,
+  });
 }
 
 export function vatSelectedPeriodCanReportWithoutObligation(input: {

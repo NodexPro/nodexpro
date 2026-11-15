@@ -1797,6 +1797,36 @@ test('historical unfiled monthly 08.26 stays independently fileable after 10.26 
   assert.equal(buildReportingRowPresentation([hist], OCT_TODAY).cells.vat?.filing_detail?.can_report, true);
 });
 
+test('applicable income-tax advance tab with no obligation stays טרם הוגש and can report independently', () => {
+  const missing = buildReportingCellInputFromFacts({
+    kind: 'income_tax_advance',
+    applicable: true,
+    operationalPeriodKey: '2026-09',
+    facts: [],
+    calendarDueDate: null,
+  });
+  assert.equal(missing.obligation_id, null);
+  assert.equal(missing.can_mark_submitted, false);
+  assert.equal(missing.submitted, false);
+  const row = buildReportingRowPresentation([missing], OCT_TODAY);
+  assert.equal(row.cells.income_tax_advance?.filing_detail?.openable, true);
+  assert.equal(row.cells.income_tax_advance?.filing_detail?.can_report, true);
+  assert.equal(row.cells.income_tax_advance?.filing_detail?.can_report_and_pay, true);
+  assert.equal(row.cells.income_tax_advance?.filing_detail?.filing_status_key, 'clientOperations.registry.reporting.cell.open');
+  const payroll = buildReportingCellPresentation(
+    buildReportingCellInputFromFacts({
+      kind: 'payroll',
+      applicable: true,
+      operationalPeriodKey: '2026-09',
+      facts: [],
+      calendarDueDate: null,
+    }),
+    OCT_TODAY,
+  );
+  assert.equal(payroll.overlay_visible, false);
+  assert.equal(payroll.filing_detail, null);
+});
+
 test('applicable VAT tab with no obligation stays טרם הוגש and can report independently', () => {
   const missing = buildReportingCellInputFromFacts({
     kind: 'vat',

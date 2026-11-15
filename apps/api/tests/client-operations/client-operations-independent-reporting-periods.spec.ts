@@ -212,3 +212,37 @@ test('VAT file+pay RPC is one database transaction and does not invent due dates
   assert.doesNotMatch(migration, /due_date\s*=\s*'20/);
   assert.match(migration, /never invented/i);
 });
+
+test('income-tax advance file+pay RPC is one database transaction and uses YYYY-MM identity', () => {
+  const migration = readFileSync(
+    join(
+      dirname(fileURLToPath(import.meta.url)),
+      '../../../../supabase/migrations/215_file_client_operations_period_income_tax_advance_obligation.sql',
+    ),
+    'utf8',
+  );
+  assert.match(
+    migration,
+    /create or replace function public\.file_client_operations_period_income_tax_advance_obligation/i,
+  );
+  assert.match(migration, /obligation_type = 'income_tax_advance'/);
+  assert.match(migration, /'income_tax_advance'/);
+  assert.match(migration, /related_module,\s*[\s\S]*'tax'/);
+  assert.doesNotMatch(migration, /vat_report/);
+  assert.doesNotMatch(migration, /vatDueDateFromPeriod/);
+  assert.doesNotMatch(migration, /make_date\(/);
+  assert.match(migration, /never invented/i);
+  assert.match(migration, /grant execute[\s\S]*to service_role/i);
+
+  const core = readFileSync(join(srcDir, 'client-obligations-tasks-core.service.ts'), 'utf8');
+  const fileFn = sliceExportAsync(core, 'fileClientOperationsPeriodIncomeTaxAdvanceObligation');
+  assert.match(fileFn, /file_client_operations_period_income_tax_advance_obligation/);
+  assert.match(fileFn, /incomeTaxAdvanceFilingPeriodIdentity/);
+  assert.match(fileFn, /PERIOD_ITA_FILE_NULL_DUE_ALLOWED/);
+  assert.doesNotMatch(fileFn, /vatFilingPeriodIdentityForOperationalPeriod/);
+  assert.doesNotMatch(fileFn, /recomputeClientObligationsAndTasks/);
+
+  const registry = readFileSync(join(srcDir, 'client-operations-registry-custom-columns.service.ts'), 'utf8');
+  assert.match(registry, /incomeTaxAdvanceFilingCreateAllowed/);
+  assert.match(registry, /fileClientOperationsPeriodIncomeTaxAdvanceObligation/);
+});

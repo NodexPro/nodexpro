@@ -5,6 +5,7 @@ import { localizeClientOperationsRegistryCommandError } from '../../lib/client-o
 import {
   buildFilingActionCommandBody,
   canStartFilingAction,
+  filingActionDisabledReasonKey,
   filingAggregateConfirmsAction,
   filingModalActionEnabled,
   filingCellPresentationClass,
@@ -293,6 +294,9 @@ export type ClientOperationsReportingCellPresentation = {
     can_report: boolean;
     can_report_and_pay: boolean;
     can_mark_paid: boolean;
+    report_disabled_reason_key?: string | null;
+    report_and_pay_disabled_reason_key?: string | null;
+    paid_disabled_reason_key?: string | null;
     material_warning_key?: string | null;
     attachment_notice_key?: string;
     evidence?: Array<{
@@ -4983,7 +4987,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         </button>
       );
     }
-    if (reportingCell?.overlay_visible) {
+    if (reportingCell?.overlay_visible && col.key !== 'payroll') {
       const text = displayForColumn(r, col, t);
       const markKey = `${r.client_id}:reporting:${col.key}`;
       const saving = pendingMarkKeys.has(markKey);
@@ -5677,6 +5681,25 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           can_mark_paid: detail.can_mark_paid,
           hasObligation,
         });
+        const noPermissionKey = 'clientOperations.registry.reporting.filing.noPermission';
+        const reportDisabledReason = filingActionDisabledReasonKey({
+          enabled: reportEnabled,
+          canMutate,
+          aggregateReasonKey: detail.report_disabled_reason_key,
+          noPermissionKey,
+        });
+        const reportAndPayDisabledReason = filingActionDisabledReasonKey({
+          enabled: reportAndPayEnabled,
+          canMutate,
+          aggregateReasonKey: detail.report_and_pay_disabled_reason_key,
+          noPermissionKey,
+        });
+        const paidDisabledReason = filingActionDisabledReasonKey({
+          enabled: paidEnabled,
+          canMutate,
+          aggregateReasonKey: detail.paid_disabled_reason_key,
+          noPermissionKey,
+        });
         return (
           <div className="nx-clients-overlay nx-co-ni-overlay">
             <div
@@ -5844,6 +5867,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     className="nx-glass-btn nx-glass-btn--secondary"
                     data-testid="client-operations-filing-report"
                     disabled={!reportEnabled}
+                    title={reportDisabledReason ? t(reportDisabledReason) : undefined}
                     onClick={() => void runFilingAction('report')}
                   >
                     {t(detail.report_key)}
@@ -5853,6 +5877,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     className="nx-glass-btn nx-glass-btn--secondary"
                     data-testid="client-operations-filing-report-paid"
                     disabled={!reportAndPayEnabled}
+                    title={reportAndPayDisabledReason ? t(reportAndPayDisabledReason) : undefined}
                     onClick={() => void runFilingAction('report_and_pay')}
                   >
                     {t(detail.report_and_paid_key)}
@@ -5862,6 +5887,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     className="nx-glass-btn nx-glass-btn--purple"
                     data-testid="client-operations-filing-paid"
                     disabled={!paidEnabled}
+                    title={paidDisabledReason ? t(paidDisabledReason) : undefined}
                     onClick={() => void runFilingAction('paid')}
                   >
                     {t(detail.paid_key)}

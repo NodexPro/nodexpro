@@ -3,7 +3,9 @@ import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError, badRequest, forbidden, serviceUnavailable } from '../../shared/errors.js';
 import {
+  isMissingItaPeriodFileRpc,
   isMissingVatPeriodFileRpc,
+  itaPeriodFileRpcBusinessError,
   obligationWritePersisted,
   vatFilingCompensationPlan,
   vatPeriodFileRpcBusinessError,
@@ -21,6 +23,7 @@ import {
   obligationCheckboxLabelKey,
   obligationColumnLabelKey,
 } from './client-operations-ui-labels.pure.js';
+import { incomeTaxAdvanceFilingPeriodIdentity } from './client-operations-operational-period.pure.js';
 import {
   isFilingSubmittedStatus,
   resolveSelfEmployedNiHandlingMethod,
@@ -3357,6 +3360,18 @@ function throwVatPeriodFileRpcError(error: { code?: string; message?: string; de
   throw new AppError(500, error.message ?? 'VAT period file failed', 'SUPABASE_ERROR');
 }
 
+function throwItaPeriodFileRpcError(error: { code?: string; message?: string; details?: string }): never {
+  if (isMissingItaPeriodFileRpc(error) || error.code === '42P01' || error.code === 'PGRST205') {
+    throw serviceUnavailable(
+      'income-tax advance period file RPC is not migrated',
+      'FILE_ITA_PERIOD_RPC_PENDING_MIGRATION',
+    );
+  }
+  const business = itaPeriodFileRpcBusinessError(`${error.message ?? ''} ${error.details ?? ''}`);
+  if (business) throw badRequest(business.httpMessage, business.code);
+  throw new AppError(500, error.message ?? 'income-tax advance period file failed', 'SUPABASE_ERROR');
+}
+
 /**
  * Named VAT filing for one explicit operational period. Create-as-reported and
  * optional paid_in_full attestation run inside one DB function/transaction.
@@ -3447,6 +3462,103 @@ export async function fileClientOperationsPeriodVatObligation(
       entityType: 'client_obligations',
       entityId: result.obligation_id,
       action: AUDIT_ACTIONS.CLIENT_OPERATIONS_PERIOD_VAT_OBLIGATION_FILED,
+      payload: {
+        client_id: input.clientId,
+        operational_period_key: input.operationalPeriodKey,
+        period_key: identity.period_key,
+        created: result.created,
+        paid: result.paid,
+        previous_status: result.previous_status,
+        previous_is_active: result.previous_is_active,
+      },
+    });
+  }
+  return result;
+}
+
+/**
+ * Named income-tax advance filing for one explicit operational period.
+ * Create-as-reported and optional paid_in_full attestation run inside one DB
+ * function/transaction. Uses YYYY-MM identity, not VAT pair keys.
+ * due_date is calendar-or-null (PERIOD_ITA_FILE_NULL_DUE_ALLOWED).
+ */
+export async function fileClientOperationsPeriodIncomeTaxAdvanceObligation(
+  ctx: RequestContext,
+  input: {
+    clientId: string;
+    operationalPeriodKey: string;
+    obligationId?: string | null;
+    now?: Date;
+    pay?: { canonicalId: string; classification: string } | null;
+  },
+): Promise<FilePeriodVatObligationResult> {
+  const orgId = assertOrg(ctx);
+  await ensureClientInOrg(orgId, input.clientId);
+  // PERIOD_ITA_FILE_NULL_DUE_ALLOWED: calendar filing_due_date or null, never invented 19/23.
+  const now = input.now ?? new Date();
+  const nowIso = now.toISOString();
+  const reportDate = businessYmd(now);
+  const pay = input.pay ?? null;
+  const payCanonicalId = String(pay?.canonicalId ?? '').trim();
+  const payClassification = String(pay?.classification ?? '').trim();
+  const pPay = Boolean(pay);
+  if (pPay && (!payCanonicalId || payClassification !== 'paid_in_full')) {
+    throw badRequest(payCanonicalId ? 'payment_classification required' : 'canonical_id required');
+  }
+
+  const { data: taxRow, error: taxError } = await supabaseAdmin
+    .from('client_tax_settings')
+    .select('income_tax_advance_enabled,income_tax_advance_frequency')
+    .eq('organization_id', orgId)
+    .eq('client_id', input.clientId)
+    .maybeSingle();
+  if (taxError) {
+    throw new AppError(500, taxError.message ?? 'client_tax_settings read failed', 'SUPABASE_ERROR');
+  }
+  const tax = (taxRow ?? {}) as Record<string, unknown>;
+  const identity = incomeTaxAdvanceFilingPeriodIdentity({
+    enabled: tax.income_tax_advance_enabled === true,
+    frequency: (tax.income_tax_advance_frequency as string | null) ?? null,
+    operational_period_key: input.operationalPeriodKey,
+  });
+  if (!identity) throw badRequest('cannot create income-tax advance obligation for this period');
+
+  const due = await resolveOfficialFilingDueDateIso({
+    organizationId: orgId,
+    kind: 'income_tax_advance',
+    reportingPeriodKey: identity.period_key,
+    income_tax_advance_enabled: true,
+    asOfDate: reportDate,
+  });
+
+  const requestedId = String(input.obligationId ?? '').trim() || null;
+  const { data, error } = await supabaseAdmin.rpc(
+    'file_client_operations_period_income_tax_advance_obligation',
+    {
+      p_organization_id: orgId,
+      p_client_id: input.clientId,
+      p_actor_user_id: ctx.user.id,
+      p_period_key: identity.period_key,
+      p_operational_period_key: input.operationalPeriodKey,
+      p_due_date: due,
+      p_obligation_id: requestedId,
+      p_report_date: reportDate,
+      p_now: nowIso,
+      p_pay: pPay,
+      p_canonical_id: pPay ? payCanonicalId : null,
+      p_payment_classification: pPay ? payClassification : null,
+    },
+  );
+  if (error) throwItaPeriodFileRpcError(error);
+  const result = mapVatPeriodFileRpcResult(data, identity.period_key);
+  if (result.filed) {
+    await writeAudit({
+      organizationId: orgId,
+      actorUserId: ctx.user.id,
+      moduleCode: 'client-operations',
+      entityType: 'client_obligations',
+      entityId: result.obligation_id,
+      action: AUDIT_ACTIONS.CLIENT_OPERATIONS_PERIOD_ITA_OBLIGATION_FILED,
       payload: {
         client_id: input.clientId,
         operational_period_key: input.operationalPeriodKey,

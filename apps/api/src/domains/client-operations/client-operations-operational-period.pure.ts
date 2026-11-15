@@ -296,6 +296,27 @@ export function isIncomeTaxFrequencyApplicableForOperationalPeriod(
 }
 
 /**
+ * Income-tax advance identity is the selected operational month (YYYY-MM).
+ * Frequency only gates whether that month is a filing month — not VAT pair keys.
+ */
+export function incomeTaxAdvanceFilingPeriodIdentity(input: {
+  enabled: boolean | null | undefined;
+  frequency: string | null | undefined;
+  operational_period_key: string;
+}): { period_key: string } | null {
+  if (input.enabled !== true) return null;
+  if (
+    !isIncomeTaxFrequencyApplicableForOperationalPeriod(
+      input.frequency,
+      input.operational_period_key,
+    )
+  ) {
+    return null;
+  }
+  return { period_key: input.operational_period_key };
+}
+
+/**
  * Income-tax DEDUCTIONS frequency for Client Operations registry/workspace months.
  *
  * Distinct from advances (`isIncomeTaxFrequencyApplicableForOperationalPeriod`):

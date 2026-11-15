@@ -104,7 +104,7 @@ test('payment modal is Create Client-styled, has no Yes preselect, and cancel do
   assert.match(viewSource, /selected: null/);
   assert.match(viewSource, /disabled=\{!paymentModal\.selected\}/);
   assert.match(viewSource, /setPaymentModal\(null\)/);
-  assert.match(viewSource, /reportingCell\?\.overlay_visible/);
+  assert.match(viewSource, /reportingCell\?\.overlay_visible && col\.key !== 'payroll'/);
   assert.doesNotMatch(viewSource, /\['vat', 'income_tax_advance'/);
   assert.match(viewSource, /data-testid="client-operations-payments-outstanding-kpi"/);
   assert.doesNotMatch(viewSource, /mark_obligation_reported_and_paid/);
@@ -250,6 +250,15 @@ test('filed VAT cell tooltip uses backend דווח / דווח ושולם keys an
     (he.clientOperations.registry.reporting.filing as { reportAndPaid: string }).reportAndPaid,
     'דווח ושולם',
   );
+  assert.match(
+    (he.clientOperations.registry.reporting.filing as { alreadyFiled: string }).alreadyFiled,
+    /[\u0590-\u05FF]/,
+  );
+  assert.match(
+    (he.clientOperations.registry.reporting.filing as { noPermission: string }).noPermission,
+    /[\u0590-\u05FF]/,
+  );
+  assert.match(viewSource, /title=\{reportDisabledReason \? t\(reportDisabledReason\) : undefined\}/);
   assert.match(cssSource, /td\.is-filing-chrome-filed_unpaid[\s\S]*rgba\(249,\s*115,\s*22/);
   assert.match(cssSource, /td\.is-filing-chrome-filed_paid[\s\S]*rgba\(34,\s*197,\s*94/);
 });

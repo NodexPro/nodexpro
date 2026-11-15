@@ -61,6 +61,7 @@ import {
 import {
   ensureClientOperationsPeriodVatObligation,
   executeClientObligationsCommand,
+  fileClientOperationsPeriodIncomeTaxAdvanceObligation,
   fileClientOperationsPeriodVatObligation,
 } from './client-obligations-tasks-core.service.js';
 import {
@@ -518,6 +519,18 @@ function vatFilingCreateAllowed(body: Record<string, unknown>, command: string):
   const kind = String(body.kind ?? '').trim();
   const canonicalId = String(body.canonical_id ?? '').trim();
   return kind === 'vat' || canonicalId.startsWith('vat_report::');
+}
+
+function incomeTaxAdvanceFilingCreateAllowed(body: Record<string, unknown>, command: string): boolean {
+  if (
+    command !== 'mark_client_operations_obligation_reported' &&
+    command !== 'confirm_client_operations_obligation_filed_with_payment'
+  ) {
+    return false;
+  }
+  const kind = String(body.kind ?? '').trim();
+  const canonicalId = String(body.canonical_id ?? '').trim();
+  return kind === 'income_tax_advance' || canonicalId.startsWith('income_tax_advance::');
 }
 
 const FILING_REGISTRY_COMMANDS = new Set([
@@ -1144,6 +1157,37 @@ export async function executeClientOperationsRegistryCommand(
           canonicalId: `vat_report::${filed.period_key}`,
         });
       }
+    } else if (
+      command === 'mark_client_operations_obligation_reported' &&
+      incomeTaxAdvanceFilingCreateAllowed(body, command)
+    ) {
+      const periodRaw =
+        body.operational_period_key ??
+        (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key;
+      const operationalPeriodKey = requiredOperationalPeriodKeyFrom(periodRaw);
+      const filed = await fileClientOperationsPeriodIncomeTaxAdvanceObligation(ctx, {
+        clientId,
+        operationalPeriodKey,
+        obligationId: optionalIdFrom(body.obligation_id),
+      });
+      await assertSelectedTabMatchesObligation({
+        organizationId: orgId,
+        clientId,
+        obligationType: 'income_tax_advance',
+        obligationPeriodKey: filed.period_key,
+        operationalPeriodKey,
+      });
+      if (filed.filed) {
+        await emitObligationFiledWorkEvent({
+          ctx,
+          orgId,
+          clientId,
+          obligationId: filed.obligation_id,
+          obligationType: 'income_tax_advance',
+          periodKey: filed.period_key,
+          canonicalId: `income_tax_advance::${filed.period_key}`,
+        });
+      }
     } else {
       const obligationIdRaw = optionalIdFrom(body.obligation_id);
       const operationalPeriodKey = operationalPeriodKeyFrom(
@@ -1242,6 +1286,74 @@ export async function executeClientOperationsRegistryCommand(
           obligationType: 'vat_report',
           periodKey: filed.period_key,
           canonicalId: canonicalId.startsWith('vat_report::') ? canonicalId : `vat_report::${filed.period_key}`,
+        });
+      }
+      if (filed.paid) {
+        await emitObligationPaymentWorkEvent({
+          ctx,
+          orgId,
+          clientId,
+          obligationId: filed.obligation_id,
+          periodKey: operationalPeriodKey,
+          canonicalId,
+          paymentClassification: classificationRaw,
+        });
+      }
+      if (filed.filed || filed.paid) {
+        await audit(ctx, AUDIT_ACTIONS.CLIENT_OPERATIONS_OBLIGATION_FILED_WITH_PAYMENT, filed.obligation_id, {
+          client_id: clientId,
+          obligation_id: filed.obligation_id,
+          canonical_id: canonicalId,
+          payment_classification: classificationRaw,
+          refiled: false,
+          outstanding: paymentClassificationIsOutstanding(classificationRaw),
+        });
+      }
+    } else if (
+      command === 'confirm_client_operations_obligation_filed_with_payment' &&
+      incomeTaxAdvanceFilingCreateAllowed(body, command)
+    ) {
+      const operationalPeriodKey = requiredOperationalPeriodKeyFrom(
+        body.operational_period_key ??
+          (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
+      );
+      const existingFacts = await loadTaxObligationPaymentFactsForClients({
+        organizationId: orgId,
+        clientIds: [clientId],
+      });
+      const existingClassification = (existingFacts.get(clientId) ?? []).find(
+        (fact) => fact.obligation_canonical_id === canonicalId,
+      )?.payment_classification;
+      if (paymentAlreadyConfirmedInFull(existingClassification, classificationRaw)) {
+        throw badRequest('payment already confirmed');
+      }
+      const filed = await fileClientOperationsPeriodIncomeTaxAdvanceObligation(ctx, {
+        clientId,
+        operationalPeriodKey,
+        obligationId: optionalIdFrom(body.obligation_id),
+        pay: {
+          canonicalId,
+          classification: classificationRaw,
+        },
+      });
+      await assertSelectedTabMatchesObligation({
+        organizationId: orgId,
+        clientId,
+        obligationType: 'income_tax_advance',
+        obligationPeriodKey: filed.period_key,
+        operationalPeriodKey,
+      });
+      if (filed.filed) {
+        await emitObligationFiledWorkEvent({
+          ctx,
+          orgId,
+          clientId,
+          obligationId: filed.obligation_id,
+          obligationType: 'income_tax_advance',
+          periodKey: filed.period_key,
+          canonicalId: canonicalId.startsWith('income_tax_advance::')
+            ? canonicalId
+            : `income_tax_advance::${filed.period_key}`,
         });
       }
       if (filed.paid) {

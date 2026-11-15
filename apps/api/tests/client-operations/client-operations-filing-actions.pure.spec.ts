@@ -34,6 +34,20 @@ function cell(
   };
 }
 
+test('income-tax advance missing obligation still enables דווח and דווח ושולם', () => {
+  const pending = buildReportingCellPresentation(
+    cell({ kind: 'income_tax_advance', obligation_id: null, can_mark_submitted: false }),
+    TODAY,
+  );
+  assert.equal(pending.filing_detail?.can_report, true);
+  assert.equal(pending.filing_detail?.can_report_and_pay, true);
+  assert.equal(pending.filing_detail?.can_mark_paid, false);
+  assert.equal(
+    pending.filing_detail?.paid_disabled_reason_key,
+    CO_UI.reporting.filing.payRequiresFiling,
+  );
+});
+
 test('three VAT buttons, chrome, and tooltip follow דווח / דווח ושולם / שולם', () => {
   const pending = buildReportingCellPresentation(
     cell({ kind: 'vat', obligation_id: null, can_mark_submitted: false }),
