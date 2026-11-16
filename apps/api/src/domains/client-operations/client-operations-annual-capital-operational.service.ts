@@ -777,13 +777,21 @@ async function loadChecklistFileLinks(input: {
   taxYear?: number;
 }): Promise<Array<{ file_asset_id: string; source_kind: 'checklist' }>> {
   const yearColumnSupported = await supportsAnnualDocumentTaxYearColumns();
-  const { data, error } = await supabaseAdmin
-    .from('client_annual_document_rows')
-    .select(yearColumnSupported ? 'file_asset_id, tax_year' : 'file_asset_id')
-    .eq('organization_id', input.orgId)
-    .eq('client_id', input.clientId)
-    .eq('tab_scope', input.tabScope)
-    .not('file_asset_id', 'is', null);
+  const { data, error } = yearColumnSupported
+    ? await supabaseAdmin
+        .from('client_annual_document_rows')
+        .select('file_asset_id, tax_year')
+        .eq('organization_id', input.orgId)
+        .eq('client_id', input.clientId)
+        .eq('tab_scope', input.tabScope)
+        .not('file_asset_id', 'is', null)
+    : await supabaseAdmin
+        .from('client_annual_document_rows')
+        .select('file_asset_id')
+        .eq('organization_id', input.orgId)
+        .eq('client_id', input.clientId)
+        .eq('tab_scope', input.tabScope)
+        .not('file_asset_id', 'is', null);
   assertQueryError(error, 'Failed to load checklist files');
   const ids = checklistFileIdsForFilingYear(
     (data ?? []) as Array<{ tax_year?: number | null; file_asset_id: string | null }>,

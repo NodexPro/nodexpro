@@ -213,6 +213,7 @@ test('annual tab service keeps Core → Commands → Aggregate: named command, r
   assert.match(serviceSrc, /TEMPORARY_COUNTRY_PACK_PENDING/);
   assert.match(operationalSrc, /checklistFileIdsForFilingYear/);
   assert.match(operationalSrc, /tabScope: 'annual_report',\s*taxYear,/);
+  assert.doesNotMatch(operationalSrc, /select\(yearColumnSupported \?/);
   assert.match(migration217, /tax_year/);
   assert.match(migration217, /working_tax_year/);
   assert.match(migration217, /NOT backfilled/i);
