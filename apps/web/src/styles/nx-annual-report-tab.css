@@ -12,7 +12,7 @@
   margin: 0;
   padding: 0;
   background: transparent;
-  font-family: inherit;
+  font-family: Arial, sans-serif;
 }
 
 /* Match other workspace tabs: single light inner container on dark shell */
@@ -600,14 +600,14 @@
 }
 
 .nx-annual-file-name {
-  color: #2563eb;
+  color: #0ea5e9;
   cursor: pointer;
-  font-weight: 500;
+  font-weight: 600;
   font-size: 13px;
   background: none;
   border: none;
   padding: 0;
-  font: inherit;
+  font-family: Arial, sans-serif;
   text-align: right;
   text-decoration: none;
   overflow: hidden;
@@ -799,7 +799,15 @@
 .nx-annual-logical-folders,
 .nx-annual-logical-folder,
 .nx-annual-logical-folder-head,
-.nx-annual-logical-folder-files {
+.nx-annual-logical-folder-files,
+.nx-annual-filing-years,
+.nx-annual-filing-year-card,
+.nx-annual-readiness,
+.nx-annual-dialog,
+.nx-annual-dialog input,
+.nx-annual-dialog select,
+.nx-annual-dialog textarea,
+.nx-annual-dialog button {
   font-family: Arial, sans-serif;
 }
 
@@ -812,6 +820,71 @@
 
 .nx-annual-filing-status.is-filed {
   color: #15803d;
+}
+
+.nx-annual-filing-status--sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.nx-annual-filing-years {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.nx-annual-filing-year-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 12px;
+  min-width: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(125, 211, 252, 0.35);
+  background: linear-gradient(180deg, rgba(8, 38, 82, 0.55), rgba(8, 38, 82, 0.28));
+  color: #eef6ff;
+  cursor: pointer;
+  text-align: right;
+}
+
+.nx-annual-filing-year-card:disabled {
+  cursor: default;
+  opacity: 0.92;
+}
+
+.nx-annual-filing-year-card.is-working {
+  box-shadow: 0 0 0 1px rgba(125, 236, 247, 0.7);
+}
+
+.nx-annual-filing-year-label {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.nx-annual-filing-year-status {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fde047;
+}
+
+.nx-annual-filing-year-status.is-filed {
+  color: #86efac;
+}
+
+.nx-annual-readiness {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(238, 246, 255, 0.82);
 }
 
 .nx-annual-logical-folders {
@@ -828,17 +901,25 @@
 }
 
 .nx-annual-logical-folder {
-  background: #fff;
-  border: 1px solid rgba(219, 227, 238, 0.95);
-  border-radius: 10px;
-  padding: 12px 14px;
+  background: linear-gradient(180deg, rgba(8, 38, 82, 0.42), rgba(8, 38, 82, 0.22));
+  border: 1px solid rgba(210, 238, 255, 0.35);
+  border-radius: 8px;
+  padding: 8px 10px;
 }
 
 .nx-annual-logical-folder-head {
   display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
+  padding: 4px 0;
+  border: none;
+  background: transparent;
+  color: inherit;
   font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: right;
 }
 
 .nx-annual-logical-folder-files {
@@ -846,4 +927,44 @@
   margin: 8px 0 0;
   padding: 0;
   font-size: 13px;
+  display: grid;
+  gap: 6px;
+}
+
+.nx-annual-logical-folder-file {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.7fr) minmax(0, 0.7fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.nx-annual-folder-file-name,
+.nx-annual-folder-file-type,
+.nx-annual-folder-file-date {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nx-annual-folder-file-preview {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(125, 236, 247, 0.45);
+  background: rgba(8, 38, 82, 0.35);
+  color: #7decf7;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .nx-annual-filing-years {
+    grid-template-columns: 1fr;
+  }
+
+  .nx-annual-logical-folder-file {
+    grid-template-columns: 1fr;
+  }
 }

@@ -140,12 +140,29 @@ export type AnnualTabModel = {
     enabled: boolean;
   }>;
   file_open_path_template: string;
+  current_tax_year?: number;
+  working_tax_year?: number;
+  document_readiness?: AnnualControlStatusDto;
   filing_status?: {
     filed: boolean;
     code: 'filed' | 'not_filed';
     label_key: string;
     submitted_on: string | null;
   };
+  filing_years?: Array<{
+    tax_year: number;
+    is_current: boolean;
+    is_working: boolean;
+    filed: boolean;
+    submitted_on: string | null;
+    filing_status: {
+      filed: boolean;
+      code: 'filed' | 'not_filed';
+      label_key: string;
+      submitted_on: string | null;
+    };
+    can_select_working: boolean;
+  }>;
   year_folders?: Array<{
     folder_key: string;
     tax_year: number;
@@ -159,6 +176,9 @@ export type AnnualTabModel = {
       source_kind: 'form_1301' | 'additional' | 'checklist';
       source_kind_label_key: string;
       can_open: boolean;
+      uploaded_on?: string | null;
+      type_label?: string | null;
+      actions?: { can_open: boolean; can_preview: boolean };
     }>;
   }>;
   capital_folders?: Array<{
@@ -176,6 +196,9 @@ export type AnnualTabModel = {
       source_kind: 'form_1301' | 'additional' | 'checklist';
       source_kind_label_key: string;
       can_open: boolean;
+      uploaded_on?: string | null;
+      type_label?: string | null;
+      actions?: { can_open: boolean; can_preview: boolean };
     }>;
   }>;
 };

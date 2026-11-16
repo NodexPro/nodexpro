@@ -72,6 +72,15 @@
       "attachFile": "Прикрепить файл",
       "removeFile": "Удалить файл",
       "filedStatus": "Подано",
+      "notFiledStatus": "Не подано",
+      "yearFolders": "Папки по налоговому году",
+      "documentReadiness": "Готовность документов",
+      "previewFile": "Просмотр",
+      "fileType": "Тип",
+      "fileDate": "Дата",
+      "folderEmpty": "В папке нет файлов",
+      "expandFolder": "Открыть папку",
+      "collapseFolder": "Закрыть папку",
       "taxYear": "Налоговый год"
     },
     "registry": {

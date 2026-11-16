@@ -52,6 +52,25 @@ test('Annual premium skin is scoped to the workspace modal and reused for הצה
   assert.match(annualBase, /\.nx-annual-root/);
 });
 
+test('Annual tab renders backend filing years, separate document readiness, and archive folders at the bottom', () => {
+  assert.match(annualSrc, /annualTab\.filing_years/);
+  assert.match(annualSrc, /select_annual_working_tax_year/);
+  assert.match(annualSrc, /annual-tab-document-readiness/);
+  assert.match(annualSrc, /AnnualArchiveFolders/);
+  assert.match(annualSrc, /annual-tab-logical-folders/);
+  const foldersIdx = annualSrc.indexOf('<AnnualArchiveFolders');
+  const docsIdx = annualSrc.indexOf('annualTab.visibility.show_documents');
+  const notesIdx = annualSrc.indexOf('annualTab.visibility.show_notes');
+  assert.ok(docsIdx > 0 && notesIdx > docsIdx && foldersIdx > notesIdx);
+  assert.match(annualBase, /font-family:\s*Arial/);
+  assert.match(annualCss, /font-family:\s*Arial/);
+  assert.match(annualBase, /\.nx-annual-logical-folder \{[\s\S]*?linear-gradient\(180deg, rgba\(8, 38, 82/);
+  const he = readFileSync(join(dir, '../src/i18n/he.json'), 'utf8');
+  assert.match(he, /"notFiledStatus": "לא הוגש"/);
+  assert.match(he, /"documentReadiness"/);
+  assert.doesNotMatch(annualSrc, /new Date\(\)\.getFullYear\(\)/);
+});
+
 test('Taxes interior and portal/raise are not altered by the Annual restyle', () => {
   assert.match(panelSrc, /createPortal\(\s*overlay,\s*document\.body\s*\)/);
   assert.match(

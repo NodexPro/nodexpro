@@ -16,6 +16,9 @@ export type AnnualCapitalLinkedFile = {
   source_kind: AnnualCapitalSubmissionFileKind;
   source_kind_label_key: string;
   can_open: boolean;
+  uploaded_on?: string | null;
+  type_label?: string | null;
+  actions?: { can_open: boolean; can_preview: boolean };
 };
 
 export type AnnualTaxYearOption = {

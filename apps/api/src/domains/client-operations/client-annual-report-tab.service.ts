@@ -5,6 +5,7 @@ import { AppError, badRequest, conflict, forbidden } from '../../shared/errors.j
 import {
   isSupabaseMissingColumnError,
   isSupabaseMissingTableError,
+  isSupabaseUniqueViolation,
   PUBLIC_DATABASE_ERROR_MESSAGE,
 } from '../../shared/supabase-errors.js';
 import { requireGuardedUpload } from '../../shared/file-content-guard.js';
@@ -18,6 +19,20 @@ import {
   ANNUAL_SUBMISSION_STATUS_LABEL_KEY,
   ANNUAL_TAB_TITLE_KEY,
 } from './client-operations-ui-labels.pure.js';
+import {
+  buildAnnualFilingYearBoard,
+  checklistFileIdsForFilingYear,
+  fileTypeLabelFromMeta,
+  isoDateOnly,
+  parseAnnualWorkingTaxYear,
+  isProvenAnnualTaxYear,
+  provenYearScopedChecklistFiles,
+  resolveCurrentAnnualTaxYear,
+  resolveWorkingTaxYear,
+  uniqueLinkedFileIds,
+  workingDocumentRowsForTaxYear,
+  type AnnualFilingYearBoardItem,
+} from './client-annual-report-tab.pure.js';
 import {
   buildAnnualYearFolders,
   buildCapitalRequirementFolders,
@@ -332,12 +347,17 @@ export type AnnualTabResponse = {
     enabled: boolean;
   }>;
   file_open_path_template: string;
+  /** TEMPORARY_COUNTRY_PACK_PENDING: UTC calendar year until Country Pack owns the tax-year clock. */
+  current_tax_year: number;
+  working_tax_year: number;
+  document_readiness: AnnualControlStatusDto;
   filing_status: {
     filed: boolean;
     code: 'filed' | 'not_filed';
     label_key: string;
     submitted_on: string | null;
   };
+  filing_years: AnnualFilingYearBoardItem[];
   year_folders: AnnualYearFolder[];
   capital_folders: CapitalRequirementFolder[];
 };
@@ -361,7 +381,8 @@ export type AnnualAnnualCommandType =
   | 'remove_annual_submission_date'
   | 'attach_annual_submission_file'
   | 'update_annual_notes'
-  | 'copy_previous_capital_declaration';
+  | 'copy_previous_capital_declaration'
+  | 'select_annual_working_tax_year';
 
 function assertOrg(ctx: RequestContext): string {
   const orgId = ctx.organizationId;
@@ -418,6 +439,20 @@ async function supportsAnnualScopeColumns(): Promise<boolean> {
   annualScopeSupportCache = true;
   return true;
 }
+
+let annualTaxYearSupportCache: boolean | null = null;
+async function supportsAnnualDocumentTaxYearColumns(): Promise<boolean> {
+  if (annualTaxYearSupportCache != null) return annualTaxYearSupportCache;
+  const { error } = await supabaseAdmin.from('client_annual_document_rows').select('tax_year').limit(0);
+  if (isSupabaseMissingColumnError(error, 'tax_year')) {
+    annualTaxYearSupportCache = false;
+    return false;
+  }
+  annualTaxYearSupportCache = true;
+  return true;
+}
+
+export { checklistFileIdsForFilingYear, supportsAnnualDocumentTaxYearColumns };
 
 function annualDbError(context: string, error: { message?: string } | null | undefined): AppError {
   console.error('[annual-report]', context, error?.message ?? 'unknown');
@@ -554,7 +589,7 @@ function calendarDaysDiffUtc(fromYmd: string, toYmd: string): number {
   return Math.round((b - a) / 86_400_000);
 }
 
-/** Default deadline: May 31 UTC (year from server clock). */
+/** TEMPORARY_COUNTRY_PACK_PENDING: May 31 UTC from server clock until Country Pack owns the legal due date. */
 function buildAnnualDeadlineInfo(serverNow: Date): AnnualDeadlineInfoDto {
   const year = serverNow.getUTCFullYear();
   const due_date = `${year}-05-31`;
@@ -734,12 +769,16 @@ function buildCapitalFallbackReadModel(canEdit: boolean): AnnualTabResponse {
       { action_key: 'copy_previous', label_he: 'העתק הצהרת הון קודמת', label_key: 'clientOperations.annual.copyPreviousCapital', enabled: false },
     ],
     file_open_path_template: `/m/client-operations/clients/{clientId}/annual/files/{fileAssetId}/open`,
+    current_tax_year: resolveCurrentAnnualTaxYear(),
+    working_tax_year: resolveCurrentAnnualTaxYear(),
+    document_readiness: control.status,
     filing_status: {
       filed: false,
       code: 'not_filed',
       label_key: 'clientOperations.annual.notFiledStatus',
       submitted_on: null,
     },
+    filing_years: [],
     year_folders: [],
     capital_folders: [],
   };
@@ -749,21 +788,43 @@ function asTabLinkedFile(input: {
   file_asset_id: string;
   file_name: string | null;
   source_kind: AnnualCapitalLinkedFile['source_kind'];
+  mime_type?: string | null;
+  uploaded_on?: string | null;
 }): AnnualCapitalLinkedFile {
+  const canOpen = true;
   return {
     file_asset_id: input.file_asset_id,
     file_name: input.file_name,
     source_kind: input.source_kind,
     source_kind_label_key: linkedFileKindLabelKey(input.source_kind),
-    can_open: true,
+    can_open: canOpen,
+    uploaded_on: isoDateOnly(input.uploaded_on ?? null),
+    type_label: fileTypeLabelFromMeta({ file_name: input.file_name, mime_type: input.mime_type ?? null }),
+    actions: { can_open: canOpen, can_preview: canOpen },
   };
+}
+
+type AnnualFileAssetMeta = { file_name: string | null; mime_type: string | null; created_at: string | null };
+
+function fileMetaByIdFromAssets(
+  assets: Array<{ id: string; file_name: string | null; mime_type?: string | null; created_at?: string | null }> | null | undefined,
+): Map<string, AnnualFileAssetMeta> {
+  const out = new Map<string, AnnualFileAssetMeta>();
+  for (const asset of assets ?? []) {
+    out.set(String(asset.id), {
+      file_name: asset.file_name ?? null,
+      mime_type: asset.mime_type ?? null,
+      created_at: asset.created_at ?? null,
+    });
+  }
+  return out;
 }
 
 async function loadSubmissionLinkedFiles(input: {
   orgId: string;
   clientId: string;
   submissionIds: string[];
-  fileNameById: Map<string, string>;
+  fileMetaById: Map<string, AnnualFileAssetMeta>;
 }): Promise<Map<string, AnnualCapitalLinkedFile[]>> {
   const out = new Map<string, AnnualCapitalLinkedFile[]>();
   if (!input.submissionIds.length) return out;
@@ -781,17 +842,19 @@ async function loadSubmissionLinkedFiles(input: {
     ...new Set(
       ((data ?? []) as Array<{ file_asset_id: string }>)
         .map((row) => String(row.file_asset_id))
-        .filter((id) => id && !input.fileNameById.has(id)),
+        .filter((id) => id && !input.fileMetaById.has(id)),
     ),
   ];
   if (extraIds.length) {
     const { data: assets } = await supabaseAdmin
       .from('file_assets')
-      .select('id, file_name')
+      .select('id, file_name, mime_type, created_at')
       .eq('organization_id', input.orgId)
       .in('id', extraIds);
-    for (const asset of (assets ?? []) as Array<{ id: string; file_name: string | null }>) {
-      input.fileNameById.set(asset.id, asset.file_name ?? '');
+    for (const [id, meta] of fileMetaByIdFromAssets(
+      assets as Array<{ id: string; file_name: string | null; mime_type?: string | null; created_at?: string | null }>,
+    )) {
+      input.fileMetaById.set(id, meta);
     }
   }
   for (const raw of data ?? []) {
@@ -804,11 +867,14 @@ async function loadSubmissionLinkedFiles(input: {
         : 'additional';
     const list = out.get(submissionId) ?? [];
     if (list.some((file) => file.file_asset_id === fileAssetId)) continue;
+    const meta = input.fileMetaById.get(fileAssetId);
     list.push(
       asTabLinkedFile({
         file_asset_id: fileAssetId,
-        file_name: input.fileNameById.get(fileAssetId) ?? null,
+        file_name: meta?.file_name ?? null,
         source_kind: kind,
+        mime_type: meta?.mime_type ?? null,
+        uploaded_on: meta?.created_at ?? null,
       }),
     );
     out.set(submissionId, list);
@@ -907,12 +973,23 @@ async function ensureProfile(orgId: string, clientId: string, scope: AnnualTabSc
     })
     .select('id, read_model_version')
     .single();
-  if (error || !ins) throw new AppError(500, error?.message ?? 'annual profile insert failed', 'SUPABASE_ERROR');
+  if (error && isSupabaseUniqueViolation(error)) {
+    const raced = await loadAnnualProfile(orgId, clientId, scope, scoped);
+    if (raced) return raced;
+  }
+  if (error || !ins) throw annualDbError('annual profile insert failed', error);
   return { id: String((ins as { id: string }).id), read_model_version: Number((ins as { read_model_version: number }).read_model_version ?? 1) };
 }
 
-async function ensureSystemDocumentRows(orgId: string, clientId: string, scope: AnnualTabScope): Promise<void> {
+async function ensureSystemDocumentRows(
+  orgId: string,
+  clientId: string,
+  scope: AnnualTabScope,
+  options?: { workingTaxYear?: number; yearColumnSupported?: boolean },
+): Promise<void> {
   const scoped = await supportsAnnualScopeColumns();
+  const yearColumnSupported = options?.yearColumnSupported ?? (await supportsAnnualDocumentTaxYearColumns());
+  const yearScoped = Boolean(yearColumnSupported && scope === 'annual_report' && Number.isInteger(options?.workingTaxYear));
   const templates = systemTemplatesForScope(scope);
   let existingQ = supabaseAdmin
     .from('client_annual_document_rows')
@@ -921,6 +998,7 @@ async function ensureSystemDocumentRows(orgId: string, clientId: string, scope: 
     .eq('client_id', clientId)
     .eq('source_type', 'system');
   if (scoped) existingQ = existingQ.eq('tab_scope', scope);
+  if (yearScoped) existingQ = existingQ.eq('tax_year', options!.workingTaxYear);
   const { data: existingRows, error: readErr } = await existingQ;
   if (readErr) throw new AppError(500, readErr.message ?? 'annual system rows read failed', 'SUPABASE_ERROR');
   const existingKeys = new Set(
@@ -934,6 +1012,7 @@ async function ensureSystemDocumentRows(orgId: string, clientId: string, scope: 
     organization_id: orgId,
     client_id: clientId,
     ...(scoped ? { tab_scope: scope } : {}),
+    ...(yearScoped ? { tax_year: options!.workingTaxYear } : {}),
     source_type: 'system' as const,
     system_key: t.system_key,
     document_name_he: t.document_name_he,
@@ -944,7 +1023,28 @@ async function ensureSystemDocumentRows(orgId: string, clientId: string, scope: 
     file_asset_id: null,
   }));
   const { error: insertErr } = await supabaseAdmin.from('client_annual_document_rows').insert(rows);
-  if (insertErr) throw new AppError(500, insertErr.message ?? 'annual system rows insert failed', 'SUPABASE_ERROR');
+  if (insertErr && isSupabaseUniqueViolation(insertErr)) return;
+  if (insertErr) throw annualDbError('annual system rows insert failed', insertErr);
+}
+
+async function loadProfileWorkingTaxYear(
+  orgId: string,
+  clientId: string,
+  scope: AnnualTabScope,
+  scoped: boolean,
+  yearColumnSupported: boolean,
+): Promise<number | null> {
+  if (!yearColumnSupported) return null;
+  let q = supabaseAdmin
+    .from('client_annual_report_profiles')
+    .select('working_tax_year')
+    .eq('organization_id', orgId)
+    .eq('client_id', clientId);
+  if (scoped) q = q.eq('tab_scope', scope);
+  const { data, error } = await q.maybeSingle();
+  if (error && isSupabaseMissingColumnError(error, 'working_tax_year')) return null;
+  if (error) throw annualDbError('annual working tax year read failed', error);
+  return parseAnnualWorkingTaxYear((data as { working_tax_year?: number | null } | null)?.working_tax_year);
 }
 
 async function assertExpectedVersion(orgId: string, clientId: string, expected: number, scope: AnnualTabScope): Promise<void> {
@@ -976,7 +1076,7 @@ async function bumpReadModelVersion(orgId: string, clientId: string, expected: n
     .eq('read_model_version', expected);
   if (scoped) q = q.eq('tab_scope', scope);
   const { data: updated, error } = await q.select('id');
-  if (error) throw new AppError(500, error.message ?? 'version bump failed', 'SUPABASE_ERROR');
+  if (error) throw annualDbError('version bump failed', error);
   if (!updated?.length) throw conflict('הנתונים עודכנו; רענן ונסה שוב');
 }
 
@@ -1016,17 +1116,37 @@ export async function getAnnualTabReadModel(
     if (!existing) {
       return scope === 'capital_declaration'
         ? buildCapitalFallbackReadModel(canEditEarly)
-        : {
-            ...buildCapitalFallbackReadModel(canEditEarly),
-            tab_key: 'annual_report',
-            tab_title_he: 'דוח שנתי',
-            status_card_title_he: 'סטטוס דוח שנתי',
-          };
+        : (() => {
+            const currentTaxYear = resolveCurrentAnnualTaxYear();
+            const fallback = buildCapitalFallbackReadModel(canEditEarly);
+            return {
+              ...fallback,
+              tab_key: 'annual_report' as const,
+              tab_title_he: 'דוח שנתי',
+              status_card_title_he: 'סטטוס דוח שנתי',
+              status_card_title_key: 'clientOperations.annual.statusCard',
+              current_tax_year: currentTaxYear,
+              working_tax_year: currentTaxYear,
+              filing_years: buildAnnualFilingYearBoard({
+                currentTaxYear,
+                workingTaxYear: currentTaxYear,
+                canEdit: false,
+                submissions: [],
+              }),
+            };
+          })();
     }
     prof = existing;
   } else {
     prof = await ensureProfile(orgId, clientId, scope);
-    await ensureSystemDocumentRows(orgId, clientId, scope);
+  }
+
+  const yearColumnSupported = await supportsAnnualDocumentTaxYearColumns();
+  const currentTaxYear = resolveCurrentAnnualTaxYear();
+  const profileWorkingTaxYear = await loadProfileWorkingTaxYear(orgId, clientId, scope, scoped, yearColumnSupported);
+  const workingTaxYear = resolveWorkingTaxYear({ profileWorkingTaxYear, currentTaxYear });
+  if (!options?.readOnly) {
+    await ensureSystemDocumentRows(orgId, clientId, scope, { workingTaxYear, yearColumnSupported });
   }
 
   let profileQ = supabaseAdmin
@@ -1053,6 +1173,10 @@ export async function getAnnualTabReadModel(
     .eq('client_id', clientId);
   if (scoped) docQ = docQ.eq('tab_scope', scope);
   const { data: docRows } = await docQ.order('sort_order', { ascending: true }).order('id', { ascending: true });
+  const workingDocRows = workingDocumentRowsForTaxYear(
+    ((docRows ?? []) as Array<Record<string, unknown> & { tax_year?: number | null }>),
+    { yearColumnSupported, workingTaxYear, tabScope: scope },
+  );
 
   let subQ = supabaseAdmin
     .from('client_annual_submission_rows')
@@ -1064,18 +1188,26 @@ export async function getAnnualTabReadModel(
 
   const fileIds = [
     ...new Set(
-      [...(docRows ?? []), ...(subRows ?? [])].map((r) => (r as { file_asset_id?: string | null }).file_asset_id).filter(Boolean)
+      [...workingDocRows, ...(docRows ?? []), ...(subRows ?? [])]
+        .map((r) => (r as { file_asset_id?: string | null }).file_asset_id)
+        .filter(Boolean),
     ),
   ] as string[];
-  const fileNameById = new Map<string, string>();
+  const fileMetaById = new Map<string, AnnualFileAssetMeta>();
   if (fileIds.length > 0) {
-    const { data: assets } = await supabaseAdmin.from('file_assets').select('id, file_name').eq('organization_id', orgId).in('id', fileIds);
-    for (const a of (assets ?? []) as Array<{ id: string; file_name: string | null }>) {
-      fileNameById.set(a.id, a.file_name ?? '');
+    const { data: assets } = await supabaseAdmin
+      .from('file_assets')
+      .select('id, file_name, mime_type, created_at')
+      .eq('organization_id', orgId)
+      .in('id', fileIds);
+    for (const [id, meta] of fileMetaByIdFromAssets(
+      assets as Array<{ id: string; file_name: string | null; mime_type?: string | null; created_at?: string | null }>,
+    )) {
+      fileMetaById.set(id, meta);
     }
   }
 
-  const rows: AnnualDocumentRowDto[] = (docRows ?? []).map((raw) => {
+  const rows: AnnualDocumentRowDto[] = workingDocRows.map((raw) => {
     const r = raw as {
       id: string;
       source_type: string;
@@ -1109,7 +1241,7 @@ export async function getAnnualTabReadModel(
       file: {
         state: fid ? 'attached' : 'none',
         file_asset_id: fid,
-        file_name: fid ? fileNameById.get(fid) ?? null : null,
+        file_name: fid ? fileMetaById.get(fid)?.file_name ?? null : null,
       },
       actions: {
         can_toggle_received: canEdit,
@@ -1147,7 +1279,7 @@ export async function getAnnualTabReadModel(
       file: {
         state: fid ? 'attached' : 'none',
         file_asset_id: fid,
-        file_name: fid ? fileNameById.get(fid) ?? null : null,
+        file_name: fid ? fileMetaById.get(fid)?.file_name ?? null : null,
       },
       actions: { can_edit: canEdit, can_remove: canEdit, can_attach_file: canEdit, can_open_file: Boolean(fid) },
     };
@@ -1157,16 +1289,19 @@ export async function getAnnualTabReadModel(
     orgId,
     clientId,
     submissionIds: submissions.map((row) => row.submission_id),
-    fileNameById,
+    fileMetaById,
   });
   const filesForSubmission = (row: AnnualSubmissionRowDto): AnnualCapitalLinkedFile[] => {
     const files: AnnualCapitalLinkedFile[] = [];
     if (row.file.file_asset_id) {
+      const meta = fileMetaById.get(row.file.file_asset_id);
       files.push(
         asTabLinkedFile({
           file_asset_id: row.file.file_asset_id,
           file_name: row.file.file_name,
           source_kind: 'additional',
+          mime_type: meta?.mime_type ?? null,
+          uploaded_on: meta?.created_at ?? null,
         }),
       );
     }
@@ -1176,15 +1311,57 @@ export async function getAnnualTabReadModel(
     }
     return files;
   };
-  const latestFiled = [...submissions]
+  const filing_years =
+    scope === 'annual_report'
+      ? buildAnnualFilingYearBoard({
+          currentTaxYear,
+          workingTaxYear,
+          canEdit,
+          submissions: submissions.map((row) => ({ tax_year: row.tax_year, submitted_on: row.submitted_on })),
+        })
+      : [];
+  const workingYearBoard = filing_years.find((row) => row.tax_year === workingTaxYear) ?? null;
+  const latestSubmitted = [...submissions]
     .filter((row) => row.submitted_on)
     .sort((a, b) => String(b.submitted_on).localeCompare(String(a.submitted_on)))[0] ?? null;
-  const filing_status = {
-    filed: Boolean(latestFiled),
-    code: latestFiled ? ('filed' as const) : ('not_filed' as const),
-    label_key: latestFiled ? 'clientOperations.annual.filedStatus' : 'clientOperations.annual.notFiledStatus',
-    submitted_on: latestFiled?.submitted_on ?? null,
-  };
+  const filing_status =
+    scope === 'annual_report'
+      ? workingYearBoard?.filing_status ?? {
+          filed: false,
+          code: 'not_filed' as const,
+          label_key: 'clientOperations.annual.notFiledStatus',
+          submitted_on: null,
+        }
+      : {
+          filed: Boolean(latestSubmitted),
+          code: latestSubmitted ? ('filed' as const) : ('not_filed' as const),
+          label_key: latestSubmitted ? 'clientOperations.annual.filedStatus' : 'clientOperations.annual.notFiledStatus',
+          submitted_on: latestSubmitted?.submitted_on ?? null,
+        };
+  const yearScopedChecklistByYear = new Map<number, AnnualCapitalLinkedFile[]>();
+  if (yearColumnSupported && scope === 'annual_report') {
+    const proven = (docRows ?? []) as Array<{ tax_year?: number | null; file_asset_id: string | null }>;
+    const years = [...new Set(proven.map((row) => row.tax_year).filter(isProvenAnnualTaxYear))];
+    for (const taxYear of years) {
+      const files = uniqueLinkedFileIds(
+        provenYearScopedChecklistFiles(proven, taxYear).flatMap((row) => {
+          const id = String(row.file_asset_id ?? '');
+          if (!id) return [];
+          const meta = fileMetaById.get(id);
+          return [
+            asTabLinkedFile({
+              file_asset_id: id,
+              file_name: meta?.file_name ?? null,
+              source_kind: 'checklist',
+              mime_type: meta?.mime_type ?? null,
+              uploaded_on: meta?.created_at ?? null,
+            }),
+          ];
+        }),
+      );
+      if (files.length) yearScopedChecklistByYear.set(taxYear, files);
+    }
+  }
   const year_folders =
     scope === 'annual_report'
       ? buildAnnualYearFolders({
@@ -1192,7 +1369,10 @@ export async function getAnnualTabReadModel(
             submission_id: row.submission_id,
             tax_year: row.tax_year,
             submitted_on: row.submitted_on,
-            files: filesForSubmission(row),
+            files: uniqueLinkedFileIds([
+              ...filesForSubmission(row),
+              ...(yearScopedChecklistByYear.get(row.tax_year) ?? []),
+            ]),
           })),
         })
       : [];
@@ -1346,7 +1526,11 @@ export async function getAnnualTabReadModel(
           ]
         : [{ action_key: 'upload_document', label_he: 'הוסף מסמך', label_key: 'clientOperations.annual.addDocument', enabled: canEdit }],
     file_open_path_template: `/m/client-operations/clients/{clientId}/annual/files/{fileAssetId}/open`,
+    current_tax_year: currentTaxYear,
+    working_tax_year: workingTaxYear,
+    document_readiness: control.status,
     filing_status,
+    filing_years,
     year_folders,
     capital_folders,
   };
@@ -1548,7 +1732,13 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
   if (!canEditAnnualTab(ctx)) throw forbidden('Insufficient permission');
   await ensureClientInOrg(orgId, clientId);
   await ensureProfile(orgId, clientId, scope);
-  await ensureSystemDocumentRows(orgId, clientId, scope);
+  const yearColumnSupported = await supportsAnnualDocumentTaxYearColumns();
+  const currentTaxYear = resolveCurrentAnnualTaxYear();
+  const workingTaxYear = resolveWorkingTaxYear({
+    profileWorkingTaxYear: await loadProfileWorkingTaxYear(orgId, clientId, scope, scoped, yearColumnSupported),
+    currentTaxYear,
+  });
+  await ensureSystemDocumentRows(orgId, clientId, scope, { workingTaxYear, yearColumnSupported });
 
   if (body == null || typeof body.type !== 'string') throw badRequest('פקודה לא תקינה');
   const expected = Number(body.expected_version);
@@ -1566,6 +1756,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         organization_id: orgId,
         client_id: clientId,
         ...(scoped ? { tab_scope: scope } : {}),
+        ...(yearColumnSupported && scope === 'annual_report' ? { tax_year: workingTaxYear } : {}),
         source_type: 'custom',
         system_key: null,
         document_name_he: name,
@@ -1575,7 +1766,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         row_note: null,
         file_asset_id: null,
       });
-      if (error) throw new AppError(500, error.message ?? 'insert failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('insert failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { document_name_he: name });
       break;
     }
@@ -1606,7 +1797,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'update failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('update failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { row_id: rowId, keys: Object.keys(patch) });
       break;
     }
@@ -1623,7 +1814,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'delete failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('delete failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { row_id: rowId });
       break;
     }
@@ -1638,7 +1829,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'update failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('update failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { row_id: rowId, received });
       break;
     }
@@ -1654,7 +1845,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'attach failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('attach failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { row_id: rowId, file_asset_id: fileAssetId });
       break;
     }
@@ -1668,7 +1859,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'remove file failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('remove file failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { row_id: rowId });
       break;
     }
@@ -1690,7 +1881,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         note,
         sort_order: 0,
       });
-      if (error) throw new AppError(500, error.message ?? 'insert submission failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('insert submission failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { tax_year: taxYear, submitted_on: submittedOn });
       break;
     }
@@ -1721,7 +1912,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'update submission failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('update submission failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { submission_id: submissionId, keys: Object.keys(patch) });
       break;
     }
@@ -1735,7 +1926,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'delete submission failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('delete submission failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { submission_id: submissionId });
       break;
     }
@@ -1753,7 +1944,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'attach submission file failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('attach submission file failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { submission_id: submissionId, file_asset_id: fileAssetId });
       break;
     }
@@ -1765,7 +1956,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .eq('organization_id', orgId)
         .eq('client_id', clientId)
         .match(scoped ? { tab_scope: scope } : {});
-      if (error) throw new AppError(500, error.message ?? 'notes update failed', 'SUPABASE_ERROR');
+      if (error) throw annualDbError('notes update failed', error);
       await auditAnnual(ctx, orgId, clientId, cmd, { notes_len: notes?.length ?? 0 });
       break;
     }
@@ -1810,6 +2001,25 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .match(scoped ? { tab_scope: scope } : {});
       if (updateErr) throw new AppError(500, updateErr.message ?? 'copy previous declaration failed', 'SUPABASE_ERROR');
       await auditAnnual(ctx, orgId, clientId, cmd, { from_submission_id: prev.id, target_row_id: targetRowId });
+      break;
+    }
+    case 'select_annual_working_tax_year': {
+      if (scope !== 'annual_report') throw badRequest('פקודה זו זמינה רק בדוח שנתי');
+      const taxYear = parseAnnualWorkingTaxYear(payload.tax_year);
+      if (taxYear == null) throw badRequest('שנת מס לא תקינה');
+      if (!yearColumnSupported) {
+        await auditAnnual(ctx, orgId, clientId, cmd, { tax_year: taxYear, persisted: false });
+        break;
+      }
+      const { error } = await supabaseAdmin
+        .from('client_annual_report_profiles')
+        .update({ working_tax_year: taxYear })
+        .eq('organization_id', orgId)
+        .eq('client_id', clientId)
+        .match(scoped ? { tab_scope: scope } : {});
+      if (error) throw annualDbError('working tax year update failed', error);
+      await ensureSystemDocumentRows(orgId, clientId, scope, { workingTaxYear: taxYear, yearColumnSupported });
+      await auditAnnual(ctx, orgId, clientId, cmd, { tax_year: taxYear, persisted: true });
       break;
     }
     default:

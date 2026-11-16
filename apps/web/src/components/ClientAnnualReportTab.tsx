@@ -214,13 +214,28 @@ export function ClientAnnualReportTab({
           <h3 id="nx-annual-dash-status-heading" className="nx-annual-dash-card-title">
             {localizeSystemLabel(t, annualTab.status_card_title_key, annualTab.status_card_title_he)}
           </h3>
-          <div className="nx-annual-dash-status-row">
-            <span className={`nx-annual-dash-dot nx-annual-dash-dot--${annualTab.status.color}`} aria-hidden />
-            <span className={`nx-annual-dash-status-label nx-annual-dash-status-label--${annualTab.status.color}`}>
-              {localizeSystemLabel(t, annualTab.status.label_key, annualTab.status.label_he)}
-            </span>
-          </div>
-          {annualTab.filing_status ? (
+          {annualTab.filing_years && annualTab.filing_years.length > 0 ? (
+            <div className="nx-annual-filing-years" data-testid="annual-tab-filing-years">
+              {annualTab.filing_years.map((year) => (
+                <button
+                  key={year.tax_year}
+                  type="button"
+                  className={`nx-annual-filing-year-card${year.filed ? ' is-filed' : ' is-open'}${year.is_working ? ' is-working' : ''}`}
+                  data-testid={`annual-tab-filing-year-${year.tax_year}`}
+                  disabled={busy || !year.can_select_working}
+                  onClick={() => {
+                    if (year.is_working) return;
+                    void postCmd('select_annual_working_tax_year', { tax_year: year.tax_year });
+                  }}
+                >
+                  <span className="nx-annual-filing-year-label">{year.tax_year}</span>
+                  <span className={`nx-annual-filing-year-status${year.filed ? ' is-filed' : ''}`}>
+                    {t(year.filing_status.label_key)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : annualTab.filing_status ? (
             <p
               className={`nx-annual-filing-status${annualTab.filing_status.filed ? ' is-filed' : ''}`}
               data-testid="annual-tab-filing-status"
@@ -228,7 +243,39 @@ export function ClientAnnualReportTab({
               {t(annualTab.filing_status.label_key)}
               {annualTab.filing_status.submitted_on ? ` · ${annualTab.filing_status.submitted_on}` : ''}
             </p>
+          ) : (
+            <div className="nx-annual-dash-status-row">
+              <span className={`nx-annual-dash-dot nx-annual-dash-dot--${annualTab.status.color}`} aria-hidden />
+              <span className={`nx-annual-dash-status-label nx-annual-dash-status-label--${annualTab.status.color}`}>
+                {localizeSystemLabel(t, annualTab.status.label_key, annualTab.status.label_he)}
+              </span>
+            </div>
+          )}
+          {annualTab.filing_status && annualTab.filing_years && annualTab.filing_years.length > 0 ? (
+            <p
+              className={`nx-annual-filing-status nx-annual-filing-status--sr`}
+              data-testid="annual-tab-filing-status"
+            >
+              {t(annualTab.filing_status.label_key)}
+            </p>
           ) : null}
+          <p
+            className="nx-annual-readiness"
+            data-testid="annual-tab-document-readiness"
+          >
+            <span
+              className={`nx-annual-dash-dot nx-annual-dash-dot--${(annualTab.document_readiness ?? annualTab.status).color}`}
+              aria-hidden
+            />
+            <span>
+              {t('clientOperations.annual.documentReadiness')}:{' '}
+              {localizeSystemLabel(
+                t,
+                (annualTab.document_readiness ?? annualTab.status).label_key,
+                (annualTab.document_readiness ?? annualTab.status).label_he,
+              )}
+            </span>
+          </p>
           <p className="nx-annual-dash-risk">{localizeSystemLabel(t, annualTab.risk_indicator.label_key, annualTab.risk_indicator.label_he)}</p>
           <div className="nx-annual-dash-deadline">
             <IconCalendarSmall />
@@ -292,82 +339,6 @@ export function ClientAnnualReportTab({
           </div>
         </article>
       </div>
-
-      {(annualTab.year_folders && annualTab.year_folders.length > 0) ||
-      (annualTab.capital_folders && annualTab.capital_folders.length > 0) ? (
-        <section className="nx-annual-logical-folders" data-testid="annual-tab-logical-folders">
-          {annualTab.year_folders && annualTab.year_folders.length > 0 ? (
-            <div>
-              <h3 className="nx-annual-card-title">{t('clientOperations.annual.yearFolders')}</h3>
-              <ul className="nx-annual-logical-folder-list">
-                {annualTab.year_folders.map((folder) => (
-                  <li key={folder.folder_key} className="nx-annual-logical-folder">
-                    <div className="nx-annual-logical-folder-head">
-                      <IconFolder />
-                      <strong>{folder.label}</strong>
-                      <span>{t('clientOperations.annual.filedStatus')}</span>
-                    </div>
-                    <ul className="nx-annual-logical-folder-files">
-                      {folder.files.length === 0 ? (
-                        <li className="nx-annual-dash">—</li>
-                      ) : (
-                        folder.files.map((file) => (
-                          <li key={file.file_asset_id}>
-                            <button
-                              type="button"
-                              className="nx-annual-file-name"
-                              disabled={busy || !file.can_open}
-                              onClick={() => void openFile(file.file_asset_id)}
-                            >
-                              {file.file_name || t(file.source_kind_label_key)}
-                            </button>
-                          </li>
-                        ))
-                      )}
-                    </ul>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {annualTab.capital_folders && annualTab.capital_folders.length > 0 ? (
-            <div>
-              <h3 className="nx-annual-card-title">{t('clientOperations.annual.capitalFolders')}</h3>
-              <ul className="nx-annual-logical-folder-list">
-                {annualTab.capital_folders.map((folder) => (
-                  <li key={folder.folder_key} className="nx-annual-logical-folder">
-                    <div className="nx-annual-logical-folder-head">
-                      <IconFolder />
-                      <strong>{fillI18n(t(folder.folder_label_key), { n: folder.sequence_no })}</strong>
-                      <span>
-                        {folder.filed ? t('clientOperations.annual.filedStatus') : t('clientOperations.annual.notFiledStatus')}
-                      </span>
-                    </div>
-                    <ul className="nx-annual-logical-folder-files">
-                      {folder.files.length === 0 ? (
-                        <li className="nx-annual-dash">—</li>
-                      ) : (
-                        folder.files.map((file) => (
-                          <li key={file.file_asset_id}>
-                            <button
-                              type="button"
-                              className="nx-annual-file-name"
-                              disabled={busy || !file.can_open}
-                              onClick={() => void openFile(file.file_asset_id)}
-                            >
-                              {file.file_name || t(file.source_kind_label_key)}
-                            </button>
-                          </li>
-                        ))
-                      )}
-                    </ul>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
 
       {annualTab.visibility.show_documents ? (
         <section>
@@ -631,10 +602,17 @@ export function ClientAnnualReportTab({
         ) : null}
       </div>
 
+      <AnnualArchiveFolders
+        annualTab={annualTab}
+        busy={busy}
+        onOpenFile={(fileAssetId) => void openFile(fileAssetId)}
+      />
+
       {submissionDlg ? (
         <SubmissionDialog
           state={submissionDlg}
           busy={busy}
+          defaultTaxYear={annualTab.current_tax_year ?? annualTab.working_tax_year}
           onClose={() => setSubmissionDlg(null)}
           onSave={async (payload) => {
             if (submissionDlg.mode === 'add') {
@@ -781,21 +759,157 @@ function DocumentRow({
   );
 }
 
+function AnnualArchiveFolders({
+  annualTab,
+  busy,
+  onOpenFile,
+}: {
+  annualTab: AnnualTabModel;
+  busy: boolean;
+  onOpenFile: (fileAssetId: string) => void;
+}) {
+  const { t } = useI18n();
+  const [openKeys, setOpenKeys] = useState<Record<string, boolean>>({});
+  const yearFolders = annualTab.year_folders ?? [];
+  const capitalFolders = annualTab.capital_folders ?? [];
+  if (yearFolders.length === 0 && capitalFolders.length === 0) return null;
+
+  const toggle = (key: string) => {
+    setOpenKeys((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  return (
+    <section className="nx-annual-logical-folders nx-annual-logical-folders--archive" data-testid="annual-tab-logical-folders">
+      {yearFolders.length > 0 ? (
+        <div>
+          <h3 className="nx-annual-card-title">{t('clientOperations.annual.yearFolders')}</h3>
+          <ul className="nx-annual-logical-folder-list">
+            {yearFolders.map((folder) => {
+              const open = Boolean(openKeys[folder.folder_key]);
+              return (
+                <li key={folder.folder_key} className={`nx-annual-logical-folder${open ? ' is-open' : ''}`}>
+                  <button
+                    type="button"
+                    className="nx-annual-logical-folder-head"
+                    aria-expanded={open}
+                    onClick={() => toggle(folder.folder_key)}
+                    data-testid={`annual-tab-year-folder-${folder.tax_year}`}
+                  >
+                    <IconFolder />
+                    <strong>{folder.label}</strong>
+                    <span>{t('clientOperations.annual.filedStatus')}</span>
+                  </button>
+                  {open ? (
+                    <ul className="nx-annual-logical-folder-files">
+                      {folder.files.length === 0 ? (
+                        <li className="nx-annual-dash">{t('clientOperations.annual.folderEmpty')}</li>
+                      ) : (
+                        folder.files.map((file) => (
+                          <li key={file.file_asset_id} className="nx-annual-logical-folder-file">
+                            <span className="nx-annual-folder-file-name">
+                              {file.file_name || t(file.source_kind_label_key)}
+                            </span>
+                            <span className="nx-annual-folder-file-type">
+                              {file.type_label || t(file.source_kind_label_key)}
+                            </span>
+                            <span className="nx-annual-folder-file-date">{file.uploaded_on || folder.submitted_on}</span>
+                            {(file.actions?.can_preview ?? file.can_open) ? (
+                              <button
+                                type="button"
+                                className="nx-annual-folder-file-preview"
+                                disabled={busy || !(file.actions?.can_open ?? file.can_open)}
+                                onClick={() => onOpenFile(file.file_asset_id)}
+                              >
+                                {t('clientOperations.annual.previewFile')}
+                              </button>
+                            ) : null}
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+      {capitalFolders.length > 0 ? (
+        <div>
+          <h3 className="nx-annual-card-title">{t('clientOperations.annual.capitalFolders')}</h3>
+          <ul className="nx-annual-logical-folder-list">
+            {capitalFolders.map((folder) => {
+              const open = Boolean(openKeys[folder.folder_key]);
+              return (
+                <li key={folder.folder_key} className={`nx-annual-logical-folder${open ? ' is-open' : ''}`}>
+                  <button
+                    type="button"
+                    className="nx-annual-logical-folder-head"
+                    aria-expanded={open}
+                    onClick={() => toggle(folder.folder_key)}
+                  >
+                    <IconFolder />
+                    <strong>{fillI18n(t(folder.folder_label_key), { n: folder.sequence_no })}</strong>
+                    <span>
+                      {folder.filed ? t('clientOperations.annual.filedStatus') : t('clientOperations.annual.notFiledStatus')}
+                    </span>
+                  </button>
+                  {open ? (
+                    <ul className="nx-annual-logical-folder-files">
+                      {folder.files.length === 0 ? (
+                        <li className="nx-annual-dash">{t('clientOperations.annual.folderEmpty')}</li>
+                      ) : (
+                        folder.files.map((file) => (
+                          <li key={file.file_asset_id} className="nx-annual-logical-folder-file">
+                            <span className="nx-annual-folder-file-name">
+                              {file.file_name || t(file.source_kind_label_key)}
+                            </span>
+                            <span className="nx-annual-folder-file-type">
+                              {file.type_label || t(file.source_kind_label_key)}
+                            </span>
+                            <span className="nx-annual-folder-file-date">{file.uploaded_on || folder.submitted_on || '—'}</span>
+                            {(file.actions?.can_preview ?? file.can_open) ? (
+                              <button
+                                type="button"
+                                className="nx-annual-folder-file-preview"
+                                disabled={busy || !(file.actions?.can_open ?? file.can_open)}
+                                onClick={() => onOpenFile(file.file_asset_id)}
+                              >
+                                {t('clientOperations.annual.previewFile')}
+                              </button>
+                            ) : null}
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function SubmissionDialog({
   state,
   busy,
+  defaultTaxYear,
   onClose,
   onSave,
 }: {
   state: NonNullable<SubmissionDialogState>;
   busy: boolean;
+  defaultTaxYear?: number;
   onClose: () => void;
   onSave: (payload: Record<string, unknown>) => Promise<void>;
 }) {
   const { t } = useI18n();
   const isEdit = state.mode === 'edit';
   const r = isEdit ? state.row : null;
-  const [taxYear, setTaxYear] = useState(isEdit ? String(r!.tax_year) : String(new Date().getFullYear()));
+  const [taxYear, setTaxYear] = useState(isEdit ? String(r!.tax_year) : String(defaultTaxYear ?? ''));
   const [submittedOn, setSubmittedOn] = useState(isEdit ? r!.submitted_on : '');
   const [status, setStatus] = useState(isEdit ? r!.status : 'submitted');
   const [note, setNote] = useState(isEdit ? r!.note ?? '' : '');

@@ -34,6 +34,7 @@
   min-width: 0;
   direction: inherit;
   color: #e8f4ff;
+  font-family: Arial, sans-serif;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-meta {
@@ -235,4 +236,30 @@
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-filing-year-card,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-logical-folder {
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.16), transparent 48%),
+    linear-gradient(180deg, rgba(248, 252, 255, 0.16) 0%, rgba(186, 216, 246, 0.1) 100%);
+  border: 1px solid rgba(210, 238, 255, 0.42);
+  color: #eef6ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-logical-folder-head,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-folder-file-name,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-folder-file-type,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-folder-file-date {
+  color: #eef6ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-folder-file-preview {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  color: #165dff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-logical-folders--archive {
+  margin-top: 4px;
 }

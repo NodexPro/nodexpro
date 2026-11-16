@@ -9,7 +9,11 @@ import type { RequestContext } from '../../shared/context.js';
 import { AppError, badRequest, forbidden } from '../../shared/errors.js';
 import { isSupabaseMissingColumnError } from '../../shared/supabase-errors.js';
 import { isOperationalPeriodKey } from './client-operations-operational-period.pure.js';
-import { uploadAnnualReportDocument } from './client-annual-report-tab.service.js';
+import {
+  checklistFileIdsForFilingYear,
+  supportsAnnualDocumentTaxYearColumns,
+  uploadAnnualReportDocument,
+} from './client-annual-report-tab.service.js';
 import {
   annualFilingUsesTabTaxYear,
   buildAnnualReportCell,
@@ -770,24 +774,26 @@ async function loadChecklistFileLinks(input: {
   orgId: string;
   clientId: string;
   tabScope: 'annual_report' | 'capital_declaration';
+  taxYear?: number;
 }): Promise<Array<{ file_asset_id: string; source_kind: 'checklist' }>> {
+  const yearColumnSupported = await supportsAnnualDocumentTaxYearColumns();
   const { data, error } = await supabaseAdmin
     .from('client_annual_document_rows')
-    .select('file_asset_id')
+    .select(yearColumnSupported ? 'file_asset_id, tax_year' : 'file_asset_id')
     .eq('organization_id', input.orgId)
     .eq('client_id', input.clientId)
     .eq('tab_scope', input.tabScope)
     .not('file_asset_id', 'is', null);
   assertQueryError(error, 'Failed to load checklist files');
-  const seen = new Set<string>();
-  const out: Array<{ file_asset_id: string; source_kind: 'checklist' }> = [];
-  for (const raw of data ?? []) {
-    const id = String((raw as { file_asset_id?: string | null }).file_asset_id ?? '').trim();
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    out.push({ file_asset_id: id, source_kind: 'checklist' });
-  }
-  return out;
+  const ids = checklistFileIdsForFilingYear(
+    (data ?? []) as Array<{ tax_year?: number | null; file_asset_id: string | null }>,
+    {
+      yearColumnSupported,
+      taxYear: Number.isInteger(input.taxYear) ? Number(input.taxYear) : 0,
+      tabScope: input.tabScope,
+    },
+  );
+  return ids.map((file_asset_id) => ({ file_asset_id, source_kind: 'checklist' as const }));
 }
 
 async function upsertSubmissionFileLinks(input: {
@@ -898,6 +904,7 @@ export async function fileClientOperationsAnnualReport(input: {
     orgId,
     clientId: input.clientId,
     tabScope: 'annual_report',
+    taxYear,
   });
   const existing = await findAnnualSubmissionForTaxYear({ orgId, clientId: input.clientId, taxYear });
   let submissionId: string;
