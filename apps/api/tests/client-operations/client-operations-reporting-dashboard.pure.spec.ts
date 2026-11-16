@@ -109,7 +109,8 @@ test('row is green only when every applicable obligation is submitted and requir
     [cell({ kind: 'payroll', submitted: true })],
     TODAY,
   );
-  assert.equal(payrollComplete.row_tone, 'complete');
+  assert.equal(payrollComplete.row_tone, 'none');
+  assert.equal(reportingKindAffectsRowTone('payroll'), false);
   const filedUnpaid = buildReportingRowPresentation(
     [cell({ kind: 'vat', submitted: true, payment_classification: 'outstanding' })],
     TODAY,
@@ -203,7 +204,7 @@ test('דווח ושולם and דווח then שולם both return filed_paid and 
   assert.equal(reportOnly.cells.vat?.tone, 'payment_unknown');
 });
 
-test('green VAT/ITA cells do not paint the row when payroll or withholding filings are still open', () => {
+test('green VAT/ITA cells do not paint the row when withholding filings are still open', () => {
   const vatPaid = cell({
     kind: 'vat',
     submitted: true,
@@ -220,10 +221,8 @@ test('green VAT/ITA cells do not paint the row when payroll or withholding filin
   );
   assert.equal(payrollOpen.cells.vat?.filing_detail?.chrome, 'filed_paid');
   assert.equal(payrollOpen.cells.income_tax_advance?.filing_detail?.chrome, 'filed_paid');
-  assert.equal(payrollOpen.row_tone, 'neutral');
-  assert.deepEqual(reportingRowToneIncompleteCells(Object.values(payrollOpen.cells)), [
-    { kind: 'payroll', submitted: false, payment_state: 'not_applicable', tone: 'unknown' },
-  ]);
+  assert.equal(payrollOpen.row_tone, 'complete');
+  assert.deepEqual(reportingRowToneIncompleteCells(Object.values(payrollOpen.cells)), []);
   const itdOpen = buildReportingRowPresentation(
     [vatPaid, cell({ kind: 'income_tax_deductions', submitted: false, due_date: null })],
     TODAY,
@@ -246,6 +245,39 @@ test('green VAT/ITA cells do not paint the row when payroll or withholding filin
       tone: 'unknown',
     },
   ]);
+});
+
+test('fully closed selected-period filing cells paint complete even when payroll/annual/עצמאי stay open', () => {
+  const row = buildReportingRowPresentation(
+    [
+      cell({
+        kind: 'vat',
+        submitted: true,
+        payment_classification: 'paid_in_full',
+      }),
+      cell({
+        kind: 'income_tax_advance',
+        submitted: true,
+        payment_classification: 'paid_in_full',
+      }),
+      cell({ kind: 'payroll', submitted: false, due_date: null }),
+      cell({ kind: 'income_tax_deductions', submitted: true, due_date: null }),
+      cell({ kind: 'national_insurance_deductions', submitted: true, due_date: null }),
+      cell({ kind: 'national_insurance', submitted: false, due_date: null }),
+      cell({ kind: 'annual', submitted: false, due_date: '2026-05-31' }),
+    ],
+    TODAY,
+  );
+  assert.equal(row.cells.vat?.filing_detail?.chrome, 'filed_paid');
+  assert.equal(row.cells.income_tax_advance?.filing_detail?.chrome, 'filed_paid');
+  assert.equal(row.row_tone, 'complete');
+  assert.deepEqual(reportingRowToneIncompleteCells(Object.values(row.cells)), []);
+  assert.equal(row.row_tone_paint_column_keys.includes('annual_report'), false);
+  assert.equal(row.row_tone_paint_column_keys.includes('capital_declaration'), false);
+  assert.equal(
+    row.row_tone_paint_column_keys[row.row_tone_paint_column_keys.length - 1],
+    'income_tax_deductions',
+  );
 });
 
 test('withholding and payroll completion follow their own submitted truth, not VAT payment_unknown', () => {
@@ -279,7 +311,7 @@ test('row tone prefers overdue over urgent over warning', () => {
   const row = buildReportingRowPresentation(
     [
       cell({ kind: 'vat', due_date: '2026-11-14' }),
-      cell({ kind: 'payroll', due_date: TODAY }),
+      cell({ kind: 'income_tax_deductions', due_date: TODAY }),
       cell({ kind: 'income_tax_advance', due_date: '2026-11-18' }),
     ],
     TODAY,
@@ -445,7 +477,7 @@ test('KPI filter and default priority sort are applied by registry query, not fr
     },
   ];
   const priority = applyRegistryQueryToRows(rows, { sort_by: 'priority' }).map((r) => r.client_id);
-  assert.deepEqual(priority, ['open', 'payroll-only', 'done']);
+  assert.deepEqual(priority, ['open', 'done', 'payroll-only']);
   const vatOnly = applyRegistryQueryToRows(rows, { sort_by: 'priority', filter_reporting_kpi: 'vat' }).map(
     (r) => r.client_id,
   );
@@ -454,7 +486,7 @@ test('KPI filter and default priority sort are applied by registry query, not fr
   const byName = applyRegistryQueryToRows(rows, { sort_by: 'client_name' }).map((r) => r.client_id);
   assert.deepEqual(byName, ['done', 'open', 'payroll-only']);
   const defaultPriority = applyRegistryQueryToRows(rows, {}).map((r) => r.client_id);
-  assert.deepEqual(defaultPriority, ['open', 'payroll-only', 'done']);
+  assert.deepEqual(defaultPriority, ['open', 'done', 'payroll-only']);
 });
 
 test('filing fact builder prefers calendar due date and does not invent N/A as submitted', () => {

@@ -3796,6 +3796,13 @@ button.nx-co-sheet__date-open {
   background: rgba(34, 197, 94, 0.16);
 }
 
+.nx-co-sheet__table tbody tr.is-reporting-row-complete td.is-row-tone-paint.is-reporting-cell-submitted,
+.nx-co-sheet__table tbody tr.is-reporting-row-complete:nth-child(even) td.is-row-tone-paint.is-reporting-cell-submitted,
+.nx-co-sheet__table tbody tr.is-reporting-row-complete td.is-row-tone-paint.is-reporting-cell-unknown,
+.nx-co-sheet__table tbody tr.is-reporting-row-complete:nth-child(even) td.is-row-tone-paint.is-reporting-cell-unknown {
+  background: rgba(34, 197, 94, 0.07);
+}
+
 .nx-co-sheet__table tbody td.is-reporting-cell-payment_outstanding {
   background: rgba(249, 115, 22, 0.28);
 }
@@ -3850,5 +3857,270 @@ button.nx-co-sheet__date-open {
 @media print {
   .nx-co-sheet__print-root {
     display: block;
+  }
+}
+
+/*
+ * Annual/capital filing date control.
+ * Native input[type=date] inside .nx-clients-overlay / .nx-co-ni-overlay
+ * (both use backdrop-filter: blur) opens Chromium's picker as a blank white
+ * fullscreen layer. Keep a custom calendar portaled to document.body instead.
+ */
+.nx-co-annual-capital-modal.nx-co-ni-modal.nx-clients-modal,
+.nx-co-ni-overlay .nx-co-annual-capital-modal.nx-co-ni-modal.nx-clients-modal.nx-glass-card {
+  width: min(520px, calc(100vw - 24px));
+  height: auto;
+  max-height: min(88vh, 480px);
+  font-family: Arial, sans-serif;
+}
+
+.nx-co-annual-capital-modal .nx-clients-form,
+.nx-co-annual-capital-modal .nx-clients-form__body {
+  flex: 0 1 auto;
+}
+
+.nx-co-ni-overlay .nx-co-annual-capital-modal .nx-clients-modal__head {
+  padding-inline-end: 88px;
+}
+
+.nx-co-annual-capital-modal__body {
+  position: relative;
+  gap: 10px;
+}
+
+.nx-co-annual-capital-modal__clip {
+  position: absolute;
+  inset-block-start: 12px;
+  inset-inline-end: 48px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(210, 238, 255, 0.4);
+  background: rgba(8, 38, 82, 0.35);
+  color: #d2eeff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.nx-co-annual-capital-modal__clip:hover:not(:disabled) {
+  background: rgba(70, 213, 255, 0.2);
+  color: #ffffff;
+}
+
+.nx-co-annual-capital-modal__clip:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.nx-co-annual-capital-modal__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 10px 16px;
+  align-items: start;
+}
+
+.nx-co-annual-capital-modal__identity,
+.nx-co-annual-capital-modal__date {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nx-co-annual-capital-modal__fact {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  color: rgba(238, 246, 255, 0.78);
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.nx-co-annual-capital-modal__fact strong,
+.nx-co-annual-capital-modal__fact select {
+  color: #eef6ff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.nx-co-annual-capital-modal__files {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nx-co-annual-capital-modal__files li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #eef6ff;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.nx-co-annual-capital-modal__files span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nx-co-annual-capital-modal .nx-co-ni-modal__footer .nx-glass-btn {
+  min-width: 96px;
+  min-height: 36px;
+  height: auto;
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.nx-co-filing-date {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.nx-co-filing-date__label {
+  color: rgba(238, 246, 255, 0.78);
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.nx-co-filing-date__control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(210, 238, 255, 0.4);
+  background: rgba(4, 21, 47, 0.35);
+  color: #eef6ff;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.nx-co-filing-date__control:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.nx-co-filing-date__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nx-co-filing-date__value.is-empty {
+  min-height: 1em;
+}
+
+.nx-co-filing-date__icon {
+  display: inline-flex;
+  color: #7dd3fc;
+}
+
+.nx-co-filing-calendar {
+  position: fixed;
+  z-index: 1200;
+  box-sizing: border-box;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(70, 213, 255, 0.42);
+  background:
+    linear-gradient(180deg, #082652 0%, #04152f 100%);
+  box-shadow: 0 16px 32px rgba(2, 8, 24, 0.45);
+  color: #eef6ff;
+  font-family: Arial, sans-serif;
+}
+
+.nx-co-filing-calendar__nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.nx-co-filing-calendar__month {
+  flex: 1 1 auto;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.nx-co-filing-calendar__nav-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(210, 238, 255, 0.35);
+  background: rgba(8, 38, 82, 0.4);
+  color: #eef6ff;
+  cursor: pointer;
+}
+
+.nx-co-filing-calendar__weekdays,
+.nx-co-filing-calendar__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.nx-co-filing-calendar__weekdays {
+  margin-bottom: 4px;
+  color: rgba(238, 246, 255, 0.7);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.nx-co-filing-calendar__day {
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #eef6ff;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.nx-co-filing-calendar__day.is-outside {
+  color: rgba(238, 246, 255, 0.38);
+}
+
+.nx-co-filing-calendar__day.is-selected,
+.nx-co-filing-calendar__day:hover {
+  background: rgba(34, 197, 94, 0.22);
+}
+
+@media (max-width: 560px) {
+  .nx-co-annual-capital-modal__layout {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

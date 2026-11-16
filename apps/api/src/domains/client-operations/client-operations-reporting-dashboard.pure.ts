@@ -223,10 +223,19 @@ export function reportingKindIsInformational(
   return kind === 'national_insurance';
 }
 
+/**
+ * Selected-period row wash follows filing cells: VAT, ITA, ITD, NI deductions.
+ * Payroll overlay is off (שכר is standing כן/לא); workflow stays KPI-only.
+ * Annual / capital / עצמאי never gate the reporting block.
+ */
 export function reportingKindAffectsRowTone(
   kind: ClientOperationsReportingObligationKind,
 ): boolean {
-  return !reportingKindIsInformational(kind) && kind !== 'annual';
+  return (
+    !reportingKindIsInformational(kind) &&
+    kind !== 'annual' &&
+    kind !== 'payroll'
+  );
 }
 
 /**

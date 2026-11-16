@@ -17,6 +17,10 @@ const viewSource = readFileSync(
   join(dir, '../src/components/client-operations/ClientOperationsRegistryView.tsx'),
   'utf8',
 );
+const annualCapitalModalSource = readFileSync(
+  join(dir, '../src/components/client-operations/ClientOperationsAnnualCapitalFilingModal.tsx'),
+  'utf8',
+);
 const panelSource = readFileSync(join(dir, '../src/components/ClientWorkspacePanel.tsx'), 'utf8');
 const tabsSource = readFileSync(
   join(dir, '../src/components/client-operations/ClientOperationsPeriodSheetTabs.tsx'),
@@ -207,7 +211,8 @@ test('annual/capital filing square and named file commands stay render-only', ()
   assert.match(viewSource, /file_client_operations_annual_report/);
   assert.match(viewSource, /file_client_operations_capital_declaration/);
   assert.match(viewSource, /confirm_other_tax_year/);
-  assert.match(viewSource, /client-operations-annual-capital-modal/);
+  assert.match(annualCapitalModalSource, /client-operations-annual-capital-modal/);
+  assert.match(viewSource, /ClientOperationsAnnualCapitalFilingModal/);
   assert.match(cssSource, /\.nx-co-sheet__filing-square\.is-filed/);
   assert.match(cssSource, /rgba\(34,\s*197,\s*94,\s*0\.07\)/);
   assert.match(viewSource, /is-row-tone-paint/);

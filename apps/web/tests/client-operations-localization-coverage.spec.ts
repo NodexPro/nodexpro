@@ -29,6 +29,8 @@ const SCAN_FILES = [
   'src/components/client-operations/ClientOperationsTodoNotePopover.tsx',
   'src/components/client-operations/ClientOperationsClientQuickProfilePopover.tsx',
   'src/components/client-operations/ClientOperationsRegistryView.tsx',
+  'src/components/client-operations/ClientOperationsAnnualCapitalFilingModal.tsx',
+  'src/components/client-operations/ClientOperationsFilingDateField.tsx',
   'src/components/client-operations/ClientOperationsMultiSelectFilter.tsx',
   'src/components/ClientNoteModal.tsx',
   'src/components/ClientWorkspacePanel.tsx',

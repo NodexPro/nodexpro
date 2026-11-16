@@ -56,6 +56,10 @@ test('row/cell tones, overdue marker, KPI and previous-period chrome exist', () 
   assert.match(cssSource, /\.nx-co-sheet__table tbody tr\.is-reporting-row-complete td\.is-row-tone-paint/);
   assert.match(cssSource, /\.nx-co-sheet__table tbody td\.is-reporting-cell-overdue/);
   assert.match(cssSource, /\.nx-co-sheet__table tbody td\.is-reporting-cell-payment_outstanding/);
+  assert.match(
+    cssSource,
+    /tr\.is-reporting-row-complete td\.is-row-tone-paint\.is-reporting-cell-submitted[\s\S]*rgba\(34,\s*197,\s*94,\s*0\.07\)/,
+  );
 });
 
 test('frozen cells paint the same row tone; N/A dash and hover stay unboxed', () => {

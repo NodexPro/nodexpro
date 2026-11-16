@@ -68,6 +68,12 @@
     "updatePasswordFailed": "Не удалось обновить пароль"
   },
   "clientOperations": {
+    "annual": {
+      "attachFile": "Прикрепить файл",
+      "removeFile": "Удалить файл",
+      "filedStatus": "Подано",
+      "taxYear": "Налоговый год"
+    },
     "registry": {
       "saving": "Сохранение…",
       "errors": {
@@ -77,6 +83,26 @@
         "niDeductionsNotApplicable": "Удержания национального страхования не относятся к этому периоду",
         "incomeTaxDeductionsNotDue": "Удержания подоходного налога не относятся к этому периоду",
         "saveFailed": "Не удалось сохранить отметку"
+      },
+      "reporting": {
+        "filing": {
+          "client": "Клиент",
+          "filedOn": "Фактическая дата подачи",
+          "cancel": "Отмена",
+          "saving": "Сохранение…"
+        },
+        "annualCapital": {
+          "annualTitle": "Подача годового отчёта",
+          "capitalTitle": "Подача декларации о капитале",
+          "filedAction": "Подано",
+          "form1301": "Форма 1301",
+          "additionalFiles": "Дополнительные документы",
+          "dueDate": "Целевая дата",
+          "tabYear": "Налоговый год этой вкладки",
+          "confirmOtherYear": "Подтверждаю подачу за налоговый год, который не относится к этой вкладке",
+          "previewFile": "Просмотр",
+          "filedSaved": "Подача сохранена"
+        }
       }
     }
   }

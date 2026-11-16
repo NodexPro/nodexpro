@@ -2189,6 +2189,7 @@
           "openFiling": "Open filing",
           "tabYear": "This tab tax year",
           "confirmOtherYear": "I confirm filing a tax year that does not belong to this tab",
+          "previewFile": "Preview",
           "filedSaved": "Filing was saved",
           "migrationPending": "Filing documents cannot be saved until the database update is applied",
           "instanceMismatch": "Filing must target the open capital requirement",

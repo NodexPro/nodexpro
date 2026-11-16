@@ -45,6 +45,11 @@ import { useClientOperationsHeaderSearchSlot, useClientOperationsHeaderWorkspace
 import { encodeClientOperationsWorkspaceOptionValue } from '../../lib/client-operations-workspace-url.pure';
 import { ClientOperationsMultiSelectFilter } from './ClientOperationsMultiSelectFilter';
 import {
+  ClientOperationsAnnualCapitalFilingModal,
+  type AnnualCapitalFilingModalState,
+} from './ClientOperationsAnnualCapitalFilingModal';
+import { nextAnnualCapitalPendingKind } from '../../lib/client-operations-filing-date-field.pure';
+import {
   orgClients,
   moduleClientOperationsCase,
   moduleClientOperationsClientQuickProfile,
@@ -1171,23 +1176,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     confirmMonthHandled: boolean;
   } | null>(null);
   const [niFeedback, setNiFeedback] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
-  const [annualCapitalModal, setAnnualCapitalModal] = useState<{
-    kind: 'annual_report' | 'capital_declaration';
-    clientId: string;
-    taxYear: number;
-    submittedOn: string;
-    confirmOtherTaxYear: boolean;
-    pendingFiles: Array<{
-      kind: 'form_1301' | 'additional';
-      file_name: string;
-      file_base64: string;
-      mime_type: string | null;
-    }>;
-  } | null>(null);
+  const [annualCapitalModal, setAnnualCapitalModal] = useState<AnnualCapitalFilingModalState | null>(null);
   const [annualCapitalPending, setAnnualCapitalPending] = useState(false);
   const [annualCapitalFeedback, setAnnualCapitalFeedback] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
-  const annualCapital1301Ref = useRef<HTMLInputElement | null>(null);
-  const annualCapitalExtraRef = useRef<HTMLInputElement | null>(null);
   const statusPaintSlotsRef = useRef<Map<string, ManualStatusPaintSlot>>(new Map());
   const statusOverlaysRef = useRef<Map<string, ManualStatusOverlay>>(new Map());
   const statusOverlayGenRef = useRef(0);
@@ -3854,23 +3845,29 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       pendingFiles: [],
     });
   };
-  const addAnnualCapitalPendingFile = async (kind: 'form_1301' | 'additional', file: File) => {
+  const addAnnualCapitalPendingFiles = async (files: File[]) => {
+    if (!files.length) return;
     try {
-      const file_base64 = await readEvidenceFile(file);
+      const encoded = await Promise.all(
+        files.map(async (file) => ({
+          file_name: file.name,
+          file_base64: await readEvidenceFile(file),
+          mime_type: file.type || null,
+        })),
+      );
       setAnnualCapitalModal((current) => {
         if (!current) return current;
-        const nextFiles =
-          kind === 'form_1301'
-            ? [...current.pendingFiles.filter((item) => item.kind !== 'form_1301'), {
-                kind,
-                file_name: file.name,
-                file_base64,
-                mime_type: file.type || null,
-              }]
-            : [
-                ...current.pendingFiles,
-                { kind, file_name: file.name, file_base64, mime_type: file.type || null },
-              ];
+        const live = rows.find((row) => row.client_id === current.clientId);
+        const existingHas1301 = Boolean(
+          live?.annual_report_cell?.filing?.modal.files.some((file) => file.source_kind === 'form_1301'),
+        );
+        let hasForm1301 = existingHas1301 || current.pendingFiles.some((file) => file.kind === 'form_1301');
+        const nextFiles = [...current.pendingFiles];
+        for (const item of encoded) {
+          const kind = nextAnnualCapitalPendingKind({ filingKind: current.kind, hasForm1301 });
+          if (kind === 'form_1301') hasForm1301 = true;
+          nextFiles.push({ kind, ...item });
+        }
         return { ...current, pendingFiles: nextFiles };
       });
     } catch {
@@ -3929,11 +3926,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           query,
         });
       }
-      setAnnualCapitalFeedback({
-        tone: 'ok',
-        text: t('clientOperations.registry.reporting.annualCapital.filedSaved'),
-      });
-      setAnnualCapitalModal((current) => (current ? { ...current, pendingFiles: [] } : current));
+      setAnnualCapitalFeedback(null);
+      setAnnualCapitalModal(null);
     } catch (error) {
       setAnnualCapitalFeedback({
         tone: 'err',
@@ -6175,283 +6169,42 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       {annualCapitalModal ? (() => {
         const liveRow = rows.find((row) => row.client_id === annualCapitalModal.clientId);
         if (!liveRow) return null;
-        const isAnnual = annualCapitalModal.kind === 'annual_report';
-        const annualFiling = liveRow.annual_report_cell?.filing;
-        const capitalFiling = liveRow.capital_declaration_cell?.filing;
-        const filing = isAnnual ? annualFiling : capitalFiling;
+        const filing =
+          annualCapitalModal.kind === 'annual_report'
+            ? liveRow.annual_report_cell?.filing
+            : liveRow.capital_declaration_cell?.filing;
         if (!filing) return null;
-        const otherYear = isAnnual && annualCapitalModal.taxYear !== annualFiling?.tab_tax_year;
         const canSubmit = Boolean(canEdit && onRegistryCommand && filing.can_open_modal && !annualCapitalPending);
-        const existingFiles = filing.modal.files;
-        const form1301 = existingFiles.filter((file) => file.source_kind === 'form_1301');
-        const extraFiles = existingFiles.filter((file) => file.source_kind !== 'form_1301');
-        const pending1301 = annualCapitalModal.pendingFiles.find((file) => file.kind === 'form_1301');
-        const pendingExtra = annualCapitalModal.pendingFiles.filter((file) => file.kind === 'additional');
         return (
-          <div className="nx-clients-overlay nx-co-ni-overlay">
-            <div
-              className="nx-glass-card nx-clients-modal nx-co-ops-modal nx-co-ni-modal nx-co-filing-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="nx-co-annual-capital-title"
-              dir={lang === 'he' ? 'rtl' : 'ltr'}
-              data-testid="client-operations-annual-capital-modal"
-            >
-              <div className="nx-clients-modal__head">
-                <h3 id="nx-co-annual-capital-title">{t(filing.modal.title_key)}</h3>
-                <button
-                  type="button"
-                  onClick={() => !annualCapitalPending && setAnnualCapitalModal(null)}
-                  className="nx-clients-modal__close"
-                  aria-label={t(filing.modal.cancel_key)}
-                  disabled={annualCapitalPending}
-                >
-                  ×
-                </button>
-              </div>
-              <form
-                className="nx-clients-form"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void confirmAnnualCapitalFiling();
-                }}
-                noValidate
-              >
-                <div className="nx-clients-form__body nx-co-ni-modal__body">
-                  <dl className="nx-co-ni-modal__facts">
-                    <div className="nx-co-ni-modal__row">
-                      <dt>{t(filing.modal.client_label_key)}</dt>
-                      <dd>{liveRow.client_name ?? liveRow.client_id}</dd>
-                    </div>
-                    {isAnnual && annualFiling ? (
-                      <div className="nx-co-ni-modal__row">
-                        <dt>{t(annualFiling.modal.tax_year_label_key)}</dt>
-                        <dd>
-                          <select
-                            className="nx-co-annual-capital-select"
-                            value={annualCapitalModal.taxYear}
-                            disabled={!canSubmit}
-                            onChange={(event) => {
-                              const nextYear = Number(event.currentTarget.value);
-                              const option = annualFiling.modal.tax_year_options.find((row) => row.tax_year === nextYear);
-                              setAnnualCapitalModal((current) =>
-                                current
-                                  ? {
-                                      ...current,
-                                      taxYear: nextYear,
-                                      submittedOn: option?.submitted_on ?? current.submittedOn,
-                                      confirmOtherTaxYear: nextYear === annualFiling.tab_tax_year ? false : current.confirmOtherTaxYear,
-                                    }
-                                  : current,
-                              );
-                            }}
-                          >
-                            {annualFiling.modal.tax_year_options.map((option) => (
-                              <option key={option.tax_year} value={option.tax_year}>
-                                {option.tax_year}
-                                {option.is_tab_year
-                                  ? ` — ${t('clientOperations.registry.reporting.annualCapital.tabYear')}`
-                                  : ''}
-                                {option.already_filed
-                                  ? ` — ${t('clientOperations.annual.filedStatus')}`
-                                  : ''}
-                              </option>
-                            ))}
-                          </select>
-                        </dd>
-                      </div>
-                    ) : capitalFiling ? (
-                      <div className="nx-co-ni-modal__row">
-                        <dt>{t(capitalFiling.modal.due_date_label_key)}</dt>
-                        <dd>{capitalFiling.modal.operational_target_date || '—'}</dd>
-                      </div>
-                    ) : null}
-                    <div className="nx-co-ni-modal__row">
-                      <dt>{t(filing.modal.filed_on_label_key)}</dt>
-                      <dd>
-                        <input
-                          type="date"
-                          className="nx-co-annual-capital-date"
-                          value={annualCapitalModal.submittedOn}
-                          disabled={!canSubmit}
-                          required
-                          onChange={(event) =>
-                            setAnnualCapitalModal((current) =>
-                              current ? { ...current, submittedOn: event.currentTarget.value } : current,
-                            )
-                          }
-                        />
-                      </dd>
-                    </div>
-                  </dl>
-                  {otherYear ? (
-                    <label className="nx-co-annual-capital-confirm">
-                      <input
-                        type="checkbox"
-                        checked={annualCapitalModal.confirmOtherTaxYear}
-                        disabled={!canSubmit}
-                        onChange={(event) =>
-                          setAnnualCapitalModal((current) =>
-                            current ? { ...current, confirmOtherTaxYear: event.target.checked } : current,
-                          )
-                        }
-                      />
-                      <span>{t('clientOperations.registry.reporting.annualCapital.confirmOtherYear')}</span>
-                    </label>
-                  ) : null}
-                  {isAnnual && annualFiling ? (
-                    <div className="nx-co-filing-modal__evidence">
-                      <p className="nx-co-filing-modal__notice">{t(annualFiling.modal.form_1301_label_key)}</p>
-                      <div className="nx-co-filing-modal__evidence-row">
-                        <button
-                          type="button"
-                          className="nx-co-filing-modal__clip"
-                          disabled={!canSubmit}
-                          onClick={() => annualCapital1301Ref.current?.click()}
-                        >
-                          {t('clientOperations.registry.reporting.filing.attach')}
-                        </button>
-                        <input
-                          ref={annualCapital1301Ref}
-                          type="file"
-                          hidden
-                          onChange={(event) => {
-                            const file = event.currentTarget.files?.[0];
-                            event.currentTarget.value = '';
-                            if (file) void addAnnualCapitalPendingFile('form_1301', file);
-                          }}
-                        />
-                      </div>
-                      <ul className="nx-co-filing-modal__files">
-                        {form1301.map((file) => (
-                          <li key={file.file_asset_id}>
-                            <button
-                              type="button"
-                              className="nx-co-annual-capital-file-link"
-                              onClick={() => void openAnnualCapitalLinkedFile(liveRow.client_id, file.file_asset_id, 'annual_report')}
-                            >
-                              {file.file_name || t(file.source_kind_label_key)}
-                            </button>
-                          </li>
-                        ))}
-                        {pending1301 ? <li>{pending1301.file_name}</li> : null}
-                      </ul>
-                      <p className="nx-co-filing-modal__notice">{t(annualFiling.modal.additional_files_label_key)}</p>
-                      <div className="nx-co-filing-modal__evidence-row">
-                        <button
-                          type="button"
-                          className="nx-co-filing-modal__clip"
-                          disabled={!canSubmit}
-                          onClick={() => annualCapitalExtraRef.current?.click()}
-                        >
-                          {t('clientOperations.registry.reporting.filing.attach')}
-                        </button>
-                        <input
-                          ref={annualCapitalExtraRef}
-                          type="file"
-                          hidden
-                          onChange={(event) => {
-                            const file = event.currentTarget.files?.[0];
-                            event.currentTarget.value = '';
-                            if (file) void addAnnualCapitalPendingFile('additional', file);
-                          }}
-                        />
-                      </div>
-                      <ul className="nx-co-filing-modal__files">
-                        {extraFiles.map((file) => (
-                          <li key={file.file_asset_id}>
-                            <button
-                              type="button"
-                              className="nx-co-annual-capital-file-link"
-                              onClick={() => void openAnnualCapitalLinkedFile(liveRow.client_id, file.file_asset_id, 'annual_report')}
-                            >
-                              {file.file_name || t(file.source_kind_label_key)}
-                            </button>
-                          </li>
-                        ))}
-                        {pendingExtra.map((file) => (
-                          <li key={`pending-${file.file_name}`}>{file.file_name}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : capitalFiling ? (
-                    <div className="nx-co-filing-modal__evidence">
-                      <p className="nx-co-filing-modal__notice">{t(capitalFiling.modal.files_label_key)}</p>
-                      <div className="nx-co-filing-modal__evidence-row">
-                        <button
-                          type="button"
-                          className="nx-co-filing-modal__clip"
-                          disabled={!canSubmit}
-                          onClick={() => annualCapitalExtraRef.current?.click()}
-                        >
-                          {t('clientOperations.registry.reporting.filing.attach')}
-                        </button>
-                        <input
-                          ref={annualCapitalExtraRef}
-                          type="file"
-                          hidden
-                          onChange={(event) => {
-                            const file = event.currentTarget.files?.[0];
-                            event.currentTarget.value = '';
-                            if (file) void addAnnualCapitalPendingFile('additional', file);
-                          }}
-                        />
-                      </div>
-                      <ul className="nx-co-filing-modal__files">
-                        {existingFiles.map((file) => (
-                          <li key={file.file_asset_id}>
-                            <button
-                              type="button"
-                              className="nx-co-annual-capital-file-link"
-                              onClick={() => void openAnnualCapitalLinkedFile(liveRow.client_id, file.file_asset_id, 'capital_declaration')}
-                            >
-                              {file.file_name || t(file.source_kind_label_key)}
-                            </button>
-                          </li>
-                        ))}
-                        {pendingExtra.map((file) => (
-                          <li key={`pending-${file.file_name}`}>{file.file_name}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-                  {annualCapitalPending || annualCapitalFeedback ? (
-                    <div
-                      className={`nx-co-filing-modal__result is-${annualCapitalPending ? 'pending' : annualCapitalFeedback?.tone}`}
-                      role={annualCapitalFeedback?.tone === 'err' ? 'alert' : 'status'}
-                      aria-live="polite"
-                    >
-                      <span className="nx-co-filing-modal__result-icon" aria-hidden="true">
-                        {annualCapitalPending ? '…' : annualCapitalFeedback?.tone === 'ok' ? '✓' : '!'}
-                      </span>
-                      <span>
-                        {annualCapitalPending
-                          ? t('clientOperations.registry.reporting.filing.saving')
-                          : annualCapitalFeedback?.text}
-                      </span>
-                    </div>
-                  ) : null}
-                </div>
-                <div className="nx-clients-form__footer nx-co-ni-modal__footer">
-                  <button
-                    type="submit"
-                    className="nx-glass-btn nx-glass-btn--purple"
-                    disabled={!canSubmit || (otherYear && !annualCapitalModal.confirmOtherTaxYear)}
-                  >
-                    {t(filing.modal.confirm_key)}
-                  </button>
-                  <button
-                    type="button"
-                    className="nx-glass-btn nx-glass-btn--secondary"
-                    disabled={annualCapitalPending}
-                    onClick={() => setAnnualCapitalModal(null)}
-                  >
-                    {t(filing.modal.cancel_key)}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
+          <ClientOperationsAnnualCapitalFilingModal
+            state={annualCapitalModal}
+            liveRow={liveRow}
+            lang={lang}
+            t={t}
+            canSubmit={canSubmit}
+            pending={annualCapitalPending}
+            feedback={annualCapitalFeedback}
+            onClose={() => setAnnualCapitalModal(null)}
+            onSubmit={() => void confirmAnnualCapitalFiling()}
+            onStateChange={(patch) =>
+              setAnnualCapitalModal((current) => (current ? { ...current, ...patch } : current))
+            }
+            onAddFiles={(files) => void addAnnualCapitalPendingFiles(files)}
+            onRemovePendingFile={(index) =>
+              setAnnualCapitalModal((current) =>
+                current
+                  ? { ...current, pendingFiles: current.pendingFiles.filter((_, itemIndex) => itemIndex !== index) }
+                  : current,
+              )
+            }
+            onOpenLinkedFile={(file) =>
+              void openAnnualCapitalLinkedFile(
+                liveRow.client_id,
+                file.file_asset_id,
+                annualCapitalModal.kind,
+              )
+            }
+          />
         );
       })() : null}
       {niModal?.row.national_insurance_operations ? (() => {
