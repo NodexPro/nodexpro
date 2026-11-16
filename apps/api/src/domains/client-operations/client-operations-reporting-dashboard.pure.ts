@@ -206,12 +206,14 @@ const REPORTING_OVERLAY_KINDS = new Set<ClientOperationsReportingObligationKind>
 
 /**
  * TEMPORARY_COUNTRY_PACK_PENDING — Country Pack / Reporting Calendar has no
- * payment_required flag yet. Payroll data filing is not a tax-payment obligation.
+ * payment_required flag yet. Only VAT / ITA / annual overlay have tax-payment
+ * attestation. Payroll and withholding filings keep their own submitted truth
+ * and must not inherit VAT/ITA payment_unknown as a row-tone blocker.
  */
 export function paymentAppliesForReportingKind(
   kind: ClientOperationsReportingObligationKind,
 ): boolean {
-  return kind !== 'payroll' && kind !== 'national_insurance';
+  return kind === 'vat' || kind === 'income_tax_advance' || kind === 'annual';
 }
 
 /** Self-employed NI is an amount display, not a filing-overdue driver. */
@@ -342,6 +344,7 @@ export type ClientOperationsFilingDetail = {
   submission_reference: string | null;
   payment_classification: TaxObligationPaymentClassification | null;
   payment_state: ClientOperationsReportingPaymentState;
+  payment_applies: boolean;
   can_confirm_filing: boolean;
   can_clear_filing: boolean;
   can_record_payment: boolean;
@@ -795,6 +798,24 @@ export function buildReportingCellPresentation(
   };
 }
 
+export function reportingRowToneIncompleteCells(
+  cells: readonly ClientOperationsReportingCellPresentation[],
+): Array<{
+  kind: ClientOperationsReportingObligationKind;
+  submitted: boolean;
+  payment_state: ClientOperationsReportingPaymentState;
+  tone: ClientOperationsReportingCellTone;
+}> {
+  return cells
+    .filter((c) => c.applicable && reportingKindAffectsRowTone(c.kind) && !(c.submitted && cellPaymentComplete(c)))
+    .map((c) => ({
+      kind: c.kind,
+      submitted: c.submitted,
+      payment_state: c.payment_state,
+      tone: c.tone,
+    }));
+}
+
 export function resolveReportingRowTone(
   cells: readonly ClientOperationsReportingCellPresentation[],
 ): ClientOperationsReportingRowTone {
@@ -1159,6 +1180,7 @@ function buildFilingDetail(input: {
     submission_reference: null,
     payment_classification: input.paymentClassification,
     payment_state: input.paymentState,
+    payment_applies: input.paymentApplies,
     can_confirm_filing: input.applicable && input.canConfirmFiling,
     can_clear_filing: input.applicable && input.canClearFiling,
     can_record_payment: input.applicable && input.paymentApplies && input.submitted && !paid,

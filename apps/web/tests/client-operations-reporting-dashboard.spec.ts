@@ -263,6 +263,16 @@ test('filed VAT cell tooltip uses backend דווח / דווח ושולם keys an
   assert.match(cssSource, /td\.is-filing-chrome-filed_paid[\s\S]*rgba\(34,\s*197,\s*94/);
 });
 
+test('VAT/ITA modal always shows backend payment_state when payment applies', () => {
+  assert.match(viewSource, /detail\.payment_applies \?/);
+  assert.match(viewSource, /reportingPaymentStateLabelKey\(detail\.payment_state\)/);
+  assert.doesNotMatch(viewSource, /detail\.can_record_payment \?/);
+  assert.equal(
+    (he.clientOperations.registry.reporting.filing as { paymentStatus: string }).paymentStatus,
+    'סטטוס תשלום',
+  );
+});
+
 test('VAT filing buttons stay command-gated; tab switch refreshes aggregate without local history writes', () => {
   assert.match(viewSource, /const canMutate = Boolean\(canEdit && onRegistryCommand && !filingActionPending && !evidencePending\)/);
   assert.match(viewSource, /disabled=\{!reportEnabled\}/);

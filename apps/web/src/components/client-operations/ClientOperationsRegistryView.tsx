@@ -353,6 +353,7 @@ export type ClientOperationsReportingCellPresentation = {
     submission_reference: string | null;
     payment_classification: string | null;
     payment_state: string;
+    payment_applies?: boolean;
     can_confirm_filing: boolean;
     can_clear_filing: boolean;
     can_record_payment: boolean;
@@ -6026,7 +6027,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                         <dd>{detail.submission_reference}</dd>
                       </div>
                     ) : null}
-                    {detail.can_record_payment ? (
+                    {detail.payment_applies ? (
                       <div className="nx-co-ni-modal__row">
                         <dt>{t(detail.payment_status_key)}</dt>
                         <dd>{t(reportingPaymentStateLabelKey(detail.payment_state))}</dd>

@@ -36,6 +36,7 @@ import {
   obligationIdentityKey,
   reportingKindAffectsRowTone,
   reportingKindIsInformational,
+  reportingRowToneIncompleteCells,
   REPORTING_ROW_TONE_PAINT_COLUMN_KEYS,
   resolvePreviousPeriodVatCalendarDue,
   resolveReportingCellTone,
@@ -156,6 +157,122 @@ test('row is green only when every applicable obligation is submitted and requir
     annualDoesNotBlock.row_tone_paint_column_keys[annualDoesNotBlock.row_tone_paint_column_keys.length - 1],
     'income_tax_deductions',
   );
+});
+
+test('דווח ושולם and דווח then שולם both return filed_paid and the same row_tone', () => {
+  const reportAndPay = buildReportingRowPresentation(
+    [
+      cell({
+        kind: 'vat',
+        submitted: true,
+        can_mark_submitted: false,
+        payment_classification: 'paid_in_full',
+      }),
+    ],
+    TODAY,
+  );
+  const reportThenPaid = buildReportingRowPresentation(
+    [
+      cell({
+        kind: 'income_tax_advance',
+        submitted: true,
+        can_mark_submitted: false,
+        payment_classification: 'paid_in_full',
+      }),
+    ],
+    TODAY,
+  );
+  const reportOnly = buildReportingRowPresentation(
+    [cell({ kind: 'vat', submitted: true, can_mark_submitted: false, payment_classification: null })],
+    TODAY,
+  );
+  assert.equal(reportAndPay.cells.vat?.submitted, true);
+  assert.equal(reportAndPay.cells.vat?.payment_state, 'paid_in_full');
+  assert.equal(reportAndPay.cells.vat?.filing_detail?.chrome, 'filed_paid');
+  assert.equal(reportAndPay.cells.vat?.filing_detail?.payment_applies, true);
+  assert.equal(reportAndPay.cells.vat?.filing_detail?.can_record_payment, false);
+  assert.equal(reportAndPay.row_tone, 'complete');
+  assert.deepEqual(reportingRowToneIncompleteCells(Object.values(reportAndPay.cells)), []);
+  assert.equal(reportThenPaid.cells.income_tax_advance?.submitted, true);
+  assert.equal(reportThenPaid.cells.income_tax_advance?.payment_state, 'paid_in_full');
+  assert.equal(reportThenPaid.cells.income_tax_advance?.filing_detail?.chrome, 'filed_paid');
+  assert.equal(reportThenPaid.row_tone, 'complete');
+  assert.equal(reportOnly.cells.vat?.filing_detail?.chrome, 'filed_unpaid');
+  assert.equal(reportOnly.cells.vat?.payment_state, 'unknown');
+  assert.equal(reportOnly.row_tone, 'neutral');
+  assert.equal(reportOnly.cells.vat?.tone, 'payment_unknown');
+});
+
+test('green VAT/ITA cells do not paint the row when payroll or withholding filings are still open', () => {
+  const vatPaid = cell({
+    kind: 'vat',
+    submitted: true,
+    payment_classification: 'paid_in_full',
+  });
+  const itaPaid = cell({
+    kind: 'income_tax_advance',
+    submitted: true,
+    payment_classification: 'paid_in_full',
+  });
+  const payrollOpen = buildReportingRowPresentation(
+    [vatPaid, itaPaid, cell({ kind: 'payroll', submitted: false, due_date: null })],
+    TODAY,
+  );
+  assert.equal(payrollOpen.cells.vat?.filing_detail?.chrome, 'filed_paid');
+  assert.equal(payrollOpen.cells.income_tax_advance?.filing_detail?.chrome, 'filed_paid');
+  assert.equal(payrollOpen.row_tone, 'neutral');
+  assert.deepEqual(reportingRowToneIncompleteCells(Object.values(payrollOpen.cells)), [
+    { kind: 'payroll', submitted: false, payment_state: 'not_applicable', tone: 'unknown' },
+  ]);
+  const itdOpen = buildReportingRowPresentation(
+    [vatPaid, cell({ kind: 'income_tax_deductions', submitted: false, due_date: null })],
+    TODAY,
+  );
+  assert.equal(itdOpen.row_tone, 'neutral');
+  assert.equal(itdOpen.cells.income_tax_deductions?.overdue, false);
+  assert.deepEqual(reportingRowToneIncompleteCells(Object.values(itdOpen.cells)), [
+    { kind: 'income_tax_deductions', submitted: false, payment_state: 'not_applicable', tone: 'unknown' },
+  ]);
+  const niDedOpen = buildReportingRowPresentation(
+    [vatPaid, cell({ kind: 'national_insurance_deductions', submitted: false, due_date: null })],
+    TODAY,
+  );
+  assert.equal(niDedOpen.row_tone, 'neutral');
+  assert.deepEqual(reportingRowToneIncompleteCells(Object.values(niDedOpen.cells)), [
+    {
+      kind: 'national_insurance_deductions',
+      submitted: false,
+      payment_state: 'not_applicable',
+      tone: 'unknown',
+    },
+  ]);
+});
+
+test('withholding and payroll completion follow their own submitted truth, not VAT payment_unknown', () => {
+  const vatPaid = cell({
+    kind: 'vat',
+    submitted: true,
+    payment_classification: 'paid_in_full',
+  });
+  const closed = buildReportingRowPresentation(
+    [
+      vatPaid,
+      cell({ kind: 'payroll', submitted: true, due_date: null }),
+      cell({ kind: 'income_tax_deductions', submitted: true, due_date: null }),
+      cell({ kind: 'national_insurance_deductions', submitted: true, due_date: null }),
+      cell({ kind: 'national_insurance', submitted: false, due_date: null }),
+    ],
+    TODAY,
+  );
+  assert.equal(closed.cells.vat?.filing_detail?.chrome, 'filed_paid');
+  assert.equal(closed.cells.income_tax_deductions?.payment_applies, false);
+  assert.equal(closed.cells.national_insurance_deductions?.payment_applies, false);
+  assert.equal(closed.cells.payroll?.payment_applies, false);
+  assert.equal(closed.row_tone, 'complete');
+  assert.deepEqual(reportingRowToneIncompleteCells(Object.values(closed.cells)), []);
+  assert.equal(paymentAppliesForReportingKind('income_tax_deductions'), false);
+  assert.equal(paymentAppliesForReportingKind('national_insurance_deductions'), false);
+  assert.equal(paymentAppliesForReportingKind('payroll'), false);
 });
 
 test('row tone prefers overdue over urgent over warning', () => {
@@ -436,7 +553,10 @@ test('filing and payment are independent; unknown payment is not green paid', ()
   assert.equal(partial?.tooltip_key.includes('paymentPartial'), false);
   assert.equal(paymentAppliesForReportingKind('payroll'), false);
   assert.equal(paymentAppliesForReportingKind('national_insurance'), false);
+  assert.equal(paymentAppliesForReportingKind('income_tax_deductions'), false);
+  assert.equal(paymentAppliesForReportingKind('national_insurance_deductions'), false);
   assert.equal(paymentAppliesForReportingKind('vat'), true);
+  assert.equal(paymentAppliesForReportingKind('income_tax_advance'), true);
 });
 
 test('payments-outstanding KPI counts selected-period orange cells once and lists previous periods in tooltip', () => {
