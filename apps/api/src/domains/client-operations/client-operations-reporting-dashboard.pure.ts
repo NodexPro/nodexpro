@@ -224,8 +224,25 @@ export function reportingKindIsInformational(
 export function reportingKindAffectsRowTone(
   kind: ClientOperationsReportingObligationKind,
 ): boolean {
-  return !reportingKindIsInformational(kind);
+  return !reportingKindIsInformational(kind) && kind !== 'annual';
 }
+
+/**
+ * Pale-green complete fill is limited to the selected-period reporting block
+ * ending at מ״ה ניכויים. Annual / capital / handler / frozen identity columns
+ * are not painted by row_tone complete.
+ */
+export const REPORTING_ROW_TONE_PAINT_COLUMN_KEYS = [
+  'payroll',
+  'material_brought',
+  'pcn',
+  'vat',
+  'vat_due',
+  'income_tax_advance',
+  'national_insurance',
+  'national_insurance_deductions',
+  'income_tax_deductions',
+] as const;
 
 export function reportingKindAffectsFilingKpi(
   kind: ClientOperationsReportingObligationKind,
@@ -482,6 +499,7 @@ export type ClientOperationsReportingCellPresentation = {
 export type ClientOperationsReportingRowPresentation = {
   row_tone: ClientOperationsReportingRowTone;
   row_tone_label_key: string;
+  row_tone_paint_column_keys: readonly string[];
   priority_rank: number;
   earliest_open_due_date: string | null;
   open_overdue_count: number;
@@ -811,6 +829,7 @@ export function buildReportingRowPresentation(
   return {
     row_tone: rowTone,
     row_tone_label_key: REPORTING_ROW_TONE_LABEL_KEYS[rowTone],
+    row_tone_paint_column_keys: [...REPORTING_ROW_TONE_PAINT_COLUMN_KEYS],
     priority_rank: ROW_TONE_PRIORITY[rowTone],
     earliest_open_due_date: earliest,
     open_overdue_count: open.filter((c) => c.tone === 'overdue').length,

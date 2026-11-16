@@ -170,6 +170,8 @@ export const AUDIT_ACTIONS = {
     'client_operations.capital_declaration_operational_target_date.set',
   CLIENT_OPERATIONS_CAPITAL_DECLARATION_INSTANCE_COMPLETED:
     'client_operations.capital_declaration_instance.completed',
+  CLIENT_OPERATIONS_ANNUAL_REPORT_FILED: 'client_operations.annual_report.filed',
+  CLIENT_OPERATIONS_CAPITAL_DECLARATION_FILED: 'client_operations.capital_declaration.filed',
   CLIENT_OPERATIONS_NI_DEDUCTIONS_102_SET: 'client_operations.ni_deductions.102_set',
   CLIENT_OPERATIONS_NI_DEDUCTIONS_100_SET: 'client_operations.ni_deductions.100_set',
   CLIENT_OPERATIONS_NI_DEDUCTIONS_126_CYCLE_COMPLETED:

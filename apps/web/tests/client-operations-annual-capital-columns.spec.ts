@@ -63,8 +63,8 @@ test('default widths keep tax columns compact and date columns calendar-sized', 
   assert.match(apiPresentationSource, /key:\s*'national_insurance'[\s\S]*?default_width_px:\s*72/);
   assert.match(apiPresentationSource, /key:\s*'national_insurance_deductions'[\s\S]*?default_width_px:\s*120/);
   assert.match(apiPresentationSource, /key:\s*'income_tax_deductions'[\s\S]*?default_width_px:\s*72/);
-  assert.match(apiPresentationSource, /key:\s*'annual_report'[\s\S]*?default_width_px:\s*118/);
-  assert.match(apiPresentationSource, /key:\s*'capital_declaration'[\s\S]*?default_width_px:\s*118/);
+  assert.match(apiPresentationSource, /key:\s*'annual_report'[\s\S]*?default_width_px:\s*138/);
+  assert.match(apiPresentationSource, /key:\s*'capital_declaration'[\s\S]*?default_width_px:\s*138/);
   assert.match(apiPresentationSource, /key:\s*'material_brought'[\s\S]*?default_width_px:\s*120/);
 });
 
@@ -200,4 +200,16 @@ test('existing material, hidden obligations tab, and month tabs contracts remain
   assert.ok((viewSource.match(/ClientOperationsPeriodSheetTabs/g) || []).length >= 2);
   assert.match(tabsSource, /onSelectPeriod/);
   assert.match(tabsSource, /clientOperations\.periods\.open/);
+});
+
+test('annual/capital filing square and named file commands stay render-only', () => {
+  assert.match(viewSource, /nx-co-sheet__filing-square/);
+  assert.match(viewSource, /file_client_operations_annual_report/);
+  assert.match(viewSource, /file_client_operations_capital_declaration/);
+  assert.match(viewSource, /confirm_other_tax_year/);
+  assert.match(viewSource, /client-operations-annual-capital-modal/);
+  assert.match(cssSource, /\.nx-co-sheet__filing-square\.is-filed/);
+  assert.match(cssSource, /rgba\(34,\s*197,\s*94,\s*0\.07\)/);
+  assert.match(viewSource, /is-row-tone-paint/);
+  assert.doesNotMatch(viewSource, /resolveAnnualReportTaxYearForOperationalPeriod/);
 });

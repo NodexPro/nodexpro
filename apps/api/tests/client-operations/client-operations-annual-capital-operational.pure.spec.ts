@@ -139,3 +139,83 @@ test('operational dates display as Hebrew day/month/year from date-only input', 
   assert.equal(formatOperationalDateDisplayHeForContract(null), '—');
   assert.equal(formatOperationalDateDisplayHeForContract('not-a-date'), '—');
 });
+
+test('annual square and KPI tax year stay on the tab year even if another year is already filed', async () => {
+  const {
+    buildAnnualReportCell,
+    annualFilingUsesTabTaxYear,
+    buildAnnualYearFolders,
+    buildCapitalRequirementFolders,
+    nextCapitalDeclarationSequenceNo,
+    pickVisibleCapitalInstance,
+    buildCapitalDeclarationCell,
+  } = await import('../../src/domains/client-operations/client-operations-annual-capital-operational.pure.js');
+  const cell = buildAnnualReportCell({
+    taxYear: 2025,
+    instanceId: 'annual-1',
+    operationalTargetDate: '2026-10-31',
+    canEdit: true,
+    submissions: [
+      { tax_year: 2024, submitted_on: '2025-04-01' },
+      { tax_year: 2025, submitted_on: '2026-04-10' },
+    ],
+  });
+  assert.equal(cell.filing.tab_tax_year, 2025);
+  assert.equal(cell.filing.filed_for_tab_tax_year, true);
+  assert.equal(cell.filing.square_chrome, 'filed');
+  const otherYearOnly = buildAnnualReportCell({
+    taxYear: 2025,
+    instanceId: null,
+    operationalTargetDate: null,
+    canEdit: true,
+    submissions: [{ tax_year: 2024, submitted_on: '2025-04-01' }],
+  });
+  assert.equal(otherYearOnly.filing.square_chrome, 'empty');
+  assert.equal(otherYearOnly.filing.filed_for_tab_tax_year, false);
+  assert.equal(annualFilingUsesTabTaxYear({ taxYear: 2024, tabTaxYear: 2025, confirmOtherTaxYear: false }).ok, false);
+  assert.equal(annualFilingUsesTabTaxYear({ taxYear: 2024, tabTaxYear: 2025, confirmOtherTaxYear: true }).ok, true);
+  const folders = buildAnnualYearFolders({
+    submissions: [
+      { submission_id: 's-2025', tax_year: 2025, submitted_on: '2026-04-10', files: [] },
+      { submission_id: 's-2025b', tax_year: 2025, submitted_on: '2026-04-11', files: [] },
+    ],
+  });
+  assert.equal(folders.length, 1);
+  assert.equal(folders[0]?.folder_key, '2025');
+  assert.equal(nextCapitalDeclarationSequenceNo([1, 3]), 4);
+  const visibleCompleted = pickVisibleCapitalInstance({
+    openInstance: null,
+    datedCompletedInstance: {
+      id: 'cap-1',
+      tax_year: null,
+      operational_target_date: '2026-06-01',
+      sequence_no: 2,
+    },
+  });
+  assert.equal(visibleCompleted?.status, 'completed');
+  const completedCell = buildCapitalDeclarationCell({
+    openInstance: null,
+    datedCompletedInstance: {
+      id: 'cap-1',
+      tax_year: null,
+      operational_target_date: '2026-06-01',
+      sequence_no: 2,
+    },
+    canEdit: true,
+    submittedOn: '2026-06-02',
+  });
+  assert.equal(completedCell.applicable, true);
+  assert.equal(completedCell.editable, false);
+  assert.equal(completedCell.can_open, true);
+  assert.equal(completedCell.filing.square_chrome, 'filed');
+  const capitalFolders = buildCapitalRequirementFolders({
+    instances: [
+      { id: 'b', sequence_no: 2, status: 'open', operational_target_date: null, submitted_on: null, files: [] },
+      { id: 'a', sequence_no: 1, status: 'completed', operational_target_date: '2026-01-01', submitted_on: '2026-01-02', files: [] },
+    ],
+  });
+  assert.deepEqual(
+    capitalFolders.map((row) => row.sequence_no),
+    [1, 2],
+  );
+});

@@ -794,3 +794,56 @@
   justify-content: center;
   margin-top: 12px;
 }
+
+.nx-annual-filing-status,
+.nx-annual-logical-folders,
+.nx-annual-logical-folder,
+.nx-annual-logical-folder-head,
+.nx-annual-logical-folder-files {
+  font-family: Arial, sans-serif;
+}
+
+.nx-annual-filing-status {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.nx-annual-filing-status.is-filed {
+  color: #15803d;
+}
+
+.nx-annual-logical-folders {
+  display: grid;
+  gap: 16px;
+}
+
+.nx-annual-logical-folder-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.nx-annual-logical-folder {
+  background: #fff;
+  border: 1px solid rgba(219, 227, 238, 0.95);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.nx-annual-logical-folder-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.nx-annual-logical-folder-files {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  font-size: 13px;
+}

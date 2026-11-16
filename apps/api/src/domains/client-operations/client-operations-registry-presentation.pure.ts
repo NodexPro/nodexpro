@@ -232,7 +232,7 @@ export const CLIENT_OPERATIONS_REGISTRY_COLUMNS: ClientOperationsRegistryColumn[
     editable: true,
     freeze_default: false,
     align: 'center',
-    default_width_px: 118,
+    default_width_px: 138,
   },
   {
     key: 'capital_declaration',
@@ -244,7 +244,7 @@ export const CLIENT_OPERATIONS_REGISTRY_COLUMNS: ClientOperationsRegistryColumn[
     editable: true,
     freeze_default: false,
     align: 'center',
-    default_width_px: 118,
+    default_width_px: 138,
   },
   {
     key: 'handler',

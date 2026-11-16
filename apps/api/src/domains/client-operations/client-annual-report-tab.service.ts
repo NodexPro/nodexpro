@@ -4,6 +4,7 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { AppError, badRequest, conflict, forbidden } from '../../shared/errors.js';
 import {
   isSupabaseMissingColumnError,
+  isSupabaseMissingTableError,
   PUBLIC_DATABASE_ERROR_MESSAGE,
 } from '../../shared/supabase-errors.js';
 import { requireGuardedUpload } from '../../shared/file-content-guard.js';
@@ -17,6 +18,14 @@ import {
   ANNUAL_SUBMISSION_STATUS_LABEL_KEY,
   ANNUAL_TAB_TITLE_KEY,
 } from './client-operations-ui-labels.pure.js';
+import {
+  buildAnnualYearFolders,
+  buildCapitalRequirementFolders,
+  linkedFileKindLabelKey,
+  type AnnualCapitalLinkedFile,
+  type AnnualYearFolder,
+  type CapitalRequirementFolder,
+} from './client-operations-annual-capital-operational.pure.js';
 
 const ANNUAL_DOC_COLUMN_HEADER_KEYS: Array<string | null> = [
   'clientOperations.annual.received',
@@ -323,6 +332,14 @@ export type AnnualTabResponse = {
     enabled: boolean;
   }>;
   file_open_path_template: string;
+  filing_status: {
+    filed: boolean;
+    code: 'filed' | 'not_filed';
+    label_key: string;
+    submitted_on: string | null;
+  };
+  year_folders: AnnualYearFolder[];
+  capital_folders: CapitalRequirementFolder[];
 };
 
 export type AnnualTabCommandBody = {
@@ -717,7 +734,144 @@ function buildCapitalFallbackReadModel(canEdit: boolean): AnnualTabResponse {
       { action_key: 'copy_previous', label_he: 'העתק הצהרת הון קודמת', label_key: 'clientOperations.annual.copyPreviousCapital', enabled: false },
     ],
     file_open_path_template: `/m/client-operations/clients/{clientId}/annual/files/{fileAssetId}/open`,
+    filing_status: {
+      filed: false,
+      code: 'not_filed',
+      label_key: 'clientOperations.annual.notFiledStatus',
+      submitted_on: null,
+    },
+    year_folders: [],
+    capital_folders: [],
   };
+}
+
+function asTabLinkedFile(input: {
+  file_asset_id: string;
+  file_name: string | null;
+  source_kind: AnnualCapitalLinkedFile['source_kind'];
+}): AnnualCapitalLinkedFile {
+  return {
+    file_asset_id: input.file_asset_id,
+    file_name: input.file_name,
+    source_kind: input.source_kind,
+    source_kind_label_key: linkedFileKindLabelKey(input.source_kind),
+    can_open: true,
+  };
+}
+
+async function loadSubmissionLinkedFiles(input: {
+  orgId: string;
+  clientId: string;
+  submissionIds: string[];
+  fileNameById: Map<string, string>;
+}): Promise<Map<string, AnnualCapitalLinkedFile[]>> {
+  const out = new Map<string, AnnualCapitalLinkedFile[]>();
+  if (!input.submissionIds.length) return out;
+  const { data, error } = await supabaseAdmin
+    .from('client_annual_submission_files')
+    .select('submission_id, file_asset_id, source_kind')
+    .eq('organization_id', input.orgId)
+    .eq('client_id', input.clientId)
+    .in('submission_id', input.submissionIds);
+  if (error && (isSupabaseMissingTableError(error) || /client_annual_submission_files/i.test(error.message ?? ''))) {
+    return out;
+  }
+  if (error) throw annualDbError('Failed to load submission files', error);
+  const extraIds = [
+    ...new Set(
+      ((data ?? []) as Array<{ file_asset_id: string }>)
+        .map((row) => String(row.file_asset_id))
+        .filter((id) => id && !input.fileNameById.has(id)),
+    ),
+  ];
+  if (extraIds.length) {
+    const { data: assets } = await supabaseAdmin
+      .from('file_assets')
+      .select('id, file_name')
+      .eq('organization_id', input.orgId)
+      .in('id', extraIds);
+    for (const asset of (assets ?? []) as Array<{ id: string; file_name: string | null }>) {
+      input.fileNameById.set(asset.id, asset.file_name ?? '');
+    }
+  }
+  for (const raw of data ?? []) {
+    const row = raw as { submission_id: string; file_asset_id: string; source_kind: string };
+    const submissionId = String(row.submission_id);
+    const fileAssetId = String(row.file_asset_id);
+    const kind =
+      row.source_kind === 'form_1301' || row.source_kind === 'additional' || row.source_kind === 'checklist'
+        ? row.source_kind
+        : 'additional';
+    const list = out.get(submissionId) ?? [];
+    if (list.some((file) => file.file_asset_id === fileAssetId)) continue;
+    list.push(
+      asTabLinkedFile({
+        file_asset_id: fileAssetId,
+        file_name: input.fileNameById.get(fileAssetId) ?? null,
+        source_kind: kind,
+      }),
+    );
+    out.set(submissionId, list);
+  }
+  return out;
+}
+
+async function loadCapitalFolderInstances(input: {
+  orgId: string;
+  clientId: string;
+}): Promise<
+  Array<{
+    id: string;
+    sequence_no: number;
+    status: string;
+    operational_target_date: string | null;
+  }>
+> {
+  let { data, error } = await supabaseAdmin
+    .from('client_capital_declaration_instances')
+    .select('id, sequence_no, status, operational_target_date, opened_at')
+    .eq('organization_id', input.orgId)
+    .eq('client_id', input.clientId)
+    .in('status', ['open', 'completed'])
+    .order('sequence_no', { ascending: true })
+    .order('id', { ascending: true });
+  if (error && isSupabaseMissingColumnError(error, 'sequence_no')) {
+    const retry = await supabaseAdmin
+      .from('client_capital_declaration_instances')
+      .select('id, status, operational_target_date, opened_at')
+      .eq('organization_id', input.orgId)
+      .eq('client_id', input.clientId)
+      .in('status', ['open', 'completed'])
+      .order('opened_at', { ascending: true })
+      .order('id', { ascending: true });
+    if (retry.error) throw annualDbError('Failed to load capital declaration folders', retry.error);
+    return (
+      (retry.data ?? []) as Array<{
+        id: string;
+        status: string;
+        operational_target_date: string | null;
+      }>
+    ).map((row, index) => ({
+      id: String(row.id),
+      sequence_no: index + 1,
+      status: String(row.status),
+      operational_target_date: row.operational_target_date ? String(row.operational_target_date).slice(0, 10) : null,
+    }));
+  }
+  if (error) throw annualDbError('Failed to load capital declaration folders', error);
+  return (
+    (data ?? []) as Array<{
+      id: string;
+      sequence_no?: number | null;
+      status: string;
+      operational_target_date: string | null;
+    }>
+  ).map((row) => ({
+    id: String(row.id),
+    sequence_no: Number(row.sequence_no ?? 0) || 1,
+    status: String(row.status),
+    operational_target_date: row.operational_target_date ? String(row.operational_target_date).slice(0, 10) : null,
+  }));
 }
 
 let annualBucketEnsured = false;
@@ -999,6 +1153,89 @@ export async function getAnnualTabReadModel(
     };
   });
 
+  const linkedFilesBySubmission = await loadSubmissionLinkedFiles({
+    orgId,
+    clientId,
+    submissionIds: submissions.map((row) => row.submission_id),
+    fileNameById,
+  });
+  const filesForSubmission = (row: AnnualSubmissionRowDto): AnnualCapitalLinkedFile[] => {
+    const files: AnnualCapitalLinkedFile[] = [];
+    if (row.file.file_asset_id) {
+      files.push(
+        asTabLinkedFile({
+          file_asset_id: row.file.file_asset_id,
+          file_name: row.file.file_name,
+          source_kind: 'additional',
+        }),
+      );
+    }
+    for (const file of linkedFilesBySubmission.get(row.submission_id) ?? []) {
+      if (files.some((existing) => existing.file_asset_id === file.file_asset_id)) continue;
+      files.push(file);
+    }
+    return files;
+  };
+  const latestFiled = [...submissions]
+    .filter((row) => row.submitted_on)
+    .sort((a, b) => String(b.submitted_on).localeCompare(String(a.submitted_on)))[0] ?? null;
+  const filing_status = {
+    filed: Boolean(latestFiled),
+    code: latestFiled ? ('filed' as const) : ('not_filed' as const),
+    label_key: latestFiled ? 'clientOperations.annual.filedStatus' : 'clientOperations.annual.notFiledStatus',
+    submitted_on: latestFiled?.submitted_on ?? null,
+  };
+  const year_folders =
+    scope === 'annual_report'
+      ? buildAnnualYearFolders({
+          submissions: submissions.map((row) => ({
+            submission_id: row.submission_id,
+            tax_year: row.tax_year,
+            submitted_on: row.submitted_on,
+            files: filesForSubmission(row),
+          })),
+        })
+      : [];
+  let capital_folders: CapitalRequirementFolder[] = [];
+  if (scope === 'capital_declaration') {
+    const instances = await loadCapitalFolderInstances({ orgId, clientId });
+    const submittedOnByInstance = new Map<string, string>();
+    const filesByInstance = new Map<string, AnnualCapitalLinkedFile[]>();
+    const { data: capSubs, error: capSubErr } = await supabaseAdmin
+      .from('client_annual_submission_rows')
+      .select('id, capital_declaration_instance_id, submitted_on')
+      .eq('organization_id', orgId)
+      .eq('client_id', clientId)
+      .eq('tab_scope', 'capital_declaration');
+    if (!(capSubErr && isSupabaseMissingColumnError(capSubErr, 'capital_declaration_instance_id'))) {
+      if (capSubErr) throw annualDbError('Failed to load capital submission links', capSubErr);
+      for (const raw of capSubs ?? []) {
+        const row = raw as {
+          id: string;
+          capital_declaration_instance_id: string | null;
+          submitted_on: string | null;
+        };
+        const instanceId = row.capital_declaration_instance_id ? String(row.capital_declaration_instance_id) : '';
+        if (!instanceId) continue;
+        if (row.submitted_on && !submittedOnByInstance.has(instanceId)) {
+          submittedOnByInstance.set(instanceId, String(row.submitted_on).slice(0, 10));
+        }
+        const submission = submissions.find((item) => item.submission_id === String(row.id));
+        filesByInstance.set(instanceId, submission ? filesForSubmission(submission) : []);
+      }
+    }
+    capital_folders = buildCapitalRequirementFolders({
+      instances: instances.map((row) => ({
+        id: row.id,
+        sequence_no: row.sequence_no,
+        status: row.status,
+        operational_target_date: row.operational_target_date,
+        submitted_on: submittedOnByInstance.get(row.id) ?? null,
+        files: filesByInstance.get(row.id) ?? [],
+      })),
+    });
+  }
+
   const serverNow = new Date();
   const control = buildAnnualControlState(scopedRows, serverNow);
 
@@ -1109,6 +1346,9 @@ export async function getAnnualTabReadModel(
           ]
         : [{ action_key: 'upload_document', label_he: 'הוסף מסמך', label_key: 'clientOperations.annual.addDocument', enabled: canEdit }],
     file_open_path_template: `/m/client-operations/clients/{clientId}/annual/files/{fileAssetId}/open`,
+    filing_status,
+    year_folders,
+    capital_folders,
   };
 }
 
@@ -1153,6 +1393,21 @@ export async function assertAnnualReportFileOpenAllowed(
   if (!scoped && scope === 'capital_declaration') subQ = subQ.like('note', `${LEGACY_SCOPE_MARKER.capital_declaration}%`);
   const { data: linkedSubmission } = await subQ.maybeSingle();
   if (linkedSubmission) return;
+  const { data: linkedFilingFile, error: linkedFilingError } = await supabaseAdmin
+    .from('client_annual_submission_files')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('client_id', clientId)
+    .eq('file_asset_id', fileAssetId)
+    .limit(1)
+    .maybeSingle();
+  if (
+    linkedFilingError &&
+    !(isSupabaseMissingTableError(linkedFilingError) || /client_annual_submission_files/i.test(linkedFilingError.message ?? ''))
+  ) {
+    throw annualDbError('Failed to authorize submission file', linkedFilingError);
+  }
+  if (linkedFilingFile) return;
   const { data: fileAsset, error } = await supabaseAdmin
     .from('file_assets')
     .select('organization_id, storage_key')

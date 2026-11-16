@@ -82,6 +82,8 @@ export const SINGLE_CLIENT_REGISTRY_REFRESH_COMMANDS = new Set([
   'open_capital_declaration_instance',
   'set_capital_declaration_operational_target_date',
   'complete_capital_declaration_instance',
+  'file_client_operations_annual_report',
+  'file_client_operations_capital_declaration',
   'set_ni_deductions_reported_102',
   'set_ni_deductions_reported_100',
   'complete_ni_deductions_126_cycle',

@@ -105,7 +105,10 @@ import {
 import {
   loadAnnualReportYearInstancesForClients,
   loadAnnualReportSubmissionsForTaxYear,
+  loadAnnualSubmissionFactsForClients,
+  loadAnnualSubmissionFilesForSubmissions,
   loadCapitalDeclarationKpiInstances,
+  loadLatestDatedCompletedCapitalInstancesForClients,
   loadOpenCapitalDeclarationInstancesForClients,
   projectAnnualReportCells,
   projectCapitalDeclarationCells,
@@ -1536,6 +1539,9 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     reportingDashboardLoad,
     annualSubmissionsByClient,
     capitalKpiInstances,
+    completedCapitalByClient,
+    annualSubmissionFacts,
+    capitalSubmissionFacts,
   ] = matchingClientIds.length
     ? await Promise.all([
         loadNotesAggregatesByClient(orgId, matchingClientIds),
@@ -1590,6 +1596,20 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
           organizationId: orgId,
           clientIds: matchingClientIds,
         }),
+        loadLatestDatedCompletedCapitalInstancesForClients({
+          organizationId: orgId,
+          clientIds: matchingClientIds,
+        }),
+        loadAnnualSubmissionFactsForClients({
+          organizationId: orgId,
+          clientIds: matchingClientIds,
+          tabScope: 'annual_report',
+        }),
+        loadAnnualSubmissionFactsForClients({
+          organizationId: orgId,
+          clientIds: matchingClientIds,
+          tabScope: 'capital_declaration',
+        }),
       ])
     : [
         new Map(),
@@ -1608,21 +1628,55 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
         }),
         new Set<string>(),
         [] as Awaited<ReturnType<typeof loadCapitalDeclarationKpiInstances>>,
+        new Map() as Awaited<ReturnType<typeof loadLatestDatedCompletedCapitalInstancesForClients>>,
+        [] as Awaited<ReturnType<typeof loadAnnualSubmissionFactsForClients>>,
+        [] as Awaited<ReturnType<typeof loadAnnualSubmissionFactsForClients>>,
       ];
   markStage('phase2_presentation_loads', phase2Ms);
   const vatDueDisplayByClient = await vatDuePromise;
   markStage('vat_due_display', vatDueMs);
 
+  const annualSubmissionsByClientId = new Map<string, typeof annualSubmissionFacts>();
+  for (const row of annualSubmissionFacts) {
+    const list = annualSubmissionsByClientId.get(row.client_id) ?? [];
+    list.push(row);
+    annualSubmissionsByClientId.set(row.client_id, list);
+  }
+  const capitalSubmittedOnByInstanceId = new Map<string, string>();
+  const capitalSubmissionIdByInstanceId = new Map<string, string>();
+  for (const row of capitalSubmissionFacts) {
+    if (!row.capital_declaration_instance_id || !row.submitted_on) continue;
+    if (!capitalSubmittedOnByInstanceId.has(row.capital_declaration_instance_id)) {
+      capitalSubmittedOnByInstanceId.set(row.capital_declaration_instance_id, row.submitted_on);
+      capitalSubmissionIdByInstanceId.set(row.capital_declaration_instance_id, row.id);
+    }
+  }
+  const submissionFileMap = await loadAnnualSubmissionFilesForSubmissions({
+    organizationId: orgId,
+    submissionIds: [
+      ...annualSubmissionFacts.map((row) => row.id),
+      ...capitalSubmissionFacts.map((row) => row.id),
+    ],
+  });
+  const capitalFilesByInstanceId = new Map<string, NonNullable<ReturnType<typeof submissionFileMap.get>>>();
+  for (const [instanceId, submissionId] of capitalSubmissionIdByInstanceId) {
+    capitalFilesByInstanceId.set(instanceId, submissionFileMap.get(submissionId) ?? []);
+  }
   const annualReportCells = projectAnnualReportCells({
     clientIds: matchingClientIds,
     taxYear: annualReportTaxYear,
     instancesByClientId: annualReportInstancesByClient,
     canEdit: canEditRegistry,
+    submissionsByClientId: annualSubmissionsByClientId,
+    filesBySubmissionId: submissionFileMap,
   });
   const capitalDeclarationCells = projectCapitalDeclarationCells({
     clientIds: matchingClientIds,
     openByClientId: openCapitalInstancesByClient,
+    completedByClientId: completedCapitalByClient,
     canEdit: canEditRegistry,
+    submittedOnByInstanceId: capitalSubmittedOnByInstanceId,
+    filesByInstanceId: capitalFilesByInstanceId,
   });
   const capitalOpenByClient = new Map<string, { operational_target_date: string | null; status: string }>();
   const capitalCompletedByClient = new Map<
@@ -1698,6 +1752,28 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       tax_year: annualReportTaxYear,
       instance_id: null,
       operational_target_date: null,
+      filing: {
+        square_chrome: 'empty',
+        tab_tax_year: annualReportTaxYear,
+        filed_for_tab_tax_year: false,
+        tab_submitted_on: null,
+        can_open_modal: canEditRegistry,
+        other_year_confirm_required_code: 'ANNUAL_OTHER_TAX_YEAR_CONFIRM_REQUIRED',
+        modal: {
+          title_key: 'clientOperations.registry.reporting.annualCapital.annualTitle',
+          confirm_key: 'clientOperations.registry.reporting.annualCapital.filedAction',
+          cancel_key: 'clientOperations.registry.reporting.filing.cancel',
+          client_label_key: 'clientOperations.registry.reporting.filing.client',
+          tax_year_label_key: 'clientOperations.annual.taxYear',
+          filed_on_label_key: 'clientOperations.registry.reporting.filing.filedOn',
+          form_1301_label_key: 'clientOperations.registry.reporting.annualCapital.form1301',
+          additional_files_label_key: 'clientOperations.registry.reporting.annualCapital.additionalFiles',
+          tax_year: annualReportTaxYear,
+          tax_year_options: [{ tax_year: annualReportTaxYear, is_tab_year: true, already_filed: false, submitted_on: null }],
+          submitted_on: null,
+          files: [],
+        },
+      },
     };
     const capital_declaration_cell = capitalDeclarationCells.get(c.id) ?? {
       applicable: false,
@@ -1705,7 +1781,32 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       instance_id: null,
       tax_year: null,
       operational_target_date: null,
+      sequence_no: null,
+      instance_status: null,
       can_open: canEditRegistry,
+      filing: {
+        square_chrome: 'empty',
+        instance_id: null,
+        sequence_no: null,
+        filed: false,
+        submitted_on: null,
+        operational_target_date: null,
+        can_open_modal: false,
+        modal: {
+          title_key: 'clientOperations.registry.reporting.annualCapital.capitalTitle',
+          confirm_key: 'clientOperations.registry.reporting.annualCapital.filedAction',
+          cancel_key: 'clientOperations.registry.reporting.filing.cancel',
+          client_label_key: 'clientOperations.registry.reporting.filing.client',
+          due_date_label_key: 'clientOperations.registry.reporting.annualCapital.dueDate',
+          filed_on_label_key: 'clientOperations.registry.reporting.filing.filedOn',
+          files_label_key: 'clientOperations.registry.reporting.annualCapital.additionalFiles',
+          instance_id: null,
+          sequence_no: null,
+          operational_target_date: null,
+          submitted_on: null,
+          files: [],
+        },
+      },
     };
     // NI deductions: configured (= file) is due every month when configured (no separate cadence).
     const national_insurance_deductions_cell = buildNiDeductionsRegistryCellForClient({

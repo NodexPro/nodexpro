@@ -34,7 +34,9 @@ import {
   obligationFactIsActive,
   historicalObligationIdentitiesToPreserve,
   obligationIdentityKey,
+  reportingKindAffectsRowTone,
   reportingKindIsInformational,
+  REPORTING_ROW_TONE_PAINT_COLUMN_KEYS,
   resolvePreviousPeriodVatCalendarDue,
   resolveReportingCellTone,
   resolveVatCalendarLookupPeriodKey,
@@ -129,6 +131,31 @@ test('row is green only when every applicable obligation is submitted and requir
     TODAY,
   );
   assert.equal(unknownBlocksGreen.row_tone, 'neutral');
+  const annualDoesNotBlock = buildReportingRowPresentation(
+    [
+      cell({ kind: 'vat', submitted: true, due_date: '2026-11-19', payment_classification: 'paid_in_full' }),
+      cell({ kind: 'annual', submitted: false, due_date: '2026-05-31' }),
+    ],
+    TODAY,
+  );
+  assert.equal(annualDoesNotBlock.row_tone, 'complete');
+  assert.equal(reportingKindAffectsRowTone('annual'), false);
+  assert.deepEqual([...REPORTING_ROW_TONE_PAINT_COLUMN_KEYS], [
+    'payroll',
+    'material_brought',
+    'pcn',
+    'vat',
+    'vat_due',
+    'income_tax_advance',
+    'national_insurance',
+    'national_insurance_deductions',
+    'income_tax_deductions',
+  ]);
+  assert.equal(annualDoesNotBlock.row_tone_paint_column_keys.includes('annual_report'), false);
+  assert.equal(
+    annualDoesNotBlock.row_tone_paint_column_keys[annualDoesNotBlock.row_tone_paint_column_keys.length - 1],
+    'income_tax_deductions',
+  );
 });
 
 test('row tone prefers overdue over urgent over warning', () => {

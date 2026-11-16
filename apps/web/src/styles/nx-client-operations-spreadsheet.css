@@ -1341,6 +1341,89 @@ button.nx-co-sheet__ni-clip:disabled {
 }
 
 /* Integrated spreadsheet date control (annual / capital operational targets). */
+.nx-co-sheet__date-with-square {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  font-family: Arial, sans-serif;
+}
+
+.nx-co-sheet__filing-square {
+  box-sizing: border-box;
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  padding: 0;
+  border-radius: 2px;
+  border: 1px solid rgba(14, 116, 144, 0.5);
+  background: #fff;
+  cursor: pointer;
+}
+
+.nx-co-sheet__filing-square.is-filed {
+  background: rgba(34, 197, 94, 0.88);
+  border-color: rgba(22, 163, 74, 0.95);
+}
+
+.nx-co-sheet__capital-new {
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid rgba(14, 116, 144, 0.45);
+  background: #fff;
+  color: #0e7490;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.nx-co-sheet__table tbody tr td.is-annual-capital-filed,
+.nx-co-sheet__table tbody tr.is-reporting-row-complete td.is-annual-capital-filed {
+  background: rgba(34, 197, 94, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(22, 163, 74, 0.5);
+}
+
+.nx-co-annual-capital-select,
+.nx-co-annual-capital-date,
+.nx-co-annual-capital-confirm,
+.nx-co-annual-capital-file-link {
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+}
+
+.nx-co-annual-capital-select,
+.nx-co-annual-capital-date {
+  min-width: 132px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(210, 238, 255, 0.4);
+  background: rgba(4, 21, 47, 0.35);
+  color: #eef6ff;
+}
+
+.nx-co-annual-capital-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0;
+  color: #eef6ff;
+}
+
+.nx-co-annual-capital-file-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #d2eeff;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .nx-co-sheet__date-field {
   position: relative;
   display: inline-flex;
@@ -3614,8 +3697,8 @@ button.nx-co-sheet__date-open {
   background: rgba(249, 115, 22, 0.1);
 }
 
-.nx-co-sheet__table tbody tr.is-reporting-row-complete td,
-.nx-co-sheet__table tbody tr.is-reporting-row-complete:nth-child(even) td {
+.nx-co-sheet__table tbody tr.is-reporting-row-complete td.is-row-tone-paint,
+.nx-co-sheet__table tbody tr.is-reporting-row-complete:nth-child(even) td.is-row-tone-paint {
   background: rgba(34, 197, 94, 0.07);
 }
 
@@ -3660,8 +3743,8 @@ button.nx-co-sheet__date-open {
     var(--nx-table-bg);
 }
 
-.nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-complete td[data-freeze='true'],
-.nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-complete:nth-child(even) td[data-freeze='true'] {
+.nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-complete td.is-row-tone-paint[data-freeze='true'],
+.nx-co-sheet__table.is-frozen tbody tr.is-reporting-row-complete:nth-child(even) td.is-row-tone-paint[data-freeze='true'] {
   background:
     linear-gradient(rgba(34, 197, 94, 0.07), rgba(34, 197, 94, 0.07)),
     var(--nx-table-bg);

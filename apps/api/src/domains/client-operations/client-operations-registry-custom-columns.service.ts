@@ -35,6 +35,8 @@ import {
 } from './client-operations-operational-period.pure.js';
 import {
   completeCapitalDeclarationInstance,
+  fileClientOperationsAnnualReport,
+  fileClientOperationsCapitalDeclaration,
   openCapitalDeclarationInstance,
   setAnnualReportOperationalTargetDate,
   setCapitalDeclarationOperationalTargetDate,
@@ -155,6 +157,11 @@ export type ClientOperationsRegistryCommandBody = {
   target_operational_period_key?: unknown;
   mode?: unknown;
   width_px?: unknown;
+  submitted_on?: unknown;
+  submitted_at?: unknown;
+  confirm_other_tax_year?: unknown;
+  files?: unknown;
+  instance_id?: unknown;
 };
 
 function assertOrg(ctx: RequestContext): string {
@@ -497,6 +504,8 @@ const OPERATIONAL_DATE_REGISTRY_COMMANDS = new Set([
   'open_capital_declaration_instance',
   'set_capital_declaration_operational_target_date',
   'complete_capital_declaration_instance',
+  'file_client_operations_annual_report',
+  'file_client_operations_capital_declaration',
 ]);
 
 const NI_DEDUCTIONS_REGISTRY_COMMANDS = new Set([
@@ -1004,6 +1013,24 @@ export async function executeClientOperationsRegistryCommand(
     await completeCapitalDeclarationInstance({
       ctx,
       clientId: idFrom(body.client_id, 'client_id'),
+    });
+  } else if (command === 'file_client_operations_annual_report') {
+    await fileClientOperationsAnnualReport({
+      ctx,
+      clientId: idFrom(body.client_id, 'client_id'),
+      operationalPeriodKey: operationalPeriodKeyFrom(body.operational_period_key),
+      taxYear: body.tax_year,
+      submittedOn: body.submitted_on ?? body.submitted_at,
+      confirmOtherTaxYear: body.confirm_other_tax_year,
+      files: body.files,
+    });
+  } else if (command === 'file_client_operations_capital_declaration') {
+    await fileClientOperationsCapitalDeclaration({
+      ctx,
+      clientId: idFrom(body.client_id, 'client_id'),
+      instanceId: body.instance_id,
+      submittedOn: body.submitted_on ?? body.submitted_at,
+      files: body.files,
     });
   } else if (command === 'set_ni_deductions_reported_102' || command === 'set_ni_deductions_reported_100') {
     const clientId = idFrom(body.client_id, 'client_id');

@@ -53,7 +53,7 @@ test('row/cell tones, overdue marker, KPI and previous-period chrome exist', () 
   assert.match(viewSource, /nx-co-sheet__reporting-overdue/);
   assert.match(viewSource, /onPeriodChange\?\.\(item\.navigate_period_key\)/);
   assert.match(cssSource, /\.nx-co-sheet__plain-dash\b/);
-  assert.match(cssSource, /\.nx-co-sheet__table tbody tr\.is-reporting-row-complete td/);
+  assert.match(cssSource, /\.nx-co-sheet__table tbody tr\.is-reporting-row-complete td\.is-row-tone-paint/);
   assert.match(cssSource, /\.nx-co-sheet__table tbody td\.is-reporting-cell-overdue/);
   assert.match(cssSource, /\.nx-co-sheet__table tbody td\.is-reporting-cell-payment_outstanding/);
 });
