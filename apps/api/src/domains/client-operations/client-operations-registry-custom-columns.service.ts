@@ -60,6 +60,16 @@ import {
   resolveAllowedManualStatusesForWrite,
   setClientOperationsCellManualStatus,
 } from './client-operations-cell-manual-status.service.js';
+import { setClientOperationsCellPresentationsBulk } from './client-operations-cell-presentation.service.js';
+import { CLIENT_OPERATIONS_CELL_PRESENTATION_COMMAND } from './client-operations-cell-presentation.pure.js';
+import {
+  setClientOperationsUserHiddenColumns,
+  setClientOperationsUserSystemColumnWidth,
+} from './client-operations-user-sheet-layout.service.js';
+import {
+  CLIENT_OPERATIONS_USER_HIDDEN_COLUMNS_COMMAND,
+  CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_COMMAND,
+} from './client-operations-user-sheet-layout.pure.js';
 import {
   ensureClientOperationsPeriodVatObligation,
   executeClientObligationsCommand,
@@ -162,6 +172,8 @@ export type ClientOperationsRegistryCommandBody = {
   confirm_other_tax_year?: unknown;
   files?: unknown;
   instance_id?: unknown;
+  cells?: unknown;
+  column_keys?: unknown;
 };
 
 function assertOrg(ctx: RequestContext): string {
@@ -174,6 +186,21 @@ function assertEdit(ctx: RequestContext): void {
     throw forbidden('client_operations.edit permission required');
   }
 }
+
+function assertRegistryView(ctx: RequestContext): void {
+  const permissions = ctx.membership?.permissions ?? [];
+  if (
+    !permissions.includes('client_operations.view') &&
+    !permissions.includes('client_operations.edit')
+  ) {
+    throw forbidden('client_operations.view permission required');
+  }
+}
+
+const PERSONAL_SHEET_LAYOUT_COMMANDS = new Set([
+  CLIENT_OPERATIONS_USER_HIDDEN_COLUMNS_COMMAND,
+  CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_COMMAND,
+]);
 
 function assertQueryError(error: { message?: string } | null, description: string): void {
   if (error) throw new AppError(500, error.message || description, 'SUPABASE_ERROR');
@@ -665,8 +692,12 @@ export async function executeClientOperationsRegistryCommand(
   body: ClientOperationsRegistryCommandBody
 ) {
   const orgId = assertOrg(ctx);
-  assertEdit(ctx);
   const command = typeof body.command === 'string' ? body.command : '';
+  if (PERSONAL_SHEET_LAYOUT_COMMANDS.has(command)) {
+    assertRegistryView(ctx);
+  } else {
+    assertEdit(ctx);
+  }
   let reuseMaterializationCache = false;
 
   // Client-scoped registry commands must obey assignment ACL before any write.
@@ -802,6 +833,34 @@ export async function executeClientOperationsRegistryCommand(
       actorUserId: ctx.user.id,
       columnKey: column.key,
     });
+  } else if (command === CLIENT_OPERATIONS_CELL_PRESENTATION_COMMAND) {
+    const operationalPeriodKey = operationalPeriodKeyFrom(
+      body.operational_period_key ??
+        (body.query as { operational_period_key?: unknown } | undefined)?.operational_period_key,
+    );
+    await setClientOperationsCellPresentationsBulk({
+      ctx,
+      organizationId: orgId,
+      operationalPeriodKey,
+      cells: body.cells,
+    });
+    // Personal overlay is attached after the shared materialization cache.
+    reuseMaterializationCache = true;
+  } else if (command === CLIENT_OPERATIONS_USER_HIDDEN_COLUMNS_COMMAND) {
+    await setClientOperationsUserHiddenColumns({
+      ctx,
+      organizationId: orgId,
+      columnKeys: body.column_keys,
+    });
+    reuseMaterializationCache = true;
+  } else if (command === CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_COMMAND) {
+    await setClientOperationsUserSystemColumnWidth({
+      ctx,
+      organizationId: orgId,
+      columnKey: body.column_key,
+      widthPx: body.width_px,
+    });
+    reuseMaterializationCache = true;
   } else if (command === 'set_client_operations_cell_manual_status') {
     const clientId = idFrom(body.client_id, 'client_id');
     await ensureActiveClientInOrg(orgId, clientId);
@@ -1637,6 +1696,11 @@ export async function executeClientOperationsRegistryCommand(
       body.target_operational_period_key ??
         body.operational_period_key ??
         responseQuery.operational_period_key,
+    );
+  }
+  if (command === CLIENT_OPERATIONS_CELL_PRESENTATION_COMMAND) {
+    responseQuery.operational_period_key = operationalPeriodKeyFrom(
+      body.operational_period_key ?? responseQuery.operational_period_key,
     );
   }
   // No-op ensure: GET already populated the materialization — do not drop it and rebuild.

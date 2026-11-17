@@ -180,13 +180,14 @@ test('existing width persistence key unchanged', () => {
   assert.equal(loadClientOperationsColumnWidths('u', 'o', storage).vat, 160);
 });
 
-test('view hydrates and persists presentation + hidden columns; undo stack not persisted', () => {
-  assert.match(viewSource, /loadClientOperationsCellPresentation/);
-  assert.match(viewSource, /saveClientOperationsCellPresentation/);
-  assert.match(viewSource, /loadClientOperationsHiddenColumns/);
-  assert.match(viewSource, /saveClientOperationsHiddenColumns/);
+test('view hydrates formatting and column layout from aggregate; undo stack not persisted', () => {
+  assert.match(viewSource, /hydrateClientOperationsUserCellFormatting/);
+  assert.doesNotMatch(viewSource, /loadClientOperationsCellPresentation\(/);
+  assert.doesNotMatch(viewSource, /saveClientOperationsCellPresentation\(/);
+  assert.doesNotMatch(viewSource, /loadClientOperationsHiddenColumns\(/);
+  assert.doesNotMatch(viewSource, /saveClientOperationsHiddenColumns\(/);
   assert.match(viewSource, /persistCellPresentation/);
   assert.match(viewSource, /persistHiddenColumns/);
   assert.doesNotMatch(viewSource, /localStorage\.setItem\([^\)]*undo/i);
-  assert.match(viewSource, /saveClientOperationsColumnWidths/);
+  assert.match(viewSource, /persistSystemColumnWidth/);
 });

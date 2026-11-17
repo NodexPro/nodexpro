@@ -47,14 +47,17 @@ test('active selection is presentation-only — no backend command / API / migra
   );
 });
 
-test('formatting persistence key unchanged (user+org scoped)', () => {
+test('legacy localStorage key retained unused; production identity is user+org+period', () => {
   assert.match(presentationPersistSource, /nx\.client-operations\.cell-presentation\.v1/);
   assert.match(presentationPersistSource, /userId.*organizationId|organizationId.*userId/s);
+  assert.match(presentationPersistSource, /set_client_operations_cell_presentation/);
+  assert.match(viewSource, /hydrateClientOperationsUserCellFormatting/);
 });
 
 test('org switching clears selection on hydrate', () => {
   assert.match(viewSource, /widthScope\?\.organizationId, widthScope\?\.userId/);
-  assert.match(viewSource, /loadClientOperationsCellPresentation[\s\S]{0,200}setFocusedCell\(null\)/s);
+  assert.match(viewSource, /setFocusedCell\(null\)/);
+  assert.match(viewSource, /hydrateClientOperationsUserCellFormatting\(userCellFormatting/);
 });
 
 // ── Click → select active cell ───────────────────────────────────────────────

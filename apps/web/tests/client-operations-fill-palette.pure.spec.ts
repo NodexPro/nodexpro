@@ -101,11 +101,15 @@ test('toolbar uses one paint-bucket and persists the whole selection in one writ
   assert.match(viewSource, /data-testid="fill-remove"/);
   assert.match(viewSource, /data-testid="fill-white"/);
   assert.match(viewSource, /clientOperationsFillPaletteGroups/);
-  assert.match(viewSource, /persistCellPresentation\(next\)/);
+  assert.match(viewSource, /persistCellPresentation\(next, previous\)/);
   const applyStart = viewSource.indexOf('const applyPresentation =');
   const applySlice = viewSource.slice(applyStart, applyStart + 1600);
   assert.match(applySlice, /for \(const key of targets\)/);
-  assert.doesNotMatch(applySlice, /fetch\(|onRegistryCommand/);
+  assert.match(applySlice, /persistCellPresentation\(next, previous\)/);
+  const persistStart = viewSource.indexOf('const persistCellPresentation =');
+  const persistSlice = viewSource.slice(persistStart, persistStart + 1800);
+  assert.match(persistSlice, /CLIENT_OPERATIONS_CELL_PRESENTATION_COMMAND/);
+  assert.equal((persistSlice.match(/onRegistryCommand\(/g) ?? []).length, 1);
   assert.match(viewSource, /clientOperationsCellAllowsDecorativeFill/);
   assert.match(cssSource, /\.nx-co-sheet__fill-palette/);
   assert.match(cssSource, /inset-inline-end:\s*0/);

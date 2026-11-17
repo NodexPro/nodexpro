@@ -958,6 +958,7 @@
     "copyMonthFailed": "Could not copy month data",
     "renameColumnFailed": "Could not rename the column",
     "resizeColumnFailed": "Could not resize the column",
+    "saveFormattingFailed": "Could not save cell formatting",
     "saveMaterialFailed": "Could not save material",
     "saveNiDeductionsFailed": "Could not save NI deductions",
     "saveItDeductionsFailed": "Could not save income-tax deductions",

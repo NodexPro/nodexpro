@@ -104,6 +104,7 @@ const router = Router();
 
 const withView = [requirePermission('client_operations.view')];
 const withEdit = [requirePermission('client_operations.edit')];
+const withRegistryCommand = [requirePermission('client_operations.view', 'client_operations.edit')];
 const withBusinessProfileEdit = [requirePermission('business_profile.edit', 'client_operations.edit')];
 const withAccountingTabView = [requirePermission('accounting_settings_tab.view', 'client_operations.view')];
 const withAccountingBlockEdit = [
@@ -210,7 +211,7 @@ router.get('/registry', ...withView, async (req, res, next) => {
   }
 });
 
-router.post('/registry/commands', ...withEdit, async (req, res, next) => {
+router.post('/registry/commands', ...withRegistryCommand, async (req, res, next) => {
   try {
     const ctx = req.context as RequestContext;
     const out = await executeClientOperationsRegistryCommand(ctx, (req.body ?? {}) as ClientOperationsRegistryCommandBody);

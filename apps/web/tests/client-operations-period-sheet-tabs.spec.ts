@@ -107,7 +107,7 @@ test('folder / widths / custom columns contracts preserved across period UI', ()
     'utf8',
   );
   assert.match(view, /📁/);
-  assert.match(view, /loadClientOperationsColumnWidths|saveClientOperationsColumnWidths/);
+  assert.match(view, /persistSystemColumnWidth|CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_COMMAND/);
   assert.doesNotMatch(view, /column-widths.*operational_period|operational_period.*column-widths/);
 });
 

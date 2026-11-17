@@ -1,7 +1,7 @@
 /**
- * Client Operations hidden-column preferences (localStorage).
- * Presentation only — does not delete registry columns/data.
- * Scoped by user + organization.
+ * Client Operations hidden-column preferences.
+ * Production hydrate/save is backend-owned (`user_hidden_column_keys` + named command).
+ * localStorage helpers are retained unused as the write path until a confirmed cutover.
  */
 
 import {
@@ -11,6 +11,9 @@ import {
 
 export const CLIENT_OPERATIONS_HIDDEN_COLUMNS_STORAGE_PREFIX =
   'nx.client-operations.hidden-columns.v1';
+
+export const CLIENT_OPERATIONS_USER_HIDDEN_COLUMNS_COMMAND =
+  'set_client_operations_user_hidden_columns';
 
 export function clientOperationsHiddenColumnsStorageKey(
   userId: string,

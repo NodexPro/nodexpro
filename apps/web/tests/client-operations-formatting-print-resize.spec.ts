@@ -290,7 +290,7 @@ test('view: undoLastAction handles column_visibility', () => {
 test('view: undoLastAction handles column_width', () => {
   assert.match(viewSource, /entry\.kind === 'column_width'/);
   assert.match(viewSource, /entry\.previousWidth/);
-  assert.match(viewSource, /saveClientOperationsColumnWidths.*entry\.columnKey.*entry\.previousWidth/s);
+  assert.match(viewSource, /persistSystemColumnWidth\(restoredColumn, entry\.previousWidth\)/);
 });
 
 // ── View source: beginResize uses pure module ─────────────────────────────────

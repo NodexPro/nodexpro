@@ -136,13 +136,14 @@ test('TOOLBAR — מיון / סינון / הקפאה / + עמודה hidden from 
   assert.match(viewSource, /is-frozen/);
 });
 
-test('RESIZE — all headers keep resize handle; localStorage key reused', () => {
+test('RESIZE — all headers keep resize handle; legacy localStorage key retained unused', () => {
   assert.match(viewSource, /nx-co-sheet__resize-handle/);
   assert.match(viewSource, /beginResize/);
   assert.match(viewSource, /clampClientOperationsColumnWidth/);
   assert.match(widthsPure, /nx\.client-operations\.column-widths\.v1/);
   assert.match(widthsPure, /COLUMN_WIDTH_MIN = 48/);
   assert.match(widthsPure, /COLUMN_WIDTH_MAX = 480/);
+  assert.match(viewSource, /CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_COMMAND/);
   assert.doesNotMatch(viewSource, /beginResize[\s\S]{0,80}onRegistryCommand/);
 });
 

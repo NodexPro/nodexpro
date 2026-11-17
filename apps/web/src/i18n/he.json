@@ -958,6 +958,7 @@
     "copyMonthFailed": "העתקת מידע מחודש נכשלה",
     "renameColumnFailed": "שינוי שם העמודה נכשל",
     "resizeColumnFailed": "שינוי רוחב העמודה נכשל",
+    "saveFormattingFailed": "שמירת עיצוב התאים נכשלה",
     "saveMaterialFailed": "שמירת חומר נכשלה",
     "saveNiDeductionsFailed": "שמירת ב״ל ניכויים נכשלה",
     "saveItDeductionsFailed": "שמירת מ״ה ניכויים נכשלה",

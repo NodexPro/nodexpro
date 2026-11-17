@@ -17,6 +17,10 @@ import {
   type ClientOperationsRegistryRow,
   type ClientOperationsToolbarCapability,
 } from '../components/client-operations/ClientOperationsRegistryView';
+import type { ClientOperationsStoredCellPresentation } from '../lib/client-operations-cell-presentation.pure';
+import { hydrateClientOperationsUserCellFormatting } from '../lib/client-operations-cell-presentation.pure';
+import { sanitizeClientOperationsHiddenColumnKeys } from '../lib/client-operations-hidden-columns.pure';
+import { clampClientOperationsColumnWidth } from '../lib/client-operations-column-widths.pure';
 import {
   canRenderPeriodBoundRows,
   getPeriodAggregateCache,
@@ -130,6 +134,9 @@ type RegistryAggregate = {
     workspace_subject_user_id?: string | null;
   };
   reporting_dashboard?: ClientOperationsReportingDashboard;
+  user_cell_formatting?: Record<string, ClientOperationsStoredCellPresentation>;
+  user_hidden_column_keys?: string[];
+  user_system_column_widths?: Record<string, number>;
   period?: { selected_period_key: string; default_period_key: string; available_periods: string[] };
   /** Backend-owned periods with meaningful user-entered custom/manual values (copy menu). */
   user_period_data_copy_source_periods?: string[];
@@ -196,6 +203,11 @@ export function ClientOperationsRegistry() {
   >([]);
   const [filters, setFilters] = useState<RegistryAggregate['filters']>(undefined);
   const [reportingDashboard, setReportingDashboard] = useState<ClientOperationsReportingDashboard | null>(null);
+  const [userCellFormatting, setUserCellFormatting] = useState<
+    Record<string, ClientOperationsStoredCellPresentation>
+  >({});
+  const [userHiddenColumnKeys, setUserHiddenColumnKeys] = useState<string[]>([]);
+  const [userSystemColumnWidths, setUserSystemColumnWidths] = useState<Record<string, number>>({});
   const [workspace, setWorkspace] = useState<RegistryWorkspaceAggregate | null>(null);
   const [query, setQuery] = useState<{
     q: string | null;
@@ -311,6 +323,7 @@ export function ClientOperationsRegistry() {
     setRenderedAggregatePeriodKey(null);
     setUserColumnPeriodSetup(null);
     setManualRowsPeriodSetup(null);
+    setUserCellFormatting({});
   }, []);
   const applyAggregate = useCallback(
     (
@@ -370,6 +383,21 @@ export function ClientOperationsRegistry() {
     }
     if (data?.filters) setFilters(data.filters);
     setReportingDashboard(data?.reporting_dashboard ?? null);
+    setUserCellFormatting(hydrateClientOperationsUserCellFormatting(data?.user_cell_formatting));
+    setUserHiddenColumnKeys(
+      sanitizeClientOperationsHiddenColumnKeys(
+        Array.isArray(data?.user_hidden_column_keys) ? data.user_hidden_column_keys : [],
+      ),
+    );
+    setUserSystemColumnWidths(
+      Object.fromEntries(
+        Object.entries(data?.user_system_column_widths ?? {}).flatMap(([key, value]) =>
+          typeof value === 'number' && Number.isFinite(value)
+            ? [[key, clampClientOperationsColumnWidth(value)]]
+            : [],
+        ),
+      ),
+    );
     if (data?.workspace) setWorkspace(data.workspace);
     if (data?.query) {
       setQuery({
@@ -914,6 +942,9 @@ export function ClientOperationsRegistry() {
       period={period}
       userPeriodDataCopySourcePeriods={userPeriodDataCopySourcePeriods}
       onPeriodChange={onPeriodChange}
+      userCellFormatting={userCellFormatting}
+      userHiddenColumnKeys={userHiddenColumnKeys}
+      userSystemColumnWidths={userSystemColumnWidths}
       widthScope={{
         userId: auth.me.user.id,
         organizationId: auth.me.activeOrganizationId ?? '',

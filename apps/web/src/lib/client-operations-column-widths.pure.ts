@@ -1,4 +1,12 @@
+/**
+ * Client Operations column widths.
+ * System column widths are personal backend prefs. Custom `width_px` stays org-owned.
+ * localStorage helpers are retained unused as the write path until a confirmed cutover.
+ */
+
 export const CLIENT_OPERATIONS_COLUMN_WIDTHS_STORAGE_PREFIX = 'nx.client-operations.column-widths.v1';
+export const CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_COMMAND =
+  'set_client_operations_user_system_column_width';
 export const CLIENT_OPERATIONS_COLUMN_WIDTH_MIN = 48;
 export const CLIENT_OPERATIONS_COLUMN_WIDTH_MAX = 480;
 export const CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_MIN = 96;

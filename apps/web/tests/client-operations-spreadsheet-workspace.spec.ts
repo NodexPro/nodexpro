@@ -44,5 +44,5 @@ test('has a shared fullscreen table and scoped width preferences', () => {
   assert.match(viewSource, /event\.key === 'Escape'/);
   assert.match(viewSource, /renderSpreadsheetTable/);
   assert.match(viewSource, /widthScope/);
-  assert.match(viewSource, /saveClientOperationsColumnWidths/);
+  assert.match(viewSource, /persistSystemColumnWidth/);
 });

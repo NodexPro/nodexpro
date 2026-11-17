@@ -65,19 +65,20 @@ import {
 } from './ClientOperationsClientQuickProfilePopover';
 import {
   CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_DEFAULT,
+  CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_COMMAND,
   clampClientOperationsColumnWidth,
   clampClientOperationsCustomColumnWidth,
-  loadClientOperationsColumnWidths,
   omitClientOperationsCustomColumnKeys,
-  saveClientOperationsColumnWidths,
 } from '../../lib/client-operations-column-widths.pure';
 import {
-  loadClientOperationsCellPresentation,
-  saveClientOperationsCellPresentation,
+  buildClientOperationsCellPresentationCommandCells,
+  CLIENT_OPERATIONS_CELL_PRESENTATION_COMMAND,
+  hydrateClientOperationsUserCellFormatting,
+  type ClientOperationsStoredCellPresentation,
 } from '../../lib/client-operations-cell-presentation.pure';
 import {
-  loadClientOperationsHiddenColumns,
-  saveClientOperationsHiddenColumns,
+  CLIENT_OPERATIONS_USER_HIDDEN_COLUMNS_COMMAND,
+  sanitizeClientOperationsHiddenColumnKeys,
 } from '../../lib/client-operations-hidden-columns.pure';
 import {
   clientOperationsPresentationCellKey,
@@ -976,6 +977,12 @@ export type ClientOperationsRegistryViewProps = {
   /** Bump parent load generation so in-flight quiet GETs cannot wipe newer writes. */
   onInvalidateStaleLoads?: () => void;
   widthScope?: { userId: string; organizationId: string };
+  /** Backend-owned personal cell formatting for the painted period. */
+  userCellFormatting?: Record<string, ClientOperationsStoredCellPresentation>;
+  /** Backend-owned personal hidden columns (not period-scoped). */
+  userHiddenColumnKeys?: string[];
+  /** Backend-owned personal system column widths. Custom widths stay on columns[].default_width_px. */
+  userSystemColumnWidths?: Record<string, number>;
   period?: {
     selected_period_key: string;
     default_period_key: string;
@@ -995,6 +1002,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     loading,
     periodContentPending = false,
     searchPending = false,
+    renderedAggregatePeriodKey = null,
     error,
     canEdit,
     canCreateCoreClient = false,
@@ -1020,6 +1028,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     onApplyAggregate,
     onInvalidateStaleLoads,
     widthScope,
+    userCellFormatting,
+    userHiddenColumnKeys,
+    userSystemColumnWidths,
     period,
     userPeriodDataCopySourcePeriods = [],
     onPeriodChange,
@@ -1198,6 +1209,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const statusOverlaysRef = useRef<Map<string, ManualStatusOverlay>>(new Map());
   const statusOverlayGenRef = useRef(0);
   const skipUndoPushRef = useRef(false);
+  const presentationWriteSeqRef = useRef(0);
+  const presentationWriteInFlightRef = useRef(0);
+  const presentationWriteTailRef = useRef(Promise.resolve());
+  const layoutWriteInFlightRef = useRef(0);
   const searchFieldRef = useRef<HTMLDivElement | null>(null);
   const searchScrollClientIdRef = useRef<string | null>(null);
   const searchRequestSeqRef = useRef(0);
@@ -1437,35 +1452,36 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
   useEffect(() => {
     if (!widthScope?.userId || !widthScope.organizationId) {
-      setColumnWidths({});
-      setCellPresentation({});
-      setHiddenColumns(new Set());
       setFocusedCell(null);
       setFormatRange(null);
       return;
     }
-    setCellPresentation(loadClientOperationsCellPresentation(widthScope.userId, widthScope.organizationId));
-    setHiddenColumns(loadClientOperationsHiddenColumns(widthScope.userId, widthScope.organizationId));
     setFocusedCell(null);
     setFormatRange(null);
   }, [widthScope?.organizationId, widthScope?.userId]);
 
   useEffect(() => {
-    if (!widthScope?.userId || !widthScope.organizationId) {
-      setColumnWidths({});
-      return;
-    }
-    const stored = loadClientOperationsColumnWidths(widthScope.userId, widthScope.organizationId);
+    if (presentationWriteInFlightRef.current > 0) return;
+    setCellPresentation(hydrateClientOperationsUserCellFormatting(userCellFormatting ?? {}));
+  }, [userCellFormatting]);
+
+  useEffect(() => {
+    if (layoutWriteInFlightRef.current > 0) return;
+    setHiddenColumns(new Set(sanitizeClientOperationsHiddenColumnKeys(userHiddenColumnKeys ?? [])));
+  }, [userHiddenColumnKeys]);
+
+  useEffect(() => {
+    if (layoutWriteInFlightRef.current > 0) return;
     const customKeys = customColumnKeySignature ? customColumnKeySignature.split('|') : [];
-    setColumnWidths(omitClientOperationsCustomColumnKeys(stored, customKeys));
-  }, [widthScope?.organizationId, widthScope?.userId, customColumnKeySignature]);
+    setColumnWidths(omitClientOperationsCustomColumnKeys(userSystemColumnWidths ?? {}, customKeys));
+  }, [userSystemColumnWidths, customColumnKeySignature]);
 
   useEffect(() => {
     clearManualStatusOverlays(statusOverlaysRef.current);
     statusPaintSlotsRef.current.clear();
     setCoUndoStack(clearClientOperationsUndoStack());
     setRedoStack([]);
-    // cellPresentation / hiddenColumns hydrate from org-scoped storage above — do not wipe to empty.
+    // Personal sheet layout hydrates from the aggregate; do not wipe to empty.
   }, [widthScope?.organizationId]);
 
   useEffect(() => {
@@ -1890,16 +1906,78 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     Math.max(0, Math.ceil(sheetCanvasHeight / SHEET_GRID_ROW_PITCH_PX) - 1 - rows.length - manualRows.length),
   );
 
-  const persistCellPresentation = (next: Record<string, CellPresentation>) => {
-    if (widthScope?.userId && widthScope.organizationId) {
-      saveClientOperationsCellPresentation(widthScope.userId, widthScope.organizationId, next);
-    }
+  const persistCellPresentation = (
+    next: Record<string, CellPresentation>,
+    previous: Record<string, CellPresentation>,
+  ) => {
+    if (!canEdit || !onRegistryCommand) return;
+    const cells = buildClientOperationsCellPresentationCommandCells({ previous, next });
+    if (!cells.length) return;
+    const operationalPeriodKey =
+      period?.selected_period_key || query?.operational_period_key || renderedAggregatePeriodKey;
+    if (!operationalPeriodKey) return;
+    const seq = ++presentationWriteSeqRef.current;
+    onInvalidateStaleLoads?.();
+    const run = async () => {
+      presentationWriteInFlightRef.current += 1;
+      try {
+        await onRegistryCommand(
+          {
+            command: CLIENT_OPERATIONS_CELL_PRESENTATION_COMMAND,
+            operational_period_key: operationalPeriodKey,
+            cells,
+          },
+          { requireApplied: true },
+        );
+      } catch (error) {
+        if (seq !== presentationWriteSeqRef.current) return;
+        setCellPresentation(previous);
+        setCommandError(
+          error instanceof ApiError
+            ? localizeClientOperationsRegistryCommandError(
+                { code: error.code, message: error.message },
+                t,
+                t('clientOperations.saveFormattingFailed'),
+              )
+            : error instanceof Error
+              ? error.message
+              : t('clientOperations.saveFormattingFailed'),
+        );
+      } finally {
+        presentationWriteInFlightRef.current = Math.max(0, presentationWriteInFlightRef.current - 1);
+      }
+    };
+    presentationWriteTailRef.current = presentationWriteTailRef.current.then(run, run);
   };
 
   const persistHiddenColumns = (next: Set<string>) => {
-    if (widthScope?.userId && widthScope.organizationId) {
-      saveClientOperationsHiddenColumns(widthScope.userId, widthScope.organizationId, next);
-    }
+    if (!onRegistryCommand) return;
+    const columnKeys = sanitizeClientOperationsHiddenColumnKeys(next);
+    layoutWriteInFlightRef.current += 1;
+    onInvalidateStaleLoads?.();
+    void onRegistryCommand(
+      {
+        command: CLIENT_OPERATIONS_USER_HIDDEN_COLUMNS_COMMAND,
+        column_keys: columnKeys,
+      },
+      { requireApplied: true },
+    )
+      .catch((error) => {
+        setCommandError(
+          error instanceof ApiError
+            ? localizeClientOperationsRegistryCommandError(
+                { code: error.code, message: error.message },
+                t,
+                t('clientOperations.saveColumnSettingsFailed'),
+              )
+            : error instanceof Error
+              ? error.message
+              : t('clientOperations.saveColumnSettingsFailed'),
+        );
+      })
+      .finally(() => {
+        layoutWriteInFlightRef.current = Math.max(0, layoutWriteInFlightRef.current - 1);
+      });
   };
 
   const formatSelectionRowIds = useMemo(() => {
@@ -2003,24 +2081,23 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       ? selectedKeys.filter((key) => presentationAllowsDecorativeFill(key))
       : selectedKeys;
     if (!targets.length) return;
+    const previous = cellPresentation;
+    const next = { ...previous };
+    for (const key of targets) {
+      const merged: CellPresentation = { ...next[key], ...patch };
+      if (fillPatch && !patch.fill) {
+        delete merged.fill;
+      }
+      next[key] = merged;
+    }
     if (!skipUndoPushRef.current) {
       setCoUndoStack((history) =>
-        pushClientOperationsUndoEntry(history, { kind: 'presentation', previous: cellPresentation }),
+        pushClientOperationsUndoEntry(history, { kind: 'presentation', previous }),
       );
     }
     setRedoStack([]);
-    setCellPresentation((prev) => {
-      const next = { ...prev };
-      for (const key of targets) {
-        const merged: CellPresentation = { ...next[key], ...patch };
-        if (fillPatch && !patch.fill) {
-          delete merged.fill;
-        }
-        next[key] = merged;
-      }
-      persistCellPresentation(next);
-      return next;
-    });
+    setCellPresentation(next);
+    persistCellPresentation(next, previous);
   };
 
   /**
@@ -2068,14 +2145,34 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             ? CLIENT_OPERATIONS_CUSTOM_COLUMN_WIDTH_DEFAULT
             : 110),
     );
-  const persistLocalColumnWidths = (next: Record<string, number>) => {
-    if (!widthScope?.userId || !widthScope.organizationId) return;
-    const customKeys = columns.filter((column) => column.cell_kind === 'custom').map((column) => column.key);
-    saveClientOperationsColumnWidths(
-      widthScope.userId,
-      widthScope.organizationId,
-      omitClientOperationsCustomColumnKeys(next, customKeys),
-    );
+  const persistSystemColumnWidth = (column: ClientOperationsRegistryColumn, width: number) => {
+    if (!onRegistryCommand || column.cell_kind === 'custom') return;
+    layoutWriteInFlightRef.current += 1;
+    onInvalidateStaleLoads?.();
+    void onRegistryCommand(
+      {
+        command: CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_COMMAND,
+        column_key: column.key,
+        width_px: width,
+      },
+      { requireApplied: true },
+    )
+      .catch((error) => {
+        setCommandError(
+          error instanceof ApiError
+            ? localizeClientOperationsRegistryCommandError(
+                { code: error.code, message: error.message },
+                t,
+                t('clientOperations.resizeColumnFailed'),
+              )
+            : error instanceof Error
+              ? error.message
+              : t('clientOperations.resizeColumnFailed'),
+        );
+      })
+      .finally(() => {
+        layoutWriteInFlightRef.current = Math.max(0, layoutWriteInFlightRef.current - 1);
+      });
   };
   const persistCustomColumnWidth = (column: ClientOperationsRegistryColumn, width: number) => {
     if (!canEdit || !column.custom_column_id || !onRegistryCommand) return;
@@ -2104,8 +2201,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const saveColumnWidth = (column: ClientOperationsRegistryColumn, width: number) => {
     const next = { ...columnWidths, [column.key]: width };
     setColumnWidths(next);
-    persistLocalColumnWidths(next);
     if (column.cell_kind === 'custom') persistCustomColumnWidth(column, width);
+    else persistSystemColumnWidth(column, width);
   };
   const toggleHiddenColumn = (columnKey: string) => {
     const next = toggleClientOperationsHiddenColumn(hiddenColumns, columnKey);
@@ -2172,18 +2269,20 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     window.addEventListener('mouseup', onUp);
   };
   const undoPresentationOnly = (previous: Record<string, CellPresentation>) => {
-    setRedoStack((history) => [...history, { presentation: cellPresentation }]);
+    const current = cellPresentation;
+    setRedoStack((history) => [...history, { presentation: current }]);
     setCellPresentation(previous);
-    persistCellPresentation(previous);
+    persistCellPresentation(previous, current);
   };
   const redoPresentation = () => {
     const next = redoStack.at(-1);
     if (!next) return;
+    const current = cellPresentation;
     setCoUndoStack((history) =>
-      pushClientOperationsUndoEntry(history, { kind: 'presentation', previous: cellPresentation }),
+      pushClientOperationsUndoEntry(history, { kind: 'presentation', previous: current }),
     );
     setCellPresentation(next.presentation);
-    persistCellPresentation(next.presentation);
+    persistCellPresentation(next.presentation, current);
     setRedoStack((history) => history.slice(0, -1));
   };
   const formatPresentationValue = (value: string, column: ClientOperationsRegistryColumn, presentation?: CellPresentation) => {
@@ -3030,10 +3129,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     if (entry.kind === 'column_width') {
       const restoredWidths = { ...columnWidths, [entry.columnKey]: entry.previousWidth };
       setColumnWidths(restoredWidths);
-      persistLocalColumnWidths(restoredWidths);
       const restoredColumn = columns.find((column) => column.key === entry.columnKey);
       if (restoredColumn?.cell_kind === 'custom') {
         persistCustomColumnWidth(restoredColumn, entry.previousWidth);
+      } else if (restoredColumn) {
+        persistSystemColumnWidth(restoredColumn, entry.previousWidth);
       }
     }
   };

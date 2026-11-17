@@ -98,7 +98,7 @@ test('13-15 no active cell: tool defaults only — no cellPresentation / domain 
 test('16-18 active cell: formatting still applies, selection retained, persistence retained', () => {
   assert.match(viewSource, /commitPresentationOrToolDefault/);
   assert.match(viewSource, /applyPresentation\(patch\)/);
-  assert.match(viewSource, /persistCellPresentation\(next\)/);
+  assert.match(viewSource, /persistCellPresentation\(next, previous\)/);
   assert.match(viewSource, /preserveActiveCellOnToolbarMouseDown/);
   const applyStart = viewSource.indexOf('const applyPresentation =');
   const apply = viewSource.slice(applyStart, applyStart + 700);

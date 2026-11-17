@@ -69,6 +69,8 @@ import {
   manualStatusPaintModesForAggregate,
 } from './client-operations-cell-manual-status.service.js';
 import { mergeSelectedPeriodIntoAvailablePeriods, isClientOperationsManualStatusPaintableColumnKey } from './client-operations-cell-manual-status.pure.js';
+import { loadClientOperationsCellPresentationsForUser } from './client-operations-cell-presentation.service.js';
+import { loadClientOperationsUserSheetLayoutForUser } from './client-operations-user-sheet-layout.service.js';
 import {
   ensurePeriodApplicabilitySnapshots,
   listKnownOperationalPeriodKeys,
@@ -309,6 +311,28 @@ export type ClientOperationsRegistryResponse = {
     key: string;
     available_baseline_periods: string[];
   }>;
+  /**
+   * Personal decorative cell formatting for the current user + selected period.
+   * Keys are `${stableRowId}::${columnKey}`. Not shared business status.
+   */
+  /** Personal hidden column keys for the current user (not period-scoped). */
+  user_hidden_column_keys?: string[];
+  /** Personal system column widths in px. Custom column width_px stays org-owned. */
+  user_system_column_widths?: Record<string, number>;
+  user_cell_formatting?: Record<
+    string,
+    {
+      align?: 'right' | 'center' | 'left';
+      wrap?: boolean;
+      bold?: boolean;
+      italic?: boolean;
+      underline?: boolean;
+      color?: string;
+      fill?: string;
+      fontSize?: number;
+      numberFormat?: 'general' | 'number' | 'currency' | 'percent' | 'date';
+    }
+  >;
   /** Excel paint-mode tools (backend labels/tokens; FE is render-only). */
   manual_status_paint_modes?: Array<{
     id: 'ready' | 'sent_for_approval' | 'completed' | 'clear';
@@ -764,6 +788,20 @@ export async function listClientOperationsRegistry(
       });
   const searchAndSortMs = Date.now() - searchMs;
 
+  // Personal formatting is request-scoped (user + period). Never store it in the
+  // shared pre-search materialization cache — that cache is not user-keyed.
+  const [user_cell_formatting, userSheetLayout] = await Promise.all([
+    loadClientOperationsCellPresentationsForUser({
+      organizationId: orgId,
+      userId: ctx.user.id,
+      operationalPeriodKey: selectedPeriodKey,
+    }),
+    loadClientOperationsUserSheetLayoutForUser({
+      organizationId: orgId,
+      userId: ctx.user.id,
+    }),
+  ]);
+
   const response: ClientOperationsRegistryResponse = {
     title_he: 'תפעול לקוחות',
     period: materialization.period,
@@ -795,6 +833,9 @@ export async function listClientOperationsRegistry(
     ),
     allowed_actions: buildRegistryAllowedActions(ctx),
     reporting_dashboard,
+    user_cell_formatting,
+    user_hidden_column_keys: userSheetLayout.hidden_column_keys,
+    user_system_column_widths: userSheetLayout.system_column_widths,
   };
   const reusedMaterialization =
     materializationSource === 'hit' || materializationSource === 'coalesced';
