@@ -76,7 +76,7 @@ test('font-size pure: default is 12 (control default, not forced on cells)', () 
 test('font-size pure: sizes array includes standard values', () => {
   assert.match(fontSizeSource, /CLIENT_OPERATIONS_FONT_SIZES/);
   assert.match(fontSizeSource, /8.*9.*10.*11.*12/s);
-  assert.match(fontSizeSource, /14.*16.*18.*20.*24/s);
+  assert.match(fontSizeSource, /14.*16.*18.*20.*24.*28.*32/s);
 });
 
 test('font-size pure: normalizeClientOperationsFontSize exported', () => {

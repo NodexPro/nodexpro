@@ -112,7 +112,10 @@ export function ClientAnnualReportTab({
   const auth = useAuth();
   const organizationId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
   const boardYears = annualTab.filing_years ?? [];
+  const olderYears = annualTab.older_tax_years ?? [];
+  const extraYears = olderYears.map((year) => year.tax_year);
   const yearViews = annualTab.year_views ?? [];
+  const olderYearSelect = annualTab.older_tax_year_select;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [notesDraft, setNotesDraft] = useState(annualTab.notes_card.notes ?? '');
@@ -124,6 +127,7 @@ export function ClientAnnualReportTab({
       selectedYear: annualTab.working_tax_year ?? null,
       workingTaxYear: annualTab.working_tax_year ?? null,
       boardYears: boardYears.map((year) => year.tax_year),
+      extraYears,
     }),
   );
   const [archiveOpenKey, setArchiveOpenKey] = useState<string | null>(null);
@@ -156,6 +160,7 @@ export function ClientAnnualReportTab({
         selectedYear: null,
         workingTaxYear: annualTab.working_tax_year ?? null,
         boardYears: (annualTab.filing_years ?? []).map((year) => year.tax_year),
+        extraYears: (annualTab.older_tax_years ?? []).map((year) => year.tax_year),
       }),
     );
   }, [clientId]);
@@ -166,9 +171,10 @@ export function ClientAnnualReportTab({
         selectedYear: current,
         workingTaxYear: annualTab.working_tax_year ?? null,
         boardYears: (annualTab.filing_years ?? []).map((year) => year.tax_year),
+        extraYears: (annualTab.older_tax_years ?? []).map((year) => year.tax_year),
       }),
     );
-  }, [annualTab.working_tax_year, annualTab.filing_years]);
+  }, [annualTab.working_tax_year, annualTab.filing_years, annualTab.older_tax_years]);
 
   useEffect(() => {
     invalidateAnnualYearSnapshotsForClient(yearCacheRef.current, { organizationId, clientId });
@@ -190,6 +196,7 @@ export function ClientAnnualReportTab({
     selectedYear,
     workingTaxYear: annualTab.working_tax_year ?? null,
     boardYears: boardYears.map((year) => year.tax_year),
+    extraYears,
   });
   selectedYearRef.current = displayedYear;
   const yearView =
@@ -382,7 +389,7 @@ export function ClientAnnualReportTab({
         </p>
       ) : null}
 
-      {boardYears.length > 0 ? (
+      {boardYears.length > 0 || olderYearSelect?.visible ? (
         <div className="nx-annual-year-tabs" role="tablist" aria-label={t('clientOperations.annual.yearTabsAria')} data-testid="annual-tab-year-tabs">
           {boardYears.map((year) => {
             const selected = year.tax_year === displayedYear;
@@ -403,6 +410,30 @@ export function ClientAnnualReportTab({
               </button>
             );
           })}
+          {olderYearSelect?.visible ? (
+            <label className="nx-annual-older-year">
+              <span className="nx-annual-older-year-label">{t(olderYearSelect.label_key)}</span>
+              <select
+                className="nx-annual-older-year-select"
+                data-testid="annual-tab-older-year-select"
+                value={extraYears.includes(displayedYear as number) ? String(displayedYear) : ''}
+                disabled={!olderYearSelect.can_select}
+                onChange={(e) => {
+                  const nextYear = Number(e.target.value);
+                  const option = olderYears.find((row) => row.tax_year === nextYear);
+                  if (!option) return;
+                  selectYearTab(option.tax_year, option.can_select);
+                }}
+              >
+                <option value="">{t(olderYearSelect.placeholder_key)}</option>
+                {olderYears.map((year) => (
+                  <option key={year.tax_year} value={year.tax_year}>
+                    {year.tax_year}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
       ) : null}
 
@@ -541,7 +572,18 @@ export function ClientAnnualReportTab({
       {showChecklist ? (
         <section>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-            <h3 className="nx-annual-card-title">{localizeSystemLabel(t, activeDocuments.card_title_key, activeDocuments.card_title_he)}</h3>
+            <h3 className="nx-annual-card-title nx-annual-documents-year-heading" data-testid="annual-tab-documents-year-heading">
+              {displayedYear != null
+                ? fillI18n(
+                    t(
+                      yearView?.documents_year_heading?.label_key ??
+                        annualTab.documents_year_heading_label_key ??
+                        'clientOperations.annual.documentsForTaxYear',
+                    ),
+                    { year: displayedYear },
+                  )
+                : localizeSystemLabel(t, activeDocuments.card_title_key, activeDocuments.card_title_he)}
+            </h3>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
               {activeDocuments.add_custom_enabled ? (
                 <button

@@ -27,6 +27,27 @@ test('year snapshots are keyed by organization, client, tax year and aggregate v
   assert.equal(buildAnnualYearSnapshotKey({ ...keyInput, organizationId: '' }), '');
 });
 
+test('selecting 2023 outside the last three keeps that year displayed', () => {
+  assert.equal(
+    resolveDisplayedAnnualTaxYear({
+      selectedYear: 2023,
+      workingTaxYear: 2026,
+      boardYears: [2026, 2025, 2024],
+      extraYears: [2023, 2022, 2021],
+    }),
+    2023,
+  );
+  assert.equal(
+    resolveDisplayedAnnualTaxYear({
+      selectedYear: null,
+      workingTaxYear: 2023,
+      boardYears: [2026, 2025, 2024],
+      extraYears: [2023],
+    }),
+    2023,
+  );
+});
+
 test('switching 2026 → 2024 → 2025 keeps the selected tab; a late 2024 persist does not win', () => {
   assert.equal(
     resolveDisplayedAnnualTaxYear({

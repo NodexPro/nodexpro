@@ -56,11 +56,14 @@ export function resolveDisplayedAnnualTaxYear(input: {
   selectedYear: number | null | undefined;
   workingTaxYear: number | null | undefined;
   boardYears: readonly number[];
+  extraYears?: readonly number[];
 }): number | null {
   const board = input.boardYears.filter((year) => Number.isInteger(year));
-  if (board.includes(input.selectedYear as number)) return input.selectedYear as number;
-  if (board.includes(input.workingTaxYear as number)) return input.workingTaxYear as number;
-  return board[0] ?? null;
+  const extra = (input.extraYears ?? []).filter((year) => Number.isInteger(year) && !board.includes(year));
+  const allowed = [...board, ...extra];
+  if (allowed.includes(input.selectedYear as number)) return input.selectedYear as number;
+  if (allowed.includes(input.workingTaxYear as number)) return input.workingTaxYear as number;
+  return board[0] ?? extra[0] ?? null;
 }
 
 export function shouldApplyAnnualYearPersistResponse(input: {

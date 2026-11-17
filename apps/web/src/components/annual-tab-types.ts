@@ -163,6 +163,20 @@ export type AnnualTabModel = {
     };
     can_select_working: boolean;
   }>;
+  older_tax_years?: Array<{
+    tax_year: number;
+    filed: boolean;
+    submitted_on: string | null;
+    is_working: boolean;
+    can_select: boolean;
+  }>;
+  older_tax_year_select?: {
+    visible: boolean;
+    can_select: boolean;
+    label_key: string;
+    placeholder_key: string;
+  };
+  documents_year_heading_label_key?: string;
   year_views?: Array<{
     tax_year: number;
     is_current: boolean;
@@ -186,7 +200,13 @@ export type AnnualTabModel = {
       show_filed_confirmation: boolean;
       show_document_readiness: boolean;
       show_deadline: boolean;
+      show_documents_year_heading?: boolean;
     };
+    documents_year_heading?: {
+      visible: boolean;
+      label_key: string;
+      tax_year: number;
+    } | null;
     filed_confirmation: {
       label_key: string;
       submitted_on: string | null;

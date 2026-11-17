@@ -95,6 +95,31 @@ test('year switch uses in-aggregate year_views and does not reload the client ca
   assert.doesNotMatch(annualSrc, /moduleClientOperationsCase\(/);
 });
 
+test('working checklist heading uses the selected tax year and hides when the year is filed', () => {
+  assert.match(annualSrc, /documentsForTaxYear/);
+  assert.match(annualSrc, /annual-tab-documents-year-heading/);
+  assert.match(annualSrc, /show_working_checklist/);
+  assert.match(annualSrc, /fillI18n\([\s\S]*year: displayedYear/);
+  const he = readFileSync(join(dir, '../src/i18n/he.json'), 'utf8');
+  assert.match(he, /"documentsForTaxYear": "מסמכים לשנת מס \{\{year\}\}"/);
+  const headingIdx = annualSrc.indexOf('annual-tab-documents-year-heading');
+  const checklistIdx = annualSrc.indexOf('{showChecklist ? (');
+  assert.ok(checklistIdx > 0 && headingIdx > checklistIdx);
+});
+
+test('older tax year uses the existing named command and archive stays independent of the selected tab', () => {
+  assert.match(annualSrc, /annualTab\.older_tax_years/);
+  assert.match(annualSrc, /annual-tab-older-year-select/);
+  assert.match(annualSrc, /select_annual_working_tax_year/);
+  assert.match(annualSrc, /AnnualArchiveFolders/);
+  assert.match(annualSrc, /annualTab\.year_folders/);
+  assert.doesNotMatch(annualSrc, /getFullYear\(/);
+  const foldersIdx = annualSrc.indexOf('<AnnualArchiveFolders');
+  const olderIdx = annualSrc.indexOf('annual-tab-older-year-select');
+  const notesIdx = annualSrc.indexOf('annualTab.visibility.show_notes');
+  assert.ok(olderIdx > 0 && notesIdx > olderIdx && foldersIdx > notesIdx);
+});
+
 test('Taxes interior and portal/raise are not altered by the Annual restyle', () => {
   assert.match(panelSrc, /createPortal\(\s*overlay,\s*document\.body\s*\)/);
   assert.match(

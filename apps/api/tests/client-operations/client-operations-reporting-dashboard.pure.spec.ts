@@ -591,6 +591,52 @@ test('filing and payment are independent; unknown payment is not green paid', ()
   assert.equal(paymentAppliesForReportingKind('income_tax_advance'), true);
 });
 
+test('payments-outstanding KPI counts דווח filed-unpaid VAT/ITA and drops after שולם', () => {
+  const reported = buildReportingRowPresentation(
+    [cell({ kind: 'vat', submitted: true, canonical_id: 'vat_report::2026-09-10' })],
+    TODAY,
+  ).cells.vat;
+  assert.equal(reported?.payment_state, 'unknown');
+  assert.equal(reported?.filing_detail?.chrome, 'filed_unpaid');
+  assert.equal(
+    buildPaymentsOutstandingKpi({
+      rows: [
+        {
+          reporting: buildReportingRowPresentation(
+            [cell({ kind: 'vat', submitted: true, canonical_id: 'vat_report::2026-09-10' })],
+            TODAY,
+          ),
+        },
+      ],
+      selected_period_key: '2026-10',
+      outstanding_period_facts: [],
+    }).count,
+    1,
+  );
+  assert.equal(
+    buildPaymentsOutstandingKpi({
+      rows: [
+        {
+          reporting: buildReportingRowPresentation(
+            [
+              cell({
+                kind: 'income_tax_advance',
+                submitted: true,
+                canonical_id: 'income_tax_advance::2026-10',
+                payment_classification: 'paid_in_full',
+              }),
+            ],
+            TODAY,
+          ),
+        },
+      ],
+      selected_period_key: '2026-10',
+      outstanding_period_facts: [],
+    }).count,
+    0,
+  );
+});
+
 test('payments-outstanding KPI counts selected-period orange cells once and lists previous periods in tooltip', () => {
   const rows = [
     {

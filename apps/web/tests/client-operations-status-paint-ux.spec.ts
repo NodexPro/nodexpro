@@ -50,7 +50,7 @@ test('four Hebrew status paint modes with swatches and mutually exclusive active
   assert.match(viewSource, /manualStatusPaintModes/);
   assert.match(viewSource, /nx-co-sheet__status-mode/);
   assert.match(viewSource, /setStatusPaintMode\(\(current\) => \(current === mode\.id \? null : mode\.id\)\)/);
-  assert.match(cssSource, /\.nx-co-sheet__status-mode\s*\{[^}]*height:\s*28px/s);
+  assert.match(cssSource, /\.nx-co-sheet__status-mode\s*\{[^}]*height:\s*30px/s);
   assert.match(viewSource, /aria-label=\{statusLabel\}/);
   assert.match(viewSource, /title=\{statusLabel\}/);
   assert.match(viewSource, /className="nx-co-sheet__sr-only">\{statusLabel\}/);

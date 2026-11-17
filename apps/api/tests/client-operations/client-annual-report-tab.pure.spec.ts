@@ -4,7 +4,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  annualTabViewTaxYears,
   buildAnnualFilingYearBoard,
+  buildAnnualOlderTaxYearOptions,
   buildAnnualYearPresentationFlags,
   checklistFileIdsForFilingYear,
   fileTypeLabelFromMeta,
@@ -67,6 +69,63 @@ test('year list is backend-owned from current tax year, not hardcoded 2024/2025/
   );
   assert.equal(board[2]?.filed, true);
   assert.equal(board[0]?.can_select_working, false);
+});
+
+test('rolling board follows 2026 → 2027 → 2028 without frontend year lists', () => {
+  assert.equal(resolveCurrentAnnualTaxYear(new Date('2026-06-15T00:00:00.000Z')), 2026);
+  assert.equal(resolveCurrentAnnualTaxYear(new Date('2027-01-01T00:00:00.000Z')), 2027);
+  assert.equal(resolveCurrentAnnualTaxYear(new Date('2028-12-31T23:59:59.000Z')), 2028);
+  assert.deepEqual(
+    buildAnnualFilingYearBoard({
+      currentTaxYear: 2026,
+      workingTaxYear: 2026,
+      canEdit: true,
+      submissions: [],
+    }).map((row) => row.tax_year),
+    [2026, 2025, 2024],
+  );
+  assert.deepEqual(
+    buildAnnualFilingYearBoard({
+      currentTaxYear: 2027,
+      workingTaxYear: 2027,
+      canEdit: true,
+      submissions: [],
+    }).map((row) => row.tax_year),
+    [2027, 2026, 2025],
+  );
+  assert.deepEqual(
+    buildAnnualFilingYearBoard({
+      currentTaxYear: 2028,
+      workingTaxYear: 2028,
+      canEdit: true,
+      submissions: [],
+    }).map((row) => row.tax_year),
+    [2028, 2027, 2026],
+  );
+});
+
+test('older tax year outside the last three remains selectable for a late annual filing', () => {
+  const older = buildAnnualOlderTaxYearOptions({
+    currentTaxYear: 2026,
+    workingTaxYear: 2023,
+    canEdit: true,
+    boardYears: [2026, 2025, 2024],
+    knownYears: [{ tax_year: 2023, submitted_on: null }],
+  });
+  assert.equal(older.some((row) => row.tax_year === 2026), false);
+  assert.equal(older.some((row) => row.tax_year === 2024), false);
+  const late = older.find((row) => row.tax_year === 2023);
+  assert.equal(late?.can_select, true);
+  assert.equal(late?.is_working, true);
+  assert.equal(late?.filed, false);
+  assert.deepEqual(
+    annualTabViewTaxYears({
+      boardYears: [2026, 2025, 2024],
+      olderYears: older.map((row) => row.tax_year),
+      workingTaxYear: 2023,
+    }).slice(0, 4),
+    [2026, 2025, 2024, 2023],
+  );
 });
 
 test('checklist + filing files of 2025 live in one folder; re-file does not duplicate the folder', () => {
@@ -208,6 +267,7 @@ test('filed 2025 hides working checklist and missing-as-problem; 2026 not filed 
   });
   assert.equal(filed?.filing_tone, 'green');
   assert.equal(filed?.show_working_checklist, false);
+  assert.equal(filed?.show_documents_year_heading, false);
   assert.equal(filed?.show_missing_as_active_problem, false);
   assert.equal(filed?.show_filed_confirmation, true);
   assert.equal(filed?.archive_folder_key, '2025');
@@ -219,6 +279,8 @@ test('filed 2025 hides working checklist and missing-as-problem; 2026 not filed 
   });
   assert.equal(open?.filing_tone, 'yellow');
   assert.equal(open?.show_working_checklist, true);
+  assert.equal(open?.show_documents_year_heading, true);
+  assert.equal(open?.documents_year_heading_label_key, 'clientOperations.annual.documentsForTaxYear');
   assert.equal(open?.show_missing_as_active_problem, true);
   assert.equal(open?.show_filed_confirmation, false);
   assert.equal(buildAnnualYearPresentationFlags({ tax_year: 0, filed: false, submitted_on: null, canEdit: true }), null);
@@ -226,9 +288,13 @@ test('filed 2025 hides working checklist and missing-as-problem; 2026 not filed 
 
 test('annual tab service keeps Core → Commands → Aggregate: named command, refreshed truth, tenant/RBAC/audit/i18n', () => {
   assert.match(serviceSrc, /select_annual_working_tax_year/);
+  assert.match(serviceSrc, /parseAnnualWorkingTaxYear\(payload.tax_year\)/);
+  assert.doesNotMatch(serviceSrc, /filing_years\.some/);
   assert.match(serviceSrc, /filing_years/);
+  assert.match(serviceSrc, /older_tax_years/);
   assert.match(serviceSrc, /year_views/);
   assert.match(serviceSrc, /working_tax_year/);
+  assert.match(serviceSrc, /if \(!options\?\.readOnly\) \{/);
   assert.match(serviceSrc, /document_readiness/);
   assert.match(serviceSrc, /getAnnualTabReadModel\(ctx, clientId, scope\)/);
   assert.match(serviceSrc, /annual_report_tab\.view/);

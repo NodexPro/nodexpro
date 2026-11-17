@@ -242,6 +242,20 @@
   color: #7decf7;
 }
 
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-older-year-label {
+  color: rgba(238, 246, 255, 0.72);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-older-year-select {
+  background: rgba(8, 38, 82, 0.55);
+  border: 1px solid rgba(125, 211, 252, 0.34);
+  color: #eef6ff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-documents-year-heading {
+  color: #eef6ff;
+}
+
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-filing-year-card,
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-logical-folder {
   background:

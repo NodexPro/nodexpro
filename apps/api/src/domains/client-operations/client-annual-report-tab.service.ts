@@ -20,7 +20,11 @@ import {
   ANNUAL_TAB_TITLE_KEY,
 } from './client-operations-ui-labels.pure.js';
 import {
+  annualFilingSubmittedOnByYear,
+  annualTabViewTaxYears,
   buildAnnualFilingYearBoard,
+  buildAnnualFilingYearItem,
+  buildAnnualOlderTaxYearOptions,
   buildAnnualYearPresentationFlags,
   checklistFileIdsForFilingYear,
   fileTypeLabelFromMeta,
@@ -33,6 +37,7 @@ import {
   uniqueLinkedFileIds,
   workingDocumentRowsForTaxYear,
   type AnnualFilingYearBoardItem,
+  type AnnualOlderTaxYearOption,
   type AnnualYearPresentationFlags,
 } from './client-annual-report-tab.pure.js';
 import {
@@ -360,6 +365,14 @@ export type AnnualTabResponse = {
     submitted_on: string | null;
   };
   filing_years: AnnualFilingYearBoardItem[];
+  older_tax_years: AnnualOlderTaxYearOption[];
+  older_tax_year_select: {
+    visible: boolean;
+    can_select: boolean;
+    label_key: string;
+    placeholder_key: string;
+  };
+  documents_year_heading_label_key: string;
   year_views: AnnualYearViewDto[];
   year_folders: AnnualYearFolder[];
   capital_folders: CapitalRequirementFolder[];
@@ -377,14 +390,20 @@ export interface AnnualYearViewDto {
   missing_documents: string[];
   completion_percent: number;
   deadline_info: AnnualDeadlineInfoDto;
-  visibility: {
-    show_working_checklist: boolean;
-    show_missing_as_active_problem: boolean;
-    show_filed_confirmation: boolean;
-    show_document_readiness: boolean;
-    show_deadline: boolean;
-  };
-  filed_confirmation: {
+    visibility: {
+      show_working_checklist: boolean;
+      show_missing_as_active_problem: boolean;
+      show_filed_confirmation: boolean;
+      show_document_readiness: boolean;
+      show_deadline: boolean;
+      show_documents_year_heading: boolean;
+    };
+    documents_year_heading: {
+      visible: boolean;
+      label_key: string;
+      tax_year: number;
+    } | null;
+    filed_confirmation: {
     label_key: string;
     submitted_on: string | null;
     archive_folder_key: string | null;
@@ -740,7 +759,15 @@ function buildAnnualYearView(input: {
       show_filed_confirmation: input.flags.show_filed_confirmation,
       show_document_readiness: input.flags.show_document_readiness,
       show_deadline: input.flags.show_deadline,
+      show_documents_year_heading: input.flags.show_documents_year_heading,
     },
+    documents_year_heading: input.flags.show_documents_year_heading
+      ? {
+          visible: true,
+          label_key: input.flags.documents_year_heading_label_key,
+          tax_year: input.flags.tax_year,
+        }
+      : null,
     filed_confirmation: input.flags.show_filed_confirmation
       ? {
           label_key: input.flags.filed_confirmation_label_key,
@@ -963,6 +990,14 @@ function buildCapitalFallbackReadModel(canEdit: boolean): AnnualTabResponse {
       submitted_on: null,
     },
     filing_years: [],
+    older_tax_years: [],
+    older_tax_year_select: {
+      visible: false,
+      can_select: false,
+      label_key: 'clientOperations.annual.olderTaxYear',
+      placeholder_key: 'clientOperations.annual.selectOlderTaxYear',
+    },
+    documents_year_heading_label_key: 'clientOperations.annual.documentsForTaxYear',
     year_views: [],
     year_folders: [],
     capital_folders: [],
@@ -1304,6 +1339,12 @@ export async function getAnnualTabReadModel(
         : (() => {
             const currentTaxYear = resolveCurrentAnnualTaxYear();
             const fallback = buildCapitalFallbackReadModel(canEditEarly);
+            const filing_years = buildAnnualFilingYearBoard({
+              currentTaxYear,
+              workingTaxYear: currentTaxYear,
+              canEdit: false,
+              submissions: [],
+            });
             return {
               ...fallback,
               tab_key: 'annual_report' as const,
@@ -1312,12 +1353,20 @@ export async function getAnnualTabReadModel(
               status_card_title_key: 'clientOperations.annual.statusCard',
               current_tax_year: currentTaxYear,
               working_tax_year: currentTaxYear,
-              filing_years: buildAnnualFilingYearBoard({
+              filing_years,
+              older_tax_years: buildAnnualOlderTaxYearOptions({
                 currentTaxYear,
                 workingTaxYear: currentTaxYear,
                 canEdit: false,
-                submissions: [],
+                boardYears: filing_years.map((row) => row.tax_year),
               }),
+              older_tax_year_select: {
+                visible: true,
+                can_select: false,
+                label_key: 'clientOperations.annual.olderTaxYear',
+                placeholder_key: 'clientOperations.annual.selectOlderTaxYear',
+              },
+              documents_year_heading_label_key: 'clientOperations.annual.documentsForTaxYear',
             };
           })();
     }
@@ -1464,19 +1513,49 @@ export async function getAnnualTabReadModel(
     }
     return files;
   };
+  const submissionYears = submissions.map((row) => ({ tax_year: row.tax_year, submitted_on: row.submitted_on }));
   const filing_years =
     scope === 'annual_report'
       ? buildAnnualFilingYearBoard({
           currentTaxYear,
           workingTaxYear,
           canEdit,
-          submissions: submissions.map((row) => ({ tax_year: row.tax_year, submitted_on: row.submitted_on })),
+          submissions: submissionYears,
+        })
+      : [];
+  const knownDocumentYears = ((docRows ?? []) as Array<{ tax_year?: number | null }>)
+    .map((row) => row.tax_year)
+    .filter(isProvenAnnualTaxYear)
+    .map((tax_year) => ({ tax_year, submitted_on: null as string | null }));
+  const older_tax_years =
+    scope === 'annual_report'
+      ? buildAnnualOlderTaxYearOptions({
+          currentTaxYear,
+          workingTaxYear,
+          canEdit,
+          boardYears: filing_years.map((row) => row.tax_year),
+          knownYears: [...submissionYears, ...knownDocumentYears],
         })
       : [];
   const updatedDisplayHe = p?.updated_at ? formatDateTimeHe(p.updated_at) : '—';
+  const filedOnByYear = annualFilingSubmittedOnByYear(submissionYears);
   const year_views: AnnualYearViewDto[] =
     scope === 'annual_report'
-      ? filing_years.flatMap((board) => {
+      ? annualTabViewTaxYears({
+          boardYears: filing_years.map((row) => row.tax_year),
+          olderYears: older_tax_years.map((row) => row.tax_year),
+          workingTaxYear,
+        }).flatMap((taxYear) => {
+          const board =
+            filing_years.find((row) => row.tax_year === taxYear) ??
+            buildAnnualFilingYearItem({
+              tax_year: taxYear,
+              currentTaxYear,
+              workingTaxYear,
+              canEdit,
+              submitted_on: filedOnByYear.get(taxYear) ?? null,
+            });
+          if (!board) return [];
           const flags = buildAnnualYearPresentationFlags({
             tax_year: board.tax_year,
             filed: board.filed,
@@ -1733,6 +1812,14 @@ export async function getAnnualTabReadModel(
     document_readiness: control.status,
     filing_status,
     filing_years,
+    older_tax_years,
+    older_tax_year_select: {
+      visible: older_tax_years.length > 0,
+      can_select: canEdit && older_tax_years.some((row) => row.can_select),
+      label_key: 'clientOperations.annual.olderTaxYear',
+      placeholder_key: 'clientOperations.annual.selectOlderTaxYear',
+    },
+    documents_year_heading_label_key: 'clientOperations.annual.documentsForTaxYear',
     year_views,
     year_folders,
     capital_folders,

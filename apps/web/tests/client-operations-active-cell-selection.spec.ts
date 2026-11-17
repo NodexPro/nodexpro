@@ -74,7 +74,7 @@ test('selected cell gets visible Nova #123756 outline', () => {
   assert.match(cssSource, /\.nx-co-sheet__table td\.is-format-selected/);
   assert.match(cssSource, /outline:\s*1\.5px solid var\(--nx-co-brand\)/);
   assert.match(viewSource, /is-focused is-format-selected/);
-  assert.match(viewSource, /data-format-selected=\{focused \? 'true' : 'false'\}/);
+  assert.match(viewSource, /data-format-selected=\{focused \|\| inFormatRange \? 'true' : 'false'\}/);
   assert.match(viewSource, /data-testid=\{focused \? 'co-active-format-cell'/);
 });
 

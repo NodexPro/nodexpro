@@ -980,7 +980,8 @@ export function buildReportingKpiCards(rows: ReportingKpiRowInput[]): ClientOper
 export function cellHasPaymentOutstanding(
   cell: ClientOperationsReportingCellPresentation | null | undefined,
 ): boolean {
-  if (!cell?.applicable) return false;
+  if (!cell?.applicable || cell.payment_applies === false) return false;
+  if (cell.filing_detail?.chrome === 'filed_unpaid') return true;
   return cell.payment_state === 'outstanding' || cell.payment_state === 'partially_paid';
 }
 

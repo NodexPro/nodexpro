@@ -2,7 +2,7 @@
  * Font-size options for Client Operations spreadsheet cells (presentation only).
  */
 
-export const CLIENT_OPERATIONS_FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24] as const;
+export const CLIENT_OPERATIONS_FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32] as const;
 
 export type ClientOperationsFontSize = (typeof CLIENT_OPERATIONS_FONT_SIZES)[number];
 

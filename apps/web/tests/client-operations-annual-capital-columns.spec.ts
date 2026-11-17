@@ -88,11 +88,9 @@ test('frontend renders integrated date/calendar control without tax year math', 
 test('capital N/A is a plain dash; open uses the calendar icon', () => {
   assert.match(viewSource, /capital_declaration_cell\?\.can_open/);
   assert.match(viewSource, /open_capital_declaration_instance/);
-  assert.match(viewSource, /nx-co-sheet__date-open/);
   assert.match(viewSource, /ClientOperationsCalendarIcon/);
   assert.match(viewSource, /nx-co-sheet__plain-dash/);
   assert.doesNotMatch(viewSource, /nx-co-sheet__date-field-plus/);
-  assert.match(cssSource, /\.nx-co-sheet__date-open/);
 });
 
 test('applicable date cells share one calendar control; non-applicable cells are not date inputs', () => {
@@ -104,8 +102,9 @@ test('applicable date cells share one calendar control; non-applicable cells are
     viewSource.indexOf("if (!operationalCell?.applicable)"),
     viewSource.indexOf("const dateInputId"),
   );
-  assert.match(noOpenBranch, /nx-co-sheet__date-open/);
   assert.match(noOpenBranch, /nx-co-sheet__plain-dash/);
+  assert.doesNotMatch(noOpenBranch, /nx-co-sheet__date-open/);
+  assert.doesNotMatch(noOpenBranch, /nx-co-sheet__filing-square/);
   assert.doesNotMatch(noOpenBranch, /type="date"/);
 });
 
@@ -141,14 +140,13 @@ test('editable annual/capital date field is a full-area operable native input', 
   assert.match(viewSource, /showPicker/);
   // Annual + open capital share the SAME date-field branch (one component pattern).
   assert.match(viewSource, /col\.key === 'annual_report' \? 'annual_report' : 'capital_declaration'/);
-  // Capital no-open: + only, no active date input in that branch.
-  assert.match(viewSource, /nx-co-sheet__date-open/);
   assert.match(viewSource, /open_capital_declaration_instance/);
   const noOpenBranch = viewSource.slice(
     viewSource.indexOf("if (!operationalCell?.applicable)"),
     viewSource.indexOf("const dateInputId"),
   );
-  assert.match(noOpenBranch, /nx-co-sheet__date-open/);
+  assert.match(noOpenBranch, /nx-co-sheet__plain-dash/);
+  assert.doesNotMatch(noOpenBranch, /nx-co-sheet__date-open/);
   assert.doesNotMatch(noOpenBranch, /type="date"/);
   assert.doesNotMatch(noOpenBranch, /showPicker/);
   assert.doesNotMatch(noOpenBranch, /tryShowNativeDatePicker/);

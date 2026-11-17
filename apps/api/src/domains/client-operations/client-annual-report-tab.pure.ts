@@ -7,6 +7,8 @@
  */
 
 export const ANNUAL_FILING_YEAR_BOARD_SIZE = 3;
+/** Presentation lookback for late filing — not a Country Pack statutory limit. */
+export const ANNUAL_LATE_FILING_YEAR_LOOKBACK = 10;
 
 export type AnnualFilingStatusCode = 'filed' | 'not_filed';
 
@@ -23,6 +25,14 @@ export type AnnualFilingYearBoardItem = {
     submitted_on: string | null;
   };
   can_select_working: boolean;
+};
+
+export type AnnualOlderTaxYearOption = {
+  tax_year: number;
+  filed: boolean;
+  submitted_on: string | null;
+  is_working: boolean;
+  can_select: boolean;
 };
 
 export type AnnualLinkedFileMeta = {
@@ -53,40 +63,130 @@ export function parseAnnualWorkingTaxYear(value: unknown): number | null {
   return isProvenAnnualTaxYear(year) ? year : null;
 }
 
+export function annualFilingSubmittedOnByYear(
+  submissions: ReadonlyArray<{ tax_year: number; submitted_on: string | null }>,
+): Map<number, string> {
+  const filedOnByYear = new Map<number, string>();
+  for (const row of submissions) {
+    if (!Number.isInteger(row.tax_year) || !row.submitted_on) continue;
+    const current = filedOnByYear.get(row.tax_year);
+    if (!current || row.submitted_on > current) filedOnByYear.set(row.tax_year, row.submitted_on);
+  }
+  return filedOnByYear;
+}
+
+export function buildAnnualFilingYearItem(input: {
+  tax_year: number;
+  currentTaxYear: number;
+  workingTaxYear: number;
+  canEdit: boolean;
+  submitted_on: string | null;
+}): AnnualFilingYearBoardItem | null {
+  if (!isProvenAnnualTaxYear(input.tax_year)) return null;
+  const submitted_on = input.submitted_on;
+  const filed = Boolean(submitted_on);
+  return {
+    tax_year: input.tax_year,
+    is_current: input.tax_year === input.currentTaxYear,
+    is_working: input.tax_year === input.workingTaxYear,
+    filed,
+    submitted_on,
+    filing_status: {
+      filed,
+      code: filed ? 'filed' : 'not_filed',
+      label_key: filed ? 'clientOperations.annual.filedStatus' : 'clientOperations.annual.notFiledStatus',
+      submitted_on,
+    },
+    can_select_working: input.canEdit,
+  };
+}
+
 export function buildAnnualFilingYearBoard(input: {
   currentTaxYear: number;
   workingTaxYear: number;
   canEdit: boolean;
   submissions: ReadonlyArray<{ tax_year: number; submitted_on: string | null }>;
 }): AnnualFilingYearBoardItem[] {
-  const filedOnByYear = new Map<number, string>();
-  for (const row of input.submissions) {
-    if (!Number.isInteger(row.tax_year) || !row.submitted_on) continue;
-    const current = filedOnByYear.get(row.tax_year);
-    if (!current || row.submitted_on > current) filedOnByYear.set(row.tax_year, row.submitted_on);
-  }
+  const filedOnByYear = annualFilingSubmittedOnByYear(input.submissions);
   const years: number[] = [];
   for (let offset = 0; offset < ANNUAL_FILING_YEAR_BOARD_SIZE; offset += 1) {
     years.push(input.currentTaxYear - offset);
   }
-  return years.map((tax_year) => {
-    const submitted_on = filedOnByYear.get(tax_year) ?? null;
-    const filed = Boolean(submitted_on);
-    return {
+  return years.flatMap((tax_year) => {
+    const item = buildAnnualFilingYearItem({
       tax_year,
-      is_current: tax_year === input.currentTaxYear,
-      is_working: tax_year === input.workingTaxYear,
-      filed,
-      submitted_on,
-      filing_status: {
-        filed,
-        code: filed ? 'filed' : 'not_filed',
-        label_key: filed ? 'clientOperations.annual.filedStatus' : 'clientOperations.annual.notFiledStatus',
-        submitted_on,
-      },
-      can_select_working: input.canEdit,
-    };
+      currentTaxYear: input.currentTaxYear,
+      workingTaxYear: input.workingTaxYear,
+      canEdit: input.canEdit,
+      submitted_on: filedOnByYear.get(tax_year) ?? null,
+    });
+    return item ? [item] : [];
   });
+}
+
+export function buildAnnualOlderTaxYearOptions(input: {
+  currentTaxYear: number;
+  workingTaxYear: number;
+  canEdit: boolean;
+  boardYears: readonly number[];
+  knownYears?: ReadonlyArray<{ tax_year: number; submitted_on?: string | null }>;
+}): AnnualOlderTaxYearOption[] {
+  const board = new Set(input.boardYears.filter((year) => isProvenAnnualTaxYear(year)));
+  const filedOnByYear = annualFilingSubmittedOnByYear(
+    (input.knownYears ?? []).map((row) => ({
+      tax_year: row.tax_year,
+      submitted_on: row.submitted_on ?? null,
+    })),
+  );
+  const years = new Set<number>();
+  const oldestBoardYear = input.currentTaxYear - ANNUAL_FILING_YEAR_BOARD_SIZE;
+  const floor = Math.max(1990, oldestBoardYear - ANNUAL_LATE_FILING_YEAR_LOOKBACK + 1);
+  for (let taxYear = oldestBoardYear; taxYear >= floor; taxYear -= 1) {
+    if (isProvenAnnualTaxYear(taxYear) && !board.has(taxYear)) years.add(taxYear);
+  }
+  if (
+    isProvenAnnualTaxYear(input.workingTaxYear) &&
+    input.workingTaxYear <= input.currentTaxYear &&
+    !board.has(input.workingTaxYear)
+  ) {
+    years.add(input.workingTaxYear);
+  }
+  for (const row of input.knownYears ?? []) {
+    if (
+      isProvenAnnualTaxYear(row.tax_year) &&
+      row.tax_year <= input.currentTaxYear &&
+      !board.has(row.tax_year)
+    ) {
+      years.add(row.tax_year);
+    }
+  }
+  return [...years]
+    .sort((a, b) => b - a)
+    .map((tax_year) => {
+      const submitted_on = filedOnByYear.get(tax_year) ?? null;
+      return {
+        tax_year,
+        filed: Boolean(submitted_on),
+        submitted_on,
+        is_working: tax_year === input.workingTaxYear,
+        can_select: input.canEdit,
+      };
+    });
+}
+
+export function annualTabViewTaxYears(input: {
+  boardYears: readonly number[];
+  olderYears?: readonly number[];
+  workingTaxYear: number;
+}): number[] {
+  const out: number[] = [];
+  const seen = new Set<number>();
+  for (const year of [...input.boardYears, input.workingTaxYear, ...(input.olderYears ?? [])]) {
+    if (!isProvenAnnualTaxYear(year) || seen.has(year)) continue;
+    seen.add(year);
+    out.push(year);
+  }
+  return out;
 }
 
 export function workingDocumentRowsForTaxYear<T extends { tax_year?: number | null }>(
@@ -178,6 +278,8 @@ export type AnnualYearPresentationFlags = {
   show_filed_confirmation: boolean;
   show_document_readiness: boolean;
   show_deadline: boolean;
+  show_documents_year_heading: boolean;
+  documents_year_heading_label_key: string;
   archive_folder_key: string | null;
   filed_confirmation_label_key: string;
   open_archive_label_key: string;
@@ -202,6 +304,8 @@ export function buildAnnualYearPresentationFlags(input: {
     show_filed_confirmation: filed,
     show_document_readiness: !filed,
     show_deadline: !filed,
+    show_documents_year_heading: !filed,
+    documents_year_heading_label_key: 'clientOperations.annual.documentsForTaxYear',
     archive_folder_key: filed ? String(input.tax_year) : null,
     filed_confirmation_label_key: 'clientOperations.annual.filedConfirmation',
     open_archive_label_key: 'clientOperations.annual.openYearArchive',

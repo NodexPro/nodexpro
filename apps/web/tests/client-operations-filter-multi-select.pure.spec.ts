@@ -38,7 +38,7 @@ test('toggle הכל clears specifics; a value deselects הכל; empty is unrestr
 test('multi-select is driven by backend selection_mode and aggregate options', () => {
   assert.match(view, /def\.selection_mode === 'multi'/);
   assert.match(view, /ClientOperationsMultiSelectFilter/);
-  assert.match(view, /options=\{def\.options\}/);
+  assert.match(view, /options=\{def\.options\.map/);
   assert.doesNotMatch(view, /osek_murshe/);
   assert.doesNotMatch(view, /vat_monthly/);
   assert.doesNotMatch(page, /osek_murshe/);
@@ -49,7 +49,7 @@ test('multi-select is driven by backend selection_mode and aggregate options', (
 });
 
 test('toolbar and six filters stretch across the workspace without stretching buttons', () => {
-  assert.match(css, /\.nx-co-sheet__toolbar \{[\s\S]*?justify-content:\s*space-between/);
+  assert.match(css, /\.nx-co-sheet__toolbar \{[\s\S]*?justify-content:\s*flex-start/);
   assert.match(css, /\.nx-co-sheet__filter-control \{[\s\S]*?flex:\s*1 1 0/);
   assert.match(css, /\.nx-co-sheet__filter-bar-scroll \{[\s\S]*?width:\s*100%/);
   assert.match(css, /\.nx-co-sheet__btn \{[\s\S]*?padding:\s*6px 12px/);
