@@ -1022,7 +1022,12 @@ export async function fileClientOperationsCapitalDeclaration(input: {
     if (!existing?.id) throw badRequest('Capital declaration instance not found');
     instanceId = String(existing.id);
   } else {
-    throw badRequest('No capital declaration requirement to file', 'CAPITAL_FILING_INSTANCE_REQUIRED');
+    const opened = await openCapitalDeclarationInstance({
+      ctx: input.ctx,
+      clientId: input.clientId,
+    });
+    instanceId = opened.instance_id;
+    await completeCapitalDeclarationInstance({ ctx: input.ctx, clientId: input.clientId });
   }
 
   const incoming = await uploadIncomingFilingFiles({

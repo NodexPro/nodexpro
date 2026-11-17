@@ -1380,10 +1380,12 @@ button.nx-co-sheet__ni-clip:disabled {
 
 /* Integrated spreadsheet date control (annual / capital operational targets). */
 .nx-co-sheet__table td:has(.nx-co-sheet__date-with-square) {
-  /* Square and calendar must stay inside the cell; hidden overflow clips the square. */
-  overflow: visible;
+  overflow: hidden;
   text-overflow: clip;
+  padding-block: 2px;
   padding-inline: 4px;
+  height: 31px;
+  max-height: 31px;
 }
 
 .nx-co-sheet__date-with-square {
@@ -1393,6 +1395,7 @@ button.nx-co-sheet__ni-clip:disabled {
   width: 100%;
   max-width: 100%;
   min-width: 0;
+  height: 22px;
   box-sizing: border-box;
   font-family: Arial, sans-serif;
 }
@@ -1402,6 +1405,13 @@ button.nx-co-sheet__ni-clip:disabled {
   width: auto;
   min-width: 0;
   max-width: none;
+  min-height: 22px;
+  height: 22px;
+  padding: 0 4px;
+}
+
+.nx-co-sheet__date-field--capital {
+  min-width: 0;
 }
 
 .nx-co-sheet__filing-square {
@@ -1423,18 +1433,21 @@ button.nx-co-sheet__ni-clip:disabled {
 
 .nx-co-sheet__capital-new {
   box-sizing: border-box;
-  width: 18px;
-  height: 18px;
-  flex: 0 0 18px;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
   padding: 0;
   border-radius: 4px;
   border: 1px solid rgba(14, 116, 144, 0.45);
   background: #fff;
   color: #0e7490;
   font-family: Arial, sans-serif;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
 }
 

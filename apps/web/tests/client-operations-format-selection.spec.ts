@@ -14,8 +14,10 @@ import {
   formatDragExceededThreshold,
   listClientOperationsFormatSelectionKeys,
   listClientOperationsTableSelectionKeys,
+  scrollDeltaForPointerNearEdge,
   shouldSuppressFormatSelectionClick,
   tableSelectionRange,
+  toggleCellInFormatSelection,
 } from '../src/lib/client-operations-format-selection.pure.js';
 
 const dir = dirname(fileURLToPath(import.meta.url));
@@ -135,5 +137,91 @@ test('drag click leftover and modifier gestures do not reset the range', () => {
   assert.match(viewSource, /beginFormatPointerSelection/);
   assert.match(viewSource, /selectAllFormatCells/);
   assert.match(viewSource, /event\.key\.toLowerCase\(\) === 'a'/);
+  assert.match(viewSource, /toggleCellInFormatSelection/);
+  assert.match(viewSource, /scrollDeltaForPointerNearEdge/);
   assert.doesNotMatch(pureSource, /fetch\(|onRegistryCommand|set_client_operations/);
+});
+
+test('ctrl+click removes a cell from a rectangle without dropping the rest', () => {
+  const ranges = [
+    {
+      anchor: { clientId: 'c1', colKey: 'client_name' },
+      focus: { clientId: 'c3', colKey: 'notes' },
+    },
+  ];
+  const next = toggleCellInFormatSelection({
+    cell: { clientId: 'c2', colKey: 'vat' },
+    ranges,
+    rowIds,
+    columnKeys,
+  });
+  const keys = listClientOperationsFormatSelectionKeys({
+    range: null,
+    ranges: next,
+    focused: null,
+    rowIds,
+    columnKeys,
+  });
+  assert.equal(keys.includes('c2::vat'), false);
+  assert.ok(keys.includes('c1::vat'));
+  assert.ok(keys.includes('c2::notes'));
+  assert.ok(keys.includes('c3::client_name'));
+});
+
+test('a 50-cell rectangle and mixed client/manual rows stay one selection', () => {
+  const manyRows = Array.from({ length: 10 }, (_, index) => `c${index + 1}`);
+  const manyCols = ['a', 'b', 'c', 'd', 'e'];
+  const keys = listClientOperationsFormatSelectionKeys({
+    range: {
+      anchor: { clientId: 'c1', colKey: 'a' },
+      focus: { clientId: 'c10', colKey: 'e' },
+    },
+    focused: null,
+    rowIds: manyRows,
+    columnKeys: manyCols,
+  });
+  assert.equal(keys.length, 50);
+  const hundredRows = Array.from({ length: 20 }, (_, index) => `r${index + 1}`);
+  const hundred = listClientOperationsFormatSelectionKeys({
+    range: {
+      anchor: { clientId: 'r1', colKey: 'a' },
+      focus: { clientId: 'r20', colKey: 'e' },
+    },
+    focused: null,
+    rowIds: hundredRows,
+    columnKeys: manyCols,
+  });
+  assert.equal(hundred.length, 100);
+  const mixed = listClientOperationsTableSelectionKeys({
+    clientIds: ['c1'],
+    manualRowKeys: ['manual:01'],
+    columnKeys: ['client_name', 'notes'],
+  });
+  assert.ok(mixed.includes('c1::notes'));
+  assert.ok(mixed.includes('manual:01::client_name'));
+});
+
+test('pointer near the canvas edge asks the grid to scroll', () => {
+  assert.deepEqual(
+    scrollDeltaForPointerNearEdge({
+      clientX: 10,
+      clientY: 10,
+      left: 0,
+      top: 0,
+      right: 400,
+      bottom: 300,
+    }),
+    { x: -24, y: -24 },
+  );
+  assert.deepEqual(
+    scrollDeltaForPointerNearEdge({
+      clientX: 200,
+      clientY: 150,
+      left: 0,
+      top: 0,
+      right: 400,
+      bottom: 300,
+    }),
+    { x: 0, y: 0 },
+  );
 });

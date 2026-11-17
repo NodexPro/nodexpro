@@ -275,3 +275,114 @@ export function applyFormatSelectionGesture(input: {
   }
   return [{ anchor: input.next, focus: input.next }];
 }
+
+export function sameFormatSelectionCell(
+  left: ClientOperationsActiveCell | null | undefined,
+  right: ClientOperationsActiveCell | null | undefined,
+): boolean {
+  if (!left || !right) return false;
+  return identityOf(left) === identityOf(right) && left.colKey === right.colKey;
+}
+
+export function splitFormatRangeExcludingCell(input: {
+  range: ClientOperationsFormatRange;
+  cell: ClientOperationsActiveCell;
+  rowIds: readonly string[];
+  columnKeys: readonly string[];
+}): ClientOperationsFormatRange[] {
+  const keys = formatSelectionKeysForRange({
+    range: input.range,
+    rowIds: input.rowIds,
+    columnKeys: input.columnKeys,
+  });
+  const excluded = clientOperationsPresentationCellKey(input.cell);
+  if (!keys.includes(excluded)) return [input.range];
+  if (keys.length === 1) return [];
+  const rowA = input.rowIds.indexOf(identityOf(input.range.anchor));
+  const rowB = input.rowIds.indexOf(identityOf(input.range.focus));
+  const colA = input.columnKeys.indexOf(input.range.anchor.colKey);
+  const colB = input.columnKeys.indexOf(input.range.focus.colKey);
+  const hitRow = input.rowIds.indexOf(identityOf(input.cell));
+  const hitCol = input.columnKeys.indexOf(input.cell.colKey);
+  if (rowA < 0 || rowB < 0 || colA < 0 || colB < 0 || hitRow < 0 || hitCol < 0) {
+    return keys
+      .filter((key) => key !== excluded)
+      .map((key) => {
+        const sep = key.lastIndexOf('::');
+        return {
+          anchor: cellFromRowId(key.slice(0, sep), key.slice(sep + 2)),
+          focus: cellFromRowId(key.slice(0, sep), key.slice(sep + 2)),
+        };
+      });
+  }
+  const r0 = Math.min(rowA, rowB);
+  const r1 = Math.max(rowA, rowB);
+  const c0 = Math.min(colA, colB);
+  const c1 = Math.max(colA, colB);
+  const out: ClientOperationsFormatRange[] = [];
+  const pushRect = (rowStart: number, rowEnd: number, colStart: number, colEnd: number) => {
+    if (rowStart > rowEnd || colStart > colEnd) return;
+    const startRow = input.rowIds[rowStart];
+    const endRow = input.rowIds[rowEnd];
+    const startCol = input.columnKeys[colStart];
+    const endCol = input.columnKeys[colEnd];
+    if (!startRow || !endRow || !startCol || !endCol) return;
+    out.push({
+      anchor: cellFromRowId(startRow, startCol),
+      focus: cellFromRowId(endRow, endCol),
+    });
+  };
+  if (hitRow > r0) pushRect(r0, hitRow - 1, c0, c1);
+  if (hitRow < r1) pushRect(hitRow + 1, r1, c0, c1);
+  if (hitCol > c0) pushRect(hitRow, hitRow, c0, hitCol - 1);
+  if (hitCol < c1) pushRect(hitRow, hitRow, hitCol + 1, c1);
+  return out;
+}
+
+export function toggleCellInFormatSelection(input: {
+  cell: ClientOperationsActiveCell;
+  ranges: readonly ClientOperationsFormatRange[];
+  rowIds: readonly string[];
+  columnKeys: readonly string[];
+}): ClientOperationsFormatRange[] {
+  const selected = listClientOperationsFormatSelectionKeys({
+    range: null,
+    ranges: input.ranges,
+    focused: null,
+    rowIds: input.rowIds,
+    columnKeys: input.columnKeys,
+  });
+  const key = clientOperationsPresentationCellKey(input.cell);
+  if (!selected.includes(key)) {
+    return [...input.ranges, { anchor: input.cell, focus: input.cell }];
+  }
+  return input.ranges.flatMap((range) =>
+    splitFormatRangeExcludingCell({
+      range,
+      cell: input.cell,
+      rowIds: input.rowIds,
+      columnKeys: input.columnKeys,
+    }),
+  );
+}
+
+export function scrollDeltaForPointerNearEdge(input: {
+  clientX: number;
+  clientY: number;
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+  edgePx?: number;
+  stepPx?: number;
+}): { x: number; y: number } {
+  const edge = input.edgePx ?? 28;
+  const step = input.stepPx ?? 24;
+  let x = 0;
+  let y = 0;
+  if (input.clientX < input.left + edge) x = -step;
+  else if (input.clientX > input.right - edge) x = step;
+  if (input.clientY < input.top + edge) y = -step;
+  else if (input.clientY > input.bottom - edge) y = step;
+  return { x, y };
+}

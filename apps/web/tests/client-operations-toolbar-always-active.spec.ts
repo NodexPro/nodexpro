@@ -86,12 +86,11 @@ test('13-15 no active cell: tool defaults only — no cellPresentation / domain 
   assert.ok(helperStart >= 0);
   const helper = viewSource.slice(helperStart, helperStart + 900);
   assert.match(helper, /setPresentationToolDefaults/);
-  assert.match(helper, /if \(!focusedCell\) return;/);
+  assert.match(helper, /if \(!focusedCell && !formatSelectionKeys.length\) return;/);
   assert.match(helper, /applyPresentation\(patch\)/);
-  // applyPresentation itself never writes without focusedCell
   const applyStart = viewSource.indexOf('const applyPresentation =');
-  const apply = viewSource.slice(applyStart, applyStart + 200);
-  assert.match(apply, /if \(!focusedCell\) return;/);
+  const apply = viewSource.slice(applyStart, applyStart + 400);
+  assert.match(apply, /if \(!selectedKeys.length\) return;/);
   assert.doesNotMatch(helper, /onRegistryCommand|toggleMaterial|setOperational/);
 });
 

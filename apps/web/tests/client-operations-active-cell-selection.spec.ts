@@ -111,7 +111,7 @@ test('A / font size / B I U / alignment apply via commitPresentationOrToolDefaul
   assert.match(viewSource, /commitPresentationOrToolDefault\(\{ align: 'left' \}\)/);
   assert.match(viewSource, /commitPresentationOrToolDefault\(\{ color: swatch\.hex \}\)/);
   assert.match(viewSource, /commitPresentationOrToolDefault\(\{\s*fontSize:/);
-  assert.match(viewSource, /if \(!focusedCell\) return;/); // applyPresentation still gates cell mutation
+  assert.match(viewSource, /if \(!selectedKeys.length\) return;/); // applyPresentation still gates cell mutation
 });
 
 test('selection remains after toolbar action (mousedown preserve + no clear in applyPresentation)', () => {

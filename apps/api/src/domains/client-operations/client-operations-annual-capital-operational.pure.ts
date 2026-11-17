@@ -51,9 +51,18 @@ export type AnnualReportFilingPresentation = {
   };
 };
 
+export type CapitalDeclarationAllowedActions = {
+  can_set_date: boolean;
+  can_open_modal: boolean;
+  can_file: boolean;
+  can_open_new: boolean;
+};
+
+export type CapitalDeclarationAssignmentState = 'unassigned' | 'assigned' | 'filed' | 'not_applicable';
+
 export type CapitalDeclarationFilingPresentation = {
   square_chrome: AnnualCapitalFilingSquareChrome;
-  /** Backend-owned: filing square only for an assigned declaration instance. */
+  /** Backend-owned: square stays visible for every assignable client, including unassigned. */
   square_visible: boolean;
   instance_id: string | null;
   sequence_no: number | null;
@@ -96,9 +105,11 @@ export type CapitalDeclarationOperationalDateCell = {
   instance_status: 'open' | 'completed' | null;
   /**
    * Backend-owned assignment: missing instance is unassigned, not N/A.
-   * not_applicable is reserved for a real business rule (none today).
+   * filed is a completed assigned instance. not_applicable is reserved for a
+   * real legal rule — never a missing instance.
    */
-  assignment_state: 'unassigned' | 'assigned' | 'not_applicable';
+  assignment_state: CapitalDeclarationAssignmentState;
+  allowed_actions: CapitalDeclarationAllowedActions;
   /** Backend-owned: show compact + after a completed instance so another can be opened. */
   can_open: boolean;
   filing: CapitalDeclarationFilingPresentation;
@@ -254,16 +265,29 @@ export function buildAnnualReportCell(input: {
   };
 }
 
+function capitalActions(input: {
+  assignmentState: CapitalDeclarationAssignmentState;
+  canEdit: boolean;
+}): CapitalDeclarationAllowedActions {
+  if (!input.canEdit || input.assignmentState === 'not_applicable') {
+    return { can_set_date: false, can_open_modal: false, can_file: false, can_open_new: false };
+  }
+  if (input.assignmentState === 'filed') {
+    return { can_set_date: false, can_open_modal: true, can_file: true, can_open_new: true };
+  }
+  return { can_set_date: true, can_open_modal: true, can_file: true, can_open_new: false };
+}
+
 function emptyCapitalFiling(canEdit: boolean): CapitalDeclarationFilingPresentation {
   return {
     square_chrome: 'empty',
-    square_visible: false,
+    square_visible: true,
     instance_id: null,
     sequence_no: null,
     filed: false,
     submitted_on: null,
     operational_target_date: null,
-    can_open_modal: false,
+    can_open_modal: canEdit,
     modal: {
       title_key: 'clientOperations.registry.reporting.annualCapital.capitalTitle',
       confirm_key: 'clientOperations.registry.reporting.annualCapital.filedAction',
@@ -384,30 +408,35 @@ export function buildCapitalDeclarationCell(input: {
     datedCompletedInstance: input.datedCompletedInstance ?? null,
   });
   if (!visible) {
+    const allowed_actions = capitalActions({ assignmentState: 'unassigned', canEdit: input.canEdit });
     return {
       applicable: true,
-      editable: input.canEdit,
+      editable: allowed_actions.can_set_date,
       instance_id: null,
       tax_year: null,
       operational_target_date: null,
       sequence_no: null,
       instance_status: null,
       assignment_state: 'unassigned',
-      can_open: false,
+      allowed_actions,
+      can_open: allowed_actions.can_open_new,
       filing: emptyCapitalFiling(input.canEdit),
     };
   }
   const isOpen = visible.status === 'open';
+  const assignment_state: CapitalDeclarationAssignmentState = isOpen ? 'assigned' : 'filed';
+  const allowed_actions = capitalActions({ assignmentState: assignment_state, canEdit: input.canEdit });
   return {
     applicable: true,
-    editable: input.canEdit && isOpen,
+    editable: allowed_actions.can_set_date,
     instance_id: visible.id,
     tax_year: visible.tax_year,
     operational_target_date: visible.operational_target_date,
     sequence_no: visible.sequence_no,
     instance_status: visible.status,
-    assignment_state: 'assigned',
-    can_open: input.canEdit && !isOpen,
+    assignment_state,
+    allowed_actions,
+    can_open: allowed_actions.can_open_new,
     filing: buildCapitalDeclarationFiling({
       instance: {
         id: visible.id,

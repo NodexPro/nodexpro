@@ -222,11 +222,13 @@ test('annual square and KPI tax year stay on the tab year even if another year i
     capitalFolders.map((row) => row.sequence_no),
     [1, 2],
   );
-  assert.equal(completedCell.assignment_state, 'assigned');
+  assert.equal(completedCell.assignment_state, 'filed');
   assert.equal(completedCell.filing.square_visible, true);
+  assert.equal(completedCell.allowed_actions.can_open_new, true);
+  assert.equal(completedCell.allowed_actions.can_set_date, false);
 });
 
-test('unassigned capital is calendar-ready; square only after an assigned instance', async () => {
+test('unassigned capital keeps calendar and square without creating an instance', async () => {
   const { buildCapitalDeclarationCell } = await import(
     '../../src/domains/client-operations/client-operations-annual-capital-operational.pure.js'
   );
@@ -237,7 +239,9 @@ test('unassigned capital is calendar-ready; square only after an assigned instan
   assert.equal(unassigned.applicable, true);
   assert.equal(unassigned.editable, true);
   assert.equal(unassigned.assignment_state, 'unassigned');
-  assert.equal(unassigned.filing.square_visible, false);
+  assert.equal(unassigned.filing.square_visible, true);
+  assert.equal(unassigned.filing.can_open_modal, true);
+  assert.equal(unassigned.allowed_actions.can_file, true);
   assert.equal(unassigned.can_open, false);
   const assigned = buildCapitalDeclarationCell({
     openInstance: {
@@ -250,6 +254,7 @@ test('unassigned capital is calendar-ready; square only after an assigned instan
   assert.equal(assigned.assignment_state, 'assigned');
   assert.equal(assigned.filing.square_visible, true);
   assert.equal(assigned.filing.square_chrome, 'empty');
+  assert.equal(assigned.allowed_actions.can_open_modal, true);
 });
 
 test('capital date command creates an instance instead of requiring one on GET', () => {
@@ -263,4 +268,15 @@ test('capital date command creates an instance instead of requiring one on GET',
   assert.match(slice, /openCapitalDeclarationInstance/);
   assert.doesNotMatch(slice, /No open capital declaration instance for this client/);
   assert.match(slice, /date == null/);
+});
+
+test('capital file command creates an instance when none exists', () => {
+  const serviceSource = readFileSync(
+    join(dir, '../../src/domains/client-operations/client-operations-annual-capital-operational.service.ts'),
+    'utf8',
+  );
+  const start = serviceSource.indexOf('export async function fileClientOperationsCapitalDeclaration');
+  const slice = serviceSource.slice(start);
+  assert.match(slice, /openCapitalDeclarationInstance/);
+  assert.doesNotMatch(slice, /CAPITAL_FILING_INSTANCE_REQUIRED/);
 });

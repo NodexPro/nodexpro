@@ -111,8 +111,10 @@ import {
   formatDragExceededThreshold,
   isClientOperationsFormatRangeCell,
   listClientOperationsFormatSelectionKeys,
+  scrollDeltaForPointerNearEdge,
   shouldSuppressFormatSelectionClick,
   tableSelectionRange,
+  toggleCellInFormatSelection,
   type ClientOperationsFormatRange,
   type ClientOperationsSelectionGesture,
 } from '../../lib/client-operations-format-selection.pure';
@@ -254,6 +256,13 @@ export type ClientOperationsAnnualReportFiling = {
   };
 };
 
+export type ClientOperationsCapitalDeclarationAllowedActions = {
+  can_set_date: boolean;
+  can_open_modal: boolean;
+  can_file: boolean;
+  can_open_new: boolean;
+};
+
 export type ClientOperationsCapitalDeclarationFiling = {
   square_chrome: 'empty' | 'filed';
   square_visible?: boolean;
@@ -296,7 +305,8 @@ export type ClientOperationsCapitalDeclarationCell = {
   operational_target_date: string | null;
   sequence_no?: number | null;
   instance_status?: 'open' | 'completed' | null;
-  assignment_state?: 'unassigned' | 'assigned' | 'not_applicable';
+  assignment_state?: 'unassigned' | 'assigned' | 'filed' | 'not_applicable';
+  allowed_actions?: ClientOperationsCapitalDeclarationAllowedActions;
   can_open: boolean;
   filing?: ClientOperationsCapitalDeclarationFiling;
 };
@@ -1152,6 +1162,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     startY: number;
   }>({ active: false, moved: false, gesture: 'replace', startX: 0, startY: 0 });
   const formatSuppressClickRef = useRef(false);
+  const formatPendingToggleRef = useRef<ClientOperationsActiveCell | null>(null);
   const pendingDatePickerRef = useRef<HTMLInputElement | null>(null);
   const [columnVisibilityOpen, setColumnVisibilityOpen] = useState(false);
   const [isResizingColumn, setIsResizingColumn] = useState(false);
@@ -1934,6 +1945,28 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     observer.observe(el);
     sheetCanvasObserverRef.current = observer;
   }, []);
+
+  useEffect(() => {
+    const onMouseMove = (event: MouseEvent) => {
+      const drag = formatDragRef.current;
+      if (!drag.active) return;
+      const canvas = sheetCanvasElRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const delta = scrollDeltaForPointerNearEdge({
+        clientX: event.clientX,
+        clientY: event.clientY,
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+      });
+      if (delta.x) canvas.scrollLeft += delta.x;
+      if (delta.y) canvas.scrollTop += delta.y;
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    return () => window.removeEventListener('mousemove', onMouseMove);
+  }, []);
   const sheetFillerRowCount = Math.min(
     80,
     Math.max(0, Math.ceil(sheetCanvasHeight / SHEET_GRID_ROW_PITCH_PX) - 1 - rows.length - manualRows.length),
@@ -2130,6 +2163,27 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       return false;
     }
     const gesture = clientOperationsSelectionGesture(event);
+    const next: ClientOperationsActiveCell = options?.rowKey
+      ? { rowKey: options.rowKey, colKey: column.key }
+      : { clientId, colKey: column.key };
+    formatPendingToggleRef.current = null;
+    if (gesture === 'add') {
+      const alreadySelected = formatSelectionKeys.includes(clientOperationsPresentationCellKey(next));
+      if (alreadySelected) {
+        formatPendingToggleRef.current = next;
+        formatDragRef.current = {
+          active: event.button === 0,
+          moved: false,
+          gesture,
+          startX: event.clientX,
+          startY: event.clientY,
+        };
+        formatSuppressClickRef.current = true;
+        event.preventDefault();
+        sheetCanvasElRef.current?.focus({ preventScroll: true });
+        return true;
+      }
+    }
     selectActiveFormatCell(clientId, column, { rowKey: options?.rowKey, gesture });
     formatDragRef.current = {
       active: event.button === 0,
@@ -2163,6 +2217,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     ) {
       drag.moved = true;
     }
+    if (formatPendingToggleRef.current && drag.moved) {
+      const pending = formatPendingToggleRef.current;
+      formatPendingToggleRef.current = null;
+      selectActiveFormatCell(pending.clientId ?? pending.rowKey ?? clientId, {
+        key: pending.colKey,
+        cell_kind: column.cell_kind,
+      }, {
+        rowKey: pending.rowKey,
+        gesture: 'add',
+      });
+    }
     selectActiveFormatCell(clientId, column, {
       rowKey: options?.rowKey,
       gesture: drag.gesture === 'add' && !drag.moved ? 'add' : 'extend',
@@ -2170,6 +2235,30 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   };
 
   const consumeFormatSelectionClick = (event: ReactMouseEvent): boolean => {
+    const pendingToggle = formatPendingToggleRef.current;
+    formatPendingToggleRef.current = null;
+    if (pendingToggle && !formatDragRef.current.moved) {
+      const nextRanges = toggleCellInFormatSelection({
+        cell: pendingToggle,
+        ranges: formatRanges,
+        rowIds: formatSelectionRowIds,
+        columnKeys: formatSelectionColumnKeys,
+      });
+      setFormatRanges(nextRanges);
+      const keys = listClientOperationsFormatSelectionKeys({
+        range: null,
+        ranges: nextRanges,
+        focused: null,
+        rowIds: formatSelectionRowIds,
+        columnKeys: formatSelectionColumnKeys,
+      });
+      if (!keys.includes(clientOperationsPresentationCellKey(pendingToggle))) {
+        const last = nextRanges[nextRanges.length - 1];
+        setFocusedCell(last?.focus ?? null);
+      }
+      formatSuppressClickRef.current = false;
+      return true;
+    }
     const suppress = formatSuppressClickRef.current
       || shouldSuppressFormatSelectionClick({
         dragMoved: formatDragRef.current.moved,
@@ -2187,10 +2276,12 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   };
 
   const applyPresentation = (patch: Partial<CellPresentation>) => {
-    if (!focusedCell) return;
     const selectedKeys = formatSelectionKeys.length
       ? formatSelectionKeys
-      : [clientOperationsPresentationCellKey(focusedCell)];
+      : focusedCell
+        ? [clientOperationsPresentationCellKey(focusedCell)]
+        : [];
+    if (!selectedKeys.length) return;
     const fillPatch = Object.prototype.hasOwnProperty.call(patch, 'fill');
     const targets = fillPatch
       ? selectedKeys.filter((key) => presentationAllowsDecorativeFill(key))
@@ -2232,7 +2323,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       ...(patch.fill !== undefined ? { fill: patch.fill } : {}),
       ...(patch.numberFormat !== undefined ? { numberFormat: patch.numberFormat } : {}),
     }));
-    if (!focusedCell) return;
+    if (!focusedCell && !formatSelectionKeys.length) return;
     applyPresentation(patch);
   };
 
@@ -4171,7 +4262,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       return;
     }
     const filing = row.capital_declaration_cell?.filing;
-    if (!filing?.square_visible) return;
+    const canOpenModal =
+      row.capital_declaration_cell?.allowed_actions?.can_open_modal ??
+      Boolean(filing?.can_open_modal ?? filing?.square_visible);
+    if (!filing || !canOpenModal) return;
     setAnnualCapitalFeedback(null);
     setAnnualCapitalModal({
       kind,
@@ -4253,7 +4347,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         });
       } else {
         const filing = liveRow.capital_declaration_cell?.filing;
-        if (!filing?.instance_id) return;
+        const canFile =
+          liveRow.capital_declaration_cell?.allowed_actions?.can_file ?? Boolean(filing?.can_open_modal);
+        if (!filing || !canFile) return;
         await onRegistryCommand({
           command: 'file_client_operations_capital_declaration',
           client_id: liveRow.client_id,
@@ -5153,18 +5249,20 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           : col.key === 'capital_declaration'
             ? r.capital_declaration_cell
             : null;
+      const capitalCell = col.key === 'capital_declaration' ? r.capital_declaration_cell : null;
       const annualCapitalFiling =
         col.key === 'annual_report'
           ? r.annual_report_cell?.filing
           : col.key === 'capital_declaration'
             ? r.capital_declaration_cell?.filing
             : undefined;
+      const capitalSquareVisible =
+        col.key === 'capital_declaration' &&
+        capitalCell?.assignment_state !== 'not_applicable' &&
+        capitalCell?.filing?.square_visible !== false;
       const filingSquare =
         annualCapitalFiling &&
-        (col.key === 'annual_report' ||
-          (col.key === 'capital_declaration' &&
-            'square_visible' in annualCapitalFiling &&
-            annualCapitalFiling.square_visible === true)) ? (
+        (col.key === 'annual_report' || capitalSquareVisible) ? (
           <button
             type="button"
             className={`nx-co-sheet__filing-square is-${annualCapitalFiling.square_chrome}`}
@@ -5186,7 +5284,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         const canOpenCompletedCapital =
           col.key === 'capital_declaration' &&
           Boolean(operationalCell?.applicable) &&
-          Boolean(r.capital_declaration_cell?.can_open);
+          Boolean(r.capital_declaration_cell?.allowed_actions?.can_open_new ?? r.capital_declaration_cell?.can_open);
         const extraOpen = canOpenCompletedCapital ? (
           <button
             type="button"
@@ -5211,7 +5309,6 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           </div>
         );
       };
-      const capitalCell = col.key === 'capital_declaration' ? r.capital_declaration_cell : null;
       const capitalShowDash =
         col.key === 'capital_declaration' &&
         (!capitalCell ||
@@ -6056,6 +6153,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             <tr
               key={row.row_key}
               data-row-kind="manual"
+              data-row-key={row.row_key}
               data-testid={`co-manual-row-${row.manual_row_slot}`}
               className={selectedRowId === row.row_key ? 'is-selected' : undefined}
               onClick={() => setSelectedRowId(row.row_key)}

@@ -91,13 +91,14 @@ test('capital N/A is a plain dash; unassigned still uses the calendar icon', () 
   assert.match(viewSource, /ClientOperationsCalendarIcon/);
   assert.match(viewSource, /assignment_state === 'not_applicable'/);
   assert.match(viewSource, /nx-co-sheet__plain-dash/);
-  assert.match(viewSource, /annualCapitalFiling\.square_visible === true/);
+  assert.match(viewSource, /square_visible !== false/);
   assert.doesNotMatch(viewSource, /nx-co-sheet__date-field-plus/);
   assert.match(
     cssSource,
     /\.nx-co-sheet__date-with-square\s*>\s*\.nx-co-sheet__date-field\s*\{[^}]*min-width:\s*0/s,
   );
-  assert.match(cssSource, /td:has\(\.nx-co-sheet__date-with-square\)\s*\{[^}]*overflow:\s*visible/s);
+  assert.match(cssSource, /td:has\(\.nx-co-sheet__date-with-square\)\s*\{[^}]*overflow:\s*hidden/s);
+  assert.match(cssSource, /td:has\(\.nx-co-sheet__date-with-square\)\s*\{[^}]*height:\s*31px/s);
 });
 
 test('applicable date cells share one calendar control; non-applicable cells are not date inputs', () => {
@@ -218,6 +219,8 @@ test('annual/capital filing square and named file commands stay render-only', ()
   assert.match(viewSource, /nx-co-sheet__filing-square/);
   assert.match(viewSource, /file_client_operations_annual_report/);
   assert.match(viewSource, /file_client_operations_capital_declaration/);
+  assert.match(viewSource, /allowed_actions\?\.can_file/);
+  assert.doesNotMatch(viewSource, /if \(!filing\?\.instance_id\) return/);
   assert.match(viewSource, /confirm_other_tax_year/);
   assert.match(annualCapitalModalSource, /client-operations-annual-capital-modal/);
   assert.match(viewSource, /ClientOperationsAnnualCapitalFilingModal/);
