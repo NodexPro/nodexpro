@@ -109,7 +109,7 @@ export function TemplateLayout({
   return (
     <div
       className={`t1-appShell${usesCanonicalWorkingShell ? ' t1-appShell--client-operations' : ''}${isUsersRolesWorkspace ? ' t1-appShell--users-roles' : ''}${isNavyNativeSurface ? '' : ' t1-appShell--general'}`}
-      style={{ display: 'flex', minHeight: '100vh' }}
+      style={{ display: 'flex' }}
     >
       <AppSidebar
         items={sidebarItems}

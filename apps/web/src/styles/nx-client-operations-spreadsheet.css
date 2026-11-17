@@ -9,12 +9,12 @@
   width: 100%;
   min-width: 0;
   min-height: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   box-sizing: border-box;
 }
 
 .nx-co-registry > .nx-co-sheet {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-height: 0;
   min-width: 0;
   overflow: hidden;
@@ -76,6 +76,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1 1 0%;
   min-height: 0;
   min-width: 0;
   width: 100%;
@@ -738,7 +739,7 @@
   max-height: none;
   min-height: 0;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   scrollbar-width: thin;
   scrollbar-color: var(--nx-glass-scroll-thumb, rgba(125, 236, 247, 0.38)) transparent;
 }
@@ -1884,7 +1885,7 @@ button.nx-co-sheet__ni-clip:disabled {
   min-height: 0;
   min-width: 0;
   max-width: 100%;
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   position: relative;
   overflow: hidden;
 }

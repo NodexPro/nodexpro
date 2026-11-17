@@ -136,10 +136,24 @@
 /*
  * Fill chain — Client Operations spreadsheet must occupy the useful viewport
  * (not collapse to content height). Scoped to the registry route only via :has().
+ *
+ * The shell used to be an in-flow 100vh box. The user-agent body margin then
+ * shifted that box down, so the month-tab strip (the last column item) sat
+ * outside the layout viewport and the document scrolled. Application fullscreen
+ * hid the bug because the sheet is position:fixed. Lock the document and size
+ * the shell to the dynamic viewport instead.
  */
+html:has(.t1-appShell--client-operations .nx-co-sheet),
+body:has(.t1-appShell--client-operations .nx-co-sheet) {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
 .t1-appShell--client-operations:has(.nx-co-sheet) {
-  height: 100vh;
-  max-height: 100vh;
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -150,14 +164,14 @@
 .t1-appShell--client-operations:has(.nx-co-sheet) .t1-pageMain {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-height: 0;
   overflow: hidden;
   padding: 0;
 }
 
 .t1-appShell--client-operations:has(.nx-co-sheet) .t1-pageMain > div {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -167,7 +181,7 @@
 
 .t1-appShell--client-operations .t1-pageMain > div > .nx-co-sheet,
 .t1-appShell--client-operations .t1-pageMain > div > .nx-co-registry {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-height: 0;
 }
 
