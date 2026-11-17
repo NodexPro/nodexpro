@@ -39,6 +39,10 @@ export class ClientOperationsRouteErrorBoundary extends Component<Props, State> 
     if (this.state.error) {
       return <ClientOperationsRouteErrorFallback onRetry={this.retry} />;
     }
-    return <div key={this.state.resetKey}>{this.props.children}</div>;
+    return (
+      <div key={this.state.resetKey} className="nx-co-route">
+        {this.props.children}
+      </div>
+    );
   }
 }

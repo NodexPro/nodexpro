@@ -22,6 +22,7 @@ const VIEWPORTS = [
   [1366, 768],
   [1280, 720],
   [1200, 640],
+  [1280, 600],
 ] as const;
 
 function chromePath(): string | null {
@@ -70,7 +71,8 @@ function fixtureHtml(): string {
         </div>
       </header>
       <main class="t1-pageMain">
-        <div style="max-width:100%; margin:0 auto; width:100%; min-width:0; box-sizing:border-box">
+          <div style="max-width:100%; margin:0 auto; width:100%; min-width:0; box-sizing:border-box">
+          <div class="nx-co-route">
           <div class="nx-co-registry">
             <div class="nx-co-sheet">
               <div class="nx-co-sheet__toolbar"><span>toolbar</span></div>
@@ -87,6 +89,7 @@ function fixtureHtml(): string {
                 <div class="nx-co-sheet__period-tabs-scroll" role="tablist">${months}</div>
               </div>
             </div>
+          </div>
           </div>
         </div>
       </main>

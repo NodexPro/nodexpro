@@ -176,6 +176,15 @@ test('sheet tab strip is compact; native scrollbar ▲▼ buttons are suppressed
   const shell = readFileSync(join(dir, '../src/styles/nx-client-operations-shell.css'), 'utf8');
   assert.match(shell, /html:has\(\.t1-appShell--client-operations \.nx-co-sheet\)[\s\S]*margin:\s*0/);
   assert.match(shell, /\.t1-appShell--client-operations:has\(\.nx-co-sheet\)\s*\{[^}]*height:\s*100dvh/s);
+  assert.match(
+    shell,
+    /\.t1-appShell--client-operations:has\(\.nx-co-sheet\) \.t1-pageMain > div > \.nx-co-route\s*\{[^}]*flex:\s*1 1 0%/s,
+  );
+  const boundary = readFileSync(
+    join(dir, '../src/components/client-operations/ClientOperationsRouteErrorBoundary.tsx'),
+    'utf8',
+  );
+  assert.match(boundary, /className="nx-co-route"/);
   assert.match(css, /\.nx-co-sheet__table\.is-frozen \[data-col='folder'\]\s*\{[^}]*inset-inline-start:\s*0/s);
   assert.match(css, /::-webkit-scrollbar-button\s*\{[^}]*display:\s*none/s);
   assert.doesNotMatch(css, /fake-scroll|scroll-arrow|nx-co-sheet__scroll-btn/);

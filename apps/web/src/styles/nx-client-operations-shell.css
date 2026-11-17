@@ -179,6 +179,20 @@ body:has(.t1-appShell--client-operations .nx-co-sheet) {
   overflow: hidden;
 }
 
+/*
+ * ClientOperationsRouteErrorBoundary renders this div between the page slot
+ * and the registry. Without a flex height it sizes to the table, the viewport
+ * shell clips the bottom, and the month strip stays outside the window.
+ */
+.t1-appShell--client-operations:has(.nx-co-sheet) .t1-pageMain > div > .nx-co-route {
+  flex: 1 1 0%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
 .t1-appShell--client-operations .t1-pageMain > div > .nx-co-sheet,
 .t1-appShell--client-operations .t1-pageMain > div > .nx-co-registry {
   flex: 1 1 0%;
