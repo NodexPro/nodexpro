@@ -163,3 +163,47 @@ export function uniqueLinkedFileIds<T extends { file_asset_id: string }>(files: 
   }
   return out;
 }
+
+export type AnnualYearFilingTone = 'green' | 'yellow';
+
+/** Backend-owned presentation flags for one tax year on the annual tab. Frontend must not infer these. */
+export type AnnualYearPresentationFlags = {
+  tax_year: number;
+  filed: boolean;
+  submitted_on: string | null;
+  can_select: boolean;
+  filing_tone: AnnualYearFilingTone;
+  show_working_checklist: boolean;
+  show_missing_as_active_problem: boolean;
+  show_filed_confirmation: boolean;
+  show_document_readiness: boolean;
+  show_deadline: boolean;
+  archive_folder_key: string | null;
+  filed_confirmation_label_key: string;
+  open_archive_label_key: string;
+};
+
+export function buildAnnualYearPresentationFlags(input: {
+  tax_year: number;
+  filed: boolean;
+  submitted_on: string | null;
+  canEdit: boolean;
+}): AnnualYearPresentationFlags | null {
+  if (!isProvenAnnualTaxYear(input.tax_year)) return null;
+  const filed = input.filed === true;
+  return {
+    tax_year: input.tax_year,
+    filed,
+    submitted_on: filed ? input.submitted_on : null,
+    can_select: input.canEdit,
+    filing_tone: filed ? 'green' : 'yellow',
+    show_working_checklist: !filed,
+    show_missing_as_active_problem: !filed,
+    show_filed_confirmation: filed,
+    show_document_readiness: !filed,
+    show_deadline: !filed,
+    archive_folder_key: filed ? String(input.tax_year) : null,
+    filed_confirmation_label_key: 'clientOperations.annual.filedConfirmation',
+    open_archive_label_key: 'clientOperations.annual.openYearArchive',
+  };
+}

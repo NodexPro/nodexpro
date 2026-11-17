@@ -238,6 +238,10 @@
   box-sizing: border-box;
 }
 
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-year-tab.is-selected {
+  color: #7decf7;
+}
+
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-filing-year-card,
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-logical-folder {
   background:

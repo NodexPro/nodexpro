@@ -852,7 +852,13 @@ export function ClientOperationsRegistry() {
       });
   }, [loading, canEdit, manualRowsPeriodSetup, onRegistryCommand]);
 
-  if (auth.status !== 'authenticated') return null;
+  if (auth.status !== 'authenticated') {
+    return (
+      <p className="nx-co-sheet__loading" role="status">
+        {t('clientOperations.loading')}
+      </p>
+    );
+  }
 
   const selectedPeriodKey =
     period?.selected_period_key ?? query.operational_period_key ?? null;

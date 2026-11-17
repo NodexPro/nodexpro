@@ -163,6 +163,42 @@ export type AnnualTabModel = {
     };
     can_select_working: boolean;
   }>;
+  year_views?: Array<{
+    tax_year: number;
+    is_current: boolean;
+    is_working: boolean;
+    can_select: boolean;
+    filing_status: {
+      filed: boolean;
+      code: 'filed' | 'not_filed';
+      label_key: string;
+      submitted_on: string | null;
+    };
+    filing_tone: 'green' | 'yellow';
+    document_readiness: AnnualControlStatusDto;
+    status: AnnualControlStatusDto;
+    missing_documents: string[];
+    completion_percent: number;
+    deadline_info: AnnualDeadlineInfoDto;
+    visibility: {
+      show_working_checklist: boolean;
+      show_missing_as_active_problem: boolean;
+      show_filed_confirmation: boolean;
+      show_document_readiness: boolean;
+      show_deadline: boolean;
+    };
+    filed_confirmation: {
+      label_key: string;
+      submitted_on: string | null;
+      archive_folder_key: string | null;
+      open_archive_label_key: string;
+    } | null;
+    documents_table: AnnualTabModel['documents_table'];
+    allowed_actions: {
+      can_select: boolean;
+      can_edit_checklist: boolean;
+    };
+  }>;
   year_folders?: Array<{
     folder_key: string;
     tax_year: number;

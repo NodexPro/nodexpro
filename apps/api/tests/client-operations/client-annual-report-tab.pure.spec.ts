@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   buildAnnualFilingYearBoard,
+  buildAnnualYearPresentationFlags,
   checklistFileIdsForFilingYear,
   fileTypeLabelFromMeta,
   provenYearScopedChecklistFiles,
@@ -198,9 +199,35 @@ test('linked file presentation stays backend-owned and unique by asset id', () =
   );
 });
 
+test('filed 2025 hides working checklist and missing-as-problem; 2026 not filed keeps checklist', () => {
+  const filed = buildAnnualYearPresentationFlags({
+    tax_year: 2025,
+    filed: true,
+    submitted_on: '2026-04-10',
+    canEdit: true,
+  });
+  assert.equal(filed?.filing_tone, 'green');
+  assert.equal(filed?.show_working_checklist, false);
+  assert.equal(filed?.show_missing_as_active_problem, false);
+  assert.equal(filed?.show_filed_confirmation, true);
+  assert.equal(filed?.archive_folder_key, '2025');
+  const open = buildAnnualYearPresentationFlags({
+    tax_year: 2026,
+    filed: false,
+    submitted_on: null,
+    canEdit: true,
+  });
+  assert.equal(open?.filing_tone, 'yellow');
+  assert.equal(open?.show_working_checklist, true);
+  assert.equal(open?.show_missing_as_active_problem, true);
+  assert.equal(open?.show_filed_confirmation, false);
+  assert.equal(buildAnnualYearPresentationFlags({ tax_year: 0, filed: false, submitted_on: null, canEdit: true }), null);
+});
+
 test('annual tab service keeps Core → Commands → Aggregate: named command, refreshed truth, tenant/RBAC/audit/i18n', () => {
   assert.match(serviceSrc, /select_annual_working_tax_year/);
   assert.match(serviceSrc, /filing_years/);
+  assert.match(serviceSrc, /year_views/);
   assert.match(serviceSrc, /working_tax_year/);
   assert.match(serviceSrc, /document_readiness/);
   assert.match(serviceSrc, /getAnnualTabReadModel\(ctx, clientId, scope\)/);

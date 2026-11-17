@@ -68,6 +68,8 @@
     "updatePasswordFailed": "Не удалось обновить пароль"
   },
   "clientOperations": {
+    "retry": "Повторить",
+    "routeLoadError": "Не удалось открыть операции клиентов. Попробуйте снова.",
     "annual": {
       "attachFile": "Прикрепить файл",
       "removeFile": "Удалить файл",
@@ -75,6 +77,10 @@
       "notFiledStatus": "Не подано",
       "yearFolders": "Папки по налоговому году",
       "documentReadiness": "Готовность документов",
+      "filedConfirmation": "Отчет подан",
+      "openYearArchive": "Перейти в архивную папку",
+      "yearContentLoading": "Загрузка налогового года…",
+      "yearTabsAria": "Налоговые годы",
       "previewFile": "Просмотр",
       "fileType": "Тип",
       "fileDate": "Дата",

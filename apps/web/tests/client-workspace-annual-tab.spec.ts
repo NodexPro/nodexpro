@@ -13,6 +13,9 @@ const annualCss = readFileSync(join(dir, '../src/styles/nx-workspace-annual-tab.
 const annualBase = readFileSync(join(dir, '../src/styles/nx-annual-report-tab.css'), 'utf8');
 const premium = readFileSync(join(dir, '../src/styles/nx-workspace-modal-premium.css'), 'utf8');
 const panelSrc = readFileSync(join(dir, '../src/components/ClientWorkspacePanel.tsx'), 'utf8');
+const appSrc = readFileSync(join(dir, '../src/App.tsx'), 'utf8');
+const registrySrc = readFileSync(join(dir, '../src/pages/ClientOperationsRegistry.tsx'), 'utf8');
+const caseSrc = readFileSync(join(dir, '../src/pages/ClientOperationsClientCase.tsx'), 'utf8');
 const taxesCss = readFileSync(join(dir, '../src/styles/nx-workspace-taxes-tab.css'), 'utf8');
 
 test('Annual and capital-declaration tabs still render aggregate sections and named commands', () => {
@@ -55,6 +58,11 @@ test('Annual premium skin is scoped to the workspace modal and reused for הצה
 test('Annual tab renders backend filing years, separate document readiness, and archive folders at the bottom', () => {
   assert.match(annualSrc, /annualTab\.filing_years/);
   assert.match(annualSrc, /select_annual_working_tax_year/);
+  assert.match(annualSrc, /annual-tab-year-tabs/);
+  assert.match(annualSrc, /selectYearTab/);
+  assert.doesNotMatch(annualSrc, /void postCmd\('select_annual_working_tax_year'/);
+  assert.match(annualSrc, /show_working_checklist/);
+  assert.match(annualSrc, /annual-tab-filed-confirmation/);
   assert.match(annualSrc, /annual-tab-document-readiness/);
   assert.match(annualSrc, /AnnualArchiveFolders/);
   assert.match(annualSrc, /annual-tab-logical-folders/);
@@ -69,6 +77,22 @@ test('Annual tab renders backend filing years, separate document readiness, and 
   assert.match(he, /"notFiledStatus": "לא הוגש"/);
   assert.match(he, /"documentReadiness"/);
   assert.doesNotMatch(annualSrc, /new Date\(\)\.getFullYear\(\)/);
+});
+
+test('Client Operations route never stays on a blank page: error boundary, retry, no unauthenticated null', () => {
+  assert.match(appSrc, /ClientOperationsRouteErrorBoundary/);
+  assert.match(registrySrc, /auth\.status !== 'authenticated'/);
+  assert.doesNotMatch(registrySrc, /if \(auth\.status !== 'authenticated'\) return null;/);
+  assert.match(caseSrc, /client-operations-case-error/);
+  assert.match(caseSrc, /clientOperations\.retry/);
+});
+
+test('year switch uses in-aggregate year_views and does not reload the client case on tab click', () => {
+  assert.match(annualSrc, /annualTab\.year_views/);
+  assert.match(annualSrc, /persistWorkingYear/);
+  assert.match(annualSrc, /resolveDisplayedAnnualTaxYear/);
+  assert.match(annualSrc, /if \(apply\) onCaseUpdated\(out\)/);
+  assert.doesNotMatch(annualSrc, /moduleClientOperationsCase\(/);
 });
 
 test('Taxes interior and portal/raise are not altered by the Annual restyle', () => {

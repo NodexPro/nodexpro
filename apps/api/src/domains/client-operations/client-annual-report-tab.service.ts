@@ -21,6 +21,7 @@ import {
 } from './client-operations-ui-labels.pure.js';
 import {
   buildAnnualFilingYearBoard,
+  buildAnnualYearPresentationFlags,
   checklistFileIdsForFilingYear,
   fileTypeLabelFromMeta,
   isoDateOnly,
@@ -32,6 +33,7 @@ import {
   uniqueLinkedFileIds,
   workingDocumentRowsForTaxYear,
   type AnnualFilingYearBoardItem,
+  type AnnualYearPresentationFlags,
 } from './client-annual-report-tab.pure.js';
 import {
   buildAnnualYearFolders,
@@ -358,8 +360,41 @@ export type AnnualTabResponse = {
     submitted_on: string | null;
   };
   filing_years: AnnualFilingYearBoardItem[];
+  year_views: AnnualYearViewDto[];
   year_folders: AnnualYearFolder[];
   capital_folders: CapitalRequirementFolder[];
+};
+
+export interface AnnualYearViewDto {
+  tax_year: number;
+  is_current: boolean;
+  is_working: boolean;
+  can_select: boolean;
+  filing_status: AnnualTabResponse['filing_status'];
+  filing_tone: 'green' | 'yellow';
+  document_readiness: AnnualControlStatusDto;
+  status: AnnualControlStatusDto;
+  missing_documents: string[];
+  completion_percent: number;
+  deadline_info: AnnualDeadlineInfoDto;
+  visibility: {
+    show_working_checklist: boolean;
+    show_missing_as_active_problem: boolean;
+    show_filed_confirmation: boolean;
+    show_document_readiness: boolean;
+    show_deadline: boolean;
+  };
+  filed_confirmation: {
+    label_key: string;
+    submitted_on: string | null;
+    archive_folder_key: string | null;
+    open_archive_label_key: string;
+  } | null;
+  documents_table: AnnualTabResponse['documents_table'];
+  allowed_actions: {
+    can_select: boolean;
+    can_edit_checklist: boolean;
+  };
 };
 
 export type AnnualTabCommandBody = {
@@ -573,6 +608,155 @@ function annualDocumentNameKey(sourceType: string, systemKey: string | null): st
   return ANNUAL_DOCUMENT_LABEL_KEY[systemKey];
 }
 
+function toAnnualDocumentRowDto(
+  raw: {
+    id: string;
+    source_type: string;
+    system_key: string | null;
+    document_name_he: string;
+    description_he: string | null;
+    required: boolean | null;
+    received: boolean;
+    row_note: string | null;
+    file_asset_id: string | null;
+  },
+  fileMetaById: Map<string, AnnualFileAssetMeta>,
+  canEdit: boolean,
+): AnnualDocumentRowDto {
+  const pres = computeDocumentRowPresentation(Boolean(raw.received), raw.file_asset_id);
+  const fid = raw.file_asset_id ? String(raw.file_asset_id) : null;
+  return {
+    row_id: String(raw.id),
+    source_type: raw.source_type === 'custom' ? 'custom' : 'system',
+    system_key: raw.system_key ? String(raw.system_key) : null,
+    code: raw.system_key ? String(raw.system_key) : null,
+    label_he: String(raw.document_name_he ?? ''),
+    description_he: raw.description_he ?? null,
+    description_key: raw.system_key ? ANNUAL_DOCUMENT_DESCRIPTION_KEY[String(raw.system_key)] : undefined,
+    required: Boolean(raw.required ?? raw.source_type !== 'custom'),
+    document_name_he: String(raw.document_name_he ?? ''),
+    document_name_key: annualDocumentNameKey(raw.source_type === 'custom' ? 'custom' : 'system', raw.system_key),
+    received: Boolean(raw.received),
+    row_note: raw.row_note ?? null,
+    status: pres.status,
+    status_label_he: pres.status_label_he,
+    status_label_key: pres.status_label_key,
+    row_style: pres.row_style,
+    file: {
+      state: fid ? 'attached' : 'none',
+      file_asset_id: fid,
+      file_name: fid ? fileMetaById.get(fid)?.file_name ?? null : null,
+    },
+    actions: {
+      can_toggle_received: canEdit,
+      can_attach_file: canEdit,
+      can_remove_file: canEdit && Boolean(fid),
+      can_edit_row_note: canEdit,
+      can_rename_document: canEdit && raw.source_type === 'custom',
+      can_remove_row: canEdit && raw.source_type === 'custom',
+    },
+  };
+}
+
+function scopeAnnualDocumentRows(
+  rows: AnnualDocumentRowDto[],
+  scope: AnnualTabScope,
+  scoped: boolean,
+): AnnualDocumentRowDto[] {
+  const allowedSystemKeys = new Set(systemTemplatesForScope(scope).map((t) => t.system_key));
+  return scoped
+    ? rows
+    : rows.filter((r) => (r.source_type === 'custom' ? true : Boolean(r.system_key && allowedSystemKeys.has(r.system_key))));
+}
+
+function buildAnnualDocumentsTable(
+  scope: AnnualTabScope,
+  rows: AnnualDocumentRowDto[],
+  canEdit: boolean,
+  updatedDisplayHe: string,
+): AnnualTabResponse['documents_table'] {
+  return {
+    card_title_he: scope === 'capital_declaration' ? 'רשימת מסמכים להצהרת הון' : 'רשימת מסמכים לדוח שנתי',
+    card_title_key:
+      scope === 'capital_declaration' ? 'clientOperations.annual.capitalDocumentsList' : 'clientOperations.annual.documentsList',
+    empty_state_key: 'clientOperations.annual.emptyDocuments',
+    column_headers_he: ['התקבל', 'שם מסמך', 'קובץ', 'סטטוס', 'הערת שורה'],
+    column_header_keys: ANNUAL_DOC_COLUMN_HEADER_KEYS,
+    empty_state_he: 'אין שורות מסמכים',
+    add_custom_label_he: 'הוסף מסמך',
+    add_custom_label_key: 'clientOperations.annual.addDocument',
+    add_custom_enabled: canEdit,
+    summary: {
+      total_label_he: 'סה״כ מסמכים',
+      total_count: rows.length,
+      received_label_he: 'התקבלו',
+      received_count: rows.filter((r) => r.received).length,
+      missing_label_he: 'חסרים',
+      missing_count: rows.filter((r) => r.status === 'missing').length,
+      updated_label_he: 'עודכן לאחרונה',
+      updated_display_he: updatedDisplayHe,
+    },
+    rows,
+  };
+}
+
+function buildAnnualYearView(input: {
+  board: AnnualFilingYearBoardItem;
+  flags: AnnualYearPresentationFlags;
+  rows: AnnualDocumentRowDto[];
+  scope: AnnualTabScope;
+  canEdit: boolean;
+  updatedDisplayHe: string;
+  serverNow: Date;
+}): AnnualYearViewDto {
+  const yearCanEdit = input.canEdit && !input.flags.filed;
+  const rows = input.rows.map((row) => ({
+    ...row,
+    actions: {
+      can_toggle_received: yearCanEdit && row.actions.can_toggle_received,
+      can_attach_file: yearCanEdit && row.actions.can_attach_file,
+      can_remove_file: yearCanEdit && row.actions.can_remove_file,
+      can_edit_row_note: yearCanEdit && row.actions.can_edit_row_note,
+      can_rename_document: yearCanEdit && row.actions.can_rename_document,
+      can_remove_row: yearCanEdit && row.actions.can_remove_row,
+    },
+  }));
+  const control = buildAnnualControlState(rows, input.serverNow);
+  return {
+    tax_year: input.board.tax_year,
+    is_current: input.board.is_current,
+    is_working: input.board.is_working,
+    can_select: input.flags.can_select,
+    filing_status: input.board.filing_status,
+    filing_tone: input.flags.filing_tone,
+    document_readiness: control.status,
+    status: control.status,
+    missing_documents: control.missing_documents,
+    completion_percent: control.completion_percent,
+    deadline_info: control.deadline_info,
+    visibility: {
+      show_working_checklist: input.flags.show_working_checklist,
+      show_missing_as_active_problem: input.flags.show_missing_as_active_problem,
+      show_filed_confirmation: input.flags.show_filed_confirmation,
+      show_document_readiness: input.flags.show_document_readiness,
+      show_deadline: input.flags.show_deadline,
+    },
+    filed_confirmation: input.flags.show_filed_confirmation
+      ? {
+          label_key: input.flags.filed_confirmation_label_key,
+          submitted_on: input.flags.submitted_on,
+          archive_folder_key: input.flags.archive_folder_key,
+          open_archive_label_key: input.flags.open_archive_label_key,
+        }
+      : null,
+    documents_table: buildAnnualDocumentsTable(input.scope, rows, yearCanEdit, input.updatedDisplayHe),
+    allowed_actions: {
+      can_select: input.flags.can_select,
+      can_edit_checklist: yearCanEdit,
+    },
+  };
+}
+
 function submissionStatusLabelHe(code: string): string {
   const c = String(code ?? '').trim();
   if (c === 'submitted') return 'הוגש';
@@ -779,6 +963,7 @@ function buildCapitalFallbackReadModel(canEdit: boolean): AnnualTabResponse {
       submitted_on: null,
     },
     filing_years: [],
+    year_views: [],
     year_folders: [],
     capital_folders: [],
   };
@@ -1207,56 +1392,24 @@ export async function getAnnualTabReadModel(
     }
   }
 
-  const rows: AnnualDocumentRowDto[] = workingDocRows.map((raw) => {
-    const r = raw as {
-      id: string;
-      source_type: string;
-      system_key: string | null;
-      document_name_he: string;
-      description_he: string | null;
-      required: boolean | null;
-      received: boolean;
-      row_note: string | null;
-      file_asset_id: string | null;
-    };
-    const pres = computeDocumentRowPresentation(Boolean(r.received), r.file_asset_id);
-    const fid = r.file_asset_id ? String(r.file_asset_id) : null;
-    return {
-      row_id: String(r.id),
-      source_type: r.source_type === 'custom' ? 'custom' : 'system',
-      system_key: r.system_key ? String(r.system_key) : null,
-      code: r.system_key ? String(r.system_key) : null,
-      label_he: String(r.document_name_he ?? ''),
-      description_he: r.description_he ?? null,
-      description_key: r.system_key ? ANNUAL_DOCUMENT_DESCRIPTION_KEY[String(r.system_key)] : undefined,
-      required: Boolean(r.required ?? r.source_type !== 'custom'),
-      document_name_he: String(r.document_name_he ?? ''),
-      document_name_key: annualDocumentNameKey(r.source_type === 'custom' ? 'custom' : 'system', r.system_key),
-      received: Boolean(r.received),
-      row_note: r.row_note ?? null,
-      status: pres.status,
-      status_label_he: pres.status_label_he,
-      status_label_key: pres.status_label_key,
-      row_style: pres.row_style,
-      file: {
-        state: fid ? 'attached' : 'none',
-        file_asset_id: fid,
-        file_name: fid ? fileMetaById.get(fid)?.file_name ?? null : null,
+  const rows: AnnualDocumentRowDto[] = workingDocRows.map((raw) =>
+    toAnnualDocumentRowDto(
+      raw as {
+        id: string;
+        source_type: string;
+        system_key: string | null;
+        document_name_he: string;
+        description_he: string | null;
+        required: boolean | null;
+        received: boolean;
+        row_note: string | null;
+        file_asset_id: string | null;
       },
-      actions: {
-        can_toggle_received: canEdit,
-        can_attach_file: canEdit,
-        can_remove_file: canEdit && Boolean(fid),
-        can_edit_row_note: canEdit,
-        can_rename_document: canEdit && r.source_type === 'custom',
-        can_remove_row: canEdit && r.source_type === 'custom',
-      },
-    };
-  });
-  const allowedSystemKeys = new Set(systemTemplatesForScope(scope).map((t) => t.system_key));
-  const scopedRows: AnnualDocumentRowDto[] = scoped
-    ? rows
-    : rows.filter((r) => (r.source_type === 'custom' ? true : Boolean(r.system_key && allowedSystemKeys.has(r.system_key))));
+      fileMetaById,
+      canEdit,
+    ),
+  );
+  const scopedRows = scopeAnnualDocumentRows(rows, scope, scoped);
 
   const scopedSubRows = ((subRows ?? []) as Array<Record<string, unknown>>).filter((raw) => {
     if (scoped) return true;
@@ -1318,6 +1471,55 @@ export async function getAnnualTabReadModel(
           workingTaxYear,
           canEdit,
           submissions: submissions.map((row) => ({ tax_year: row.tax_year, submitted_on: row.submitted_on })),
+        })
+      : [];
+  const updatedDisplayHe = p?.updated_at ? formatDateTimeHe(p.updated_at) : '—';
+  const year_views: AnnualYearViewDto[] =
+    scope === 'annual_report'
+      ? filing_years.flatMap((board) => {
+          const flags = buildAnnualYearPresentationFlags({
+            tax_year: board.tax_year,
+            filed: board.filed,
+            submitted_on: board.submitted_on,
+            canEdit,
+          });
+          if (!flags) return [];
+          const yearRaw = workingDocumentRowsForTaxYear(
+            ((docRows ?? []) as Array<Record<string, unknown> & { tax_year?: number | null }>),
+            { yearColumnSupported, workingTaxYear: board.tax_year, tabScope: scope },
+          );
+          const yearRows = scopeAnnualDocumentRows(
+            yearRaw.map((raw) =>
+              toAnnualDocumentRowDto(
+                raw as {
+                  id: string;
+                  source_type: string;
+                  system_key: string | null;
+                  document_name_he: string;
+                  description_he: string | null;
+                  required: boolean | null;
+                  received: boolean;
+                  row_note: string | null;
+                  file_asset_id: string | null;
+                },
+                fileMetaById,
+                canEdit && !flags.filed,
+              ),
+            ),
+            scope,
+            scoped,
+          );
+          return [
+            buildAnnualYearView({
+              board,
+              flags,
+              rows: yearRows,
+              scope,
+              canEdit,
+              updatedDisplayHe,
+              serverNow: new Date(),
+            }),
+          ];
         })
       : [];
   const workingYearBoard = filing_years.find((row) => row.tax_year === workingTaxYear) ?? null;
@@ -1531,6 +1733,7 @@ export async function getAnnualTabReadModel(
     document_readiness: control.status,
     filing_status,
     filing_years,
+    year_views,
     year_folders,
     capital_folders,
   };
@@ -1752,11 +1955,16 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
       const name = String(payload.document_name_he ?? '').trim();
       if (!name) throw badRequest('שם מסמך נדרש');
       const sortOrder = payload.sort_order != null ? Number(payload.sort_order) : 9990;
+      const payloadYear = parseAnnualWorkingTaxYear(payload.tax_year);
+      const rowTaxYear = payloadYear ?? workingTaxYear;
+      if (payloadYear != null) {
+        await ensureSystemDocumentRows(orgId, clientId, scope, { workingTaxYear: payloadYear, yearColumnSupported });
+      }
       const { error } = await supabaseAdmin.from('client_annual_document_rows').insert({
         organization_id: orgId,
         client_id: clientId,
         ...(scoped ? { tab_scope: scope } : {}),
-        ...(yearColumnSupported && scope === 'annual_report' ? { tax_year: workingTaxYear } : {}),
+        ...(yearColumnSupported && scope === 'annual_report' ? { tax_year: rowTaxYear } : {}),
         source_type: 'custom',
         system_key: null,
         document_name_he: name,

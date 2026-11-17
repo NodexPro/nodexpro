@@ -959,6 +959,93 @@
   cursor: pointer;
 }
 
+.nx-annual-year-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  margin: 0 0 12px;
+  border-bottom: 1px solid rgba(125, 211, 252, 0.28);
+  font-family: Arial, sans-serif;
+}
+
+.nx-annual-year-tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-radius: 6px 6px 0 0;
+  color: rgba(238, 246, 255, 0.68);
+  cursor: pointer;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  height: auto;
+  line-height: 1.2;
+  min-width: 96px;
+  padding: 8px 20px;
+  position: relative;
+}
+
+.nx-annual-year-tab.is-open {
+  color: rgba(253, 224, 71, 0.86);
+}
+
+.nx-annual-year-tab.is-filed {
+  color: rgba(134, 239, 172, 0.86);
+}
+
+.nx-annual-year-tab.is-selected {
+  color: #7decf7;
+  font-weight: 700;
+}
+
+.nx-annual-year-tab.is-selected::after {
+  background: #7decf7;
+  bottom: -1px;
+  box-shadow: 0 0 10px #7decf7;
+  content: '';
+  height: 2px;
+  inset-inline: 10px;
+  position: absolute;
+}
+
+.nx-annual-year-tab:disabled {
+  cursor: default;
+}
+
+.nx-annual-year-panel {
+  min-height: 120px;
+}
+
+.nx-annual-year-loading {
+  color: #94a3b8;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+
+.nx-annual-filed-confirm {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.nx-annual-filed-confirm p {
+  color: #86efac;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.nx-annual-filing-status.is-green {
+  color: #86efac;
+}
+
+.nx-annual-filing-status.is-yellow {
+  color: #fde047;
+}
+
 @media (max-width: 768px) {
   .nx-annual-filing-years {
     grid-template-columns: 1fr;

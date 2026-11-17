@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { apiJson, userFacingApiMessage } from '../api/client';
 import { moduleClientOperationsCase } from '../api/endpoints';
+import { useI18n } from '../i18n/I18nProvider';
 import { ClientWorkspacePage } from '../components/ClientWorkspacePanel';
 import type { ClientTaxSettingsBundle } from '../components/ClientTaxesTab';
 import type { ClientBusinessProfileSectionResponse } from '../components/ClientBusinessProfileTab';
@@ -70,6 +71,7 @@ const WORKSPACE_TABS = [
 ] as const;
 
 export function ClientOperationsClientCase() {
+  const { t } = useI18n();
   const { clientId } = useParams();
   const [searchParams] = useSearchParams();
   const tabRaw = searchParams.get('tab');
@@ -101,6 +103,29 @@ export function ClientOperationsClientCase() {
       cancelled = true;
     };
   }, [clientId]);
+  if (!loading && error) {
+    return (
+      <div className="nx-co-route-error" role="alert" data-testid="client-operations-case-error">
+        <p className="nx-co-route-error__title">{error}</p>
+        <button
+          type="button"
+          className="nx-btn nx-btn-primary nx-btn-taxes-compact"
+          onClick={() => {
+            if (!clientId) return;
+            setLoading(true);
+            setError('');
+            apiJson<ClientOperationsCaseResponse>(moduleClientOperationsCase(clientId))
+              .then((res) => setData(res))
+              .catch((e) => setError(userFacingApiMessage(e)))
+              .finally(() => setLoading(false));
+          }}
+        >
+          {t('clientOperations.retry')}
+        </button>
+      </div>
+    );
+  }
+
   return <ClientWorkspacePage workspace={data} loading={loading} error={error} initialTab={initialTab} />;
 }
 

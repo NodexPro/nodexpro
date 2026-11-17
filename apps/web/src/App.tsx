@@ -34,6 +34,7 @@ import { PlatformOwnerModulesPage } from './pages/owner-modules/PlatformOwnerMod
 import { PlatformOwnerModuleDetailPage } from './pages/owner-modules/PlatformOwnerModuleDetailPage';
 import { LandingPage } from './pages/LandingPage';
 import { I18nProvider } from './i18n/I18nProvider';
+import { ClientOperationsRouteErrorBoundary } from './components/client-operations/ClientOperationsRouteErrorBoundary';
 
 const ClientOperationsRegistry = lazy(() =>
   import('./pages/ClientOperationsRegistry').then((m) => ({ default: m.ClientOperationsRegistry })),
@@ -213,17 +214,21 @@ function AppRoutes() {
         <Route
           path="m/client-operations"
           element={
-            <Suspense fallback={<RouteChunkFallback />}>
-              <ClientOperationsRegistry />
-            </Suspense>
+            <ClientOperationsRouteErrorBoundary>
+              <Suspense fallback={<RouteChunkFallback />}>
+                <ClientOperationsRegistry />
+              </Suspense>
+            </ClientOperationsRouteErrorBoundary>
           }
         />
         <Route
           path="m/client-operations/clients/:clientId"
           element={
-            <Suspense fallback={<RouteChunkFallback />}>
-              <ClientOperationsClientCase />
-            </Suspense>
+            <ClientOperationsRouteErrorBoundary>
+              <Suspense fallback={<RouteChunkFallback />}>
+                <ClientOperationsClientCase />
+              </Suspense>
+            </ClientOperationsRouteErrorBoundary>
           }
         />
         <Route
