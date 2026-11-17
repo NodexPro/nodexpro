@@ -286,6 +286,21 @@ test('filed 2025 hides working checklist and missing-as-problem; 2026 not filed 
   assert.equal(buildAnnualYearPresentationFlags({ tax_year: 0, filed: false, submitted_on: null, canEdit: true }), null);
 });
 
+test('GET capital tab loads existing instance folders without seeding a profile', () => {
+  assert.match(serviceSrc, /loadCapitalRequirementFoldersForClient/);
+  assert.match(
+    serviceSrc,
+    /buildCapitalFallbackReadModel\(canEditEarly\),\s*capital_folders:\s*await loadCapitalRequirementFoldersForClient/,
+  );
+  assert.match(serviceSrc, /Does not seed a profile or create instances/);
+  assert.match(serviceSrc, /client_capital_declaration_instances/);
+  const readOnlyIdx = serviceSrc.indexOf('if (options?.readOnly)');
+  const elseIdx = serviceSrc.indexOf('} else {', readOnlyIdx);
+  const readOnlyBlock = serviceSrc.slice(readOnlyIdx, elseIdx);
+  assert.match(readOnlyBlock, /loadCapitalRequirementFoldersForClient/);
+  assert.doesNotMatch(readOnlyBlock, /ensureProfile\(/);
+});
+
 test('annual tab service keeps Core → Commands → Aggregate: named command, refreshed truth, tenant/RBAC/audit/i18n', () => {
   assert.match(serviceSrc, /select_annual_working_tax_year/);
   assert.match(serviceSrc, /parseAnnualWorkingTaxYear\(payload.tax_year\)/);

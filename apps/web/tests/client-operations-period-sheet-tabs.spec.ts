@@ -160,12 +160,23 @@ test('sheet tab strip is compact; native scrollbar ▲▼ buttons are suppressed
     join(dir, '../src/styles/nx-client-operations-spreadsheet.css'),
     'utf8',
   );
+  const view = readFileSync(
+    join(dir, '../src/components/client-operations/ClientOperationsRegistryView.tsx'),
+    'utf8',
+  );
   assert.match(css, /\.nx-co-sheet__period-tabs-scroll\s*\{[^}]*overflow-y:\s*hidden/s);
   assert.match(css, /\.nx-co-sheet__period-tabs-scroll\s*\{[^}]*overflow-x:\s*auto/s);
   assert.match(css, /\.nx-co-sheet__canvas\s*\{[^}]*overflow-x:\s*auto/s);
   assert.match(css, /\.nx-co-sheet__canvas\s*\{[^}]*overflow-y:\s*auto/s);
+  assert.match(css, /\.nx-co-sheet__workspace\s*\{[^}]*overflow:\s*hidden/s);
+  assert.match(css, /\.nx-co-sheet__period-tabs\s*\{[^}]*min-height:\s*32px/s);
+  assert.match(css, /\.nx-co-sheet__table\.is-frozen \[data-col='folder'\]\s*\{[^}]*inset-inline-start:\s*0/s);
   assert.match(css, /::-webkit-scrollbar-button\s*\{[^}]*display:\s*none/s);
   assert.doesNotMatch(css, /fake-scroll|scroll-arrow|nx-co-sheet__scroll-btn/);
+  const workspaceOpen = view.indexOf('className={`nx-co-sheet__workspace');
+  const workspaceClose = view.indexOf('</div>', view.indexOf('{renderSpreadsheetTable()}'));
+  const tabsIdx = view.indexOf('<ClientOperationsPeriodSheetTabs');
+  assert.ok(workspaceOpen > 0 && workspaceClose > workspaceOpen && tabsIdx > workspaceClose);
 });
 
 test('חומר column renders three backend-driven subcontrols מע״מ / מה״כ / שכר', () => {

@@ -4893,43 +4893,6 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               </button>
             );
           })}
-          {reportingDashboard.payments_outstanding_kpi ? (() => {
-            const card = reportingDashboard.payments_outstanding_kpi;
-            const selected = activeKpi === card.id;
-            const tooltip = card.tooltip_periods.map((p) => p.display_label).join(' · ');
-            return (
-              <button
-                key={card.id}
-                type="button"
-                data-testid="client-operations-payments-outstanding-kpi"
-                data-kpi-id={card.id}
-                className={`nx-co-sheet__reporting-kpi is-payment-outstanding${selected ? ' is-selected' : ''}`}
-                aria-pressed={selected}
-                aria-label={`${t(card.label_key)} ${card.count}`}
-                title={tooltip || t(card.tooltip_key)}
-                onClick={() => {
-                  if (!onQueryChange) return;
-                  onQueryChange({
-                    q: query?.q ?? null,
-                    sort_by: query?.sort_by ?? null,
-                    sort_dir: query?.sort_dir ?? null,
-                    filter_operational_reporting: query?.filter_operational_reporting ?? null,
-                    filter_material: query?.filter_material ?? null,
-                    filter_payroll: query?.filter_payroll ?? null,
-                    filter_reporting_type: query?.filter_reporting_type ?? null,
-                    filter_business_type: query?.filter_business_type ?? null,
-                    filter_handler: query?.filter_handler ?? null,
-                    filter_reporting_kpi: selected ? null : card.id,
-                  }, { quiet: true });
-                }}
-              >
-                <span className="nx-co-sheet__reporting-kpi-label">{t(card.label_key)}</span>
-                <span className="nx-co-sheet__reporting-kpi-frac">
-                  <span className="is-payment-outstanding">{card.count}</span>
-                </span>
-              </button>
-            );
-          })() : null}
         </div>
       </section>
     );
@@ -5248,7 +5211,15 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           </div>
         );
       };
-      if (!operationalCell?.applicable) {
+      const capitalCell = col.key === 'capital_declaration' ? r.capital_declaration_cell : null;
+      const capitalShowDash =
+        col.key === 'capital_declaration' &&
+        (!capitalCell ||
+          capitalCell.assignment_state === 'not_applicable' ||
+          (capitalCell.assignment_state == null && capitalCell.applicable === false));
+      const showOperationalDash =
+        col.key === 'capital_declaration' ? capitalShowDash : !operationalCell?.applicable;
+      if (showOperationalDash || !operationalCell) {
         return (
           <span className="nx-co-sheet__plain-dash" aria-label={`${col.label} —`}>
             —
@@ -7228,6 +7199,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         >
           {loading ? <p className="nx-co-sheet__loading nx-co-sheet__loading--inline">{t('clientOperations.loadingPeriod')}</p> : null}
           {renderSpreadsheetTable()}
+        </div>
         <ClientOperationsPeriodSheetTabs
           availablePeriods={period?.available_periods ?? []}
           selectedPeriodKey={period?.selected_period_key ?? query?.operational_period_key ?? null}
@@ -7236,7 +7208,6 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           onSelectPeriod={(key) => flushDirtyBeforePeriodChange(key)}
           trailing={renderPreviousPeriods()}
         />
-        </div>
         {periodCopyFeedback ? (
           <div className="nx-co-sheet__copy-feedback" role="status" aria-live="polite">
             {periodCopyFeedback}

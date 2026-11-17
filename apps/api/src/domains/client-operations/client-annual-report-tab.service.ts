@@ -1160,6 +1160,117 @@ async function loadCapitalFolderInstances(input: {
   }));
 }
 
+/** GET-safe: existing instances only. Does not seed a profile or create instances. */
+async function loadCapitalRequirementFoldersForClient(input: {
+  orgId: string;
+  clientId: string;
+}): Promise<CapitalRequirementFolder[]> {
+  const instances = await loadCapitalFolderInstances(input);
+  if (instances.length === 0) return [];
+  const submittedOnByInstance = new Map<string, string>();
+  const filesByInstance = new Map<string, AnnualCapitalLinkedFile[]>();
+  const { data: capSubs, error: capSubErr } = await supabaseAdmin
+    .from('client_annual_submission_rows')
+    .select('id, capital_declaration_instance_id, submitted_on, file_asset_id')
+    .eq('organization_id', input.orgId)
+    .eq('client_id', input.clientId)
+    .eq('tab_scope', 'capital_declaration');
+  if (!(capSubErr && isSupabaseMissingColumnError(capSubErr, 'capital_declaration_instance_id'))) {
+    if (capSubErr) throw annualDbError('Failed to load capital submission links', capSubErr);
+    const fileMetaById = new Map<string, AnnualFileAssetMeta>();
+    const submissionIds: string[] = [];
+    const instanceBySubmission = new Map<string, string>();
+    for (const raw of capSubs ?? []) {
+      const row = raw as {
+        id: string;
+        capital_declaration_instance_id: string | null;
+        submitted_on: string | null;
+        file_asset_id: string | null;
+      };
+      const instanceId = row.capital_declaration_instance_id ? String(row.capital_declaration_instance_id) : '';
+      if (!instanceId) continue;
+      const submissionId = String(row.id);
+      if (row.submitted_on && !submittedOnByInstance.has(instanceId)) {
+        submittedOnByInstance.set(instanceId, String(row.submitted_on).slice(0, 10));
+      }
+      submissionIds.push(submissionId);
+      instanceBySubmission.set(submissionId, instanceId);
+      if (row.file_asset_id) {
+        const list = filesByInstance.get(instanceId) ?? [];
+        list.push(
+          asTabLinkedFile({
+            file_asset_id: String(row.file_asset_id),
+            file_name: null,
+            source_kind: 'additional',
+          }),
+        );
+        filesByInstance.set(instanceId, list);
+      }
+    }
+    const linked = await loadSubmissionLinkedFiles({
+      orgId: input.orgId,
+      clientId: input.clientId,
+      submissionIds,
+      fileMetaById,
+    });
+    for (const [submissionId, files] of linked) {
+      const instanceId = instanceBySubmission.get(submissionId);
+      if (!instanceId) continue;
+      const list = filesByInstance.get(instanceId) ?? [];
+      for (const file of files) {
+        if (list.some((existing) => existing.file_asset_id === file.file_asset_id)) continue;
+        list.push(file);
+      }
+      filesByInstance.set(instanceId, list);
+    }
+    const extraIds = [
+      ...new Set(
+        [...filesByInstance.values()].flatMap((files) =>
+          files.filter((file) => !file.file_name).map((file) => file.file_asset_id),
+        ),
+      ),
+    ];
+    if (extraIds.length) {
+      const { data: assets } = await supabaseAdmin
+        .from('file_assets')
+        .select('id, file_name, mime_type, created_at')
+        .eq('organization_id', input.orgId)
+        .in('id', extraIds);
+      for (const [id, meta] of fileMetaByIdFromAssets(
+        assets as Array<{ id: string; file_name: string | null; mime_type?: string | null; created_at?: string | null }>,
+      )) {
+        fileMetaById.set(id, meta);
+      }
+      for (const [instanceId, files] of filesByInstance) {
+        filesByInstance.set(
+          instanceId,
+          files.map((file) => {
+            const meta = fileMetaById.get(file.file_asset_id);
+            if (!meta) return file;
+            return asTabLinkedFile({
+              file_asset_id: file.file_asset_id,
+              file_name: meta.file_name,
+              source_kind: file.source_kind,
+              mime_type: meta.mime_type,
+              uploaded_on: meta.created_at,
+            });
+          }),
+        );
+      }
+    }
+  }
+  return buildCapitalRequirementFolders({
+    instances: instances.map((row) => ({
+      id: row.id,
+      sequence_no: row.sequence_no,
+      status: row.status,
+      operational_target_date: row.operational_target_date,
+      submitted_on: submittedOnByInstance.get(row.id) ?? null,
+      files: filesByInstance.get(row.id) ?? [],
+    })),
+  });
+}
+
 let annualBucketEnsured = false;
 async function ensureAnnualBucket(): Promise<void> {
   if (annualBucketEnsured) return;
@@ -1335,7 +1446,10 @@ export async function getAnnualTabReadModel(
     const existing = await loadAnnualProfile(orgId, clientId, scope, scoped);
     if (!existing) {
       return scope === 'capital_declaration'
-        ? buildCapitalFallbackReadModel(canEditEarly)
+        ? {
+            ...buildCapitalFallbackReadModel(canEditEarly),
+            capital_folders: await loadCapitalRequirementFoldersForClient({ orgId, clientId }),
+          }
         : (() => {
             const currentTaxYear = resolveCurrentAnnualTaxYear();
             const fallback = buildCapitalFallbackReadModel(canEditEarly);
@@ -1657,45 +1771,8 @@ export async function getAnnualTabReadModel(
           })),
         })
       : [];
-  let capital_folders: CapitalRequirementFolder[] = [];
-  if (scope === 'capital_declaration') {
-    const instances = await loadCapitalFolderInstances({ orgId, clientId });
-    const submittedOnByInstance = new Map<string, string>();
-    const filesByInstance = new Map<string, AnnualCapitalLinkedFile[]>();
-    const { data: capSubs, error: capSubErr } = await supabaseAdmin
-      .from('client_annual_submission_rows')
-      .select('id, capital_declaration_instance_id, submitted_on')
-      .eq('organization_id', orgId)
-      .eq('client_id', clientId)
-      .eq('tab_scope', 'capital_declaration');
-    if (!(capSubErr && isSupabaseMissingColumnError(capSubErr, 'capital_declaration_instance_id'))) {
-      if (capSubErr) throw annualDbError('Failed to load capital submission links', capSubErr);
-      for (const raw of capSubs ?? []) {
-        const row = raw as {
-          id: string;
-          capital_declaration_instance_id: string | null;
-          submitted_on: string | null;
-        };
-        const instanceId = row.capital_declaration_instance_id ? String(row.capital_declaration_instance_id) : '';
-        if (!instanceId) continue;
-        if (row.submitted_on && !submittedOnByInstance.has(instanceId)) {
-          submittedOnByInstance.set(instanceId, String(row.submitted_on).slice(0, 10));
-        }
-        const submission = submissions.find((item) => item.submission_id === String(row.id));
-        filesByInstance.set(instanceId, submission ? filesForSubmission(submission) : []);
-      }
-    }
-    capital_folders = buildCapitalRequirementFolders({
-      instances: instances.map((row) => ({
-        id: row.id,
-        sequence_no: row.sequence_no,
-        status: row.status,
-        operational_target_date: row.operational_target_date,
-        submitted_on: submittedOnByInstance.get(row.id) ?? null,
-        files: filesByInstance.get(row.id) ?? [],
-      })),
-    });
-  }
+  const capital_folders =
+    scope === 'capital_declaration' ? await loadCapitalRequirementFoldersForClient({ orgId, clientId }) : [];
 
   const serverNow = new Date();
   const control = buildAnnualControlState(scopedRows, serverNow);

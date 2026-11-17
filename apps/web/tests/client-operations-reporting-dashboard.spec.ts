@@ -110,7 +110,7 @@ test('payment modal is Create Client-styled, has no Yes preselect, and cancel do
   assert.match(viewSource, /setPaymentModal\(null\)/);
   assert.match(viewSource, /reportingCell\?\.overlay_visible && col\.key !== 'payroll'/);
   assert.doesNotMatch(viewSource, /\['vat', 'income_tax_advance'/);
-  assert.match(viewSource, /data-testid="client-operations-payments-outstanding-kpi"/);
+  assert.doesNotMatch(viewSource, /data-testid="client-operations-payments-outstanding-kpi"/);
   assert.doesNotMatch(viewSource, /mark_obligation_reported_and_paid/);
 });
 
@@ -188,10 +188,40 @@ test('reporting KPI cards stay presentation-only:  submitted/total, wrap, no rem
   assert.doesNotMatch(dashSlice, /t\(.*remaining/);
   assert.doesNotMatch(viewSource, /submitted_count\s*\+/);
   assert.doesNotMatch(viewSource, /total_count\s*-/);
-  assert.match(cssSource, /\.nx-co-sheet__reporting-kpis[\s\S]*?grid-template-columns:\s*repeat\(8,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(cssSource, /\.nx-co-sheet__reporting-kpis[\s\S]*?grid-template-columns:\s*repeat\(7,\s*minmax\(0,\s*1fr\)\)/);
+  assert.doesNotMatch(viewSource, /data-testid="client-operations-payments-outstanding-kpi"/);
+  assert.match(viewSource, /reportingDashboard\.kpi_cards\.map/);
   assert.match(viewSource, /nx-co-registry__kpis/);
   assert.match(viewSource, /nx-co-registry__previous/);
   assert.doesNotMatch(cssSource, /\.nx-co-sheet__reporting-kpis[\s\S]*?overflow-x:\s*auto/);
+});
+
+test('payments outstanding cube is not painted; seven filing cards share the strip', () => {
+  const dashSlice = viewSource.slice(
+    viewSource.indexOf('const renderReportingKpis'),
+    viewSource.indexOf('const renderPreviousPeriods'),
+  );
+  assert.doesNotMatch(dashSlice, /payments_outstanding_kpi/);
+  assert.doesNotMatch(dashSlice, /client-operations-payments-outstanding-kpi/);
+  assert.doesNotMatch(dashSlice, /is-payment-outstanding/);
+  assert.match(dashSlice, /reportingDashboard\.kpi_cards\.map/);
+  assert.match(viewSource, /payments_outstanding_kpi\?:/);
+  const kpiRule = cssSource.slice(
+    cssSource.indexOf('.nx-co-sheet__reporting-kpis {'),
+    cssSource.indexOf('.nx-co-sheet__reporting-kpi {'),
+  );
+  assert.match(kpiRule, /grid-template-columns:\s*repeat\(7,\s*minmax\(0,\s*1fr\)\)/);
+  assert.doesNotMatch(kpiRule, /overflow-x:\s*auto/);
+  const apiPure = readFileSync(
+    join(dir, '../../api/src/domains/client-operations/client-operations-reporting-dashboard.pure.ts'),
+    'utf8',
+  );
+  assert.match(apiPure, /export function buildPaymentsOutstandingKpi/);
+  assert.match(apiPure, /kpi_cards:\s*buildReportingKpiCards/);
+  assert.equal(
+    (he.clientOperations.registry.reporting.kpi as { paymentsOutstanding: string }).paymentsOutstanding,
+    'תשלומים שטרם שולמו',
+  );
 });
 
 test('self-employed NI modal is a compact two-column command surface', () => {

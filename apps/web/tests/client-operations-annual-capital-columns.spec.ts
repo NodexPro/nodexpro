@@ -85,13 +85,19 @@ test('frontend renders integrated date/calendar control without tax year math', 
   assert.match(apiRegistrySource, /resolveAnnualReportTaxYearForOperationalPeriod\(/);
 });
 
-test('capital N/A is a plain dash; open uses the calendar icon', () => {
+test('capital N/A is a plain dash; unassigned still uses the calendar icon', () => {
   assert.match(viewSource, /capital_declaration_cell\?\.can_open/);
   assert.match(viewSource, /open_capital_declaration_instance/);
   assert.match(viewSource, /ClientOperationsCalendarIcon/);
+  assert.match(viewSource, /assignment_state === 'not_applicable'/);
   assert.match(viewSource, /nx-co-sheet__plain-dash/);
   assert.match(viewSource, /annualCapitalFiling\.square_visible === true/);
   assert.doesNotMatch(viewSource, /nx-co-sheet__date-field-plus/);
+  assert.match(
+    cssSource,
+    /\.nx-co-sheet__date-with-square\s*>\s*\.nx-co-sheet__date-field\s*\{[^}]*min-width:\s*0/s,
+  );
+  assert.match(cssSource, /td:has\(\.nx-co-sheet__date-with-square\)\s*\{[^}]*overflow:\s*visible/s);
 });
 
 test('applicable date cells share one calendar control; non-applicable cells are not date inputs', () => {
@@ -100,10 +106,11 @@ test('applicable date cells share one calendar control; non-applicable cells are
   assert.match(viewSource, /open_capital_declaration_instance/);
   assert.match(viewSource, /nx-co-sheet__date-field-icon/);
   const noOpenBranch = viewSource.slice(
-    viewSource.indexOf("if (!operationalCell?.applicable)"),
-    viewSource.indexOf("const dateInputId"),
+    viewSource.indexOf('const capitalShowDash'),
+    viewSource.indexOf('const dateInputId'),
   );
   assert.match(noOpenBranch, /nx-co-sheet__plain-dash/);
+  assert.match(noOpenBranch, /assignment_state === 'not_applicable'/);
   assert.doesNotMatch(noOpenBranch, /nx-co-sheet__date-open/);
   assert.doesNotMatch(noOpenBranch, /nx-co-sheet__filing-square/);
   assert.doesNotMatch(noOpenBranch, /type="date"/);
@@ -143,10 +150,11 @@ test('editable annual/capital date field is a full-area operable native input', 
   assert.match(viewSource, /col\.key === 'annual_report' \? 'annual_report' : 'capital_declaration'/);
   assert.match(viewSource, /open_capital_declaration_instance/);
   const noOpenBranch = viewSource.slice(
-    viewSource.indexOf("if (!operationalCell?.applicable)"),
-    viewSource.indexOf("const dateInputId"),
+    viewSource.indexOf('const capitalShowDash'),
+    viewSource.indexOf('const dateInputId'),
   );
   assert.match(noOpenBranch, /nx-co-sheet__plain-dash/);
+  assert.match(noOpenBranch, /assignment_state === 'not_applicable'/);
   assert.doesNotMatch(noOpenBranch, /nx-co-sheet__date-open/);
   assert.doesNotMatch(noOpenBranch, /type="date"/);
   assert.doesNotMatch(noOpenBranch, /showPicker/);

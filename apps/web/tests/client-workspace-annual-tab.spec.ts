@@ -55,6 +55,14 @@ test('Annual premium skin is scoped to the workspace modal and reused for הצה
   assert.match(annualBase, /\.nx-annual-root/);
 });
 
+test('capital archive folders stay linked to instances and default open', () => {
+  assert.match(annualSrc, /annualTab\.capital_folders/);
+  assert.match(annualSrc, /data-instance-id=\{folder\.instance_id\}/);
+  assert.match(annualSrc, /annual-tab-capital-folder-\$\{folder\.sequence_no\}/);
+  assert.match(annualSrc, /next\[folder\.folder_key\] = true/);
+  assert.match(annualSrc, /file\.actions\?\.can_preview \?\? file\.can_open/);
+});
+
 test('Annual tab renders backend filing years, separate document readiness, and archive folders at the bottom', () => {
   assert.match(annualSrc, /annualTab\.filing_years/);
   assert.match(annualSrc, /select_annual_working_tax_year/);

@@ -161,6 +161,8 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .t1-appShell--client-operations .t1-pageMain > div > .nx-co-sheet,

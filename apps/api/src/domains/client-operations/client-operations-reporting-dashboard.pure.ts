@@ -1014,6 +1014,12 @@ export type PaymentsOutstandingPeriodFact = {
   canonical_id: string;
 };
 
+/**
+ * Selected-period count of filed-unpaid VAT / income-tax-advance obligations.
+ * A zero count means this period has none: unfiled overdue cells and kinds
+ * without payment (payroll, NI, deductions) are excluded. Previous-period
+ * facts fill the tooltip only and do not increment the count.
+ */
 export function buildPaymentsOutstandingKpi(input: {
   rows: ReportingKpiRowInput[];
   outstanding_period_facts: readonly PaymentsOutstandingPeriodFact[];

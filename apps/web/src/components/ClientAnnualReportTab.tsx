@@ -1027,6 +1027,20 @@ function AnnualArchiveFolders({
   }, [forcedOpenKey]);
   const yearFolders = annualTab.year_folders ?? [];
   const capitalFolders = annualTab.capital_folders ?? [];
+  useEffect(() => {
+    if (capitalFolders.length === 0) return;
+    setOpenKeys((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const folder of capitalFolders) {
+        if (next[folder.folder_key] === undefined) {
+          next[folder.folder_key] = true;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [capitalFolders]);
   if (yearFolders.length === 0 && capitalFolders.length === 0) return null;
 
   const toggle = (key: string) => {
@@ -1101,6 +1115,8 @@ function AnnualArchiveFolders({
                     type="button"
                     className="nx-annual-logical-folder-head"
                     aria-expanded={open}
+                    data-instance-id={folder.instance_id}
+                    data-testid={`annual-tab-capital-folder-${folder.sequence_no}`}
                     onClick={() => toggle(folder.folder_key)}
                   >
                     <IconFolder />

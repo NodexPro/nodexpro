@@ -591,6 +591,70 @@ test('filing and payment are independent; unknown payment is not green paid', ()
   assert.equal(paymentAppliesForReportingKind('income_tax_advance'), true);
 });
 
+test('payments-outstanding KPI is zero unless the selected period has filed-unpaid VAT or income-tax advance', () => {
+  const overdueUnfiled = buildPaymentsOutstandingKpi({
+    rows: [
+      {
+        client_id: 'c-overdue',
+        reporting: buildReportingRowPresentation(
+          [cell({ kind: 'vat', submitted: false, due_date: '2026-10-01', canonical_id: 'vat_report::2026-10' })],
+          TODAY,
+        ),
+      },
+    ],
+    selected_period_key: '2026-10',
+    outstanding_period_facts: [],
+  });
+  assert.equal(overdueUnfiled.count, 0);
+  const previousPeriodOnly = buildPaymentsOutstandingKpi({
+    rows: [
+      {
+        client_id: 'c-overdue',
+        reporting: buildReportingRowPresentation(
+          [cell({ kind: 'vat', submitted: false, due_date: '2026-10-01', canonical_id: 'vat_report::2026-10' })],
+          TODAY,
+        ),
+      },
+    ],
+    selected_period_key: '2026-10',
+    outstanding_period_facts: [{ period_key: '2026-08', canonical_id: 'vat_report::2026-07-08' }],
+  });
+  assert.equal(previousPeriodOnly.count, 0);
+  assert.deepEqual(
+    previousPeriodOnly.tooltip_periods.map((period) => period.period_key),
+    ['2026-08'],
+  );
+  const payrollSubmitted = buildPaymentsOutstandingKpi({
+    rows: [
+      {
+        client_id: 'c-payroll',
+        reporting: buildReportingRowPresentation(
+          [cell({ kind: 'payroll', submitted: true, canonical_id: 'payroll::2026-10' })],
+          TODAY,
+        ),
+      },
+    ],
+    selected_period_key: '2026-10',
+    outstanding_period_facts: [],
+  });
+  assert.equal(payrollSubmitted.count, 0);
+  assert.equal(paymentAppliesForReportingKind('payroll'), false);
+  const filedUnpaidVat = buildReportingRowPresentation(
+    [cell({ kind: 'vat', submitted: true, canonical_id: 'vat_report::2026-10' })],
+    TODAY,
+  );
+  assert.equal(filedUnpaidVat.cells.vat?.filing_detail?.chrome, 'filed_unpaid');
+  assert.equal(filedUnpaidVat.cells.vat?.payment_state, 'unknown');
+  assert.equal(
+    buildPaymentsOutstandingKpi({
+      rows: [{ client_id: 'c-vat', reporting: filedUnpaidVat }],
+      selected_period_key: '2026-10',
+      outstanding_period_facts: [],
+    }).count,
+    1,
+  );
+});
+
 test('payments-outstanding KPI counts דווח filed-unpaid VAT/ITA and drops after שולם', () => {
   const reported = buildReportingRowPresentation(
     [cell({ kind: 'vat', submitted: true, canonical_id: 'vat_report::2026-09-10' })],
