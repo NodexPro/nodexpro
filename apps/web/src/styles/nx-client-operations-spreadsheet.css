@@ -865,13 +865,47 @@
   background: var(--nx-co-select);
 }
 
-.nx-co-sheet__table td.is-focused,
+.nx-co-sheet__canvas:focus,
+.nx-co-sheet__canvas:focus-visible {
+  outline: none;
+}
+
 .nx-co-sheet__table td.is-format-selected {
-  outline: 1.5px solid var(--nx-co-brand);
-  outline-offset: -1.5px;
-  z-index: 1;
   position: relative;
-  box-shadow: inset 0 0 0 1px rgba(18, 55, 86, 0.08);
+  z-index: 1;
+  background-image: linear-gradient(rgba(18, 55, 86, 0.12), rgba(18, 55, 86, 0.12));
+  box-shadow:
+    var(--nx-co-sel-block-start, 0 0 0 0 transparent),
+    var(--nx-co-sel-block-end, 0 0 0 0 transparent),
+    var(--nx-co-sel-inline-start, 0 0 0 0 transparent),
+    var(--nx-co-sel-inline-end, 0 0 0 0 transparent);
+}
+
+.nx-co-sheet__table td.is-format-selected.is-sel-edge-block-start {
+  --nx-co-sel-block-start: 0 -2px 0 0 var(--nx-co-brand);
+}
+
+.nx-co-sheet__table td.is-format-selected.is-sel-edge-block-end {
+  --nx-co-sel-block-end: 0 2px 0 0 var(--nx-co-brand);
+}
+
+.nx-co-sheet__table td.is-format-selected.is-sel-edge-inline-start {
+  --nx-co-sel-inline-start: -2px 0 0 0 var(--nx-co-brand);
+}
+
+.nx-co-sheet__table td.is-format-selected.is-sel-edge-inline-end {
+  --nx-co-sel-inline-end: 2px 0 0 0 var(--nx-co-brand);
+}
+
+.nx-co-sheet__table.is-frozen td.is-format-selected[data-freeze='true'] {
+  background-image: linear-gradient(rgba(18, 55, 86, 0.12), rgba(18, 55, 86, 0.12));
+}
+
+.nx-co-sheet__table td.is-focused {
+  outline: 2px solid var(--nx-co-brand);
+  outline-offset: -2px;
+  z-index: 3;
+  position: relative;
 }
 
 .nx-co-sheet__table td.is-editing-custom {

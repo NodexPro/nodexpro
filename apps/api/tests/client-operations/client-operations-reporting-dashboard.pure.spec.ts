@@ -637,6 +637,57 @@ test('payments-outstanding KPI counts דווח filed-unpaid VAT/ITA and drops af
   );
 });
 
+test('payments-outstanding KPI counts unique unpaid obligations of the selected period', () => {
+  const unknownAfterReport = buildReportingRowPresentation(
+    [cell({ kind: 'vat', submitted: true, canonical_id: 'vat_report::2026-10', payment_classification: null })],
+    TODAY,
+  );
+  const paid = buildReportingRowPresentation(
+    [cell({ kind: 'vat', submitted: true, canonical_id: 'vat_report::2026-10', payment_classification: 'paid_in_full' })],
+    TODAY,
+  );
+  const twoClients = buildPaymentsOutstandingKpi({
+    rows: [
+      { client_id: 'c1', reporting: unknownAfterReport },
+      { client_id: 'c2', reporting: unknownAfterReport },
+      { client_id: 'c3', reporting: paid },
+    ],
+    selected_period_key: '2026-10',
+    outstanding_period_facts: [],
+  });
+  assert.equal(unknownAfterReport.cells.vat?.filing_detail?.chrome, 'filed_unpaid');
+  assert.equal(unknownAfterReport.cells.vat?.payment_state, 'unknown');
+  assert.equal(twoClients.count, 2);
+  const vatAndIta = buildPaymentsOutstandingKpi({
+    rows: [
+      {
+        client_id: 'c1',
+        reporting: buildReportingRowPresentation(
+          [
+            cell({ kind: 'vat', submitted: true, canonical_id: 'vat_report::2026-10', payment_classification: null }),
+            cell({
+              kind: 'income_tax_advance',
+              submitted: true,
+              canonical_id: 'income_tax_advance::2026-10',
+              payment_classification: 'outstanding',
+            }),
+          ],
+          TODAY,
+        ),
+      },
+    ],
+    selected_period_key: '2026-10',
+    outstanding_period_facts: [],
+  });
+  assert.equal(vatAndIta.count, 2);
+  const requiredCards = buildReportingKpiCards([
+    { client_id: 'c1', reporting: unknownAfterReport },
+  ]);
+  const vatCard = requiredCards.find((card) => card.id === 'vat');
+  assert.equal(vatCard?.remaining_count, 0);
+  assert.equal(vatCard?.submitted_count, 1);
+});
+
 test('payments-outstanding KPI counts selected-period orange cells once and lists previous periods in tooltip', () => {
   const rows = [
     {

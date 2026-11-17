@@ -91,7 +91,9 @@ test('rectangle selection lists every cell once; mixed kinds stay two keys', () 
     rowIds: ['a', 'manual:01'],
     columnKeys: ['client_name', 'notes'],
   });
-  assert.equal(mixed.length, 2);
+  assert.equal(mixed.length, 4);
+  assert.ok(mixed.includes('a::client_name'));
+  assert.ok(mixed.includes('manual:01::notes'));
 });
 
 test('toolbar uses one paint-bucket and persists the whole selection in one write', () => {

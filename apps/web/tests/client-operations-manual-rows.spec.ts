@@ -149,9 +149,10 @@ test('print excludes empty manual rows; includes filled via selectPrintableManua
 });
 
 test('paint mode does not call paint status on manual cells; no client modal / quick profile', () => {
+  const marker = '// Manual rows are NOT eligible for status paint (no fabricated client_id).';
   const manualBlock = viewSource.slice(
-    viewSource.indexOf('manualRows.map((row) =>'),
-    viewSource.indexOf('manualRows.map((row) =>') + 3500,
+    viewSource.indexOf(marker),
+    viewSource.indexOf(marker) + 4500,
   );
   assert.match(manualBlock, /NOT eligible for status paint|are NOT eligible for status paint/i);
   assert.doesNotMatch(manualBlock, /paintCellManualStatus/);

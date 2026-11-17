@@ -642,9 +642,18 @@ export async function setCapitalDeclarationOperationalTargetDate(input: {
     .eq('status', 'open')
     .maybeSingle();
   assertQueryError(openError, 'Failed to load open capital declaration');
-  if (!open?.id) throw badRequest('No open capital declaration instance for this client');
-
-  const instanceId = String(open.id);
+  let instanceId: string;
+  if (open?.id) {
+    instanceId = String(open.id);
+  } else if (date == null) {
+    return { instance_id: '', operational_target_date: null };
+  } else {
+    const opened = await openCapitalDeclarationInstance({
+      ctx: input.ctx,
+      clientId: input.clientId,
+    });
+    instanceId = opened.instance_id;
+  }
   const { error } = await supabaseAdmin
     .from('client_capital_declaration_instances')
     .update({

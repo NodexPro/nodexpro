@@ -981,8 +981,11 @@ export function cellHasPaymentOutstanding(
   cell: ClientOperationsReportingCellPresentation | null | undefined,
 ): boolean {
   if (!cell?.applicable || cell.payment_applies === false) return false;
+  if (cell.payment_state === 'paid_in_full' || cell.payment_state === 'not_required') return false;
   if (cell.filing_detail?.chrome === 'filed_unpaid') return true;
-  return cell.payment_state === 'outstanding' || cell.payment_state === 'partially_paid';
+  if (cell.payment_state === 'outstanding' || cell.payment_state === 'partially_paid') return true;
+  // דווח without שולם: payment stays unknown until a payment command.
+  return Boolean(cell.submitted && cell.payment_state === 'unknown');
 }
 
 export function rowMatchesReportingKpiFilter(
@@ -1024,8 +1027,9 @@ export function buildPaymentsOutstandingKpi(input: {
     const clientKey = reportingKpiClientKey(row, '');
     for (const cell of Object.values(cells)) {
       if (!cellHasPaymentOutstanding(cell)) continue;
-      const identity = clientKey ? `${clientKey}::${cell.canonical_id}` : cell.canonical_id;
-      if (seen.has(identity)) continue;
+      const obligation = String(cell.canonical_id || cell.obligation_id || cell.kind || '').trim();
+      const identity = clientKey ? `${clientKey}::${obligation}` : obligation;
+      if (!identity || seen.has(identity)) continue;
       seen.add(identity);
       count += 1;
     }

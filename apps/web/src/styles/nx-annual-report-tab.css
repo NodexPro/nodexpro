@@ -55,6 +55,10 @@
   align-items: stretch;
 }
 
+.nx-annual-dashboard.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 @media (max-width: 768px) {
   .nx-annual-dashboard {
     grid-template-columns: 1fr;
@@ -518,10 +522,14 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
-  align-items: stretch;
-  grid-auto-rows: 1fr;
+  align-items: start;
+  grid-auto-rows: auto;
   width: 100%;
   box-sizing: border-box;
+}
+
+.nx-annual-lower.is-single {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .nx-annual-lower > section {
@@ -559,15 +567,15 @@
 
 .nx-annual-notes-ta {
   width: 100%;
-  min-height: 0;
-  height: 100%;
-  flex: 1 1 auto;
+  min-height: 88px;
+  height: auto;
+  flex: 0 1 auto;
   padding: 10px;
   border: 1px solid #e2e8f0;
   border-radius: 6px;
   font: inherit;
   font-size: 14px;
-  resize: none;
+  resize: vertical;
 }
 
 .nx-annual-empty-cell {

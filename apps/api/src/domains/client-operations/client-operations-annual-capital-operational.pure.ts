@@ -53,6 +53,8 @@ export type AnnualReportFilingPresentation = {
 
 export type CapitalDeclarationFilingPresentation = {
   square_chrome: AnnualCapitalFilingSquareChrome;
+  /** Backend-owned: filing square only for an assigned declaration instance. */
+  square_visible: boolean;
   instance_id: string | null;
   sequence_no: number | null;
   filed: boolean;
@@ -92,7 +94,12 @@ export type CapitalDeclarationOperationalDateCell = {
   operational_target_date: string | null;
   sequence_no: number | null;
   instance_status: 'open' | 'completed' | null;
-  /** Backend-owned: show compact + when no open instance and user may edit. */
+  /**
+   * Backend-owned assignment: missing instance is unassigned, not N/A.
+   * not_applicable is reserved for a real business rule (none today).
+   */
+  assignment_state: 'unassigned' | 'assigned' | 'not_applicable';
+  /** Backend-owned: show compact + after a completed instance so another can be opened. */
   can_open: boolean;
   filing: CapitalDeclarationFilingPresentation;
 };
@@ -250,6 +257,7 @@ export function buildAnnualReportCell(input: {
 function emptyCapitalFiling(canEdit: boolean): CapitalDeclarationFilingPresentation {
   return {
     square_chrome: 'empty',
+    square_visible: false,
     instance_id: null,
     sequence_no: null,
     filed: false,
@@ -287,6 +295,7 @@ export function buildCapitalDeclarationFiling(input: {
   const filed = input.instance.status === 'completed';
   return {
     square_chrome: filed ? 'filed' : 'empty',
+    square_visible: true,
     instance_id: input.instance.id,
     sequence_no: input.instance.sequence_no,
     filed,
@@ -376,14 +385,15 @@ export function buildCapitalDeclarationCell(input: {
   });
   if (!visible) {
     return {
-      applicable: false,
-      editable: false,
+      applicable: true,
+      editable: input.canEdit,
       instance_id: null,
       tax_year: null,
       operational_target_date: null,
       sequence_no: null,
       instance_status: null,
-      can_open: input.canEdit,
+      assignment_state: 'unassigned',
+      can_open: false,
       filing: emptyCapitalFiling(input.canEdit),
     };
   }
@@ -396,6 +406,7 @@ export function buildCapitalDeclarationCell(input: {
     operational_target_date: visible.operational_target_date,
     sequence_no: visible.sequence_no,
     instance_status: visible.status,
+    assignment_state: 'assigned',
     can_open: input.canEdit && !isOpen,
     filing: buildCapitalDeclarationFiling({
       instance: {

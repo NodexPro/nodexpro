@@ -95,6 +95,21 @@ test('year switch uses in-aggregate year_views and does not reload the client ca
   assert.doesNotMatch(annualSrc, /moduleClientOperationsCase\(/);
 });
 
+test('filed year uses available width; hidden checklist does not leave an empty column', () => {
+  assert.match(annualSrc, /nx-annual-dashboard\$\{showMissingProblem \? '' : ' is-single'\}/);
+  assert.match(annualSrc, /nx-annual-lower\$\{/);
+  assert.match(annualSrc, /is-single/);
+  assert.doesNotMatch(annualSrc, /show_submissions \? \([\s\S]*\) : \(\s*<div \/>\s*\)/s);
+  assert.match(annualBase, /\.nx-annual-dashboard\.is-single/);
+  assert.match(annualBase, /\.nx-annual-lower\.is-single/);
+  assert.match(annualBase, /\.nx-annual-notes-ta \{[\s\S]*min-height:\s*88px/);
+  assert.match(annualBase, /\.nx-annual-lower \{[\s\S]*align-items:\s*start/);
+  const foldersIdx = annualSrc.indexOf('<AnnualArchiveFolders');
+  const notesIdx = annualSrc.indexOf('annualTab.visibility.show_notes');
+  const checklistIdx = annualSrc.indexOf('{showChecklist ? (');
+  assert.ok(checklistIdx > 0 && notesIdx > checklistIdx && foldersIdx > notesIdx);
+});
+
 test('working checklist heading uses the selected tax year and hides when the year is filed', () => {
   assert.match(annualSrc, /documentsForTaxYear/);
   assert.match(annualSrc, /annual-tab-documents-year-heading/);

@@ -103,10 +103,18 @@ import {
   normalizeClientOperationsFill,
 } from '../../lib/client-operations-fill-palette.pure';
 import {
+  applyFormatSelectionGesture,
   clientOperationsCellAllowsDecorativeFill,
+  clientOperationsSelectionFrameClass,
+  clientOperationsSelectionFrameEdges,
+  clientOperationsSelectionGesture,
+  formatDragExceededThreshold,
   isClientOperationsFormatRangeCell,
   listClientOperationsFormatSelectionKeys,
+  shouldSuppressFormatSelectionClick,
+  tableSelectionRange,
   type ClientOperationsFormatRange,
+  type ClientOperationsSelectionGesture,
 } from '../../lib/client-operations-format-selection.pure';
 import {
   computeClientOperationsColumnResizeDelta,
@@ -248,6 +256,7 @@ export type ClientOperationsAnnualReportFiling = {
 
 export type ClientOperationsCapitalDeclarationFiling = {
   square_chrome: 'empty' | 'filed';
+  square_visible?: boolean;
   instance_id: string | null;
   sequence_no: number | null;
   filed: boolean;
@@ -287,6 +296,7 @@ export type ClientOperationsCapitalDeclarationCell = {
   operational_target_date: string | null;
   sequence_no?: number | null;
   instance_status?: 'open' | 'completed' | null;
+  assignment_state?: 'unassigned' | 'assigned' | 'not_applicable';
   can_open: boolean;
   filing?: ClientOperationsCapitalDeclarationFiling;
 };
@@ -1133,8 +1143,16 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [colorPaletteOpen, setColorPaletteOpen] = useState(false);
   const [fillPaletteOpen, setFillPaletteOpen] = useState(false);
   const [fontSizeMenuOpen, setFontSizeMenuOpen] = useState(false);
-  const [formatRange, setFormatRange] = useState<ClientOperationsFormatRange | null>(null);
-  const formatDragRef = useRef(false);
+  const [formatRanges, setFormatRanges] = useState<ClientOperationsFormatRange[]>([]);
+  const formatDragRef = useRef<{
+    active: boolean;
+    moved: boolean;
+    gesture: ClientOperationsSelectionGesture;
+    startX: number;
+    startY: number;
+  }>({ active: false, moved: false, gesture: 'replace', startX: 0, startY: 0 });
+  const formatSuppressClickRef = useRef(false);
+  const pendingDatePickerRef = useRef<HTMLInputElement | null>(null);
   const [columnVisibilityOpen, setColumnVisibilityOpen] = useState(false);
   const [isResizingColumn, setIsResizingColumn] = useState(false);
   // Legacy "+ עמודה" dialog kept in code but hidden — 10 user slots via ensure command.
@@ -1453,11 +1471,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   useEffect(() => {
     if (!widthScope?.userId || !widthScope.organizationId) {
       setFocusedCell(null);
-      setFormatRange(null);
+      setFormatRanges([]);
       return;
     }
     setFocusedCell(null);
-    setFormatRange(null);
+    setFormatRanges([]);
   }, [widthScope?.organizationId, widthScope?.userId]);
 
   useEffect(() => {
@@ -1514,7 +1532,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       setColumnVisibilityOpen(false);
       if (focusedCell) {
         setFocusedCell(null);
-        setFormatRange(null);
+        setFormatRanges([]);
         setEditingCellKey(null);
       }
       if (fullscreenOpen) setFullscreenOpen(false);
@@ -1525,7 +1543,20 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
   useEffect(() => {
     const onMouseUp = () => {
-      formatDragRef.current = false;
+      const drag = formatDragRef.current;
+      const pendingPicker = pendingDatePickerRef.current;
+      pendingDatePickerRef.current = null;
+      if (drag.active && drag.moved) formatSuppressClickRef.current = true;
+      if (pendingPicker && !drag.moved && drag.gesture === 'replace') {
+        tryShowNativeDatePicker(pendingPicker);
+      }
+      formatDragRef.current = {
+        active: false,
+        moved: false,
+        gesture: 'replace',
+        startX: 0,
+        startY: 0,
+      };
     };
     window.addEventListener('mouseup', onMouseUp);
     return () => window.removeEventListener('mouseup', onMouseUp);
@@ -1891,7 +1922,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   // cell grid (vertical + horizontal borders) in every workspace, however few rows the viewer has.
   const [sheetCanvasHeight, setSheetCanvasHeight] = useState(0);
   const sheetCanvasObserverRef = useRef<ResizeObserver | null>(null);
+  const sheetCanvasElRef = useRef<HTMLDivElement | null>(null);
   const sheetCanvasRef = useCallback((el: HTMLDivElement | null) => {
+    sheetCanvasElRef.current = el;
     sheetCanvasObserverRef.current?.disconnect();
     sheetCanvasObserverRef.current = null;
     if (!el) return;
@@ -1980,10 +2013,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       });
   };
 
-  const formatSelectionRowIds = useMemo(() => {
-    const usesManual = Boolean(focusedCell?.rowKey || formatRange?.anchor.rowKey || formatRange?.focus.rowKey);
-    return usesManual ? manualRows.map((item) => item.row_key) : rows.map((item) => item.client_id);
-  }, [focusedCell, formatRange, manualRows, rows]);
+  const formatSelectionRowIds = useMemo(
+    () => [...rows.map((item) => item.client_id), ...manualRows.map((item) => item.row_key)],
+    [manualRows, rows],
+  );
 
   const formatSelectionColumnKeys = useMemo(
     () => visibleColumns.map((column) => column.key),
@@ -1993,12 +2026,13 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const formatSelectionKeys = useMemo(
     () =>
       listClientOperationsFormatSelectionKeys({
-        range: formatRange,
+        range: formatRanges[formatRanges.length - 1] ?? null,
+        ranges: formatRanges,
         focused: focusedCell,
         rowIds: formatSelectionRowIds,
         columnKeys: formatSelectionColumnKeys,
       }),
-    [formatRange, focusedCell, formatSelectionColumnKeys, formatSelectionRowIds],
+    [formatRanges, focusedCell, formatSelectionColumnKeys, formatSelectionRowIds],
   );
 
   const presentationAllowsDecorativeFill = (pk: string): boolean => {
@@ -2032,7 +2066,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const selectActiveFormatCell = (
     clientId: string,
     column: Pick<ClientOperationsRegistryColumn, 'key' | 'cell_kind'>,
-    options?: { rowKey?: string; extend?: boolean },
+    options?: { rowKey?: string; gesture?: ClientOperationsSelectionGesture },
   ) => {
     if (
       !isClientOperationsFormatEligibleColumn({
@@ -2045,23 +2079,104 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     const next: ClientOperationsActiveCell = options?.rowKey
       ? { rowKey: options.rowKey, colKey: column.key }
       : { clientId, colKey: column.key };
+    const gesture = options?.gesture ?? 'replace';
     setSelectedRowId(options?.rowKey ?? clientId);
-    if (options?.extend) {
-      setFocusedCell((current) => {
-        setFormatRange((prev) => ({
-          anchor: prev?.anchor ?? current ?? next,
-          focus: next,
-        }));
-        return next;
+    setFormatRanges((prev) =>
+      applyFormatSelectionGesture({
+        gesture,
+        next,
+        ranges: prev,
+        focused: focusedCell,
+      }),
+    );
+    setFocusedCell(next);
+  };
+
+  const selectAllFormatCells = () => {
+    const range = tableSelectionRange({
+      clientIds: rows.map((row) => row.client_id),
+      manualRowKeys: manualRows.map((row) => row.row_key),
+      columnKeys: formatSelectionColumnKeys,
+    });
+    if (!range) return;
+    setFormatRanges([range]);
+    setFocusedCell(range.anchor);
+  };
+
+  const beginFormatPointerSelection = (
+    event: {
+      shiftKey: boolean;
+      ctrlKey: boolean;
+      metaKey: boolean;
+      button: number;
+      clientX: number;
+      clientY: number;
+      target?: EventTarget | null;
+      preventDefault: () => void;
+    },
+    clientId: string,
+    column: Pick<ClientOperationsRegistryColumn, 'key' | 'cell_kind'>,
+    options?: { rowKey?: string },
+  ) => {
+    if (statusPaintMode) return false;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('.nx-co-sheet__resize-handle, .nx-co-sheet__col-gear')) return false;
+    if (
+      !isClientOperationsFormatEligibleColumn({
+        columnKey: column.key,
+        cellKind: column.cell_kind,
+      })
+    ) {
+      return false;
+    }
+    const gesture = clientOperationsSelectionGesture(event);
+    selectActiveFormatCell(clientId, column, { rowKey: options?.rowKey, gesture });
+    formatDragRef.current = {
+      active: event.button === 0,
+      moved: false,
+      gesture,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+    formatSuppressClickRef.current = gesture !== 'replace';
+    if (gesture !== 'replace') event.preventDefault();
+    sheetCanvasElRef.current?.focus({ preventScroll: true });
+    return true;
+  };
+
+  const extendFormatPointerSelection = (
+    clientId: string,
+    column: Pick<ClientOperationsRegistryColumn, 'key' | 'cell_kind'>,
+    options?: { rowKey?: string; clientX?: number; clientY?: number },
+  ) => {
+    const drag = formatDragRef.current;
+    if (!drag.active || statusPaintMode) return;
+    if (
+      options?.clientX != null &&
+      options?.clientY != null &&
+      formatDragExceededThreshold({
+        startX: drag.startX,
+        startY: drag.startY,
+        x: options.clientX,
+        y: options.clientY,
+      })
+    ) {
+      drag.moved = true;
+    }
+    selectActiveFormatCell(clientId, column, {
+      rowKey: options?.rowKey,
+      gesture: drag.gesture === 'add' && !drag.moved ? 'add' : 'extend',
+    });
+  };
+
+  const consumeFormatSelectionClick = (event: ReactMouseEvent): boolean => {
+    const suppress = formatSuppressClickRef.current
+      || shouldSuppressFormatSelectionClick({
+        dragMoved: formatDragRef.current.moved,
+        gesture: clientOperationsSelectionGesture(event),
       });
-      return;
-    }
-    setFormatRange(null);
-    if (options?.rowKey) {
-      setFocusedCell({ rowKey: options.rowKey, colKey: column.key });
-      return;
-    }
-    setFocusedCell({ clientId, colKey: column.key });
+    formatSuppressClickRef.current = false;
+    return suppress;
   };
 
   /** Keep active cell while clicking formatting toolbar (avoid input blur races). */
@@ -2855,7 +2970,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     }
     if (shouldClearActiveCellOnPeriodChange()) {
       setFocusedCell(null);
-      setFormatRange(null);
+      setFormatRanges([]);
     }
     onPeriodChange?.(nextPeriodKey);
   };
@@ -4056,7 +4171,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       return;
     }
     const filing = row.capital_declaration_cell?.filing;
-    if (!row.capital_declaration_cell?.applicable || !filing) return;
+    if (!filing?.square_visible) return;
     setAnnualCapitalFeedback(null);
     setAnnualCapitalModal({
       kind,
@@ -5082,7 +5197,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             ? r.capital_declaration_cell?.filing
             : undefined;
       const filingSquare =
-        annualCapitalFiling && (col.key === 'annual_report' || operationalCell?.applicable) ? (
+        annualCapitalFiling &&
+        (col.key === 'annual_report' ||
+          (col.key === 'capital_declaration' &&
+            'square_visible' in annualCapitalFiling &&
+            annualCapitalFiling.square_visible === true)) ? (
           <button
             type="button"
             className={`nx-co-sheet__filing-square is-${annualCapitalFiling.square_chrome}`}
@@ -5095,6 +5214,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 paintCellManualStatus(r, col.key);
                 return;
               }
+              if (consumeFormatSelectionClick(event)) return;
               openAnnualCapitalModal(r, col.key === 'annual_report' ? 'annual_report' : 'capital_declaration');
             }}
           />
@@ -5153,7 +5273,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               return;
             }
             // Presentation-only selection — does not change the date domain value.
-            selectActiveFormatCell(r.client_id, col);
+            consumeFormatSelectionClick(event);
           }}
           onPointerDown={(event) => {
             // Label chrome is pointer-events:none on children; still stop row selection.
@@ -5163,7 +5283,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               paintCellManualStatus(r, col.key);
               return;
             }
-            selectActiveFormatCell(r.client_id, col);
+            beginFormatPointerSelection(event, r.client_id, col);
           }}
         >
           <span className={`nx-co-sheet__date-field-value${value ? '' : ' is-empty'}`}>
@@ -5182,19 +5302,18 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
             aria-label={`${col.label} — ${r.client_name ?? r.client_id}`}
             onPointerDown={(event) => {
               event.stopPropagation();
-              if (!statusPaintMode) {
-                selectActiveFormatCell(r.client_id, col);
-              }
-              if (disabled) return;
-              // Single user-gesture showPicker (progressive). Native indicator still works alone.
-              tryShowNativeDatePicker(event.currentTarget);
+              if (statusPaintMode) return;
+              beginFormatPointerSelection(event, r.client_id, col);
+              // Keep native picker off the drag path; unmoved mouseup calls showPicker.
+              event.preventDefault();
+              pendingDatePickerRef.current = disabled ? null : event.currentTarget;
             }}
             onClick={(event) => {
-              // Native path + stop row selection. Do not call showPicker again (avoid double open).
               event.stopPropagation();
-              if (!statusPaintMode) {
-                selectActiveFormatCell(r.client_id, col);
-              }
+              if (statusPaintMode) return;
+              if (consumeFormatSelectionClick(event)) return;
+              if (disabled) return;
+              tryShowNativeDatePicker(event.currentTarget);
             }}
             onChange={(event) =>
               void setOperationalTargetDate(
@@ -5290,7 +5409,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       return;
                     }
                     // Presentation-only selection — does not change checkbox domain value.
-                    selectActiveFormatCell(r.client_id, col);
+                    if (consumeFormatSelectionClick(event)) {
+                      event.preventDefault();
+                    }
                   }}
                 />
               </label>
@@ -5387,7 +5508,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       return;
                     }
                     // Presentation-only selection — does not change checkbox domain value.
-                    selectActiveFormatCell(r.client_id, col);
+                    if (consumeFormatSelectionClick(event)) {
+                      event.preventDefault();
+                    }
                   }}
                 />
               </label>
@@ -5441,7 +5564,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                 return;
               }
               // Presentation-only selection — does not change checkbox domain value.
-              selectActiveFormatCell(r.client_id, col);
+              if (consumeFormatSelectionClick(event)) {
+                event.preventDefault();
+              }
             }}
           />
         </label>
@@ -5639,8 +5764,17 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     <div
       ref={sheetCanvasRef}
       className="nx-co-sheet__canvas"
+      tabIndex={0}
       onContextMenu={onGridContextMenu}
       data-testid="client-operations-grid-surface"
+      onKeyDown={(event) => {
+        const target = event.target as HTMLElement | null;
+        if (target?.closest('input, textarea, select')) return;
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
+          event.preventDefault();
+          selectAllFormatCells();
+        }
+      }}
     >
       <table className={`nx-co-sheet__table${freezeOn ? ' is-frozen' : ''}${bordersOn ? '' : ' is-borders-off'}${isResizingColumn ? ' is-resizing' : ''}`}>
         <colgroup>
@@ -5769,10 +5903,19 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   Boolean(focusedCell?.clientId) &&
                   focusedCell?.clientId === row.client_id &&
                   focusedCell.colKey === column.key;
+                const formatCell = { clientId: row.client_id, colKey: column.key };
                 const inFormatRange = isClientOperationsFormatRangeCell({
                   keys: formatSelectionKeys,
-                  cell: { clientId: row.client_id, colKey: column.key },
+                  cell: formatCell,
                 });
+                const selectionFrameClass = clientOperationsSelectionFrameClass(
+                  clientOperationsSelectionFrameEdges({
+                    keys: formatSelectionKeys,
+                    cell: formatCell,
+                    rowIds: formatSelectionRowIds,
+                    columnKeys: formatSelectionColumnKeys,
+                  }),
+                );
                 const manualStatus = row.manual_cell_statuses?.[column.key];
                 const statusToken = manualStatus?.presentation_token ?? null;
                 const reportingCell = row.reporting?.cells?.[column.key];
@@ -5808,6 +5951,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     data-testid={focused ? 'co-active-format-cell' : undefined}
                     className={[
                       focused ? 'is-focused is-format-selected' : inFormatRange ? 'is-format-selected' : '',
+                      inFormatRange || focused ? selectionFrameClass : '',
                       editingCellKey === pk && column.cell_kind === 'custom' ? 'is-editing-custom' : '',
                       statusToken ? `is-manual-status-${statusToken}` : '',
                       statusPaintMode ? 'is-paint-mode' : '',
@@ -5834,20 +5978,13 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     title={reportingCell ? t(reportingCell.tooltip_key || reportingCell.tone_label_key) : undefined}
                     onMouseDown={(event) => {
                       // Paint mode owns the gesture via capture click — do not turn into format selection.
-                      if (statusPaintMode) return;
-                      // Resize / gear / native interactive chrome handle their own events.
-                      const target = event.target as HTMLElement | null;
-                      if (target?.closest('.nx-co-sheet__resize-handle, .nx-co-sheet__col-gear')) return;
-                      if (event.shiftKey) {
-                        selectActiveFormatCell(row.client_id, column, { extend: true });
-                        return;
-                      }
-                      selectActiveFormatCell(row.client_id, column);
-                      formatDragRef.current = event.button === 0;
+                      beginFormatPointerSelection(event, row.client_id, column);
                     }}
-                    onMouseEnter={() => {
-                      if (!formatDragRef.current || statusPaintMode) return;
-                      selectActiveFormatCell(row.client_id, column, { extend: true });
+                    onMouseEnter={(event) => {
+                      extendFormatPointerSelection(row.client_id, column, {
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                      });
                     }}
                     onClickCapture={(event) => {
                       if (!statusPaintMode) return;
@@ -5862,7 +5999,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     onClick={(event) => {
                       event.stopPropagation();
                       if (statusPaintMode) return;
-                      selectActiveFormatCell(row.client_id, column);
+                      if (consumeFormatSelectionClick(event)) return;
                       if (column.cell_kind === 'custom' && canEdit && column.editable) {
                         beginCustomCellEdit(row, column);
                       }
@@ -5966,10 +6103,19 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   Boolean(focusedCell?.rowKey) &&
                   focusedCell?.rowKey === row.row_key &&
                   focusedCell.colKey === column.key;
+                const formatCell = { rowKey: row.row_key, colKey: column.key };
                 const inFormatRange = isClientOperationsFormatRangeCell({
                   keys: formatSelectionKeys,
-                  cell: { rowKey: row.row_key, colKey: column.key },
+                  cell: formatCell,
                 });
+                const selectionFrameClass = clientOperationsSelectionFrameClass(
+                  clientOperationsSelectionFrameEdges({
+                    keys: formatSelectionKeys,
+                    cell: formatCell,
+                    rowIds: formatSelectionRowIds,
+                    columnKeys: formatSelectionColumnKeys,
+                  }),
+                );
                 const cellPres = row.cell_presentation?.[column.key];
                 const isFolderCell = cellPres?.cell_kind === 'folder';
                 const isManualText = cellPres?.cell_kind === 'manual_text';
@@ -5991,26 +6137,23 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                     data-testid={focused ? 'co-active-format-cell' : undefined}
                     className={[
                       focused ? 'is-focused is-format-selected' : inFormatRange ? 'is-format-selected' : '',
+                      inFormatRange || focused ? selectionFrameClass : '',
                       editingCellKey === pk && isManualText ? 'is-editing-custom is-editing-manual' : '',
                       statusPaintMode ? 'is-paint-mode' : '',
                     ]
                       .filter(Boolean)
                       .join(' ') || undefined}
                     onMouseDown={(event) => {
-                      if (statusPaintMode) return;
-                      const target = event.target as HTMLElement | null;
-                      if (target?.closest('.nx-co-sheet__resize-handle, .nx-co-sheet__col-gear')) return;
                       if (isFolderCell) return;
-                      if (event.shiftKey) {
-                        selectActiveFormatCell(row.row_key, column, { rowKey: row.row_key, extend: true });
-                        return;
-                      }
-                      selectActiveFormatCell(row.row_key, column, { rowKey: row.row_key });
-                      formatDragRef.current = event.button === 0;
+                      beginFormatPointerSelection(event, row.row_key, column, { rowKey: row.row_key });
                     }}
-                    onMouseEnter={() => {
-                      if (!formatDragRef.current || statusPaintMode || isFolderCell) return;
-                      selectActiveFormatCell(row.row_key, column, { rowKey: row.row_key, extend: true });
+                    onMouseEnter={(event) => {
+                      if (isFolderCell) return;
+                      extendFormatPointerSelection(row.row_key, column, {
+                        rowKey: row.row_key,
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                      });
                     }}
                     onClickCapture={(event) => {
                       // Manual rows are NOT eligible for status paint (no fabricated client_id).
@@ -6022,7 +6165,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                       event.stopPropagation();
                       if (statusPaintMode) return;
                       if (isFolderCell) return;
-                      selectActiveFormatCell(row.row_key, column, { rowKey: row.row_key });
+                      if (consumeFormatSelectionClick(event)) return;
                       if (canEditManual) beginManualRowCellEdit(row, column);
                     }}
                     style={{

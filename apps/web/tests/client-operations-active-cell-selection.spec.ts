@@ -64,18 +64,20 @@ test('org switching clears selection on hydrate', () => {
 
 test('click normal cell: onMouseDown + onClick call selectActiveFormatCell', () => {
   assert.match(viewSource, /onMouseDown=\{\(event\) => \{/);
-  assert.match(viewSource, /selectActiveFormatCell\(row\.client_id, column\)/);
-  assert.match(
-    viewSource,
-    /onClick=\{\(event\) => \{\s*event\.stopPropagation\(\);\s*if \(statusPaintMode\) return;\s*selectActiveFormatCell\(row\.client_id, column\)/s,
-  );
+  assert.match(viewSource, /beginFormatPointerSelection\(event, row\.client_id, column\)/);
+  assert.match(viewSource, /consumeFormatSelectionClick\(event\)/);
+  const mouseDownIdx = viewSource.indexOf('beginFormatPointerSelection(event, row.client_id, column)');
+  const tdBlock = viewSource.slice(mouseDownIdx, mouseDownIdx + 2200);
+  assert.match(tdBlock, /consumeFormatSelectionClick\(event\)/);
+  assert.doesNotMatch(tdBlock, /selectActiveFormatCell\(row\.client_id, column\)/);
 });
 
 test('selected cell gets visible Nova #123756 outline', () => {
   assert.match(cssSource, /--nx-co-brand:\s*#123756/);
   assert.match(cssSource, /\.nx-co-sheet__table td\.is-focused/);
   assert.match(cssSource, /\.nx-co-sheet__table td\.is-format-selected/);
-  assert.match(cssSource, /outline:\s*1\.5px solid var\(--nx-co-brand\)/);
+  assert.match(cssSource, /outline:\s*2px solid var\(--nx-co-brand\)/);
+  assert.match(cssSource, /is-sel-edge-block-start/);
   assert.match(viewSource, /is-focused is-format-selected/);
   assert.match(viewSource, /data-format-selected=\{focused \|\| inFormatRange \? 'true' : 'false'\}/);
   assert.match(viewSource, /data-testid=\{focused \? 'co-active-format-cell'/);
@@ -121,7 +123,8 @@ test('selection remains after toolbar action (mousedown preserve + no clear in a
 });
 
 test('clicking another cell moves selection via setFocusedCell identity', () => {
-  assert.match(viewSource, /setFocusedCell\(\{ clientId, colKey: column\.key \}\)/);
+  assert.match(viewSource, /setFocusedCell\(next\)/);
+  assert.match(viewSource, /clientId, colKey: column\.key/);
 });
 
 test('Esc clears selection and related UI chrome', () => {

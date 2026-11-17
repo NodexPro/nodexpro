@@ -443,7 +443,7 @@ export function ClientAnnualReportTab({
             {t('clientOperations.annual.yearContentLoading')}
           </p>
         ) : null}
-      <div className="nx-annual-dashboard">
+      <div className={`nx-annual-dashboard${showMissingProblem ? '' : ' is-single'}`}>
         <article className="nx-annual-dash-card nx-annual-dash-card--status" aria-labelledby="nx-annual-dash-status-heading">
           <h3 id="nx-annual-dash-status-heading" className="nx-annual-dash-card-title">
             {localizeSystemLabel(t, annualTab.status_card_title_key, annualTab.status_card_title_he)}
@@ -699,7 +699,11 @@ export function ClientAnnualReportTab({
       ) : null}
       </div>
 
-      <div className="nx-annual-lower">
+      <div
+        className={`nx-annual-lower${
+          annualTab.visibility.show_submissions && annualTab.visibility.show_notes ? '' : ' is-single'
+        }`}
+      >
         {annualTab.visibility.show_submissions ? (
           <section>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
@@ -819,9 +823,7 @@ export function ClientAnnualReportTab({
               </table>
             </div>
           </section>
-        ) : (
-          <div />
-        )}
+        ) : null}
 
         {annualTab.visibility.show_notes ? (
           <section className="nx-annual-notes-card">

@@ -90,6 +90,7 @@ test('capital N/A is a plain dash; open uses the calendar icon', () => {
   assert.match(viewSource, /open_capital_declaration_instance/);
   assert.match(viewSource, /ClientOperationsCalendarIcon/);
   assert.match(viewSource, /nx-co-sheet__plain-dash/);
+  assert.match(viewSource, /annualCapitalFiling\.square_visible === true/);
   assert.doesNotMatch(viewSource, /nx-co-sheet__date-field-plus/);
 });
 
@@ -133,10 +134,10 @@ test('editable annual/capital date field is a full-area operable native input', 
     cssSource,
     /::-webkit-calendar-picker-indicator\s*\{[\s\S]*?inset:\s*0[\s\S]*?width:\s*100%[\s\S]*?height:\s*100%/,
   );
-  // Progressive showPicker once per pointerdown gesture (not click-only).
+  // Progressive showPicker on an unmoved click — drag must not open the picker.
   // Note: this environment cannot literally open Chromium's native picker UI.
   assert.match(viewSource, /tryShowNativeDatePicker/);
-  assert.match(viewSource, /onPointerDown=\{[\s\S]*?tryShowNativeDatePicker/);
+  assert.match(viewSource, /onClick=\{[\s\S]*?tryShowNativeDatePicker/);
   assert.match(viewSource, /showPicker/);
   // Annual + open capital share the SAME date-field branch (one component pattern).
   assert.match(viewSource, /col\.key === 'annual_report' \? 'annual_report' : 'capital_declaration'/);
@@ -158,12 +159,13 @@ test('date field click paths reach showPicker helper; change maps to named comma
   assert.match(viewSource, /nx-co-sheet__date-field-icon/);
   assert.match(cssSource, /\.nx-co-sheet__date-field-value\s*\{[\s\S]*?pointer-events:\s*none/);
   assert.match(cssSource, /\.nx-co-sheet__date-field-icon\s*\{[\s\S]*?pointer-events:\s*none/);
-  // Pointerdown on the overlay input is the showPicker entry (field click + icon area).
+  // Unmoved click on the overlay input is the showPicker entry (field click + icon area).
   const editableBranch = viewSource.slice(
     viewSource.indexOf('const dateInputId'),
     viewSource.indexOf("if (col.cell_kind === 'checkbox' && col.key === 'material_brought')"),
   );
-  assert.match(editableBranch, /onPointerDown=\{[\s\S]*?tryShowNativeDatePicker/);
+  assert.match(editableBranch, /onClick=\{[\s\S]*?tryShowNativeDatePicker/);
+  assert.match(editableBranch, /consumeFormatSelectionClick/);
   assert.match(editableBranch, /setOperationalTargetDate/);
   assert.match(viewSource, /set_annual_report_operational_target_date/);
   assert.match(viewSource, /set_capital_declaration_operational_target_date/);

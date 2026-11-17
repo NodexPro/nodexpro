@@ -1817,16 +1817,18 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       },
     };
     const capital_declaration_cell = capitalDeclarationCells.get(c.id) ?? {
-      applicable: false,
-      editable: false,
+      applicable: true,
+      editable: canEditRegistry,
       instance_id: null,
       tax_year: null,
       operational_target_date: null,
       sequence_no: null,
       instance_status: null,
-      can_open: canEditRegistry,
+      assignment_state: 'unassigned' as const,
+      can_open: false,
       filing: {
         square_chrome: 'empty',
+        square_visible: false,
         instance_id: null,
         sequence_no: null,
         filed: false,
@@ -1945,9 +1947,9 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       cells: buildRegistryRowCells({
         ...base,
         annual_report_display_he: formatOperationalDateDisplayHe(annual_report_cell.operational_target_date),
-        capital_declaration_display_he: capital_declaration_cell.applicable
-          ? formatOperationalDateDisplayHe(capital_declaration_cell.operational_target_date)
-          : '—',
+        capital_declaration_display_he: formatOperationalDateDisplayHe(
+          capital_declaration_cell.operational_target_date,
+        ),
         assigned_handler_display_he: formatAssignedFileEmployeesDisplay({
           handlerUserId: assigned_handler_user_id,
           handlerName: assigned_handler_user_id

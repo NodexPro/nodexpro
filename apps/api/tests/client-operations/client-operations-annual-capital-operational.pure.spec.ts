@@ -41,12 +41,13 @@ function buildCapitalDeclarationCellForContract(input: {
 }) {
   if (!input.openInstance) {
     return {
-      applicable: false,
-      editable: false,
+      applicable: true,
+      editable: input.canEdit,
       instance_id: null,
       tax_year: null,
       operational_target_date: null,
-      can_open: input.canEdit,
+      assignment_state: 'unassigned',
+      can_open: false,
     };
   }
   return {
@@ -55,6 +56,7 @@ function buildCapitalDeclarationCellForContract(input: {
     instance_id: input.openInstance.id,
     tax_year: input.openInstance.tax_year,
     operational_target_date: input.openInstance.operational_target_date,
+    assignment_state: 'assigned',
     can_open: false,
   };
 }
@@ -97,19 +99,20 @@ test('annual report cell is always applicable and carries backend date truth', (
 
 test('capital declaration cell exposes N/A open affordance until an open instance exists', () => {
   assert.match(pureSource, /export function buildCapitalDeclarationCell/);
-  assert.match(pureSource, /can_open:\s*input\.canEdit/);
+  assert.match(pureSource, /assignment_state:\s*'unassigned'/);
   assert.deepEqual(
     buildCapitalDeclarationCellForContract({
       openInstance: null,
       canEdit: true,
     }),
     {
-      applicable: false,
-      editable: false,
+      applicable: true,
+      editable: true,
       instance_id: null,
       tax_year: null,
       operational_target_date: null,
-      can_open: true,
+      assignment_state: 'unassigned',
+      can_open: false,
     },
   );
 
@@ -128,6 +131,7 @@ test('capital declaration cell exposes N/A open affordance until an open instanc
       instance_id: 'capital-1',
       tax_year: 2025,
       operational_target_date: '2026-10-01',
+      assignment_state: 'assigned',
       can_open: false,
     },
   );
@@ -218,4 +222,45 @@ test('annual square and KPI tax year stay on the tab year even if another year i
     capitalFolders.map((row) => row.sequence_no),
     [1, 2],
   );
+  assert.equal(completedCell.assignment_state, 'assigned');
+  assert.equal(completedCell.filing.square_visible, true);
+});
+
+test('unassigned capital is calendar-ready; square only after an assigned instance', async () => {
+  const { buildCapitalDeclarationCell } = await import(
+    '../../src/domains/client-operations/client-operations-annual-capital-operational.pure.js'
+  );
+  const unassigned = buildCapitalDeclarationCell({
+    openInstance: null,
+    canEdit: true,
+  });
+  assert.equal(unassigned.applicable, true);
+  assert.equal(unassigned.editable, true);
+  assert.equal(unassigned.assignment_state, 'unassigned');
+  assert.equal(unassigned.filing.square_visible, false);
+  assert.equal(unassigned.can_open, false);
+  const assigned = buildCapitalDeclarationCell({
+    openInstance: {
+      id: 'capital-open',
+      tax_year: 2025,
+      operational_target_date: null,
+    },
+    canEdit: true,
+  });
+  assert.equal(assigned.assignment_state, 'assigned');
+  assert.equal(assigned.filing.square_visible, true);
+  assert.equal(assigned.filing.square_chrome, 'empty');
+});
+
+test('capital date command creates an instance instead of requiring one on GET', () => {
+  const serviceSource = readFileSync(
+    join(dir, '../../src/domains/client-operations/client-operations-annual-capital-operational.service.ts'),
+    'utf8',
+  );
+  const start = serviceSource.indexOf('export async function setCapitalDeclarationOperationalTargetDate');
+  const end = serviceSource.indexOf('export async function completeCapitalDeclarationInstance');
+  const slice = serviceSource.slice(start, end);
+  assert.match(slice, /openCapitalDeclarationInstance/);
+  assert.doesNotMatch(slice, /No open capital declaration instance for this client/);
+  assert.match(slice, /date == null/);
 });
