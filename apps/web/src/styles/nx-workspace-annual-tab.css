@@ -281,3 +281,58 @@
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-logical-folders--archive {
   margin-top: 4px;
 }
+
+.nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'] .nx-annual-status-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'] .nx-annual-status-chip--yellow {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'] .nx-annual-status-chip--red {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'] .nx-annual-status-chip--neutral {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'] .nx-annual-status-received {
+  background: #e0f7fa;
+  color: #0e7490;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'] .nx-annual-status-missing-alert {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'] .nx-annual-received-check {
+  color: #22d3ee;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'] .nx-annual-doc-row--missing .nx-annual-doc-name {
+  color: #fecaca;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'] .nx-annual-filed-confirm {
+  background: #f8fafc;
+  color: #0f172a;
+  border-radius: 6px;
+  padding: 8px 12px;
+}

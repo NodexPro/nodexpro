@@ -10,7 +10,10 @@ import {
   buildAnnualFilingYearBoard,
   buildAnnualOlderTaxYearOptions,
   buildAnnualYearPresentationFlags,
+  buildCapitalWorkingControlState,
+  CAPITAL_OFFICE_COLLECTION_WARNING_DAYS,
   checklistFileIdsForFilingYear,
+  computeCapitalDocumentRowPresentation,
   fileTypeLabelFromMeta,
   mergeRequiredCatalogRows,
   parseAnnualCatalogRowId,
@@ -292,10 +295,7 @@ test('filed 2025 hides working checklist and missing-as-problem; 2026 not filed 
 
 test('GET capital tab loads existing instance folders without seeding a profile', () => {
   assert.match(serviceSrc, /loadCapitalRequirementFoldersForClient/);
-  assert.match(
-    serviceSrc,
-    /buildCapitalFallbackReadModel\(canEditEarly\),\s*capital_folders:\s*await loadCapitalRequirementFoldersForClient/,
-  );
+  assert.match(serviceSrc, /buildCapitalFallbackReadModel\(canEditEarly, folders\)/);
   assert.match(serviceSrc, /Does not seed a profile or create instances/);
   assert.match(serviceSrc, /client_capital_declaration_instances/);
   const readOnlyIdx = serviceSrc.indexOf('if (options?.readOnly)');
@@ -367,4 +367,136 @@ test('annual tab service keeps Core → Commands → Aggregate: named command, r
   assert.match(migration217, /working_tax_year/);
   assert.match(migration217, /NOT backfilled/i);
   assert.doesNotMatch(serviceSrc, /latestFiled/);
+});
+
+function capitalRow(status: string, required = true) {
+  return { status, document_name_he: status, required };
+}
+
+test('capital working control: no assigned date has no overdue/urgency/readiness and keeps the document list', () => {
+  const none = buildCapitalWorkingControlState({
+    assignedDueDate: null,
+    todayYmd: '2026-04-01',
+    rows: [capitalRow('missing'), capitalRow('missing')],
+    lastFiledSubmittedOn: null,
+  });
+  assert.equal(none.phase, 'unassigned');
+  assert.equal(none.status.code, 'unassigned');
+  assert.equal(none.visibility.show_deadline, false);
+  assert.equal(none.visibility.show_document_readiness, false);
+  assert.equal(none.visibility.show_missing_as_active_problem, false);
+  assert.equal(none.visibility.show_documents, true);
+  assert.equal(none.assigned_due_date, null);
+  assert.equal(none.actual_submitted_on, null);
+});
+
+test('capital working control uses assigned due date, 30-day office warning, overdue, ready, and empty catalog', () => {
+  assert.equal(CAPITAL_OFFICE_COLLECTION_WARNING_DAYS, 30);
+  const collect = buildCapitalWorkingControlState({
+    assignedDueDate: '2026-06-01',
+    todayYmd: '2026-04-01',
+    rows: [capitalRow('missing'), capitalRow('completed')],
+    lastFiledSubmittedOn: null,
+  });
+  assert.equal(collect.status.code, 'collect_docs');
+  assert.equal(collect.status.color, 'yellow');
+  assert.equal(collect.assigned_due_date, '2026-06-01');
+  assert.equal(collect.deadline_info.due_date, '2026-06-01');
+
+  const approaching = buildCapitalWorkingControlState({
+    assignedDueDate: '2026-05-01',
+    todayYmd: '2026-04-01',
+    rows: [capitalRow('missing')],
+    lastFiledSubmittedOn: null,
+  });
+  assert.equal(approaching.status.code, 'approaching');
+  assert.equal(approaching.status.color, 'red');
+  assert.equal(approaching.deadline_info.days_left, 30);
+
+  const stillCollect = buildCapitalWorkingControlState({
+    assignedDueDate: '2026-05-02',
+    todayYmd: '2026-04-01',
+    rows: [capitalRow('missing')],
+    lastFiledSubmittedOn: null,
+  });
+  assert.equal(stillCollect.status.code, 'collect_docs');
+  assert.equal(stillCollect.deadline_info.days_left, 31);
+
+  const overdue = buildCapitalWorkingControlState({
+    assignedDueDate: '2026-03-31',
+    todayYmd: '2026-04-01',
+    rows: [capitalRow('completed')],
+    lastFiledSubmittedOn: null,
+  });
+  assert.equal(overdue.status.code, 'overdue');
+  assert.equal(overdue.status.color, 'red');
+  assert.equal(overdue.deadline_info.is_overdue, true);
+
+  const ready = buildCapitalWorkingControlState({
+    assignedDueDate: '2026-06-01',
+    todayYmd: '2026-04-01',
+    rows: [capitalRow('completed'), capitalRow('completed')],
+    lastFiledSubmittedOn: null,
+  });
+  assert.equal(ready.status.code, 'ready');
+  assert.equal(ready.status.color, 'neutral');
+
+  const empty = buildCapitalWorkingControlState({
+    assignedDueDate: '2026-06-01',
+    todayYmd: '2026-04-01',
+    rows: [],
+    lastFiledSubmittedOn: null,
+  });
+  assert.equal(empty.status.code, 'collect_docs');
+  assert.equal(empty.completion_percent, 0);
+  assert.notEqual(empty.status.code, 'ready');
+});
+
+test('capital שודר stops working control and keeps actual submitted_on separate from assigned due date', () => {
+  const filed = buildCapitalWorkingControlState({
+    assignedDueDate: null,
+    todayYmd: '2026-04-01',
+    rows: [capitalRow('missing')],
+    lastFiledSubmittedOn: '2026-03-15',
+  });
+  assert.equal(filed.phase, 'filed_idle');
+  assert.equal(filed.status.code, 'filed_idle');
+  assert.equal(filed.visibility.show_missing_as_active_problem, false);
+  assert.equal(filed.visibility.show_deadline, false);
+  assert.equal(filed.actual_submitted_on, '2026-03-15');
+  assert.equal(filed.assigned_due_date, null);
+  assert.equal(filed.filed_confirmation?.submitted_on, '2026-03-15');
+});
+
+test('capital document rows keep received confirmation separate from attach', () => {
+  const missing = computeCapitalDocumentRowPresentation(false, null);
+  assert.equal(missing.status, 'missing');
+  assert.equal(missing.status_label_he, 'חסר');
+  assert.equal(missing.row_style, 'missing');
+  const attached = computeCapitalDocumentRowPresentation(false, 'file-1');
+  assert.equal(attached.status, 'attached_only');
+  assert.equal(attached.receipt_mark, 'none');
+  assert.match(attached.status_label_he, /לא סומן כהתקבל/);
+  const received = computeCapitalDocumentRowPresentation(true, 'file-1');
+  assert.equal(received.status, 'completed');
+  assert.equal(received.status_label_he, 'התקבל');
+  assert.equal(received.receipt_mark, 'cyan_check');
+  const checkedOnly = computeCapitalDocumentRowPresentation(true, null);
+  assert.equal(checkedOnly.status, 'checked_only');
+  assert.equal(checkedOnly.receipt_mark, 'cyan_check');
+});
+
+test('capital tab does not use May 31 as due date; attach keeps version control', () => {
+  assert.match(serviceSrc, /buildCapitalWorkingControlState/);
+  assert.match(serviceSrc, /operational_target_date/);
+  assert.match(serviceSrc, /assigned_due_date/);
+  assert.match(serviceSrc, /actual_submitted_on/);
+  assert.match(serviceSrc, /maybeSingle\(\)/);
+  assert.doesNotMatch(serviceSrc, /buildAnnualControlState\(rows, new Date\(\)\)/);
+  const capitalControlIdx = serviceSrc.indexOf('function capitalWorkingControlFromFolders');
+  const may31Idx = serviceSrc.indexOf('05-31');
+  assert.ok(capitalControlIdx > 0);
+  assert.ok(may31Idx > 0);
+  assert.match(serviceSrc, /assertExpectedVersion/);
+  assert.doesNotMatch(serviceSrc, /expected_version:\s*null/);
 });

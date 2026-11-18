@@ -295,3 +295,20 @@ test('capital file command creates an instance when none exists', () => {
   assert.match(slice, /openCapitalDeclarationInstance/);
   assert.doesNotMatch(slice, /CAPITAL_FILING_INSTANCE_REQUIRED/);
 });
+
+test('capital שודר copies checklist file_asset links into the instance archive then clears the working checklist', () => {
+  const serviceSource = readFileSync(
+    join(dir, '../../src/domains/client-operations/client-operations-annual-capital-operational.service.ts'),
+    'utf8',
+  );
+  const start = serviceSource.indexOf('export async function fileClientOperationsCapitalDeclaration');
+  const slice = serviceSource.slice(start, start + 4500);
+  assert.match(slice, /loadChecklistFileLinks/);
+  assert.match(slice, /upsertSubmissionFileLinks/);
+  assert.match(serviceSource, /source_kind: 'checklist'/);
+  const upsertIdx = slice.indexOf('upsertSubmissionFileLinks');
+  const resetIdx = slice.indexOf('update({ received: false, file_asset_id: null })');
+  assert.ok(upsertIdx > 0 && resetIdx > upsertIdx);
+  assert.match(slice, /tab_scope', 'capital_declaration'/);
+  assert.doesNotMatch(slice, /storage\.from\(.*\)\.copy/);
+});

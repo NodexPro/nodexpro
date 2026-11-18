@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   annualTabVersionFromCase,
+  isAnnualVersionConflict,
   buildAnnualYearSnapshotKey,
   getAnnualYearSnapshot,
   invalidateAnnualYearSnapshotsForClient,
@@ -99,6 +100,15 @@ test('switching 2026 → 2024 → 2025 keeps the selected tab; a late 2024 persi
 test('superseded persist keeps expected version from the command without painting a stale year', () => {
   assert.equal(annualTabVersionFromCase({ annual_tab: { read_model_version: 9 } }), 9);
   assert.equal(annualTabVersionFromCase({ annual_tab: null }), null);
+  assert.equal(
+    annualTabVersionFromCase(
+      { annual_tab: { read_model_version: 9 }, capital_declaration_tab: { read_model_version: 2 } },
+      'capital_declaration',
+    ),
+    2,
+  );
+  assert.equal(isAnnualVersionConflict({ status: 409, code: 'CONFLICT' }), true);
+  assert.equal(isAnnualVersionConflict({ status: 400, code: 'CONFLICT' }), false);
 });
 
 test('command refresh invalidates previous version snapshots for the same client', () => {

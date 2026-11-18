@@ -77,11 +77,25 @@ export function shouldApplyAnnualYearPersistResponse(input: {
   return true;
 }
 
-export function annualTabVersionFromCase(caseBody: {
-  annual_tab?: { read_model_version?: number } | null;
-  capital_declaration_tab?: { read_model_version?: number } | null;
-} | null | undefined): number | null {
+export function annualTabVersionFromCase(
+  caseBody: {
+    annual_tab?: { read_model_version?: number } | null;
+    capital_declaration_tab?: { read_model_version?: number } | null;
+  } | null | undefined,
+  tabKey?: 'annual_report' | 'capital_declaration',
+): number | null {
   const version =
-    caseBody?.annual_tab?.read_model_version ?? caseBody?.capital_declaration_tab?.read_model_version;
+    tabKey === 'capital_declaration'
+      ? caseBody?.capital_declaration_tab?.read_model_version
+      : tabKey === 'annual_report'
+        ? caseBody?.annual_tab?.read_model_version
+        : caseBody?.annual_tab?.read_model_version ?? caseBody?.capital_declaration_tab?.read_model_version;
   return typeof version === 'number' && Number.isFinite(version) ? version : null;
+}
+
+export function isAnnualVersionConflict(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const status = Number((error as { status?: number }).status ?? 0);
+  const code = String((error as { code?: string }).code ?? '');
+  return status === 409 && (code === 'CONFLICT' || code === 'VERSION_CONFLICT' || code === '');
 }

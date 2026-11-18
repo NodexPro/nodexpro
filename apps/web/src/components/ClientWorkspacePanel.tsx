@@ -452,7 +452,7 @@ export function ClientWorkspacePanel({
       }
       const nextCapital = workspace.capital_declaration_tab ?? null;
       const prevCapital = prev.capital_declaration_tab ?? null;
-      if (prevCapital && nextCapital && annualTabVersion(prevCapital) > annualTabVersion(nextCapital)) {
+      if (!nextCapital && prevCapital) {
         return { ...workspace, capital_declaration_tab: prevCapital };
       }
       const nextPayroll = workspace.payroll_tab ?? null;

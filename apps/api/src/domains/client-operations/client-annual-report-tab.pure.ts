@@ -340,6 +340,239 @@ export function annualReadinessFromCounts(input: { total: number; completed: num
   };
 }
 
+/**
+ * Internal office warning for capital collection. Not a Country Pack / statutory deadline.
+ * Control start is the assigned operational_target_date from the registry calendar.
+ */
+export const CAPITAL_OFFICE_COLLECTION_WARNING_DAYS = 30;
+
+export function calendarDaysDiffUtcYmd(fromYmd: string, toYmd: string): number {
+  const from = String(fromYmd ?? '').slice(0, 10);
+  const to = String(toYmd ?? '').slice(0, 10);
+  const a = new Date(`${from}T12:00:00.000Z`).getTime();
+  const b = new Date(`${to}T12:00:00.000Z`).getTime();
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return 0;
+  return Math.round((b - a) / 86_400_000);
+}
+
+export type CapitalDocumentReceiptMark = 'none' | 'cyan_check';
+
+/** Capital row truth: התקבל only after existing received confirmation, never from attach alone. */
+export function computeCapitalDocumentRowPresentation(
+  received: boolean,
+  fileAssetId: string | null,
+): {
+  status: 'missing' | 'checked_only' | 'attached_only' | 'completed';
+  status_label_he: string;
+  status_label_key: string;
+  row_style: 'neutral' | 'warning' | 'success' | 'missing';
+  receipt_mark: CapitalDocumentReceiptMark;
+} {
+  const hasFile = Boolean(fileAssetId);
+  if (received) {
+    return {
+      status: hasFile ? 'completed' : 'checked_only',
+      status_label_he: 'התקבל',
+      status_label_key: 'clientOperations.annual.received',
+      row_style: 'success',
+      receipt_mark: 'cyan_check',
+    };
+  }
+  if (hasFile) {
+    return {
+      status: 'attached_only',
+      status_label_he: 'קובץ מצורף — לא סומן כהתקבל',
+      status_label_key: 'clientOperations.annual.fileAttachedNotMarked',
+      row_style: 'warning',
+      receipt_mark: 'none',
+    };
+  }
+  return {
+    status: 'missing',
+    status_label_he: 'חסר',
+    status_label_key: 'clientOperations.annual.missing',
+    row_style: 'missing',
+    receipt_mark: 'none',
+  };
+}
+
+export type CapitalWorkingControlPhase = 'unassigned' | 'assigned_open' | 'filed_idle';
+
+export function buildCapitalWorkingControlState(input: {
+  assignedDueDate: string | null;
+  todayYmd: string;
+  rows: ReadonlyArray<{ status: string; document_name_he: string; required?: boolean }>;
+  lastFiledSubmittedOn: string | null;
+}): {
+  phase: CapitalWorkingControlPhase;
+  status: {
+    code: 'unassigned' | 'collect_docs' | 'approaching' | 'overdue' | 'ready' | 'filed_idle';
+    label_he: string;
+    label_key: string;
+    color: 'green' | 'yellow' | 'red' | 'neutral';
+  };
+  missing_documents: string[];
+  completion_percent: number;
+  deadline_info: {
+    due_date: string;
+    days_left: number;
+    is_overdue: boolean;
+    label_he: string;
+    label_key?: string;
+  };
+  risk_indicator: { label_he: string; label_key: string };
+  visibility: {
+    show_documents: boolean;
+    show_submissions: boolean;
+    show_notes: boolean;
+    show_deadline: boolean;
+    show_document_readiness: boolean;
+    show_missing_as_active_problem: boolean;
+    show_filed_confirmation: boolean;
+  };
+  filing_status: {
+    filed: boolean;
+    code: 'filed' | 'not_filed';
+    label_key: string;
+    submitted_on: string | null;
+  };
+  assigned_due_date: string | null;
+  actual_submitted_on: string | null;
+  filed_confirmation: {
+    label_key: string;
+    submitted_on: string | null;
+    archive_folder_key: string | null;
+    open_archive_label_key: string;
+  } | null;
+} {
+  const assignedDueDate = String(input.assignedDueDate ?? '').trim().slice(0, 10) || null;
+  const today = String(input.todayYmd ?? '').trim().slice(0, 10);
+  const lastFiled = String(input.lastFiledSubmittedOn ?? '').trim().slice(0, 10) || null;
+  const source = input.rows.filter((row) => row.required !== false);
+  const checklist = source.length ? source : input.rows;
+  const missingRows = checklist.filter((row) => row.status !== 'completed');
+  const readiness = annualReadinessFromCounts({
+    total: checklist.length,
+    completed: checklist.filter((row) => row.status === 'completed').length,
+  });
+  const idleVisibility = {
+    show_documents: true,
+    show_submissions: true,
+    show_notes: true,
+    show_deadline: false,
+    show_document_readiness: false,
+    show_missing_as_active_problem: false,
+    show_filed_confirmation: false,
+  };
+  const emptyDeadline = { due_date: '', days_left: 0, is_overdue: false, label_he: '' };
+  const idleRisk = { label_he: '', label_key: 'clientOperations.annual.riskNone' };
+
+  if (!assignedDueDate) {
+    const filedIdle = Boolean(lastFiled);
+    return {
+      phase: filedIdle ? 'filed_idle' : 'unassigned',
+      status: filedIdle
+        ? {
+            code: 'filed_idle',
+            label_he: 'שודר',
+            label_key: 'clientOperations.annual.capitalFiledIdle',
+            color: 'neutral',
+          }
+        : {
+            code: 'unassigned',
+            label_he: '',
+            label_key: 'clientOperations.annual.capitalUnassigned',
+            color: 'neutral',
+          },
+      missing_documents: [],
+      completion_percent: 0,
+      deadline_info: emptyDeadline,
+      risk_indicator: idleRisk,
+      visibility: { ...idleVisibility, show_filed_confirmation: filedIdle },
+      filing_status: {
+        filed: filedIdle,
+        code: filedIdle ? 'filed' : 'not_filed',
+        label_key: filedIdle ? 'clientOperations.annual.filedStatus' : 'clientOperations.annual.notFiledStatus',
+        submitted_on: filedIdle ? lastFiled : null,
+      },
+      assigned_due_date: null,
+      actual_submitted_on: filedIdle ? lastFiled : null,
+      filed_confirmation: filedIdle
+        ? {
+            label_key: 'clientOperations.annual.capitalFiledConfirmation',
+            submitted_on: lastFiled,
+            archive_folder_key: null,
+            open_archive_label_key: 'clientOperations.annual.openYearArchive',
+          }
+        : null,
+    };
+  }
+
+  const days_left = calendarDaysDiffUtcYmd(today, assignedDueDate);
+  const is_overdue = Boolean(today) && today > assignedDueDate;
+  const has_missing = !readiness.all_complete;
+  const status = is_overdue
+    ? {
+        code: 'overdue' as const,
+        label_he: 'באיחור',
+        label_key: 'clientOperations.annual.overdue',
+        color: 'red' as const,
+      }
+    : !has_missing
+      ? {
+          code: 'ready' as const,
+          label_he: 'מוכן להגשה',
+          label_key: 'clientOperations.annual.readyToSubmit',
+          color: 'neutral' as const,
+        }
+      : days_left <= CAPITAL_OFFICE_COLLECTION_WARNING_DAYS
+        ? {
+            code: 'approaching' as const,
+            label_he: 'הגשה מתקרבת — חסרים מסמכים',
+            label_key: 'clientOperations.annual.filingApproachingMissing',
+            color: 'red' as const,
+          }
+        : {
+            code: 'collect_docs' as const,
+            label_he: 'נדרש איסוף מסמכים',
+            label_key: 'clientOperations.annual.collectDocuments',
+            color: 'yellow' as const,
+          };
+
+  return {
+    phase: 'assigned_open',
+    status,
+    missing_documents: missingRows.map((row) => row.document_name_he),
+    completion_percent: readiness.completion_percent,
+    deadline_info: {
+      due_date: assignedDueDate,
+      days_left,
+      is_overdue,
+      label_he: is_overdue ? 'באיחור' : `נותרו ${days_left} ימים להגשה`,
+      label_key: is_overdue ? 'clientOperations.annual.late' : 'clientOperations.annual.daysLeftToFile',
+    },
+    risk_indicator: idleRisk,
+    visibility: {
+      show_documents: true,
+      show_submissions: true,
+      show_notes: true,
+      show_deadline: true,
+      show_document_readiness: false,
+      show_missing_as_active_problem: has_missing,
+      show_filed_confirmation: false,
+    },
+    filing_status: {
+      filed: false,
+      code: 'not_filed',
+      label_key: 'clientOperations.annual.notFiledStatus',
+      submitted_on: null,
+    },
+    assigned_due_date: assignedDueDate,
+    actual_submitted_on: null,
+    filed_confirmation: null,
+  };
+}
+
 export function buildAnnualYearPresentationFlags(input: {
   tax_year: number;
   filed: boolean;

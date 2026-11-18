@@ -1089,6 +1089,13 @@ export async function fileClientOperationsCapitalDeclaration(input: {
     actorUserId: input.ctx.user.id,
     files: [...checklist, ...incoming],
   });
+  const { error: resetWorkingError } = await supabaseAdmin
+    .from('client_annual_document_rows')
+    .update({ received: false, file_asset_id: null })
+    .eq('organization_id', orgId)
+    .eq('client_id', input.clientId)
+    .eq('tab_scope', 'capital_declaration');
+  assertQueryError(resetWorkingError, 'Failed to reset working capital checklist after filing');
   if (incoming[0]?.file_asset_id) {
     await supabaseAdmin
       .from('client_annual_submission_rows')

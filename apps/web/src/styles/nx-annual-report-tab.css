@@ -507,6 +507,46 @@
   color: #a16207;
 }
 
+.nx-annual-status-received {
+  background: #e0f7fa;
+  color: #0e7490;
+}
+
+.nx-annual-status-missing-alert {
+  background: #fef2f2;
+  color: #991b1b;
+  font-weight: 700;
+}
+
+.nx-annual-received-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nx-annual-received-check {
+  color: #06b6d4;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.nx-annual-status-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+.nx-annual-doc-row--missing .nx-annual-doc-name {
+  color: #b91c1c;
+}
+
 .nx-annual-note-inp {
   width: 100%;
   min-width: 0;

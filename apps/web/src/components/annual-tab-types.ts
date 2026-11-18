@@ -1,7 +1,7 @@
 /** Mirrors API `AnnualTabResponse` — render-only on the client. */
 
 export type AnnualDocumentRowStatus = 'missing' | 'checked_only' | 'attached_only' | 'completed';
-export type AnnualDocumentRowStyle = 'neutral' | 'warning' | 'success';
+export type AnnualDocumentRowStyle = 'neutral' | 'warning' | 'success' | 'missing';
 
 export type AnnualDocumentFileDto = {
   state: 'none' | 'attached';
@@ -26,6 +26,7 @@ export type AnnualDocumentRowDto = {
   status_label_he: string;
   status_label_key?: string;
   row_style: AnnualDocumentRowStyle;
+  receipt_mark?: 'none' | 'cyan_check';
   file: AnnualDocumentFileDto;
   actions: {
     can_toggle_received: boolean;
@@ -49,8 +50,16 @@ export type AnnualSubmissionRowDto = {
   actions: { can_edit: boolean; can_remove: boolean; can_attach_file: boolean; can_open_file: boolean };
 };
 
-export type AnnualControlStatusCode = 'ready' | 'missing_docs' | 'attention';
-export type AnnualControlColor = 'green' | 'yellow' | 'red';
+export type AnnualControlStatusCode =
+  | 'ready'
+  | 'missing_docs'
+  | 'attention'
+  | 'unassigned'
+  | 'collect_docs'
+  | 'approaching'
+  | 'overdue'
+  | 'filed_idle';
+export type AnnualControlColor = 'green' | 'yellow' | 'red' | 'neutral';
 
 export type AnnualControlStatusDto = {
   code: AnnualControlStatusCode;
@@ -88,7 +97,23 @@ export type AnnualTabModel = {
     updated_by_label_he: string;
     updated_by_display_he: string;
   };
-  visibility: { show_documents: boolean; show_submissions: boolean; show_notes: boolean };
+  visibility: {
+    show_documents: boolean;
+    show_submissions: boolean;
+    show_notes: boolean;
+    show_deadline?: boolean;
+    show_document_readiness?: boolean;
+    show_missing_as_active_problem?: boolean;
+    show_filed_confirmation?: boolean;
+  };
+  assigned_due_date?: string | null;
+  actual_submitted_on?: string | null;
+  filed_confirmation?: {
+    label_key: string;
+    submitted_on: string | null;
+    archive_folder_key: string | null;
+    open_archive_label_key: string;
+  } | null;
   documents_table: {
     card_title_he: string;
     card_title_key?: string;

@@ -4,6 +4,7 @@ import {
   moduleClientOperationsAnnualCommands,
   moduleClientOperationsAnnualFileOpen,
   moduleClientOperationsAnnualUpload,
+  moduleClientOperationsCase,
 } from '../api/endpoints';
 import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../i18n/I18nProvider';
@@ -12,6 +13,7 @@ import {
   annualTabVersionFromCase,
   getAnnualYearSnapshot,
   invalidateAnnualYearSnapshotsForClient,
+  isAnnualVersionConflict,
   putAnnualYearSnapshot,
   resolveDisplayedAnnualTaxYear,
   shouldApplyAnnualYearPersistResponse,
@@ -71,9 +73,11 @@ function IconTrash() {
   );
 }
 
-function statusBadgeClass(status: AnnualDocumentRowDto['status']): string {
-  if (status === 'completed') return 'nx-annual-status-badge nx-annual-status-done';
-  if (status === 'missing') return 'nx-annual-status-badge nx-annual-status-missing';
+function statusBadgeClass(row: AnnualDocumentRowDto, capital: boolean): string {
+  if (capital && row.receipt_mark === 'cyan_check') return 'nx-annual-status-badge nx-annual-status-received';
+  if (capital && row.status === 'missing') return 'nx-annual-status-badge nx-annual-status-missing-alert';
+  if (row.status === 'completed') return 'nx-annual-status-badge nx-annual-status-done';
+  if (row.status === 'missing') return 'nx-annual-status-badge nx-annual-status-missing';
   return 'nx-annual-status-badge nx-annual-status-warn';
 }
 
@@ -146,7 +150,7 @@ export function ClientAnnualReportTab({
 
   useEffect(() => {
     const version = annualTab.read_model_version;
-    if (typeof version === 'number' && version >= expectedVersionRef.current) {
+    if (typeof version === 'number' && Number.isFinite(version)) {
       expectedVersionRef.current = version;
     }
     workingYearRef.current = annualTab.working_tax_year ?? workingYearRef.current;
@@ -220,6 +224,11 @@ export function ClientAnnualReportTab({
       displayedYear !== annualTab.working_tax_year,
   );
 
+  const applyReturnedVersion = (out: ClientOperationsCaseResponse) => {
+    const nextVersion = annualTabVersionFromCase(out, annualTab.tab_key);
+    if (nextVersion != null) expectedVersionRef.current = nextVersion;
+  };
+
   const postCmd = async (type: string, payload: Record<string, unknown>) => {
     setBusy(true);
     setErr('');
@@ -233,6 +242,7 @@ export function ClientAnnualReportTab({
           tab_scope: annualTab.tab_key,
         }),
       });
+      applyReturnedVersion(out);
       onCaseUpdated(out);
     } catch (e) {
       setErr(userFacingApiMessage(e));
@@ -269,7 +279,7 @@ export function ClientAnnualReportTab({
             tab_scope: annualTab.tab_key,
           }),
         });
-        const nextVersion = annualTabVersionFromCase(out);
+        const nextVersion = annualTabVersionFromCase(out, annualTab.tab_key);
         if (nextVersion != null) expectedVersionRef.current = nextVersion;
         workingYearRef.current = nextYear;
         const apply = shouldApplyAnnualYearPersistResponse({
@@ -316,6 +326,7 @@ export function ClientAnnualReportTab({
   };
 
   const pickFileForRow = (rowId: string) => {
+    if (busy) return;
     setUploadTarget({ kind: 'document', id: rowId });
     fileRef.current?.click();
   };
@@ -346,15 +357,32 @@ export function ClientAnnualReportTab({
       });
       const commandType = target.kind === 'document' ? 'attach_annual_document_file' : 'attach_annual_submission_file';
       const payload = target.kind === 'document' ? { row_id: target.id, file_asset_id } : { submission_id: target.id, file_asset_id };
-      const out = await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsAnnualCommands(clientId), {
-        method: 'POST',
-        body: JSON.stringify({
+      const attachBody = () =>
+        JSON.stringify({
           type: commandType,
           payload,
           expected_version: expectedVersionRef.current,
           tab_scope: annualTab.tab_key,
-        }),
-      });
+        });
+      let out: ClientOperationsCaseResponse;
+      try {
+        out = await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsAnnualCommands(clientId), {
+          method: 'POST',
+          body: attachBody(),
+        });
+      } catch (attachErr) {
+        if (!isAnnualVersionConflict(attachErr)) throw attachErr;
+        const refreshed = await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsCase(clientId), {
+          method: 'GET',
+        });
+        applyReturnedVersion(refreshed);
+        onCaseUpdated(refreshed);
+        out = await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsAnnualCommands(clientId), {
+          method: 'POST',
+          body: attachBody(),
+        });
+      }
+      applyReturnedVersion(out);
       onCaseUpdated(out);
     } catch (e) {
       setErr(userFacingApiMessage(e));
@@ -370,10 +398,27 @@ export function ClientAnnualReportTab({
   const annualYearReady = !isAnnualBoard || yearView != null;
   const activeDocuments = yearView?.documents_table ?? (isAnnualBoard ? { ...annualTab.documents_table, rows: [] } : annualTab.documents_table);
   const showChecklist = annualYearReady && (yearView ? yearView.visibility.show_working_checklist : annualTab.visibility.show_documents);
-  const showMissingProblem = annualYearReady && (yearView ? yearView.visibility.show_missing_as_active_problem : true);
-  const showReadiness = annualYearReady && (yearView ? yearView.visibility.show_document_readiness : true);
-  const showDeadline = annualYearReady && (yearView ? yearView.visibility.show_deadline : true);
-  const showFiledConfirmation = yearView?.visibility.show_filed_confirmation === true;
+  const showMissingProblem =
+    annualYearReady &&
+    (yearView
+      ? yearView.visibility.show_missing_as_active_problem
+      : annualTab.visibility.show_missing_as_active_problem !== false && isAnnualBoard
+        ? true
+        : annualTab.visibility.show_missing_as_active_problem === true);
+  const showReadiness =
+    annualYearReady &&
+    (yearView
+      ? yearView.visibility.show_document_readiness
+      : isAnnualBoard
+        ? true
+        : annualTab.visibility.show_document_readiness === true);
+  const showDeadline =
+    annualYearReady &&
+    (yearView ? yearView.visibility.show_deadline : isAnnualBoard ? true : annualTab.visibility.show_deadline === true);
+  const showFiledConfirmation =
+    yearView?.visibility.show_filed_confirmation === true ||
+    (!isAnnualBoard && annualTab.visibility.show_filed_confirmation === true);
+  const filedConfirmation = yearView?.filed_confirmation ?? annualTab.filed_confirmation ?? null;
   const filingStatus = yearView?.filing_status ?? (isAnnualBoard ? null : annualTab.filing_status);
   const documentReadiness = yearView?.document_readiness ?? (isAnnualBoard ? null : annualTab.document_readiness ?? annualTab.status);
   const completionPercent = yearView?.completion_percent ?? (annualYearReady ? annualTab.completion_percent : 0);
@@ -384,7 +429,7 @@ export function ClientAnnualReportTab({
   const subHeaders = annualTab.submissions_table.column_headers_he;
 
   return (
-    <div className="nx-annual-root nx-ws-annual">
+    <div className="nx-annual-root nx-ws-annual" data-tab-key={annualTab.tab_key}>
       <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={onFileChange} />
 
       {err ? (
@@ -452,7 +497,7 @@ export function ClientAnnualReportTab({
           <h3 id="nx-annual-dash-status-heading" className="nx-annual-dash-card-title">
             {localizeSystemLabel(t, annualTab.status_card_title_key, annualTab.status_card_title_he)}
           </h3>
-          {filingStatus ? (
+          {filingStatus && isAnnualBoard ? (
             <p
               className={`nx-annual-filing-status${filingStatus.filed ? ' is-filed' : ''}${yearView?.filing_tone ? ` is-${yearView.filing_tone}` : ''}`}
               data-testid="annual-tab-filing-status"
@@ -464,28 +509,27 @@ export function ClientAnnualReportTab({
             <p className="nx-annual-year-loading" role="status" data-testid="annual-tab-filing-status-loading">
               {t('clientOperations.annual.yearContentLoading')}
             </p>
-          ) : !isAnnualBoard ? (
-            <div className="nx-annual-dash-status-row">
-              <span className={`nx-annual-dash-dot nx-annual-dash-dot--${annualTab.status.color}`} aria-hidden />
-              <span className={`nx-annual-dash-status-label nx-annual-dash-status-label--${annualTab.status.color}`}>
+          ) : !isAnnualBoard && annualTab.status.label_he ? (
+            <div className="nx-annual-dash-status-row" data-testid="annual-tab-capital-status">
+              <span className={`nx-annual-status-chip nx-annual-status-chip--${annualTab.status.color}`}>
                 {localizeSystemLabel(t, annualTab.status.label_key, annualTab.status.label_he)}
               </span>
             </div>
           ) : null}
-          {showFiledConfirmation && yearView?.filed_confirmation ? (
+          {showFiledConfirmation && filedConfirmation ? (
             <div className="nx-annual-filed-confirm" data-testid="annual-tab-filed-confirmation">
-              <p>{t(yearView.filed_confirmation.label_key)}</p>
-              {yearView.filed_confirmation.submitted_on ? (
-                <p>{yearView.filed_confirmation.submitted_on}</p>
+              <p>{t(filedConfirmation.label_key)}</p>
+              {filedConfirmation.submitted_on ? (
+                <p data-testid="annual-tab-actual-submitted-on">{filedConfirmation.submitted_on}</p>
               ) : null}
-              {yearView.filed_confirmation.archive_folder_key ? (
+              {filedConfirmation.archive_folder_key ? (
                 <button
                   type="button"
                   className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
                   data-testid="annual-tab-open-archive"
-                  onClick={() => setArchiveOpenKey(yearView.filed_confirmation?.archive_folder_key ?? null)}
+                  onClick={() => setArchiveOpenKey(filedConfirmation.archive_folder_key ?? null)}
                 >
-                  {t(yearView.filed_confirmation.open_archive_label_key)}
+                  {t(filedConfirmation.open_archive_label_key)}
                 </button>
               ) : null}
             </div>
@@ -509,7 +553,7 @@ export function ClientAnnualReportTab({
             </span>
           </p>
           ) : null}
-          {showMissingProblem ? (
+          {showMissingProblem && annualTab.risk_indicator.label_he ? (
             <p className="nx-annual-dash-risk">{localizeSystemLabel(t, annualTab.risk_indicator.label_key, annualTab.risk_indicator.label_he)}</p>
           ) : null}
           {showDeadline ? (
@@ -676,6 +720,7 @@ export function ClientAnnualReportTab({
                     <DocumentRow
                       key={row.row_id}
                       row={row}
+                      capital={!isAnnualBoard}
                       busy={busy}
                       onToggle={() => void postCmd('toggle_annual_document_received', { row_id: row.row_id, received: !row.received })}
                       onPickFile={() => pickFileForRow(row.row_id)}
@@ -887,6 +932,7 @@ export function ClientAnnualReportTab({
 
 function DocumentRow({
   row,
+  capital,
   busy,
   onToggle,
   onPickFile,
@@ -897,6 +943,7 @@ function DocumentRow({
   onRename,
 }: {
   row: AnnualDocumentRowDto;
+  capital: boolean;
   busy: boolean;
   onToggle: () => void;
   onPickFile: () => void;
@@ -920,7 +967,14 @@ function DocumentRow({
   return (
     <tr className={rowClass}>
       <td className="nx-annual-td">
-        <input type="checkbox" checked={row.received} disabled={!row.actions.can_toggle_received || busy} onChange={onToggle} />
+        <span className="nx-annual-received-cell">
+          {capital && row.receipt_mark === 'cyan_check' ? (
+            <span className="nx-annual-received-check" aria-hidden>
+              ✓
+            </span>
+          ) : null}
+          <input type="checkbox" checked={row.received} disabled={!row.actions.can_toggle_received || busy} onChange={onToggle} />
+        </span>
       </td>
       <td className="nx-annual-td nx-annual-td--doc-name">
         <div className="nx-annual-doc-name-row">
@@ -999,7 +1053,7 @@ function DocumentRow({
         )}
       </td>
       <td className="nx-annual-td">
-        <span className={statusBadgeClass(row.status)}>
+        <span className={statusBadgeClass(row, capital)}>
           {localizeSystemLabel(t, row.status_label_key, row.status_label_he)}
         </span>
       </td>

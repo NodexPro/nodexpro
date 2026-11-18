@@ -102,7 +102,11 @@ test('year switch uses in-aggregate year_views and does not reload the client ca
   assert.match(annualSrc, /if \(apply\) onCaseUpdated\(out\)/);
   assert.match(annualSrc, /isAnnualBoard \? null : annualTab\.filing_status/);
   assert.match(annualSrc, /annual-tab-filing-status-loading/);
-  assert.doesNotMatch(annualSrc, /moduleClientOperationsCase\(/);
+  const persistSlice = annualSrc.slice(
+    annualSrc.indexOf('const persistWorkingYear'),
+    annualSrc.indexOf('const onFileChange'),
+  );
+  assert.doesNotMatch(persistSlice, /moduleClientOperationsCase\(/);
 });
 
 test('filed year uses available width; hidden checklist does not leave an empty column', () => {
@@ -143,6 +147,24 @@ test('older tax year uses the existing named command and archive stays independe
   const olderIdx = annualSrc.indexOf('annual-tab-older-year-select');
   const notesIdx = annualSrc.indexOf('annualTab.visibility.show_notes');
   assert.ok(olderIdx > 0 && notesIdx > olderIdx && foldersIdx > notesIdx);
+});
+
+test('capital attach uses this tab version, retries 409 once, and does not treat upload as success', () => {
+  assert.match(annualSrc, /expected_version: expectedVersionRef.current/);
+  assert.match(annualSrc, /tab_scope: annualTab.tab_key/);
+  assert.match(annualSrc, /isAnnualVersionConflict/);
+  assert.match(annualSrc, /moduleClientOperationsCase\(clientId\)/);
+  assert.match(annualSrc, /annualTabVersionFromCase\(out, annualTab.tab_key\)/);
+  assert.match(annualSrc, /if \(busy\) return;/);
+  const uploadIdx = annualSrc.indexOf('moduleClientOperationsAnnualUpload');
+  const attachIdx = annualSrc.indexOf("type: commandType");
+  const applyIdx = annualSrc.lastIndexOf('onCaseUpdated(out)');
+  assert.ok(uploadIdx > 0 && attachIdx > uploadIdx && applyIdx > attachIdx);
+  assert.match(annualSrc, /nx-annual-received-check/);
+  assert.match(annualSrc, /data-tab-key=\{annualTab.tab_key\}/);
+  assert.match(annualCss, /nx-annual-status-chip--red/);
+  assert.match(annualCss, /nx-annual-received-check/);
+  assert.match(annualBase, /nx-annual-status-missing-alert/);
 });
 
 test('Taxes interior and portal/raise are not altered by the Annual restyle', () => {

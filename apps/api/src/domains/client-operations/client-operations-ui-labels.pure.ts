@@ -1001,6 +1001,11 @@ export const ANNUAL_CONTROL_STATUS_LABEL_KEY: Record<string, string> = {
   ready: 'clientOperations.annual.readyToSubmit',
   attention: 'clientOperations.annual.urgentAction',
   missing_docs: 'clientOperations.annual.missingDocuments',
+  unassigned: 'clientOperations.annual.capitalUnassigned',
+  collect_docs: 'clientOperations.annual.collectDocuments',
+  approaching: 'clientOperations.annual.filingApproachingMissing',
+  overdue: 'clientOperations.annual.overdue',
+  filed_idle: 'clientOperations.annual.capitalFiledIdle',
 };
 
 const COLUMN_LABEL_KEY: Record<string, string> = {

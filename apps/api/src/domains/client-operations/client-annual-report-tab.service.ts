@@ -28,7 +28,9 @@ import {
   buildAnnualFilingYearItem,
   buildAnnualOlderTaxYearOptions,
   buildAnnualYearPresentationFlags,
+  buildCapitalWorkingControlState,
   checklistFileIdsForFilingYear,
+  computeCapitalDocumentRowPresentation,
   fileTypeLabelFromMeta,
   isoDateOnly,
   mergeRequiredCatalogRows,
@@ -208,7 +210,7 @@ const CAPITAL_DECLARATION_SYSTEM_DOCUMENT_TEMPLATES: ReadonlyArray<{
 ];
 
 export type AnnualDocumentRowStatus = 'missing' | 'checked_only' | 'attached_only' | 'completed';
-export type AnnualDocumentRowStyle = 'neutral' | 'warning' | 'success';
+export type AnnualDocumentRowStyle = 'neutral' | 'warning' | 'success' | 'missing';
 
 export type AnnualDocumentFileDto = {
   state: 'none' | 'attached';
@@ -233,6 +235,7 @@ export type AnnualDocumentRowDto = {
   status_label_he: string;
   status_label_key?: string;
   row_style: AnnualDocumentRowStyle;
+  receipt_mark?: 'none' | 'cyan_check';
   file: AnnualDocumentFileDto;
   actions: {
     can_toggle_received: boolean;
@@ -256,8 +259,16 @@ export type AnnualSubmissionRowDto = {
   actions: { can_edit: boolean; can_remove: boolean; can_attach_file: boolean; can_open_file: boolean };
 };
 
-export type AnnualControlStatusCode = 'ready' | 'missing_docs' | 'attention';
-export type AnnualControlColor = 'green' | 'yellow' | 'red';
+export type AnnualControlStatusCode =
+  | 'ready'
+  | 'missing_docs'
+  | 'attention'
+  | 'unassigned'
+  | 'collect_docs'
+  | 'approaching'
+  | 'overdue'
+  | 'filed_idle';
+export type AnnualControlColor = 'green' | 'yellow' | 'red' | 'neutral';
 
 export type AnnualControlStatusDto = {
   code: AnnualControlStatusCode;
@@ -271,6 +282,7 @@ export type AnnualDeadlineInfoDto = {
   days_left: number;
   is_overdue: boolean;
   label_he: string;
+  label_key?: string;
 };
 
 /** שורות מוכנות לרינדור בבלוק הבקרה העליון (ללא לוגיקה בצד לקוח) */
@@ -305,7 +317,23 @@ export type AnnualTabResponse = {
     updated_by_label_he: string;
     updated_by_display_he: string;
   };
-  visibility: { show_documents: boolean; show_submissions: boolean; show_notes: boolean };
+  visibility: {
+    show_documents: boolean;
+    show_submissions: boolean;
+    show_notes: boolean;
+    show_deadline?: boolean;
+    show_document_readiness?: boolean;
+    show_missing_as_active_problem?: boolean;
+    show_filed_confirmation?: boolean;
+  };
+  assigned_due_date?: string | null;
+  actual_submitted_on?: string | null;
+  filed_confirmation?: {
+    label_key: string;
+    submitted_on: string | null;
+    archive_folder_key: string | null;
+    open_archive_label_key: string;
+  } | null;
   documents_table: {
     card_title_he: string;
     card_title_key?: string;
@@ -645,8 +673,13 @@ function toAnnualDocumentRowDto(
   },
   fileMetaById: Map<string, AnnualFileAssetMeta>,
   canEdit: boolean,
+  scope: AnnualTabScope = 'annual_report',
 ): AnnualDocumentRowDto {
-  const pres = computeDocumentRowPresentation(Boolean(raw.received), raw.file_asset_id);
+  const capitalPres =
+    scope === 'capital_declaration'
+      ? computeCapitalDocumentRowPresentation(Boolean(raw.received), raw.file_asset_id)
+      : null;
+  const pres = capitalPres ?? computeDocumentRowPresentation(Boolean(raw.received), raw.file_asset_id);
   const fid = raw.file_asset_id ? String(raw.file_asset_id) : null;
   return {
     row_id: String(raw.id),
@@ -665,6 +698,7 @@ function toAnnualDocumentRowDto(
     status_label_he: pres.status_label_he,
     status_label_key: pres.status_label_key,
     row_style: pres.row_style,
+    receipt_mark: capitalPres?.receipt_mark ?? 'none',
     file: {
       state: fid ? 'attached' : 'none',
       file_asset_id: fid,
@@ -687,7 +721,9 @@ function projectCatalogDocumentRow(input: {
   canEdit: boolean;
   taxYear?: number | null;
 }): AnnualDocumentRowDto {
-  const missing = computeDocumentRowPresentation(false, null);
+  const capitalMissing =
+    input.scope === 'capital_declaration' ? computeCapitalDocumentRowPresentation(false, null) : null;
+  const missing = capitalMissing ?? computeDocumentRowPresentation(false, null);
   return {
     row_id: buildAnnualCatalogRowId({
       scope: input.scope,
@@ -709,6 +745,7 @@ function projectCatalogDocumentRow(input: {
     status_label_he: missing.status_label_he,
     status_label_key: missing.status_label_key,
     row_style: missing.row_style,
+    receipt_mark: capitalMissing?.receipt_mark ?? 'none',
     file: { state: 'none', file_asset_id: null, file_name: null },
     actions: {
       can_toggle_received: input.canEdit,
@@ -952,13 +989,34 @@ function buildAnnualControlState(
   };
 }
 
-function buildCapitalFallbackReadModel(canEdit: boolean): AnnualTabResponse {
+function capitalWorkingControlFromFolders(
+  rows: AnnualDocumentRowDto[],
+  folders: CapitalRequirementFolder[],
+  today = new Date(),
+) {
+  const openFolder = folders.find((folder) => folder.status === 'open') ?? null;
+  const lastFiled =
+    [...folders]
+      .filter((folder) => folder.filed)
+      .sort((a, b) => b.sequence_no - a.sequence_no)[0] ?? null;
+  return buildCapitalWorkingControlState({
+    assignedDueDate: openFolder?.operational_target_date ?? null,
+    todayYmd: today.toISOString().slice(0, 10),
+    rows,
+    lastFiledSubmittedOn: lastFiled?.submitted_on ?? null,
+  });
+}
+
+function buildCapitalFallbackReadModel(
+  canEdit: boolean,
+  folders: CapitalRequirementFolder[] = [],
+): AnnualTabResponse {
   const rows = mergeScopeCatalogRows({
     scope: 'capital_declaration',
     persisted: [],
     canEdit,
   });
-  const control = buildAnnualControlState(rows, new Date());
+  const control = capitalWorkingControlFromFolders(rows, folders);
   return {
     tab_key: 'capital_declaration',
     tab_title_he: 'הצהרת הון',
@@ -972,10 +1030,10 @@ function buildCapitalFallbackReadModel(canEdit: boolean): AnnualTabResponse {
     control_block: {
       days_left_caption_he: 'ימים נותרו להגשה',
       progress_caption_he: 'התקבלו / סה״כ מסמכים',
-      progress_received_total_he: '0 / 12',
+      progress_received_total_he: `${rows.filter((row) => row.received).length} / ${rows.length}`,
     },
     risk_indicator: control.risk_indicator,
-    missing_documents_section_title_he: control.missing_documents_section_title_he,
+    missing_documents_section_title_he: 'חסרים מסמכים',
     missing_documents_section_title_key: 'clientOperations.annual.missingDocuments',
     status_card_title_he: 'סטטוס הצהרת הון',
     meta: {
@@ -984,7 +1042,10 @@ function buildCapitalFallbackReadModel(canEdit: boolean): AnnualTabResponse {
       updated_by_label_he: 'מאת:',
       updated_by_display_he: '—',
     },
-    visibility: { show_documents: true, show_submissions: true, show_notes: true },
+    visibility: control.visibility,
+    assigned_due_date: control.assigned_due_date,
+    actual_submitted_on: control.actual_submitted_on,
+    filed_confirmation: control.filed_confirmation,
     documents_table: {
       card_title_he: 'רשימת מסמכים להצהרת הון',
       column_headers_he: ['התקבל', 'שם מסמך', 'קובץ', 'סטטוס', 'הערת שורה'],
@@ -1035,12 +1096,7 @@ function buildCapitalFallbackReadModel(canEdit: boolean): AnnualTabResponse {
     current_tax_year: resolveCurrentAnnualTaxYear(),
     working_tax_year: resolveCurrentAnnualTaxYear(),
     document_readiness: control.status,
-    filing_status: {
-      filed: false,
-      code: 'not_filed',
-      label_key: 'clientOperations.annual.notFiledStatus',
-      submitted_on: null,
-    },
+    filing_status: control.filing_status,
     filing_years: [],
     older_tax_years: [],
     older_tax_year_select: {
@@ -1052,7 +1108,7 @@ function buildCapitalFallbackReadModel(canEdit: boolean): AnnualTabResponse {
     documents_year_heading_label_key: 'clientOperations.annual.documentsForTaxYear',
     year_views: [],
     year_folders: [],
-    capital_folders: [],
+    capital_folders: folders,
   };
 }
 
@@ -1581,8 +1637,10 @@ async function assertExpectedVersion(orgId: string, clientId: string, expected: 
     .eq('organization_id', orgId)
     .eq('client_id', clientId);
   if (scoped) q = q.eq('tab_scope', scope);
-  const { data: row } = await q.single();
-  const cur = Number((row as { read_model_version?: number } | null)?.read_model_version ?? 1);
+  const { data: row, error } = await q.maybeSingle();
+  if (error) throw annualDbError('annual version read failed', error);
+  if (!row) throw conflict('הנתונים עודכנו; רענן ונסה שוב');
+  const cur = Number((row as { read_model_version?: number }).read_model_version ?? 1);
   if (!Number.isFinite(expected) || expected !== cur) {
     throw conflict('הנתונים עודכנו; רענן ונסה שוב');
   }
@@ -1641,12 +1699,11 @@ export async function getAnnualTabReadModel(
   if (options?.readOnly) {
     const existing = await loadAnnualProfile(orgId, clientId, scope, scoped);
     if (!existing) {
-      return scope === 'capital_declaration'
-        ? {
-            ...buildCapitalFallbackReadModel(canEditEarly),
-            capital_folders: await loadCapitalRequirementFoldersForClient({ orgId, clientId }),
-          }
-        : buildAnnualFallbackReadModel(canEditEarly);
+      if (scope === 'capital_declaration') {
+        const folders = await loadCapitalRequirementFoldersForClient({ orgId, clientId });
+        return buildCapitalFallbackReadModel(canEditEarly, folders);
+      }
+      return buildAnnualFallbackReadModel(canEditEarly);
     }
     prof = existing;
   } else {
@@ -1734,6 +1791,7 @@ export async function getAnnualTabReadModel(
       },
       fileMetaById,
       canEdit,
+      scope,
     ),
   );
   const scopedRows = mergeScopeCatalogRows({
@@ -1868,6 +1926,7 @@ export async function getAnnualTabReadModel(
                   },
                   fileMetaById,
                   canEdit && !flags.filed,
+                  scope,
                 ),
               ),
               scope,
@@ -1893,7 +1952,7 @@ export async function getAnnualTabReadModel(
   const latestSubmitted = [...submissions]
     .filter((row) => row.submitted_on)
     .sort((a, b) => String(b.submitted_on).localeCompare(String(a.submitted_on)))[0] ?? null;
-  const filing_status =
+  let filing_status =
     scope === 'annual_report'
       ? workingYearBoard?.filing_status ?? {
           filed: false,
@@ -1949,7 +2008,19 @@ export async function getAnnualTabReadModel(
     scope === 'capital_declaration' ? await loadCapitalRequirementFoldersForClient({ orgId, clientId }) : [];
 
   const serverNow = new Date();
-  const control = buildAnnualControlState(scopedRows, serverNow);
+  const capitalWorking =
+    scope === 'capital_declaration' ? capitalWorkingControlFromFolders(scopedRows, capital_folders, serverNow) : null;
+  const control = capitalWorking
+    ? {
+        status: capitalWorking.status,
+        missing_documents: capitalWorking.missing_documents,
+        completion_percent: capitalWorking.completion_percent,
+        deadline_info: capitalWorking.deadline_info,
+        risk_indicator: capitalWorking.risk_indicator,
+        missing_documents_section_title_he: 'חסרים מסמכים',
+      }
+    : buildAnnualControlState(scopedRows, serverNow);
+  if (capitalWorking) filing_status = capitalWorking.filing_status;
 
   const summary = {
     total_label_he: 'סה״כ מסמכים',
@@ -1993,7 +2064,10 @@ export async function getAnnualTabReadModel(
       updated_by_label_he: 'מאת:',
       updated_by_display_he: p?.updated_by ? userLabels.get(p.updated_by) ?? '—' : '—',
     },
-    visibility: { show_documents: true, show_submissions: true, show_notes: true },
+    visibility: capitalWorking?.visibility ?? { show_documents: true, show_submissions: true, show_notes: true },
+    assigned_due_date: capitalWorking?.assigned_due_date ?? null,
+    actual_submitted_on: capitalWorking?.actual_submitted_on ?? null,
+    filed_confirmation: capitalWorking?.filed_confirmation ?? null,
     documents_table: {
       card_title_he: scope === 'capital_declaration' ? 'רשימת מסמכים להצהרת הון' : 'רשימת מסמכים לדוח שנתי',
       card_title_key:
