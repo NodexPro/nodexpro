@@ -260,7 +260,7 @@ test('self-employed NI standing-order save stays on the viewed month and confirm
   const view = read('../../../web/src/components/client-operations/ClientOperationsRegistryView.tsx');
   const confirm = view.slice(
     view.indexOf('const confirmSelfEmployedNiModal'),
-    view.indexOf('const setOperationalTargetDate'),
+    view.indexOf('const setFilingDateWithPending'),
   );
   assert.match(confirm, /save_client_operations_self_employed_ni/);
   assert.match(confirm, /ops\.period_key/);

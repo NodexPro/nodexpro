@@ -75,7 +75,7 @@ test('paint mode does not invoke checkbox/date canonical commands', () => {
   assert.match(viewSource, /toggleMaterialStream/);
   assert.match(viewSource, /toggleNiDeductionsItem/);
   assert.match(viewSource, /toggleIncomeTaxDeductions/);
-  assert.match(viewSource, /setOperationalTargetDate/);
+  assert.match(viewSource, /setFilingDateWithPending/);
   assert.match(viewSource, /onClickCapture/);
   assert.match(viewSource, /paintCellManualStatus\(row, column\.key\)/);
 });

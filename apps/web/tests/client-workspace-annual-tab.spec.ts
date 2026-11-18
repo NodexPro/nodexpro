@@ -175,11 +175,12 @@ test('capital attach uses this tab version, retries 409 once, and does not treat
   assert.match(annualSrc, /expected_version: expectedVersionRef.current/);
   assert.match(annualSrc, /tab_scope: annualTab.tab_key/);
   assert.match(annualSrc, /isAnnualVersionConflict/);
+  assert.match(annualSrc, /mayRetryAnnualCommandAfterVersionConflict\(type\)/);
   assert.match(annualSrc, /moduleClientOperationsCase\(clientId\)/);
   assert.match(annualSrc, /annualTabVersionFromCase\(out, annualTab.tab_key\)/);
   assert.match(annualSrc, /if \(busy\) return;/);
   const uploadIdx = annualSrc.indexOf('moduleClientOperationsAnnualUpload');
-  const attachIdx = annualSrc.indexOf("type: commandType");
+  const attachIdx = annualSrc.indexOf('postAnnualCommand(commandType');
   const applyIdx = annualSrc.lastIndexOf('onCaseUpdated(out)');
   assert.ok(uploadIdx > 0 && attachIdx > uploadIdx && applyIdx > attachIdx);
   assert.match(annualSrc, /nx-annual-received-check/);
@@ -187,6 +188,17 @@ test('capital attach uses this tab version, retries 409 once, and does not treat
   assert.match(annualCss, /nx-annual-status-chip--red/);
   assert.match(annualCss, /nx-annual-received-check/);
   assert.match(annualBase, /nx-annual-status-missing-alert/);
+});
+
+test('annual documents are white Arial with backend not-received hint and no yellow tooltip', () => {
+  assert.match(annualSrc, /nx-annual-doc-info/);
+  assert.match(annualSrc, /row\.receipt_hint_key/);
+  assert.match(annualSrc, /toggle_annual_document_received/);
+  assert.doesNotMatch(annualSrc, /title=\{localizeSystemLabel\(t, row\.description_key/);
+  assert.match(annualCss, /data-tab-key='annual_report'[\s\S]*font-family:\s*Arial/);
+  assert.match(annualCss, /\.nx-annual-doc-info[\s\S]*color:\s*#ffffff/);
+  assert.match(annualCss, /\.nx-annual-doc-name[\s\S]*color:\s*#ffffff/);
+  assert.match(annualCss, /nx-annual-doc-row--warning[\s\S]*background:\s*transparent/);
 });
 
 test('Taxes interior and portal/raise are not altered by the Annual restyle', () => {

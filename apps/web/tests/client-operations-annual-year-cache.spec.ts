@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   annualTabVersionFromCase,
   isAnnualVersionConflict,
+  mayRetryAnnualCommandAfterVersionConflict,
   buildAnnualYearSnapshotKey,
   getAnnualYearSnapshot,
   invalidateAnnualYearSnapshotsForClient,
@@ -10,7 +11,7 @@ import {
   resolveDisplayedAnnualTaxYear,
   shouldApplyAnnualYearPersistResponse,
 } from '../src/lib/client-operations-annual-year-cache.pure.ts';
-import { displayedPendingIsoDate } from '../src/lib/client-operations-filing-date-field.pure.ts';
+import { displayedPendingIsoDate, pendingFilingDateStateKey } from '../src/lib/client-operations-filing-date-field.pure.ts';
 
 test('year snapshots are keyed by organization, client, tax year and aggregate version', () => {
   const cache = new Map<string, { year: number }>();
@@ -109,7 +110,16 @@ test('superseded persist keeps expected version from the command without paintin
     2,
   );
   assert.equal(isAnnualVersionConflict({ status: 409, code: 'CONFLICT' }), true);
+  assert.equal(isAnnualVersionConflict({ status: 409, code: 'VERSION_CONFLICT' }), true);
   assert.equal(isAnnualVersionConflict({ status: 400, code: 'CONFLICT' }), false);
+  assert.equal(isAnnualVersionConflict({ status: 409, code: '' }), false);
+  assert.equal(isAnnualVersionConflict({ status: 409, code: 'REMINDER_CONFLICT' }), false);
+  assert.equal(mayRetryAnnualCommandAfterVersionConflict('attach_annual_document_file'), true);
+  assert.equal(mayRetryAnnualCommandAfterVersionConflict('select_annual_working_tax_year'), true);
+  assert.equal(mayRetryAnnualCommandAfterVersionConflict('add_annual_submission_date'), false);
+  assert.equal(mayRetryAnnualCommandAfterVersionConflict('add_annual_document_row'), false);
+  assert.equal(mayRetryAnnualCommandAfterVersionConflict('copy_previous_capital_declaration'), false);
+  assert.equal(mayRetryAnnualCommandAfterVersionConflict('remove_annual_submission_date'), false);
 });
 
 test('command refresh invalidates previous version snapshots for the same client', () => {
@@ -149,4 +159,6 @@ test('pending capital date is shown immediately and is not treated as saved unti
   assert.equal(displayedPendingIsoDate({ confirmed: '2026-01-01', pending: '2026-02-02' }), '2026-02-02');
   assert.equal(displayedPendingIsoDate({ confirmed: '2026-01-01', pending: undefined }), '2026-01-01');
   assert.equal(displayedPendingIsoDate({ confirmed: null, pending: '' }), '');
+  assert.equal(pendingFilingDateStateKey('client-1', 'annual_report'), 'client-1::annual_report');
+  assert.equal(pendingFilingDateStateKey('client-1', 'capital_declaration'), 'client-1::capital_declaration');
 });

@@ -296,6 +296,54 @@ test('capital file command creates an instance when none exists', () => {
   assert.doesNotMatch(slice, /CAPITAL_FILING_INSTANCE_REQUIRED/);
 });
 
+test('completed capital without a calendar date still files the square and keeps the assigned date', async () => {
+  const { buildCapitalDeclarationCell, pickVisibleCapitalInstance } = await import(
+    '../../src/domains/client-operations/client-operations-annual-capital-operational.pure.js'
+  );
+  const completed = buildCapitalDeclarationCell({
+    openInstance: null,
+    datedCompletedInstance: {
+      id: 'cap-filed',
+      tax_year: null,
+      operational_target_date: null,
+      sequence_no: 1,
+    },
+    canEdit: true,
+    submittedOn: '2026-06-02',
+  });
+  assert.equal(completed.filing.square_chrome, 'filed');
+  assert.equal(completed.assignment_state, 'filed');
+  assert.equal(completed.operational_target_date, null);
+  assert.equal(completed.filing.submitted_on, '2026-06-02');
+  assert.equal(completed.allowed_actions.can_set_date, false);
+  assert.equal(completed.allowed_actions.can_open_new, true);
+  const openPreferred = pickVisibleCapitalInstance({
+    openInstance: {
+      id: 'cap-new',
+      tax_year: null,
+      operational_target_date: '2026-11-01',
+      status: 'open',
+    },
+    datedCompletedInstance: {
+      id: 'cap-filed',
+      tax_year: null,
+      operational_target_date: null,
+      status: 'completed',
+    },
+  });
+  assert.equal(openPreferred?.id, 'cap-new');
+  assert.equal(openPreferred?.status, 'open');
+  const serviceSource = readFileSync(
+    join(dir, '../../src/domains/client-operations/client-operations-annual-capital-operational.service.ts'),
+    'utf8',
+  );
+  const loader = serviceSource.slice(
+    serviceSource.indexOf('export async function loadLatestDatedCompletedCapitalInstancesForClients'),
+    serviceSource.indexOf('export async function loadAnnualSubmissionFactsForClients'),
+  );
+  assert.doesNotMatch(loader, /operational_target_date',\s*'is',\s*null/);
+});
+
 test('capital שודר copies checklist file_asset links into the instance archive then clears the working checklist', () => {
   const serviceSource = readFileSync(
     join(dir, '../../src/domains/client-operations/client-operations-annual-capital-operational.service.ts'),

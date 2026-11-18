@@ -54,6 +54,11 @@ export function displayedPendingIsoDate(input: {
   return String(input.confirmed ?? '');
 }
 
+/** Shared pending overlay key for registry annual/capital calendars. Pending is not saved. */
+export function pendingFilingDateStateKey(clientId: string, columnKey: string): string {
+  return `${String(clientId ?? '').trim()}::${String(columnKey ?? '').trim()}`;
+}
+
 export function formatOperationalDateLabel(value: string | null | undefined, lang: string): string {
   if (!value || !value.trim()) return '—';
   const iso = value.trim().slice(0, 10);

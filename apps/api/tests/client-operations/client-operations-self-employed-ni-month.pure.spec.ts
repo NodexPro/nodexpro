@@ -289,7 +289,7 @@ test('14 standing-order save on an inherited October month becomes an explicit 2
   const view = readSrc('../../../../apps/web/src/components/client-operations/ClientOperationsRegistryView.tsx');
   const confirm = view.slice(
     view.indexOf('const confirmSelfEmployedNiModal'),
-    view.indexOf('const setOperationalTargetDate'),
+    view.indexOf('const setFilingDateWithPending'),
   );
   assert.match(confirm, /ops\.period_key/);
   assert.match(confirm, /requireApplied: true/);

@@ -175,7 +175,7 @@ test('date field click paths reach showPicker helper; change maps to named comma
   );
   assert.match(editableBranch, /onClick=\{[\s\S]*?tryShowNativeDatePicker/);
   assert.match(editableBranch, /consumeFormatSelectionClick/);
-  assert.match(editableBranch, /setOperationalTargetDate/);
+  assert.match(editableBranch, /setFilingDateWithPending/);
   assert.match(viewSource, /set_annual_report_operational_target_date/);
   assert.match(viewSource, /set_capital_declaration_operational_target_date/);
   // + open path remains separate and command-named.
@@ -228,4 +228,17 @@ test('annual/capital filing square and named file commands stay render-only', ()
   assert.match(cssSource, /rgba\(34,\s*197,\s*94,\s*0\.07\)/);
   assert.match(viewSource, /is-row-tone-paint/);
   assert.doesNotMatch(viewSource, /resolveAnnualReportTaxYearForOperationalPeriod/);
+});
+
+test('annual and capital registry calendars share one pending overlay', () => {
+  assert.match(viewSource, /pendingFilingDateStateKey/);
+  assert.match(viewSource, /displayedPendingIsoDate/);
+  assert.match(viewSource, /setFilingDateWithPending/);
+  assert.match(viewSource, /set_annual_report_operational_target_date/);
+  assert.match(viewSource, /set_capital_declaration_operational_target_date/);
+  assert.doesNotMatch(viewSource, /pendingCapitalDates/);
+  assert.match(cssSource, /td\.is-annual-capital-filed/);
+  assert.match(cssSource, /tr\.is-reporting-row-overdue td\.is-annual-capital-filed/);
+  assert.match(viewSource, /square_chrome === 'filed'/);
+  assert.doesNotMatch(viewSource, /already_filed\s*\?\s*'filed'/);
 });

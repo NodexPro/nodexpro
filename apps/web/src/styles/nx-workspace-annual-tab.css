@@ -121,12 +121,9 @@
   background: transparent;
 }
 
-.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-row--warning {
-  background: rgba(250, 204, 21, 0.12);
-}
-
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-row--warning,
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-row--warning:hover {
-  background: rgba(250, 204, 21, 0.18);
+  background: transparent;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-row--success {
@@ -138,7 +135,36 @@
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-name {
-  color: #eef6ff;
+  color: #ffffff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-info {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #ffffff;
+  color: #ffffff;
+  font-family: Arial, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: default;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-capital-receipt-hint {
+  color: #ffffff;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-row--warning,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-row--warning:hover {
+  background: transparent;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-inline-action {
@@ -326,6 +352,7 @@
   line-height: 1;
 }
 
+.nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='annual_report'] .nx-annual-doc-name,
 .nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'] .nx-annual-doc-row--missing .nx-annual-doc-name,
 .nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'] .nx-annual-doc-name {
   color: #ffffff;
@@ -338,6 +365,12 @@
   padding: 8px 12px;
 }
 
+.nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='annual_report'],
+.nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='annual_report'] *,
+.nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='annual_report'] button,
+.nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='annual_report'] input,
+.nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='annual_report'] select,
+.nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='annual_report'] textarea,
 .nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'],
 .nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'] *,
 .nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'] button,

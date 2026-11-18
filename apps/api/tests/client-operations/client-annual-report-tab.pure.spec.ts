@@ -353,7 +353,12 @@ test('annual tab service keeps Core → Commands → Aggregate: named command, r
   assert.match(serviceSrc, /working_tax_year/);
   assert.match(serviceSrc, /if \(!options\?\.readOnly\) \{/);
   assert.match(serviceSrc, /document_readiness/);
-  assert.match(serviceSrc, /getAnnualTabReadModel\(ctx, clientId, scope\)/);
+  assert.match(serviceSrc, /export async function getAnnualTabReadModel/);
+  const commandFn = serviceSrc.slice(serviceSrc.indexOf('export async function executeAnnualTabCommand'));
+  assert.doesNotMatch(commandFn, /getAnnualTabReadModel\(ctx, clientId, scope\)/);
+  assert.match(commandFn, /annualHasMissingDocuments/);
+  assert.match(commandFn, /invalidateClientOperationsRegistryMaterializationCache/);
+  assert.match(commandFn, /logClientOperationsTiming/);
   assert.match(serviceSrc, /annual_report_tab\.view/);
   assert.match(serviceSrc, /annual_report_tab\.edit/);
   assert.match(serviceSrc, /AUDIT_ACTIONS\.CLIENT_ANNUAL_REPORT_UPDATED/);
@@ -543,4 +548,23 @@ test('capital history uses filed instances and real sequence numbers, not assign
   assert.equal(entries[0]?.submitted_on, '2026-01-15');
   assert.equal(entries[1]?.sequence_no, 2);
   assert.equal(entries[1]?.submitted_on, '2026-04-02');
+});
+
+test('annual attached-not-received hint is backend-owned and commands log safe durations', () => {
+  assert.match(serviceSrc, /receipt_hint_key: 'clientOperations.annual.fileAttachedNotMarked'/);
+  assert.match(serviceSrc, /row_style: 'neutral'/);
+  const timingSrc = readFileSync(
+    join(dir, '../../src/domains/client-operations/client-operations-command-timing.ts'),
+    'utf8',
+  );
+  assert.match(timingSrc, /\[client-operations-timing\]/);
+  assert.doesNotMatch(timingSrc, /file_name|file_base64|document_name/);
+  const routesSrc = readFileSync(
+    join(dir, '../../src/domains/client-operations/client-operations.routes.ts'),
+    'utf8',
+  );
+  assert.match(routesSrc, /annual_command_with_refreshed_case/);
+  assert.match(routesSrc, /registry_named_command/);
+  assert.match(routesSrc, /named_command_ms/);
+  assert.match(routesSrc, /refreshed_case_ms/);
 });

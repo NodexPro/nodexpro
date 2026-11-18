@@ -97,5 +97,27 @@ export function isAnnualVersionConflict(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const status = Number((error as { status?: number }).status ?? 0);
   const code = String((error as { code?: string }).code ?? '');
-  return status === 409 && (code === 'CONFLICT' || code === 'VERSION_CONFLICT' || code === '');
+  return status === 409 && (code === 'CONFLICT' || code === 'VERSION_CONFLICT');
+}
+
+/**
+ * Last-write-wins updates may retry once after a fresh aggregate/version.
+ * Inserts, deletes, copy and filing confirmation must not auto-retry:
+ * a concurrent success already wrote, and a second POST would duplicate
+ * submissions, rows, links or audit events.
+ */
+const ANNUAL_VERSION_CONFLICT_RETRY_SAFE_COMMANDS = new Set<string>([
+  'attach_annual_document_file',
+  'attach_annual_submission_file',
+  'remove_annual_document_file',
+  'toggle_annual_document_received',
+  'update_annual_document_row',
+  'update_annual_notes',
+  'update_annual_submission_date',
+  'select_annual_working_tax_year',
+  'set_capital_declaration_operational_target_date',
+]);
+
+export function mayRetryAnnualCommandAfterVersionConflict(type: string): boolean {
+  return ANNUAL_VERSION_CONFLICT_RETRY_SAFE_COMMANDS.has(String(type ?? '').trim());
 }

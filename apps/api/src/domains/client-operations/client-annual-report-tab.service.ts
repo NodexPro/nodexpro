@@ -11,6 +11,8 @@ import {
 import { requireGuardedUpload } from '../../shared/file-content-guard.js';
 import { assertFileAssetDownloadable } from '../../shared/document-download-guard.js';
 import { syncAnnualScopeMaterialWorkEvent } from './client-operations-work-engine-bridge.js';
+import { invalidateClientOperationsRegistryMaterializationCache } from './client-operations-registry-materialization-cache.js';
+import { logClientOperationsTiming } from './client-operations-command-timing.js';
 import {
   ANNUAL_CONTROL_STATUS_LABEL_KEY,
   ANNUAL_DOC_STATUS_LABEL_KEY,
@@ -642,6 +644,7 @@ function computeDocumentRowPresentation(
   status_label_he: string;
   status_label_key: string;
   row_style: AnnualDocumentRowStyle;
+  receipt_hint_key: string | null;
 } {
   const hasFile = Boolean(fileAssetId);
   if (received && hasFile) {
@@ -650,6 +653,7 @@ function computeDocumentRowPresentation(
       status_label_he: 'הושלם',
       status_label_key: ANNUAL_DOC_STATUS_LABEL_KEY.completed,
       row_style: 'success',
+      receipt_hint_key: null,
     };
   }
   if (received && !hasFile) {
@@ -658,6 +662,7 @@ function computeDocumentRowPresentation(
       status_label_he: 'סומן — חסר קובץ',
       status_label_key: ANNUAL_DOC_STATUS_LABEL_KEY.checked_only,
       row_style: 'warning',
+      receipt_hint_key: null,
     };
   }
   if (!received && hasFile) {
@@ -665,7 +670,8 @@ function computeDocumentRowPresentation(
       status: 'attached_only',
       status_label_he: 'קובץ מצורף — לא סומן כהתקבל',
       status_label_key: ANNUAL_DOC_STATUS_LABEL_KEY.attached_only,
-      row_style: 'warning',
+      row_style: 'neutral',
+      receipt_hint_key: 'clientOperations.annual.fileAttachedNotMarked',
     };
   }
   return {
@@ -673,6 +679,7 @@ function computeDocumentRowPresentation(
     status_label_he: 'חסר',
     status_label_key: ANNUAL_DOC_STATUS_LABEL_KEY.missing,
     row_style: 'neutral',
+    receipt_hint_key: null,
   };
 }
 
@@ -721,7 +728,7 @@ function toAnnualDocumentRowDto(
     status_label_key: pres.status_label_key,
     row_style: pres.row_style,
     receipt_mark: capitalPres?.receipt_mark ?? 'none',
-    receipt_hint_key: capitalPres?.receipt_hint_key ?? null,
+    receipt_hint_key: capitalPres?.receipt_hint_key ?? pres.receipt_hint_key ?? null,
     show_missing_badge: capitalPres?.show_missing_badge ?? false,
     file: {
       state: fid ? 'attached' : 'none',
@@ -770,7 +777,7 @@ function projectCatalogDocumentRow(input: {
     status_label_key: missing.status_label_key,
     row_style: missing.row_style,
     receipt_mark: capitalMissing?.receipt_mark ?? 'none',
-    receipt_hint_key: capitalMissing?.receipt_hint_key ?? null,
+    receipt_hint_key: capitalMissing?.receipt_hint_key ?? missing.receipt_hint_key ?? null,
     show_missing_badge: capitalMissing?.show_missing_badge ?? false,
     file: { state: 'none', file_asset_id: null, file_name: null },
     actions: {
@@ -1780,7 +1787,23 @@ export async function getAnnualTabReadModel(
     .eq('organization_id', orgId)
     .eq('client_id', clientId);
   if (scoped) profileQ = profileQ.eq('tab_scope', scope);
-  const { data: profileRow } = await profileQ.single();
+  let docQ = supabaseAdmin
+    .from('client_annual_document_rows')
+    .select('*')
+    .eq('organization_id', orgId)
+    .eq('client_id', clientId);
+  if (scoped) docQ = docQ.eq('tab_scope', scope);
+  let subQ = supabaseAdmin
+    .from('client_annual_submission_rows')
+    .select('id, tax_year, submitted_on, status, note, sort_order, file_asset_id')
+    .eq('organization_id', orgId)
+    .eq('client_id', clientId);
+  if (scoped) subQ = subQ.eq('tab_scope', scope);
+  const [{ data: profileRow }, { data: docRows }, { data: subRows }] = await Promise.all([
+    profileQ.single(),
+    docQ.order('sort_order', { ascending: true }).order('id', { ascending: true }),
+    subQ.order('sort_order', { ascending: true }).order('tax_year', { ascending: false }),
+  ]);
   const p = profileRow as {
     notes: string | null;
     read_model_version: number;
@@ -1790,26 +1813,10 @@ export async function getAnnualTabReadModel(
 
   const userLabels = await loadUserLabels([p?.updated_by ?? ''].filter(Boolean));
   const canEdit = canEditAnnualTab(ctx);
-
-  let docQ = supabaseAdmin
-    .from('client_annual_document_rows')
-    .select('*')
-    .eq('organization_id', orgId)
-    .eq('client_id', clientId);
-  if (scoped) docQ = docQ.eq('tab_scope', scope);
-  const { data: docRows } = await docQ.order('sort_order', { ascending: true }).order('id', { ascending: true });
   const workingDocRows = workingDocumentRowsForTaxYear(
     ((docRows ?? []) as Array<Record<string, unknown> & { tax_year?: number | null }>),
     { yearColumnSupported, workingTaxYear, tabScope: scope },
   );
-
-  let subQ = supabaseAdmin
-    .from('client_annual_submission_rows')
-    .select('id, tax_year, submitted_on, status, note, sort_order, file_asset_id')
-    .eq('organization_id', orgId)
-    .eq('client_id', clientId);
-  if (scoped) subQ = subQ.eq('tab_scope', scope);
-  const { data: subRows } = await subQ.order('sort_order', { ascending: true }).order('tax_year', { ascending: false });
 
   const fileIds = [
     ...new Set(
@@ -2432,25 +2439,54 @@ export async function getAnnualReportDocumentFileOpenUrl(
   return { url: signed.signedUrl };
 }
 
+async function annualHasMissingDocuments(
+  orgId: string,
+  clientId: string,
+  scope: AnnualTabScope,
+): Promise<boolean> {
+  const scoped = await supportsAnnualScopeColumns();
+  let q = supabaseAdmin
+    .from('client_annual_document_rows')
+    .select('received, file_asset_id')
+    .eq('organization_id', orgId)
+    .eq('client_id', clientId);
+  if (scoped) q = q.eq('tab_scope', scope);
+  const { data, error } = await q;
+  if (error) return true;
+  const rows = (data ?? []) as Array<{ received?: boolean | null; file_asset_id?: string | null }>;
+  if (!rows.length) return true;
+  return rows.some((row) => !row.received || !row.file_asset_id);
+}
+
 export async function executeAnnualTabCommand(ctx: RequestContext, clientId: string, body: AnnualTabCommandBody): Promise<void> {
+  const started = Date.now();
+  const stage_timings: Record<string, number> = {};
+  const mark = (name: string, from: number) => {
+    stage_timings[name] = Date.now() - from;
+  };
   const orgId = assertOrg(ctx);
   const scope = parseAnnualTabScope(body?.tab_scope);
-  const scoped = await supportsAnnualScopeColumns();
+  const bootMs = Date.now();
+  const [scoped, yearColumnSupported] = await Promise.all([
+    supportsAnnualScopeColumns(),
+    supportsAnnualDocumentTaxYearColumns(),
+  ]);
   if (!canEditAnnualTab(ctx)) throw forbidden('Insufficient permission');
   await ensureClientInOrg(orgId, clientId);
   await ensureProfile(orgId, clientId, scope);
-  const yearColumnSupported = await supportsAnnualDocumentTaxYearColumns();
   const currentTaxYear = resolveCurrentAnnualTaxYear();
   const workingTaxYear = resolveWorkingTaxYear({
     profileWorkingTaxYear: await loadProfileWorkingTaxYear(orgId, clientId, scope, scoped, yearColumnSupported),
     currentTaxYear,
   });
-  await ensureSystemDocumentRows(orgId, clientId, scope, { workingTaxYear, yearColumnSupported });
+  mark('pre_command_db', bootMs);
 
   if (body == null || typeof body.type !== 'string') throw badRequest('פקודה לא תקינה');
   const expected = Number(body.expected_version);
   if (!Number.isFinite(expected)) throw badRequest('גרסה לא תקינה');
+  const versionMs = Date.now();
   await assertExpectedVersion(orgId, clientId, expected, scope);
+  mark('assert_expected_version', versionMs);
   const payload = asObj(body.payload);
   const cmd = body.type as AnnualAnnualCommandType;
   const resolveRowId = (rowId: string) =>
@@ -2761,15 +2797,23 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
       throw badRequest('סוג פקודה לא מוכר');
   }
 
+  const bumpMs = Date.now();
   await bumpReadModelVersion(orgId, clientId, expected, ctx.user.id, scope);
+  mark('bump_version', bumpMs);
+  invalidateClientOperationsRegistryMaterializationCache(orgId);
 
   const orgIdCtx = ctx.organizationId;
   if (orgIdCtx) {
-    const refreshed = await getAnnualTabReadModel(ctx, clientId, scope);
-    const hasMissingDocs = Boolean(
-      refreshed &&
-        (refreshed.status.code === 'missing_docs' || refreshed.missing_documents.length > 0),
-    );
+    const missingMs = Date.now();
+    const hasMissingDocs = await annualHasMissingDocuments(orgId, clientId, scope);
+    mark('missing_docs_flag', missingMs);
     await syncAnnualScopeMaterialWorkEvent(ctx, orgIdCtx, clientId, scope, hasMissingDocs);
   }
+  logClientOperationsTiming({
+    event: 'annual_tab_named_command',
+    command: cmd,
+    duration_ms: Date.now() - started,
+    stage_timings,
+    organization_id: orgId,
+  });
 }

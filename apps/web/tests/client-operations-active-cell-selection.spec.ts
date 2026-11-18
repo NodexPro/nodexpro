@@ -141,8 +141,8 @@ test('checkbox behavior unchanged: onChange still toggles; selection is additive
   assert.match(viewSource, /Presentation-only selection — does not change checkbox domain value/);
 });
 
-test('date behavior unchanged: setOperationalTargetDate on change; selection additive', () => {
-  assert.match(viewSource, /void setOperationalTargetDate\(/);
+test('date behavior unchanged: setFilingDateWithPending on change; selection additive', () => {
+  assert.match(viewSource, /void setFilingDateWithPending\(/);
   assert.match(viewSource, /tryShowNativeDatePicker/);
   assert.match(viewSource, /Presentation-only selection — does not change the date domain value/);
 });

@@ -113,7 +113,7 @@ test('21-26 regressions: paint / checkbox / date / custom / period / fullscreen 
   assert.match(viewSource, /paintCellManualStatus\(row, column\.key\)/);
   assert.match(viewSource, /Do NOT turn paint clicks into formatting selection/);
   assert.match(viewSource, /void toggleMaterialStream/);
-  assert.match(viewSource, /void setOperationalTargetDate/);
+  assert.match(viewSource, /void setFilingDateWithPending/);
   assert.match(viewSource, /scheduleCustomCellAutosave/);
   assert.match(viewSource, /shouldClearActiveCellOnPeriodChange/);
   assert.match(viewSource, /setFullscreenOpen\(\(open\) => !open\)/);

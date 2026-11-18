@@ -14,6 +14,7 @@ import {
   getAnnualYearSnapshot,
   invalidateAnnualYearSnapshotsForClient,
   isAnnualVersionConflict,
+  mayRetryAnnualCommandAfterVersionConflict,
   putAnnualYearSnapshot,
   resolveDisplayedAnnualTaxYear,
   shouldApplyAnnualYearPersistResponse,
@@ -245,19 +246,47 @@ export function ClientAnnualReportTab({
     if (nextVersion != null) expectedVersionRef.current = nextVersion;
   };
 
+  const postAnnualCommand = async (
+    type: string,
+    payload: Record<string, unknown>,
+  ): Promise<ClientOperationsCaseResponse> => {
+    const body = () =>
+      JSON.stringify({
+        type,
+        payload,
+        expected_version: expectedVersionRef.current,
+        tab_scope: annualTab.tab_key,
+      });
+    try {
+      return await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsAnnualCommands(clientId), {
+        method: 'POST',
+        body: body(),
+      });
+    } catch (attachErr) {
+      if (!isAnnualVersionConflict(attachErr)) throw attachErr;
+      const refreshed = await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsCase(clientId), {
+        method: 'GET',
+      });
+      applyReturnedVersion(refreshed);
+      onCaseUpdated(refreshed);
+      if (
+        !mayRetryAnnualCommandAfterVersionConflict(type) ||
+        annualTabVersionFromCase(refreshed, annualTab.tab_key) == null
+      ) {
+        throw attachErr;
+      }
+      return await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsAnnualCommands(clientId), {
+        method: 'POST',
+        body: body(),
+      });
+    }
+  };
+
   const postCmd = async (type: string, payload: Record<string, unknown>) => {
     setBusy(true);
     setErr('');
     try {
-      const out = await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsAnnualCommands(clientId), {
-        method: 'POST',
-        body: JSON.stringify({
-          type,
-          payload,
-          expected_version: expectedVersionRef.current,
-          tab_scope: annualTab.tab_key,
-        }),
-      });
+      const out = await postAnnualCommand(type, payload);
       applyReturnedVersion(out);
       onCaseUpdated(out);
     } catch (e) {
@@ -273,17 +302,9 @@ export function ClientAnnualReportTab({
     setPendingDueDate(iso);
     setErr('');
     try {
-      const out = await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsAnnualCommands(clientId), {
-        method: 'POST',
-        body: JSON.stringify({
-          type: 'set_capital_declaration_operational_target_date',
-          payload: {
-            operational_target_date: iso,
-            operational_period_key: annualTab.capital_workspace?.working_panel.operational_period_key,
-          },
-          expected_version: expectedVersionRef.current,
-          tab_scope: annualTab.tab_key,
-        }),
+      const out = await postAnnualCommand('set_capital_declaration_operational_target_date', {
+        operational_target_date: iso,
+        operational_period_key: annualTab.capital_workspace?.working_panel.operational_period_key,
       });
       if (gen !== capitalDateGenRef.current) return;
       applyReturnedVersion(out);
@@ -314,15 +335,7 @@ export function ClientAnnualReportTab({
       persistInFlightRef.current = true;
       const generation = ++persistGenRef.current;
       try {
-        const out = await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsAnnualCommands(clientId), {
-          method: 'POST',
-          body: JSON.stringify({
-            type: 'select_annual_working_tax_year',
-            payload: { tax_year: nextYear },
-            expected_version: expectedVersionRef.current,
-            tab_scope: annualTab.tab_key,
-          }),
-        });
+        const out = await postAnnualCommand('select_annual_working_tax_year', { tax_year: nextYear });
         const nextVersion = annualTabVersionFromCase(out, annualTab.tab_key);
         if (nextVersion != null) expectedVersionRef.current = nextVersion;
         workingYearRef.current = nextYear;
@@ -401,31 +414,7 @@ export function ClientAnnualReportTab({
       });
       const commandType = target.kind === 'document' ? 'attach_annual_document_file' : 'attach_annual_submission_file';
       const payload = target.kind === 'document' ? { row_id: target.id, file_asset_id } : { submission_id: target.id, file_asset_id };
-      const attachBody = () =>
-        JSON.stringify({
-          type: commandType,
-          payload,
-          expected_version: expectedVersionRef.current,
-          tab_scope: annualTab.tab_key,
-        });
-      let out: ClientOperationsCaseResponse;
-      try {
-        out = await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsAnnualCommands(clientId), {
-          method: 'POST',
-          body: attachBody(),
-        });
-      } catch (attachErr) {
-        if (!isAnnualVersionConflict(attachErr)) throw attachErr;
-        const refreshed = await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsCase(clientId), {
-          method: 'GET',
-        });
-        applyReturnedVersion(refreshed);
-        onCaseUpdated(refreshed);
-        out = await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsAnnualCommands(clientId), {
-          method: 'POST',
-          body: attachBody(),
-        });
-      }
+      const out = await postAnnualCommand(commandType, payload);
       applyReturnedVersion(out);
       onCaseUpdated(out);
     } catch (e) {
@@ -1127,26 +1116,13 @@ function DocumentRow({
       <td className="nx-annual-td nx-annual-td--doc-name">
         <div className="nx-annual-doc-name-row">
           <span className="nx-annual-doc-name">{annualDocLabel(t, row)}</span>
-          {capital && row.receipt_hint_key ? (
+          {row.receipt_hint_key ? (
             <span className="nx-capital-receipt-hint">{t(row.receipt_hint_key)}</span>
           ) : null}
           {row.description_he ? (
             <span
+              className="nx-annual-doc-info"
               aria-label={localizeSystemLabel(t, row.description_key, row.description_he)}
-              title={localizeSystemLabel(t, row.description_key, row.description_he)}
-              style={{
-                display: 'inline-flex',
-                width: 16,
-                height: 16,
-                borderRadius: '50%',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '1px solid #94a3b8',
-                color: '#64748b',
-                fontSize: 11,
-                fontWeight: 700,
-                cursor: 'help',
-              }}
             >
               i
             </span>

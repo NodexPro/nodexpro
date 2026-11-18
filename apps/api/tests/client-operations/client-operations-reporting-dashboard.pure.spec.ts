@@ -1738,7 +1738,7 @@ test('reporting dashboard wiring stays presentation-owned: payroll workflow, tax
   assert.match(dashboardService, /resolvePreviousPeriodVatCalendarDue/);
   assert.doesNotMatch(dashboardService, /material_brought/);
   assert.match(registryService, /loadPayrollPeriodWorkflowState/);
-  assert.match(registryService, /loadAnnualReportSubmissionsForTaxYear/);
+  assert.match(registryService, /row\.tax_year === annualReportTaxYear && row\.submitted_on/);
   assert.match(registryService, /loadCapitalDeclarationKpiInstances/);
   assert.match(registryService, /taxByClient:/);
   assert.doesNotMatch(dashboardService, /\.eq\('is_active', true\)/);

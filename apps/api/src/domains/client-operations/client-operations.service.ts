@@ -106,7 +106,6 @@ import {
 } from './client-operations-annual-capital-operational.pure.js';
 import {
   loadAnnualReportYearInstancesForClients,
-  loadAnnualReportSubmissionsForTaxYear,
   loadAnnualSubmissionFactsForClients,
   loadAnnualSubmissionFilesForSubmissions,
   loadCapitalDeclarationKpiInstances,
@@ -147,6 +146,7 @@ import {
   type ClientOperationsRegistryRowFilterFacets,
 } from './client-operations-registry-filters.pure.js';
 import { logAggregatePayloadBreakdown } from '../../shared/aggregate-payload-metrics.js';
+import { logClientOperationsTiming } from './client-operations-command-timing.js';
 import {
   assertUserIsActiveHandlerEligible,
   listActiveHandlerEligibleMembers,
@@ -1578,11 +1578,11 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     niDeductions126FactsByClient,
     earliestNiDeductionsApplicableByClient,
     reportingDashboardLoad,
-    annualSubmissionsByClient,
     capitalKpiInstances,
     completedCapitalByClient,
     annualSubmissionFacts,
     capitalSubmissionFacts,
+    filingEvidenceByClient,
   ] = matchingClientIds.length
     ? await Promise.all([
         loadNotesAggregatesByClient(orgId, matchingClientIds),
@@ -1628,11 +1628,6 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
           selectedPeriodKey,
           previousPeriodKeys,
         }),
-        loadAnnualReportSubmissionsForTaxYear({
-          organizationId: orgId,
-          clientIds: matchingClientIds,
-          taxYear: annualReportTaxYear,
-        }),
         loadCapitalDeclarationKpiInstances({
           organizationId: orgId,
           clientIds: matchingClientIds,
@@ -1651,6 +1646,10 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
           clientIds: matchingClientIds,
           tabScope: 'capital_declaration',
         }),
+        loadClientOperationsFilingEvidenceByClient({
+          organizationId: orgId,
+          clientIds: matchingClientIds,
+        }),
       ])
     : [
         new Map(),
@@ -1667,21 +1666,25 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
           selectedPeriodKey,
           previousPeriodKeys: [],
         }),
-        new Set<string>(),
         [] as Awaited<ReturnType<typeof loadCapitalDeclarationKpiInstances>>,
         new Map() as Awaited<ReturnType<typeof loadLatestDatedCompletedCapitalInstancesForClients>>,
         [] as Awaited<ReturnType<typeof loadAnnualSubmissionFactsForClients>>,
         [] as Awaited<ReturnType<typeof loadAnnualSubmissionFactsForClients>>,
+        new Map() as Awaited<ReturnType<typeof loadClientOperationsFilingEvidenceByClient>>,
       ];
   markStage('phase2_presentation_loads', phase2Ms);
   const vatDueDisplayByClient = await vatDuePromise;
   markStage('vat_due_display', vatDueMs);
 
   const annualSubmissionsByClientId = new Map<string, typeof annualSubmissionFacts>();
+  const annualSubmissionsByClient = new Set<string>();
   for (const row of annualSubmissionFacts) {
     const list = annualSubmissionsByClientId.get(row.client_id) ?? [];
     list.push(row);
     annualSubmissionsByClientId.set(row.client_id, list);
+    if (row.tax_year === annualReportTaxYear && row.submitted_on) {
+      annualSubmissionsByClient.add(row.client_id);
+    }
   }
   const capitalSubmittedOnByInstanceId = new Map<string, string>();
   const capitalSubmissionIdByInstanceId = new Map<string, string>();
@@ -1733,13 +1736,6 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       capitalCompletedByClient.set(inst.client_id, list);
     }
   }
-
-  const filingEvidenceByClient = matchingClientIds.length
-    ? await loadClientOperationsFilingEvidenceByClient({
-        organizationId: orgId,
-        clientIds: matchingClientIds,
-      })
-    : new Map();
 
   const presentationMs = Date.now();
   const builtRows: ClientOperationsRegistryRow[] = facetSeeds.flatMap((seed) => {
@@ -2065,10 +2061,22 @@ export async function getClientOperationsCase(
   clientId: string,
   options?: ClientOperationsCaseReadOptions
 ): Promise<ClientOperationsCaseResponse> {
+  const caseStarted = Date.now();
+  const stage_timings: Record<string, number> = {};
+  const timed = async <T,>(name: string, promise: Promise<T>): Promise<T> => {
+    const started = Date.now();
+    try {
+      return await promise;
+    } finally {
+      stage_timings[name] = Date.now() - started;
+    }
+  };
   const orgId = assertOrg(ctx);
   await assertCanAccessClientFromContext(ctx, clientId);
 
-  const [{ data: client, error: clientErr }, { data: primaryContact }, { data: profile }] = await Promise.all([
+  const [{ data: client, error: clientErr }, { data: primaryContact }, { data: profile }] = await timed(
+    'first_db_client_contact_profile',
+    Promise.all([
     supabaseAdmin
       .from('clients')
       .select('id, display_name, tax_id, status, email, phone, address, city, notes, created_at, ended_at')
@@ -2083,7 +2091,8 @@ export async function getClientOperationsCase(
       .eq('is_primary', true)
       .maybeSingle(),
     supabaseAdmin.from('client_operational_profiles').select(PROFILE_SELECT).eq('organization_id', orgId).eq('client_id', clientId).maybeSingle(),
-  ]);
+  ]),
+  );
 
   if (clientErr) {
     if (clientErr.code === 'PGRST116' || !client) throw forbidden('Client not found');
@@ -2116,19 +2125,22 @@ export async function getClientOperationsCase(
   // Recompute stays on named commands and the night pass. Command refresh
   // also uses this read path so it cannot mutate again.
   const independentP = Promise.all([
-    getClientTaxSettings(ctx, clientId),
-    getClientBusinessProfileSection(ctx, clientId),
-    getAccountingSettingsTabReadModel(ctx, clientId),
-    getFeesTabReadModel(ctx, clientId, chartView),
-    getPayrollTabReadModel(ctx, clientId, { readOnly: true }),
-    getAnnualTabReadModel(ctx, clientId, undefined, { readOnly: true }),
-    getAnnualTabReadModel(ctx, clientId, 'capital_declaration', { readOnly: true }),
-    getClientDocumentsTabReadModel(ctx, clientId, {
-      readOnly: true,
-      skipEnsureDefaultFolders: true,
-    }),
-    getClientHistoryTabReadModel(ctx, clientId, historyOpen),
-    orgHasActiveModule(orgId, 'docflow'),
+    timed('tab_tax_settings', getClientTaxSettings(ctx, clientId)),
+    timed('tab_business_profile', getClientBusinessProfileSection(ctx, clientId)),
+    timed('tab_accounting', getAccountingSettingsTabReadModel(ctx, clientId)),
+    timed('tab_fees', getFeesTabReadModel(ctx, clientId, chartView)),
+    timed('tab_payroll', getPayrollTabReadModel(ctx, clientId, { readOnly: true })),
+    timed('tab_annual', getAnnualTabReadModel(ctx, clientId, undefined, { readOnly: true })),
+    timed('tab_capital', getAnnualTabReadModel(ctx, clientId, 'capital_declaration', { readOnly: true })),
+    timed(
+      'tab_documents',
+      getClientDocumentsTabReadModel(ctx, clientId, {
+        readOnly: true,
+        skipEnsureDefaultFolders: true,
+      }),
+    ),
+    timed('tab_history', getClientHistoryTabReadModel(ctx, clientId, historyOpen)),
+    timed('module_docflow', orgHasActiveModule(orgId, 'docflow')),
   ]);
   const [
     [
@@ -2147,9 +2159,15 @@ export async function getClientOperationsCase(
     client_tasks_tab,
   ] = await Promise.all([
     independentP,
-    getClientObligationsTabReadModel(ctx, clientId),
-    getClientTasksTabReadModel(ctx, clientId),
+    timed('tab_obligations', getClientObligationsTabReadModel(ctx, clientId)),
+    timed('tab_tasks', getClientTasksTabReadModel(ctx, clientId)),
   ]);
+  logClientOperationsTiming({
+    event: 'client_operations_case_aggregate',
+    duration_ms: Date.now() - caseStarted,
+    stage_timings,
+    organization_id: orgId,
+  });
 
   return {
     client: {

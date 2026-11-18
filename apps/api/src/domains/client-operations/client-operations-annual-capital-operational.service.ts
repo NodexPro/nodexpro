@@ -227,7 +227,6 @@ export async function loadLatestDatedCompletedCapitalInstancesForClients(input: 
     .select('id, client_id, tax_year, operational_target_date, status, label_he, sequence_no, completed_at')
     .eq('organization_id', input.organizationId)
     .eq('status', 'completed')
-    .not('operational_target_date', 'is', null)
     .in('client_id', input.clientIds)
     .order('completed_at', { ascending: false });
   let completedRows = data as Array<Record<string, unknown>> | null;
@@ -237,7 +236,6 @@ export async function loadLatestDatedCompletedCapitalInstancesForClients(input: 
       .select('id, client_id, tax_year, operational_target_date, status, label_he, completed_at')
       .eq('organization_id', input.organizationId)
       .eq('status', 'completed')
-      .not('operational_target_date', 'is', null)
       .in('client_id', input.clientIds)
       .order('completed_at', { ascending: false });
     completedRows = retry.data as Array<Record<string, unknown>> | null;
@@ -758,25 +756,30 @@ async function uploadIncomingFilingFiles(input: {
   tabScope: 'annual_report' | 'capital_declaration';
   files: IncomingFilingFile[];
 }): Promise<Array<{ file_asset_id: string; source_kind: AnnualCapitalSubmissionFileKind }>> {
-  const out: Array<{ file_asset_id: string; source_kind: AnnualCapitalSubmissionFileKind }> = [];
-  for (const file of input.files) {
-    if (file.file_asset_id) {
-      out.push({ file_asset_id: file.file_asset_id, source_kind: file.kind === 'checklist' ? 'additional' : file.kind });
-      continue;
-    }
-    if (!file.file_base64 || !file.file_name) continue;
-    const uploaded = await uploadAnnualReportDocument(input.ctx, input.orgId, input.clientId, {
-      file_base64: file.file_base64,
-      file_name: file.file_name,
-      mime_type: file.mime_type,
-      tab_scope: input.tabScope,
-    });
-    out.push({
-      file_asset_id: uploaded.file_asset_id,
-      source_kind: file.kind === 'checklist' ? 'additional' : file.kind,
-    });
-  }
-  return out;
+  const uploaded = await Promise.all(
+    input.files.map(async (file) => {
+      if (file.file_asset_id) {
+        return {
+          file_asset_id: file.file_asset_id,
+          source_kind: (file.kind === 'checklist' ? 'additional' : file.kind) as AnnualCapitalSubmissionFileKind,
+        };
+      }
+      if (!file.file_base64 || !file.file_name) return null;
+      const saved = await uploadAnnualReportDocument(input.ctx, input.orgId, input.clientId, {
+        file_base64: file.file_base64,
+        file_name: file.file_name,
+        mime_type: file.mime_type,
+        tab_scope: input.tabScope,
+      });
+      return {
+        file_asset_id: saved.file_asset_id,
+        source_kind: (file.kind === 'checklist' ? 'additional' : file.kind) as AnnualCapitalSubmissionFileKind,
+      };
+    }),
+  );
+  return uploaded.filter((row): row is { file_asset_id: string; source_kind: AnnualCapitalSubmissionFileKind } =>
+    Boolean(row),
+  );
 }
 
 async function loadChecklistFileLinks(input: {
@@ -820,23 +823,25 @@ async function upsertSubmissionFileLinks(input: {
   actorUserId: string;
   files: Array<{ file_asset_id: string; source_kind: AnnualCapitalSubmissionFileKind }>;
 }): Promise<void> {
-  for (const file of input.files) {
-    const { error } = await supabaseAdmin.from('client_annual_submission_files').upsert(
-      {
-        organization_id: input.orgId,
-        client_id: input.clientId,
-        submission_id: input.submissionId,
-        file_asset_id: file.file_asset_id,
-        source_kind: file.source_kind,
-        created_by: input.actorUserId,
-      },
-      { onConflict: 'submission_id,file_asset_id', ignoreDuplicates: true },
-    );
-    if (error && /client_annual_submission_files|does not exist|schema cache/i.test(error.message ?? '')) {
-      throw badRequest('Annual/capital filing file links require migration 216', 'ANNUAL_CAPITAL_FILING_MIGRATION_PENDING');
-    }
-    assertQueryError(error, 'Failed to link submission file');
-  }
+  await Promise.all(
+    input.files.map(async (file) => {
+      const { error } = await supabaseAdmin.from('client_annual_submission_files').upsert(
+        {
+          organization_id: input.orgId,
+          client_id: input.clientId,
+          submission_id: input.submissionId,
+          file_asset_id: file.file_asset_id,
+          source_kind: file.source_kind,
+          created_by: input.actorUserId,
+        },
+        { onConflict: 'submission_id,file_asset_id', ignoreDuplicates: true },
+      );
+      if (error && /client_annual_submission_files|does not exist|schema cache/i.test(error.message ?? '')) {
+        throw badRequest('Annual/capital filing file links require migration 216', 'ANNUAL_CAPITAL_FILING_MIGRATION_PENDING');
+      }
+      assertQueryError(error, 'Failed to link submission file');
+    }),
+  );
 }
 
 async function findAnnualSubmissionForTaxYear(input: {
@@ -910,20 +915,22 @@ export async function fileClientOperationsAnnualReport(input: {
     throw badRequest('Confirm filing a tax year that is not this tab year', yearGuard.code);
   }
   const submittedOn = requiredIsoDate(input.submittedOn, 'submitted_on');
-  const incoming = await uploadIncomingFilingFiles({
-    ctx: input.ctx,
-    orgId,
-    clientId: input.clientId,
-    tabScope: 'annual_report',
-    files: parseIncomingFilingFiles(input.files),
-  });
-  const checklist = await loadChecklistFileLinks({
-    orgId,
-    clientId: input.clientId,
-    tabScope: 'annual_report',
-    taxYear,
-  });
-  const existing = await findAnnualSubmissionForTaxYear({ orgId, clientId: input.clientId, taxYear });
+  const [incoming, checklist, existing] = await Promise.all([
+    uploadIncomingFilingFiles({
+      ctx: input.ctx,
+      orgId,
+      clientId: input.clientId,
+      tabScope: 'annual_report',
+      files: parseIncomingFilingFiles(input.files),
+    }),
+    loadChecklistFileLinks({
+      orgId,
+      clientId: input.clientId,
+      tabScope: 'annual_report',
+      taxYear,
+    }),
+    findAnnualSubmissionForTaxYear({ orgId, clientId: input.clientId, taxYear }),
+  ]);
   let submissionId: string;
   let created = false;
   if (existing) {
@@ -1030,23 +1037,25 @@ export async function fileClientOperationsCapitalDeclaration(input: {
     await completeCapitalDeclarationInstance({ ctx: input.ctx, clientId: input.clientId });
   }
 
-  const incoming = await uploadIncomingFilingFiles({
-    ctx: input.ctx,
-    orgId,
-    clientId: input.clientId,
-    tabScope: 'capital_declaration',
-    files: parseIncomingFilingFiles(input.files),
-  });
-  const checklist = await loadChecklistFileLinks({
-    orgId,
-    clientId: input.clientId,
-    tabScope: 'capital_declaration',
-  });
-  const existingSubmission = await findCapitalSubmissionForInstance({
-    orgId,
-    clientId: input.clientId,
-    instanceId,
-  });
+  const [incoming, checklist, existingSubmission] = await Promise.all([
+    uploadIncomingFilingFiles({
+      ctx: input.ctx,
+      orgId,
+      clientId: input.clientId,
+      tabScope: 'capital_declaration',
+      files: parseIncomingFilingFiles(input.files),
+    }),
+    loadChecklistFileLinks({
+      orgId,
+      clientId: input.clientId,
+      tabScope: 'capital_declaration',
+    }),
+    findCapitalSubmissionForInstance({
+      orgId,
+      clientId: input.clientId,
+      instanceId,
+    }),
+  ]);
   let submissionId: string;
   if (existingSubmission) {
     submissionId = existingSubmission.id;

@@ -11,6 +11,7 @@ import {
 } from './client-operations.service.js';
 import { getClientOperationsClientQuickProfile } from './client-operations-client-quick-profile.service.js';
 import { invalidateClientOperationsRegistryMaterializationCache } from './client-operations-registry-materialization-cache.js';
+import { logClientOperationsTiming } from './client-operations-command-timing.js';
 import {
   executeClientOperationsRegistryCommand,
   type ClientOperationsRegistryCommandBody,
@@ -212,11 +213,30 @@ router.get('/registry', ...withView, async (req, res, next) => {
 });
 
 router.post('/registry/commands', ...withRegistryCommand, async (req, res, next) => {
+  const started = Date.now();
+  const body = (req.body ?? {}) as ClientOperationsRegistryCommandBody;
+  const command = typeof body.command === 'string' ? body.command : 'unknown';
   try {
     const ctx = req.context as RequestContext;
-    const out = await executeClientOperationsRegistryCommand(ctx, (req.body ?? {}) as ClientOperationsRegistryCommandBody);
+    const out = await executeClientOperationsRegistryCommand(ctx, body);
+    logClientOperationsTiming({
+      event: 'registry_named_command',
+      command,
+      duration_ms: Date.now() - started,
+      organization_id: ctx.organizationId ?? null,
+      http_status: 200,
+    });
     return res.json(out);
   } catch (e) {
+    const ctx = req.context as RequestContext | undefined;
+    logClientOperationsTiming({
+      event: 'registry_named_command',
+      command,
+      duration_ms: Date.now() - started,
+      organization_id: ctx?.organizationId ?? null,
+      result: 'failure',
+      http_status: (e as { status?: number } | undefined)?.status ?? 500,
+    });
     next(e);
   }
 });
@@ -433,16 +453,40 @@ router.post('/clients/:clientId/payroll/commands', ...withPayrollEdit, async (re
 });
 
 router.post('/clients/:clientId/annual/commands', ...withAnnualEdit, async (req, res, next) => {
+  const started = Date.now();
+  const body = (req.body ?? {}) as AnnualTabCommandBody;
+  const command = typeof body.type === 'string' ? body.type : 'unknown';
   try {
     const ctx = req.context as RequestContext;
     const clientId = String(req.params.clientId ?? '');
     if (!clientId) return res.status(400).json({ code: 'BAD_REQUEST', message: 'clientId required' });
-    const body = (req.body ?? {}) as AnnualTabCommandBody;
     const feesPv = parseFeesPriceChartView((req.body as { fees_price_chart_view?: unknown })?.fees_price_chart_view);
+    const writeMs = Date.now();
     await executeAnnualTabCommand(ctx, clientId, body);
+    const afterWrite = Date.now();
     const out = await getClientOperationsCase(ctx, clientId, { feesPriceChartView: feesPv });
+    logClientOperationsTiming({
+      event: 'annual_command_with_refreshed_case',
+      command,
+      duration_ms: Date.now() - started,
+      stage_timings: {
+        named_command_ms: afterWrite - writeMs,
+        refreshed_case_ms: Date.now() - afterWrite,
+      },
+      organization_id: ctx.organizationId ?? null,
+      http_status: 200,
+    });
     return res.json(out);
   } catch (e) {
+    const ctx = req.context as RequestContext | undefined;
+    logClientOperationsTiming({
+      event: 'annual_command_with_refreshed_case',
+      command,
+      duration_ms: Date.now() - started,
+      organization_id: ctx?.organizationId ?? null,
+      result: 'failure',
+      http_status: (e as { status?: number } | undefined)?.status ?? 500,
+    });
     next(e);
   }
 });

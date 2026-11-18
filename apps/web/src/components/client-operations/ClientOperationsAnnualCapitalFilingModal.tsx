@@ -147,55 +147,53 @@ export function ClientOperationsAnnualCapitalFilingModal(props: {
               }}
             />
             <div className="nx-co-annual-capital-modal__layout">
-              <section className="nx-co-annual-capital-modal__identity">
-                <div className="nx-co-annual-capital-modal__fact">
-                  <span>{t(filing.modal.client_label_key)}</span>
-                  <strong>{liveRow.client_name ?? liveRow.client_id}</strong>
-                </div>
-                <div className="nx-co-annual-capital-modal__fact">
-                  <span>{dueDateLabel}</span>
-                  <strong>{formatOperationalDateLabel(targetDate, lang)}</strong>
-                </div>
-                {isAnnual && annualFiling ? (
-                  <label className="nx-co-annual-capital-modal__fact">
-                    <span>{t(annualFiling.modal.tax_year_label_key)}</span>
-                    <select
-                      className="nx-co-annual-capital-select"
-                      value={state.taxYear}
-                      disabled={!canSubmit}
-                      onChange={(event) => {
-                        const nextYear = Number(event.currentTarget.value);
-                        const option = annualFiling.modal.tax_year_options.find((row) => row.tax_year === nextYear);
-                        onStateChange({
-                          taxYear: nextYear,
-                          submittedOn: option?.submitted_on ?? '',
-                          confirmOtherTaxYear: nextYear === annualFiling.tab_tax_year ? false : state.confirmOtherTaxYear,
-                        });
-                      }}
-                    >
-                      {annualFiling.modal.tax_year_options.map((option) => (
-                        <option key={option.tax_year} value={option.tax_year}>
-                          {option.tax_year}
-                          {option.is_tab_year ? ` — ${t('clientOperations.registry.reporting.annualCapital.tabYear')}` : ''}
-                          {option.already_filed ? ` — ${t('clientOperations.annual.filedStatus')}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-              </section>
-              <section className="nx-co-annual-capital-modal__date">
-                <ClientOperationsFilingDateField
-                  id="nx-co-annual-capital-filed-on"
-                  label={t(filing.modal.filed_on_label_key)}
-                  value={state.submittedOn}
-                  lang={lang}
-                  dir={dir}
-                  disabled={!canSubmit}
-                  required
-                  onChange={(iso) => onStateChange({ submittedOn: iso })}
-                />
-              </section>
+              <div className="nx-co-annual-capital-modal__fact">
+                <span>{t(filing.modal.client_label_key)}</span>
+                <strong>{liveRow.client_name ?? liveRow.client_id}</strong>
+              </div>
+              <div className="nx-co-annual-capital-modal__fact">
+                <span>{dueDateLabel}</span>
+                <strong>{formatOperationalDateLabel(targetDate, lang)}</strong>
+              </div>
+              <ClientOperationsFilingDateField
+                id="nx-co-annual-capital-filed-on"
+                label={t(filing.modal.filed_on_label_key)}
+                value={state.submittedOn}
+                lang={lang}
+                dir={dir}
+                disabled={!canSubmit}
+                required
+                onChange={(iso) => onStateChange({ submittedOn: iso })}
+              />
+              {isAnnual && annualFiling ? (
+                <label className="nx-co-annual-capital-modal__fact">
+                  <span>{t(annualFiling.modal.tax_year_label_key)}</span>
+                  <select
+                    className="nx-co-annual-capital-select"
+                    value={state.taxYear}
+                    disabled={!canSubmit}
+                    onChange={(event) => {
+                      const nextYear = Number(event.currentTarget.value);
+                      const option = annualFiling.modal.tax_year_options.find((row) => row.tax_year === nextYear);
+                      onStateChange({
+                        taxYear: nextYear,
+                        submittedOn: option?.submitted_on ?? '',
+                        confirmOtherTaxYear: nextYear === annualFiling.tab_tax_year ? false : state.confirmOtherTaxYear,
+                      });
+                    }}
+                  >
+                    {annualFiling.modal.tax_year_options.map((option) => (
+                      <option key={option.tax_year} value={option.tax_year}>
+                        {option.tax_year}
+                        {option.is_tab_year ? ` — ${t('clientOperations.registry.reporting.annualCapital.tabYear')}` : ''}
+                        {option.already_filed ? ` — ${t('clientOperations.annual.filedStatus')}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <div className="nx-co-annual-capital-modal__fact" aria-hidden="true" />
+              )}
             </div>
             {otherYear ? (
               <label className="nx-co-annual-capital-confirm">

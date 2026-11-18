@@ -80,13 +80,13 @@ test('selecting a calendar day yields an ISO date without statutory math', () =>
 });
 
 test('compact Deep Ocean layout keeps client/target on the start side and date on the end side', () => {
-  assert.match(modalSource, /nx-co-annual-capital-modal__identity/);
-  assert.match(modalSource, /nx-co-annual-capital-modal__date/);
+  assert.match(modalSource, /nx-co-annual-capital-modal__layout/);
+  assert.match(modalSource, /ClientOperationsFilingDateField/);
   assert.match(
     modalSource,
-    /nx-co-annual-capital-modal__identity[\s\S]*ClientOperationsFilingDateField/,
+    /client_label_key[\s\S]*dueDateLabel[\s\S]*ClientOperationsFilingDateField[\s\S]*tax_year_label_key/,
   );
-  assert.match(cssSource, /grid-template-columns:\s*minmax\(0,\s*1\.1fr\)\s*minmax\(0,\s*0\.9fr\)/);
+  assert.match(cssSource, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*minmax\(0,\s*1fr\)/);
   assert.match(cssSource, /font-family:\s*Arial, sans-serif/);
   assert.match(cssSource, /\.nx-co-annual-capital-modal \.nx-clients-form__body\s*\{[\s\S]*?flex:\s*0 1 auto/);
   assert.match(modalSource, /tax_year_label_key/);
@@ -123,6 +123,16 @@ test('successful filing still uses named commands then closes on refreshed aggre
 test('switching tax year does not keep the previous submitted date or tab-year files', () => {
   assert.match(modalSource, /submittedOn: option\?\.submitted_on \?\? ''/);
   assert.match(modalSource, /state\.taxYear !== annualFiling\.tab_tax_year \? \[\] : filing\.modal\.files/);
+});
+
+test('annual filing modal is a compact 2x2 Arial grid with white labels', () => {
+  assert.match(cssSource, /\.nx-co-annual-capital-modal__layout\s*\{[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)\s*minmax\(0,\s*1fr\)/);
+  assert.match(cssSource, /@media \(max-width: 560px\)[\s\S]*?\.nx-co-annual-capital-modal__layout[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  assert.match(cssSource, /\.nx-co-annual-capital-modal__fact[\s\S]*?color:\s*#ffffff/);
+  assert.match(cssSource, /\.nx-co-filing-date__label[\s\S]*?font-size:\s*12px/);
+  assert.match(modalSource, /filed_on_label_key/);
+  assert.match(modalSource, /tax_year_label_key/);
+  assert.doesNotMatch(modalSource, /nx-co-annual-capital-modal__identity/);
 });
 
 test('annual first attachment stays form 1301; capital and later files stay additional', () => {
