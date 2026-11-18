@@ -270,6 +270,21 @@ test('capital date command creates an instance instead of requiring one on GET',
   assert.match(slice, /date == null/);
 });
 
+test('annual tax year options treat a missing submitted_on as not filed', async () => {
+  const { buildAnnualTaxYearOptions } = await import(
+    '../../src/domains/client-operations/client-operations-annual-capital-operational.pure.js'
+  );
+  const options = buildAnnualTaxYearOptions({
+    tabTaxYear: 2025,
+    submissions: [
+      { tax_year: 2025, submitted_on: '2026-04-10' },
+      { tax_year: 2024, submitted_on: null },
+    ],
+  });
+  assert.equal(options.find((row) => row.tax_year === 2025)?.already_filed, true);
+  assert.equal(options.find((row) => row.tax_year === 2024)?.already_filed, false);
+});
+
 test('capital file command creates an instance when none exists', () => {
   const serviceSource = readFileSync(
     join(dir, '../../src/domains/client-operations/client-operations-annual-capital-operational.service.ts'),

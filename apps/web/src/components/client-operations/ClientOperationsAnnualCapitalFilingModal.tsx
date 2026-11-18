@@ -84,7 +84,8 @@ export function ClientOperationsAnnualCapitalFilingModal(props: {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   if (!filing) return null;
   const otherYear = isAnnual && annualFiling ? state.taxYear !== annualFiling.tab_tax_year : false;
-  const existingFiles = filing.modal.files;
+  const existingFiles =
+    isAnnual && annualFiling && state.taxYear !== annualFiling.tab_tax_year ? [] : filing.modal.files;
   const targetDate = isAnnual
     ? liveRow.annual_report_cell?.operational_target_date ?? null
     : capitalFiling?.modal.operational_target_date ?? null;
@@ -167,7 +168,7 @@ export function ClientOperationsAnnualCapitalFilingModal(props: {
                         const option = annualFiling.modal.tax_year_options.find((row) => row.tax_year === nextYear);
                         onStateChange({
                           taxYear: nextYear,
-                          submittedOn: option?.submitted_on ?? state.submittedOn,
+                          submittedOn: option?.submitted_on ?? '',
                           confirmOtherTaxYear: nextYear === annualFiling.tab_tax_year ? false : state.confirmOtherTaxYear,
                         });
                       }}

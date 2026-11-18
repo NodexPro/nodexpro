@@ -100,6 +100,8 @@ test('year switch uses in-aggregate year_views and does not reload the client ca
   assert.match(annualSrc, /persistWorkingYear/);
   assert.match(annualSrc, /resolveDisplayedAnnualTaxYear/);
   assert.match(annualSrc, /if \(apply\) onCaseUpdated\(out\)/);
+  assert.match(annualSrc, /isAnnualBoard \? null : annualTab\.filing_status/);
+  assert.match(annualSrc, /annual-tab-filing-status-loading/);
   assert.doesNotMatch(annualSrc, /moduleClientOperationsCase\(/);
 });
 

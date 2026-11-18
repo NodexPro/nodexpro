@@ -4,12 +4,16 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  annualReadinessFromCounts,
   annualTabViewTaxYears,
+  buildAnnualCatalogRowId,
   buildAnnualFilingYearBoard,
   buildAnnualOlderTaxYearOptions,
   buildAnnualYearPresentationFlags,
   checklistFileIdsForFilingYear,
   fileTypeLabelFromMeta,
+  mergeRequiredCatalogRows,
+  parseAnnualCatalogRowId,
   provenYearScopedChecklistFiles,
   resolveCurrentAnnualTaxYear,
   resolveWorkingTaxYear,
@@ -298,7 +302,44 @@ test('GET capital tab loads existing instance folders without seeding a profile'
   const elseIdx = serviceSrc.indexOf('} else {', readOnlyIdx);
   const readOnlyBlock = serviceSrc.slice(readOnlyIdx, elseIdx);
   assert.match(readOnlyBlock, /loadCapitalRequirementFoldersForClient/);
+  assert.match(readOnlyBlock, /buildAnnualFallbackReadModel/);
   assert.doesNotMatch(readOnlyBlock, /ensureProfile\(/);
+  assert.doesNotMatch(readOnlyBlock, /ensureSystemDocumentRows\(/);
+});
+
+test('empty checklist is missing documents, never 100% ready; catalog projects without GET insert', () => {
+  assert.deepEqual(annualReadinessFromCounts({ total: 0, completed: 0 }), {
+    completion_percent: 0,
+    all_complete: false,
+  });
+  assert.equal(annualReadinessFromCounts({ total: 12, completed: 12 }).all_complete, true);
+  const catalogId = buildAnnualCatalogRowId({
+    scope: 'annual_report',
+    systemKey: 'form_106_owner_all_jobs',
+    taxYear: 2026,
+  });
+  assert.equal(catalogId, 'catalog:annual:2026:form_106_owner_all_jobs');
+  assert.deepEqual(parseAnnualCatalogRowId(catalogId), {
+    scope: 'annual_report',
+    systemKey: 'form_106_owner_all_jobs',
+    taxYear: 2026,
+  });
+  const merged = mergeRequiredCatalogRows({
+    templates: [{ system_key: 'bank_accounts_balances' }, { system_key: 'cash' }],
+    persisted: [
+      { system_key: 'cash', source_type: 'system', label: 'persisted' },
+      { system_key: null, source_type: 'custom', label: 'extra' },
+    ],
+    projectMissing: (systemKey) => ({ system_key: systemKey, source_type: 'system', label: `missing:${systemKey}` }),
+  });
+  assert.deepEqual(
+    merged.map((row) => row.label),
+    ['missing:bank_accounts_balances', 'persisted', 'extra'],
+  );
+  assert.match(serviceSrc, /mergeScopeCatalogRows/);
+  assert.match(serviceSrc, /GET is read-only: catalog rows are projected, never inserted/);
+  assert.doesNotMatch(serviceSrc, /total_required === 0 \? 100/);
+  assert.match(serviceSrc, /resolveWritableAnnualDocumentRowId/);
 });
 
 test('annual tab service keeps Core → Commands → Aggregate: named command, refreshed truth, tenant/RBAC/audit/i18n', () => {

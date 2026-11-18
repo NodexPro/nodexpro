@@ -120,6 +120,11 @@ test('successful filing still uses named commands then closes on refreshed aggre
   assert.doesNotMatch(successBranch, /pendingFiles: \[\]/);
 });
 
+test('switching tax year does not keep the previous submitted date or tab-year files', () => {
+  assert.match(modalSource, /submittedOn: option\?\.submitted_on \?\? ''/);
+  assert.match(modalSource, /state\.taxYear !== annualFiling\.tab_tax_year \? \[\] : filing\.modal\.files/);
+});
+
 test('annual first attachment stays form 1301; capital and later files stay additional', () => {
   assert.equal(
     nextAnnualCapitalPendingKind({ filingKind: 'annual_report', hasForm1301: false }),

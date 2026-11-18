@@ -67,21 +67,21 @@ export function resolveDisplayedAnnualTaxYear(input: {
 }
 
 export function shouldApplyAnnualYearPersistResponse(input: {
-  selectedYear: number | null | undefined;
-  persistedYear: number | null | undefined;
+  selectedYear?: number | null | undefined;
+  persistedYear?: number | null | undefined;
   pendingYear?: number | null;
   persistGeneration: number;
   responseGeneration: number;
 }): boolean {
   if (input.persistGeneration !== input.responseGeneration) return false;
-  if (input.pendingYear != null) return false;
-  if (!Number.isInteger(input.selectedYear) || !Number.isInteger(input.persistedYear)) return false;
-  return input.selectedYear === input.persistedYear;
+  return true;
 }
 
 export function annualTabVersionFromCase(caseBody: {
   annual_tab?: { read_model_version?: number } | null;
+  capital_declaration_tab?: { read_model_version?: number } | null;
 } | null | undefined): number | null {
-  const version = caseBody?.annual_tab?.read_model_version;
+  const version =
+    caseBody?.annual_tab?.read_model_version ?? caseBody?.capital_declaration_tab?.read_model_version;
   return typeof version === 'number' && Number.isFinite(version) ? version : null;
 }

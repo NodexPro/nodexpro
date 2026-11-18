@@ -21,7 +21,9 @@ import {
 } from './client-operations-ui-labels.pure.js';
 import {
   annualFilingSubmittedOnByYear,
+  annualReadinessFromCounts,
   annualTabViewTaxYears,
+  buildAnnualCatalogRowId,
   buildAnnualFilingYearBoard,
   buildAnnualFilingYearItem,
   buildAnnualOlderTaxYearOptions,
@@ -29,6 +31,8 @@ import {
   checklistFileIdsForFilingYear,
   fileTypeLabelFromMeta,
   isoDateOnly,
+  mergeRequiredCatalogRows,
+  parseAnnualCatalogRowId,
   parseAnnualWorkingTaxYear,
   isProvenAnnualTaxYear,
   provenYearScopedChecklistFiles,
@@ -677,6 +681,75 @@ function toAnnualDocumentRowDto(
   };
 }
 
+function projectCatalogDocumentRow(input: {
+  scope: AnnualTabScope;
+  template: { system_key: string; document_name_he: string; description_he: string | null; required: boolean };
+  canEdit: boolean;
+  taxYear?: number | null;
+}): AnnualDocumentRowDto {
+  const missing = computeDocumentRowPresentation(false, null);
+  return {
+    row_id: buildAnnualCatalogRowId({
+      scope: input.scope,
+      systemKey: input.template.system_key,
+      taxYear: input.taxYear ?? null,
+    }),
+    source_type: 'system',
+    system_key: input.template.system_key,
+    code: input.template.system_key,
+    label_he: input.template.document_name_he,
+    description_he: input.template.description_he,
+    description_key: ANNUAL_DOCUMENT_DESCRIPTION_KEY[input.template.system_key],
+    required: input.template.required,
+    document_name_he: input.template.document_name_he,
+    document_name_key: annualDocumentNameKey('system', input.template.system_key),
+    received: false,
+    row_note: null,
+    status: missing.status,
+    status_label_he: missing.status_label_he,
+    status_label_key: missing.status_label_key,
+    row_style: missing.row_style,
+    file: { state: 'none', file_asset_id: null, file_name: null },
+    actions: {
+      can_toggle_received: input.canEdit,
+      can_attach_file: input.canEdit,
+      can_remove_file: false,
+      can_edit_row_note: input.canEdit,
+      can_rename_document: false,
+      can_remove_row: false,
+    },
+  };
+}
+
+function mergeScopeCatalogRows(input: {
+  scope: AnnualTabScope;
+  persisted: AnnualDocumentRowDto[];
+  canEdit: boolean;
+  taxYear?: number | null;
+}): AnnualDocumentRowDto[] {
+  return mergeRequiredCatalogRows({
+    templates: systemTemplatesForScope(input.scope),
+    persisted: input.persisted,
+    projectMissing: (systemKey) => {
+      const template = systemTemplatesForScope(input.scope).find((row) => row.system_key === systemKey);
+      if (!template) {
+        return projectCatalogDocumentRow({
+          scope: input.scope,
+          template: { system_key: systemKey, document_name_he: systemKey, description_he: null, required: true },
+          canEdit: input.canEdit,
+          taxYear: input.taxYear,
+        });
+      }
+      return projectCatalogDocumentRow({
+        scope: input.scope,
+        template,
+        canEdit: input.canEdit,
+        taxYear: input.taxYear,
+      });
+    },
+  });
+}
+
 function scopeAnnualDocumentRows(
   rows: AnnualDocumentRowDto[],
   scope: AnnualTabScope,
@@ -825,10 +898,11 @@ function buildAnnualControlState(
   const total_required = rows.length;
   const completed_count = rows.filter((r) => r.status === 'completed').length;
   const missing_documents = rows.filter((r) => r.status !== 'completed').map((r) => r.document_name_he);
-  const completion_percent = total_required === 0 ? 100 : Math.round((completed_count / total_required) * 100);
+  const readiness = annualReadinessFromCounts({ total: total_required, completed: completed_count });
+  const completion_percent = readiness.completion_percent;
 
   const deadline_info = buildAnnualDeadlineInfo(serverNow);
-  const all_complete = total_required === 0 || completed_count === total_required;
+  const all_complete = readiness.all_complete;
   const has_missing = !all_complete;
 
   let status: AnnualControlStatusDto;
@@ -879,40 +953,18 @@ function buildAnnualControlState(
 }
 
 function buildCapitalFallbackReadModel(canEdit: boolean): AnnualTabResponse {
-  const rows: AnnualDocumentRowDto[] = CAPITAL_DECLARATION_SYSTEM_DOCUMENT_TEMPLATES.map((t) => ({
-    row_id: `capital-fallback-${t.system_key}`,
-    source_type: 'system',
-    system_key: t.system_key,
-    code: t.system_key,
-    label_he: t.document_name_he,
-    description_he: t.description_he,
-    description_key: ANNUAL_DOCUMENT_DESCRIPTION_KEY[t.system_key],
-    required: t.required,
-    document_name_he: t.document_name_he,
-    document_name_key: ANNUAL_DOCUMENT_LABEL_KEY[t.system_key],
-    received: false,
-    row_note: null,
-    status: 'missing',
-    status_label_he: 'חסר',
-    status_label_key: ANNUAL_DOC_STATUS_LABEL_KEY.missing,
-    row_style: 'neutral',
-    file: { state: 'none', file_asset_id: null, file_name: null },
-    actions: {
-      can_toggle_received: false,
-      can_attach_file: false,
-      can_remove_file: false,
-      can_edit_row_note: false,
-      can_rename_document: false,
-      can_remove_row: false,
-    },
-  }));
+  const rows = mergeScopeCatalogRows({
+    scope: 'capital_declaration',
+    persisted: [],
+    canEdit,
+  });
   const control = buildAnnualControlState(rows, new Date());
   return {
     tab_key: 'capital_declaration',
     tab_title_he: 'הצהרת הון',
     title_key: ANNUAL_TAB_TITLE_KEY.capital_declaration,
     read_model_version: 1,
-    permissions: { can_view: true, can_edit: canEdit && false },
+    permissions: { can_view: true, can_edit: canEdit },
     status: control.status,
     missing_documents: control.missing_documents,
     completion_percent: control.completion_percent,
@@ -941,7 +993,7 @@ function buildCapitalFallbackReadModel(canEdit: boolean): AnnualTabResponse {
       empty_state_key: 'clientOperations.annual.emptyDocuments',
       add_custom_label_he: 'הוסף מסמך',
       add_custom_label_key: 'clientOperations.annual.addDocument',
-      add_custom_enabled: false,
+      add_custom_enabled: canEdit,
       summary: {
         total_label_he: 'סה״כ מסמכים',
         total_count: rows.length,
@@ -962,7 +1014,7 @@ function buildCapitalFallbackReadModel(canEdit: boolean): AnnualTabResponse {
       empty_state_key: 'clientOperations.annual.emptyRecords',
       add_row_label_he: 'הוסף תאריך הגשה',
       add_row_label_key: 'clientOperations.annual.addSubmissionDate',
-      add_row_enabled: false,
+      add_row_enabled: canEdit,
       rows: [],
     },
     notes_card: {
@@ -973,10 +1025,10 @@ function buildCapitalFallbackReadModel(canEdit: boolean): AnnualTabResponse {
       placeholder_key: 'clientOperations.annual.capitalNotesPlaceholder',
       save_label_he: 'שמירת הערות',
       save_label_key: 'clientOperations.annual.saveNotes',
-      edit_enabled: false,
+      edit_enabled: canEdit,
     },
     workspace_actions: [
-      { action_key: 'upload_document', label_he: 'הוסף מסמך', label_key: 'clientOperations.annual.addDocument', enabled: false },
+      { action_key: 'upload_document', label_he: 'הוסף מסמך', label_key: 'clientOperations.annual.addDocument', enabled: canEdit },
       { action_key: 'copy_previous', label_he: 'העתק הצהרת הון קודמת', label_key: 'clientOperations.annual.copyPreviousCapital', enabled: false },
     ],
     file_open_path_template: `/m/client-operations/clients/{clientId}/annual/files/{fileAssetId}/open`,
@@ -999,6 +1051,149 @@ function buildCapitalFallbackReadModel(canEdit: boolean): AnnualTabResponse {
     },
     documents_year_heading_label_key: 'clientOperations.annual.documentsForTaxYear',
     year_views: [],
+    year_folders: [],
+    capital_folders: [],
+  };
+}
+
+function buildAnnualFallbackReadModel(canEdit: boolean): AnnualTabResponse {
+  const currentTaxYear = resolveCurrentAnnualTaxYear();
+  const filing_years = buildAnnualFilingYearBoard({
+    currentTaxYear,
+    workingTaxYear: currentTaxYear,
+    canEdit,
+    submissions: [],
+  });
+  const older_tax_years = buildAnnualOlderTaxYearOptions({
+    currentTaxYear,
+    workingTaxYear: currentTaxYear,
+    canEdit,
+    boardYears: filing_years.map((row) => row.tax_year),
+  });
+  const serverNow = new Date();
+  const year_views = filing_years.flatMap((board) => {
+    const flags = buildAnnualYearPresentationFlags({
+      tax_year: board.tax_year,
+      filed: board.filed,
+      submitted_on: board.submitted_on,
+      canEdit,
+    });
+    if (!flags) return [];
+    const rows = mergeScopeCatalogRows({
+      scope: 'annual_report',
+      persisted: [],
+      canEdit: canEdit && !flags.filed,
+      taxYear: board.tax_year,
+    });
+    return [
+      buildAnnualYearView({
+        board,
+        flags,
+        rows,
+        scope: 'annual_report',
+        canEdit,
+        updatedDisplayHe: '—',
+        serverNow,
+      }),
+    ];
+  });
+  const workingView = year_views.find((view) => view.is_working) ?? year_views[0] ?? null;
+  const workingRows = workingView?.documents_table.rows ?? mergeScopeCatalogRows({
+    scope: 'annual_report',
+    persisted: [],
+    canEdit,
+    taxYear: currentTaxYear,
+  });
+  const control = workingView
+    ? {
+        status: workingView.status,
+        missing_documents: workingView.missing_documents,
+        completion_percent: workingView.completion_percent,
+        deadline_info: workingView.deadline_info,
+        risk_indicator: {
+          label_he: workingView.status.color === 'green' ? 'ללא סיכון' : workingView.status.color === 'red' ? 'סיכון גבוה' : 'סיכון בינוני',
+          label_key:
+            workingView.status.color === 'green'
+              ? 'clientOperations.annual.riskNone'
+              : workingView.status.color === 'red'
+                ? 'clientOperations.annual.riskHigh'
+                : 'clientOperations.annual.riskMedium',
+        },
+        missing_documents_section_title_he: 'חסרים מסמכים',
+      }
+    : buildAnnualControlState(workingRows, serverNow);
+  return {
+    tab_key: 'annual_report',
+    tab_title_he: 'דוח שנתי',
+    title_key: ANNUAL_TAB_TITLE_KEY.annual_report,
+    read_model_version: 1,
+    permissions: { can_view: true, can_edit: canEdit },
+    status: control.status,
+    missing_documents: control.missing_documents,
+    completion_percent: control.completion_percent,
+    deadline_info: control.deadline_info,
+    control_block: {
+      days_left_caption_he: 'ימים נותרו להגשה',
+      progress_caption_he: 'התקבלו / סה״כ מסמכים',
+      progress_received_total_he: `0 / ${workingRows.length}`,
+    },
+    risk_indicator: control.risk_indicator,
+    missing_documents_section_title_he: control.missing_documents_section_title_he,
+    missing_documents_section_title_key: 'clientOperations.annual.missingDocuments',
+    status_card_title_he: 'סטטוס דוח שנתי',
+    status_card_title_key: 'clientOperations.annual.statusCard',
+    meta: {
+      updated_last_label_he: 'עודכן לאחרונה:',
+      updated_last_display_he: '—',
+      updated_by_label_he: 'מאת:',
+      updated_by_display_he: '—',
+    },
+    visibility: { show_documents: true, show_submissions: true, show_notes: true },
+    documents_table: buildAnnualDocumentsTable('annual_report', workingRows, canEdit, '—'),
+    submissions_table: {
+      card_title_he: 'תאריכי הגשת דוחות שנתיים קודמים',
+      column_headers_he: ['שנת מס', 'תאריך הגשה', 'סטטוס', 'דוח', 'פעולות'],
+      column_header_keys: ANNUAL_SUB_COLUMN_HEADER_KEYS,
+      empty_state_he: 'אין רשומות',
+      empty_state_key: 'clientOperations.annual.emptyRecords',
+      add_row_label_he: 'הוסף תאריך הגשה',
+      add_row_label_key: 'clientOperations.annual.addSubmissionDate',
+      add_row_enabled: canEdit,
+      rows: [],
+    },
+    notes_card: {
+      card_title_he: 'הערות',
+      card_title_key: 'clientOperations.annual.notesCard',
+      notes: null,
+      placeholder_he: 'הערות כלליות לדוח השנתי…',
+      placeholder_key: 'clientOperations.annual.notesPlaceholder',
+      save_label_he: 'שמירת הערות',
+      save_label_key: 'clientOperations.annual.saveNotes',
+      edit_enabled: canEdit,
+    },
+    workspace_actions: [
+      { action_key: 'upload_document', label_he: 'הוסף מסמך', label_key: 'clientOperations.annual.addDocument', enabled: canEdit },
+    ],
+    file_open_path_template: `/m/client-operations/clients/{clientId}/annual/files/{fileAssetId}/open`,
+    current_tax_year: currentTaxYear,
+    working_tax_year: currentTaxYear,
+    document_readiness: control.status,
+    filing_status: workingView?.filing_status ?? {
+      filed: false,
+      code: 'not_filed',
+      label_key: 'clientOperations.annual.notFiledStatus',
+      submitted_on: null,
+    },
+    filing_years,
+    older_tax_years,
+    older_tax_year_select: {
+      visible: older_tax_years.length > 0,
+      can_select: canEdit && older_tax_years.some((row) => row.can_select),
+      label_key: 'clientOperations.annual.olderTaxYear',
+      placeholder_key: 'clientOperations.annual.selectOlderTaxYear',
+    },
+    documents_year_heading_label_key: 'clientOperations.annual.documentsForTaxYear',
+    year_views,
     year_folders: [],
     capital_folders: [],
   };
@@ -1429,6 +1624,7 @@ async function auditAnnual(ctx: RequestContext, orgId: string, clientId: string,
   });
 }
 
+/** GET is read-only: catalog rows are projected, never inserted. */
 export async function getAnnualTabReadModel(
   ctx: RequestContext,
   clientId: string,
@@ -1450,39 +1646,7 @@ export async function getAnnualTabReadModel(
             ...buildCapitalFallbackReadModel(canEditEarly),
             capital_folders: await loadCapitalRequirementFoldersForClient({ orgId, clientId }),
           }
-        : (() => {
-            const currentTaxYear = resolveCurrentAnnualTaxYear();
-            const fallback = buildCapitalFallbackReadModel(canEditEarly);
-            const filing_years = buildAnnualFilingYearBoard({
-              currentTaxYear,
-              workingTaxYear: currentTaxYear,
-              canEdit: false,
-              submissions: [],
-            });
-            return {
-              ...fallback,
-              tab_key: 'annual_report' as const,
-              tab_title_he: 'דוח שנתי',
-              status_card_title_he: 'סטטוס דוח שנתי',
-              status_card_title_key: 'clientOperations.annual.statusCard',
-              current_tax_year: currentTaxYear,
-              working_tax_year: currentTaxYear,
-              filing_years,
-              older_tax_years: buildAnnualOlderTaxYearOptions({
-                currentTaxYear,
-                workingTaxYear: currentTaxYear,
-                canEdit: false,
-                boardYears: filing_years.map((row) => row.tax_year),
-              }),
-              older_tax_year_select: {
-                visible: true,
-                can_select: false,
-                label_key: 'clientOperations.annual.olderTaxYear',
-                placeholder_key: 'clientOperations.annual.selectOlderTaxYear',
-              },
-              documents_year_heading_label_key: 'clientOperations.annual.documentsForTaxYear',
-            };
-          })();
+        : buildAnnualFallbackReadModel(canEditEarly);
     }
     prof = existing;
   } else {
@@ -1572,7 +1736,12 @@ export async function getAnnualTabReadModel(
       canEdit,
     ),
   );
-  const scopedRows = scopeAnnualDocumentRows(rows, scope, scoped);
+  const scopedRows = mergeScopeCatalogRows({
+    scope,
+    persisted: scopeAnnualDocumentRows(rows, scope, scoped),
+    canEdit,
+    taxYear: scope === 'annual_report' ? workingTaxYear : null,
+  });
 
   const scopedSubRows = ((subRows ?? []) as Array<Record<string, unknown>>).filter((raw) => {
     if (scoped) return true;
@@ -1681,27 +1850,32 @@ export async function getAnnualTabReadModel(
             ((docRows ?? []) as Array<Record<string, unknown> & { tax_year?: number | null }>),
             { yearColumnSupported, workingTaxYear: board.tax_year, tabScope: scope },
           );
-          const yearRows = scopeAnnualDocumentRows(
-            yearRaw.map((raw) =>
-              toAnnualDocumentRowDto(
-                raw as {
-                  id: string;
-                  source_type: string;
-                  system_key: string | null;
-                  document_name_he: string;
-                  description_he: string | null;
-                  required: boolean | null;
-                  received: boolean;
-                  row_note: string | null;
-                  file_asset_id: string | null;
-                },
-                fileMetaById,
-                canEdit && !flags.filed,
-              ),
-            ),
+          const yearRows = mergeScopeCatalogRows({
             scope,
-            scoped,
-          );
+            persisted: scopeAnnualDocumentRows(
+              yearRaw.map((raw) =>
+                toAnnualDocumentRowDto(
+                  raw as {
+                    id: string;
+                    source_type: string;
+                    system_key: string | null;
+                    document_name_he: string;
+                    description_he: string | null;
+                    required: boolean | null;
+                    received: boolean;
+                    row_note: string | null;
+                    file_asset_id: string | null;
+                  },
+                  fileMetaById,
+                  canEdit && !flags.filed,
+                ),
+              ),
+              scope,
+              scoped,
+            ),
+            canEdit: canEdit && !flags.filed,
+            taxYear: board.tax_year,
+          });
           return [
             buildAnnualYearView({
               board,
@@ -1916,6 +2090,43 @@ async function fetchDocumentRow(orgId: string, clientId: string, rowId: string, 
   return (data as Record<string, unknown>) ?? null;
 }
 
+async function resolveWritableAnnualDocumentRowId(input: {
+  orgId: string;
+  clientId: string;
+  rowId: string;
+  scope: AnnualTabScope;
+  workingTaxYear: number;
+  yearColumnSupported: boolean;
+}): Promise<string> {
+  const rowId = String(input.rowId ?? '').trim();
+  if (!rowId) throw badRequest('row_id נדרש');
+  const catalog = parseAnnualCatalogRowId(rowId);
+  if (!catalog) return rowId;
+  if (catalog.scope !== input.scope) throw badRequest('שורה לא נמצאה');
+  const taxYear = catalog.taxYear ?? input.workingTaxYear;
+  await ensureSystemDocumentRows(input.orgId, input.clientId, input.scope, {
+    workingTaxYear: taxYear,
+    yearColumnSupported: input.yearColumnSupported,
+  });
+  const scoped = await supportsAnnualScopeColumns();
+  let q = supabaseAdmin
+    .from('client_annual_document_rows')
+    .select('id')
+    .eq('organization_id', input.orgId)
+    .eq('client_id', input.clientId)
+    .eq('source_type', 'system')
+    .eq('system_key', catalog.systemKey);
+  if (scoped) q = q.eq('tab_scope', input.scope);
+  if (input.yearColumnSupported && input.scope === 'annual_report' && isProvenAnnualTaxYear(catalog.taxYear)) {
+    q = q.eq('tax_year', catalog.taxYear);
+  }
+  const { data, error } = await q.maybeSingle();
+  if (error) throw annualDbError('catalog row resolve failed', error);
+  const id = data ? String((data as { id: string }).id) : '';
+  if (!id) throw badRequest('שורה לא נמצאה');
+  return id;
+}
+
 export async function assertAnnualReportFileOpenAllowed(
   orgId: string,
   clientId: string,
@@ -2113,6 +2324,15 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
   await assertExpectedVersion(orgId, clientId, expected, scope);
   const payload = asObj(body.payload);
   const cmd = body.type as AnnualAnnualCommandType;
+  const resolveRowId = (rowId: string) =>
+    resolveWritableAnnualDocumentRowId({
+      orgId,
+      clientId,
+      rowId,
+      scope,
+      workingTaxYear,
+      yearColumnSupported,
+    });
 
   switch (cmd) {
     case 'add_annual_document_row': {
@@ -2143,8 +2363,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
       break;
     }
     case 'update_annual_document_row': {
-      const rowId = String(payload.row_id ?? '');
-      if (!rowId) throw badRequest('row_id נדרש');
+      const rowId = await resolveRowId(String(payload.row_id ?? ''));
       const row = await fetchDocumentRow(orgId, clientId, rowId, scope);
       if (!row) throw badRequest('שורה לא נמצאה');
       const isCustom = String(row.source_type) === 'custom';
@@ -2174,8 +2393,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
       break;
     }
     case 'remove_annual_document_row': {
-      const rowId = String(payload.row_id ?? '');
-      if (!rowId) throw badRequest('row_id נדרש');
+      const rowId = await resolveRowId(String(payload.row_id ?? ''));
       const row = await fetchDocumentRow(orgId, clientId, rowId, scope);
       if (!row) throw badRequest('שורה לא נמצאה');
       if (String(row.source_type) !== 'custom') throw badRequest('לא ניתן למחוק שורת מערכת');
@@ -2191,8 +2409,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
       break;
     }
     case 'toggle_annual_document_received': {
-      const rowId = String(payload.row_id ?? '');
-      if (!rowId) throw badRequest('row_id נדרש');
+      const rowId = await resolveRowId(String(payload.row_id ?? ''));
       const received = payload.received === true || payload.received === 'yes' || payload.received === 'כן';
       const { error } = await supabaseAdmin
         .from('client_annual_document_rows')
@@ -2206,9 +2423,9 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
       break;
     }
     case 'attach_annual_document_file': {
-      const rowId = String(payload.row_id ?? '');
+      const rowId = await resolveRowId(String(payload.row_id ?? ''));
       const fileAssetId = String(payload.file_asset_id ?? '');
-      if (!rowId || !fileAssetId) throw badRequest('row_id וקובץ נדרשים');
+      if (!fileAssetId) throw badRequest('row_id וקובץ נדרשים');
       await assertAnnualReportFileOpenAllowed(orgId, clientId, fileAssetId, scope);
       const { error } = await supabaseAdmin
         .from('client_annual_document_rows')
@@ -2222,8 +2439,7 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
       break;
     }
     case 'remove_annual_document_file': {
-      const rowId = String(payload.row_id ?? '');
-      if (!rowId) throw badRequest('row_id נדרש');
+      const rowId = await resolveRowId(String(payload.row_id ?? ''));
       const { error } = await supabaseAdmin
         .from('client_annual_document_rows')
         .update({ file_asset_id: null })

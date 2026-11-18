@@ -285,6 +285,61 @@ export type AnnualYearPresentationFlags = {
   open_archive_label_key: string;
 };
 
+export type AnnualCatalogRowRef = {
+  scope: 'annual_report' | 'capital_declaration';
+  systemKey: string;
+  taxYear: number | null;
+};
+
+export function buildAnnualCatalogRowId(input: AnnualCatalogRowRef): string {
+  if (input.scope === 'annual_report' && isProvenAnnualTaxYear(input.taxYear)) {
+    return `catalog:annual:${input.taxYear}:${input.systemKey}`;
+  }
+  return `catalog:capital:${input.systemKey}`;
+}
+
+export function parseAnnualCatalogRowId(rowId: string): AnnualCatalogRowRef | null {
+  const value = String(rowId ?? '').trim();
+  const annual = /^catalog:annual:(\d{4}):([a-z0-9_]+)$/i.exec(value);
+  if (annual) {
+    const taxYear = Number(annual[1]);
+    if (!isProvenAnnualTaxYear(taxYear) || !annual[2]) return null;
+    return { scope: 'annual_report', systemKey: annual[2], taxYear };
+  }
+  const capital = /^catalog:capital:([a-z0-9_]+)$/i.exec(value);
+  if (!capital?.[1]) return null;
+  return { scope: 'capital_declaration', systemKey: capital[1], taxYear: null };
+}
+
+export function mergeRequiredCatalogRows<T extends { system_key: string | null; source_type: string }>(input: {
+  templates: ReadonlyArray<{ system_key: string }>;
+  persisted: readonly T[];
+  projectMissing: (systemKey: string) => T;
+}): T[] {
+  const byKey = new Map<string, T>();
+  for (const row of input.persisted) {
+    const key = String(row.system_key ?? '').trim();
+    if (row.source_type === 'system' && key && !byKey.has(key)) byKey.set(key, row);
+  }
+  const systemRows = input.templates.map((template) => byKey.get(template.system_key) ?? input.projectMissing(template.system_key));
+  const customRows = input.persisted.filter((row) => row.source_type === 'custom');
+  return [...systemRows, ...customRows];
+}
+
+/** Empty checklist is missing documents, never 100% ready / filed-looking green. */
+export function annualReadinessFromCounts(input: { total: number; completed: number }): {
+  completion_percent: number;
+  all_complete: boolean;
+} {
+  const total = Math.max(0, input.total);
+  const completed = Math.max(0, input.completed);
+  if (total <= 0) return { completion_percent: 0, all_complete: false };
+  return {
+    completion_percent: Math.round((completed / total) * 100),
+    all_complete: completed >= total,
+  };
+}
+
 export function buildAnnualYearPresentationFlags(input: {
   tax_year: number;
   filed: boolean;

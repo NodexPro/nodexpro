@@ -199,6 +199,7 @@ export function ClientAnnualReportTab({
     extraYears,
   });
   selectedYearRef.current = displayedYear;
+  const isAnnualBoard = annualTab.tab_key === 'annual_report';
   const yearView =
     yearViews.find((view) => view.tax_year === displayedYear) ??
     (displayedYear != null
@@ -210,6 +211,8 @@ export function ClientAnnualReportTab({
         })
       : null);
   const yearContentPending = Boolean(
+    isAnnualBoard && displayedYear != null && !yearView,
+  ) || Boolean(
     displayedYear != null &&
       yearView?.visibility.show_working_checklist &&
       (yearView.documents_table.rows?.length ?? 0) === 0 &&
@@ -348,7 +351,7 @@ export function ClientAnnualReportTab({
         body: JSON.stringify({
           type: commandType,
           payload,
-          expected_version: annualTab.read_model_version,
+          expected_version: expectedVersionRef.current,
           tab_scope: annualTab.tab_key,
         }),
       });
@@ -364,16 +367,17 @@ export function ClientAnnualReportTab({
     await postCmd('update_annual_notes', { notes: notesDraft });
   };
 
-  const activeDocuments = yearView?.documents_table ?? annualTab.documents_table;
-  const showChecklist = yearView ? yearView.visibility.show_working_checklist : annualTab.visibility.show_documents;
-  const showMissingProblem = yearView ? yearView.visibility.show_missing_as_active_problem : true;
-  const showReadiness = yearView ? yearView.visibility.show_document_readiness : true;
-  const showDeadline = yearView ? yearView.visibility.show_deadline : true;
+  const annualYearReady = !isAnnualBoard || yearView != null;
+  const activeDocuments = yearView?.documents_table ?? (isAnnualBoard ? { ...annualTab.documents_table, rows: [] } : annualTab.documents_table);
+  const showChecklist = annualYearReady && (yearView ? yearView.visibility.show_working_checklist : annualTab.visibility.show_documents);
+  const showMissingProblem = annualYearReady && (yearView ? yearView.visibility.show_missing_as_active_problem : true);
+  const showReadiness = annualYearReady && (yearView ? yearView.visibility.show_document_readiness : true);
+  const showDeadline = annualYearReady && (yearView ? yearView.visibility.show_deadline : true);
   const showFiledConfirmation = yearView?.visibility.show_filed_confirmation === true;
-  const filingStatus = yearView?.filing_status ?? annualTab.filing_status;
-  const documentReadiness = yearView?.document_readiness ?? annualTab.document_readiness ?? annualTab.status;
-  const completionPercent = yearView?.completion_percent ?? annualTab.completion_percent;
-  const missingRows = (yearView?.documents_table.rows ?? annualTab.documents_table.rows).filter(
+  const filingStatus = yearView?.filing_status ?? (isAnnualBoard ? null : annualTab.filing_status);
+  const documentReadiness = yearView?.document_readiness ?? (isAnnualBoard ? null : annualTab.document_readiness ?? annualTab.status);
+  const completionPercent = yearView?.completion_percent ?? (annualYearReady ? annualTab.completion_percent : 0);
+  const missingRows = (yearView?.documents_table.rows ?? (isAnnualBoard ? [] : annualTab.documents_table.rows)).filter(
     (row) => row.status !== 'completed',
   );
   const docHeaders = activeDocuments.column_headers_he;
@@ -456,14 +460,18 @@ export function ClientAnnualReportTab({
               {t(filingStatus.label_key)}
               {filingStatus.submitted_on ? ` · ${filingStatus.submitted_on}` : ''}
             </p>
-          ) : (
+          ) : yearContentPending ? (
+            <p className="nx-annual-year-loading" role="status" data-testid="annual-tab-filing-status-loading">
+              {t('clientOperations.annual.yearContentLoading')}
+            </p>
+          ) : !isAnnualBoard ? (
             <div className="nx-annual-dash-status-row">
               <span className={`nx-annual-dash-dot nx-annual-dash-dot--${annualTab.status.color}`} aria-hidden />
               <span className={`nx-annual-dash-status-label nx-annual-dash-status-label--${annualTab.status.color}`}>
                 {localizeSystemLabel(t, annualTab.status.label_key, annualTab.status.label_he)}
               </span>
             </div>
-          )}
+          ) : null}
           {showFiledConfirmation && yearView?.filed_confirmation ? (
             <div className="nx-annual-filed-confirm" data-testid="annual-tab-filed-confirmation">
               <p>{t(yearView.filed_confirmation.label_key)}</p>
@@ -482,7 +490,7 @@ export function ClientAnnualReportTab({
               ) : null}
             </div>
           ) : null}
-          {showReadiness ? (
+          {showReadiness && documentReadiness ? (
           <p
             className="nx-annual-readiness"
             data-testid="annual-tab-document-readiness"
@@ -561,7 +569,7 @@ export function ClientAnnualReportTab({
             aria-label={t('clientOperations.annual.completeDocuments')}
           >
             <div
-              className={`nx-annual-dash-progress-fill nx-annual-dash-progress-fill--${documentReadiness.color}`}
+              className={`nx-annual-dash-progress-fill nx-annual-dash-progress-fill--${documentReadiness?.color ?? 'yellow'}`}
               style={{ width: `${completionPercent}%` }}
             />
           </div>

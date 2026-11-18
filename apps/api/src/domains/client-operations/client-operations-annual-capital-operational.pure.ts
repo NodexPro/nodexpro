@@ -196,7 +196,7 @@ export function buildAnnualTaxYearOptions(input: {
     .map((tax_year) => ({
       tax_year,
       is_tab_year: tax_year === input.tabTaxYear,
-      already_filed: byYear.has(tax_year),
+      already_filed: Boolean(byYear.get(tax_year)),
       submitted_on: byYear.get(tax_year) ?? null,
     }));
 }

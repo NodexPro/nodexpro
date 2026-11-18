@@ -73,7 +73,7 @@ test('switching 2026 → 2024 → 2025 keeps the selected tab; a late 2024 persi
       persistGeneration: 1,
       responseGeneration: 1,
     }),
-    false,
+    true,
   );
   assert.equal(
     shouldApplyAnnualYearPersistResponse({
