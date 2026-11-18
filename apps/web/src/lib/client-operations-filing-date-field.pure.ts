@@ -46,6 +46,14 @@ export function formatFilingDateDisplay(iso: string | null | undefined, lang: st
   }).format(new Date(Date.UTC(parsed.year, parsed.month - 1, parsed.day)));
 }
 
+export function displayedPendingIsoDate(input: {
+  confirmed: string | null | undefined;
+  pending: string | null | undefined;
+}): string {
+  if (typeof input.pending === 'string') return input.pending;
+  return String(input.confirmed ?? '');
+}
+
 export function formatOperationalDateLabel(value: string | null | undefined, lang: string): string {
   if (!value || !value.trim()) return '—';
   const iso = value.trim().slice(0, 10);

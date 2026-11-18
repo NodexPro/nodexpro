@@ -28,9 +28,11 @@ export function ClientOperationsFilingDateField(props: {
   dir: 'rtl' | 'ltr';
   disabled?: boolean;
   required?: boolean;
+  pending?: boolean;
+  calendarClassName?: string;
   onChange: (iso: string) => void;
 }) {
-  const { id, label, value, lang, dir, disabled, required, onChange } = props;
+  const { id, label, value, lang, dir, disabled, required, pending, calendarClassName, onChange } = props;
   const parsed = parseIsoDate(value);
   const today = new Date();
   const initial = parsed ?? { year: today.getFullYear(), month: today.getMonth() + 1, day: today.getDate() };
@@ -107,7 +109,7 @@ export function ClientOperationsFilingDateField(props: {
         ref={anchorRef}
         id={id}
         type="button"
-        className="nx-co-filing-date__control"
+        className={`nx-co-filing-date__control${pending ? ' is-pending' : ''}`}
         disabled={disabled}
         aria-haspopup="dialog"
         aria-expanded={open}
@@ -127,7 +129,7 @@ export function ClientOperationsFilingDateField(props: {
         ? createPortal(
             <div
               ref={popoverRef}
-              className="nx-co-filing-calendar"
+              className={`nx-co-filing-calendar${calendarClassName ? ` ${calendarClassName}` : ''}`}
               role="dialog"
               dir={dir}
               aria-label={label}

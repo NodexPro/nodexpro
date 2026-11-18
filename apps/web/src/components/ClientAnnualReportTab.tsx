@@ -19,7 +19,9 @@ import {
   shouldApplyAnnualYearPersistResponse,
 } from '../lib/client-operations-annual-year-cache.pure';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
+import { displayedPendingIsoDate } from '../lib/client-operations-filing-date-field.pure';
 import type { AnnualDocumentRowDto, AnnualSubmissionRowDto, AnnualTabModel } from './annual-tab-types';
+import { ClientOperationsFilingDateField } from './client-operations/ClientOperationsFilingDateField';
 import { WorkspaceNestedDialogClose } from './WorkspaceNestedDialogClose';
 
 function annualDocLabel(t: (key: string) => string, row: AnnualDocumentRowDto): string {
@@ -75,7 +77,8 @@ function IconTrash() {
 
 function statusBadgeClass(row: AnnualDocumentRowDto, capital: boolean): string {
   if (capital && row.receipt_mark === 'cyan_check') return 'nx-annual-status-badge nx-annual-status-received';
-  if (capital && row.status === 'missing') return 'nx-annual-status-badge nx-annual-status-missing-alert';
+  if (capital && row.show_missing_badge) return 'nx-annual-status-badge nx-annual-status-missing-alert';
+  if (capital) return '';
   if (row.status === 'completed') return 'nx-annual-status-badge nx-annual-status-done';
   if (row.status === 'missing') return 'nx-annual-status-badge nx-annual-status-missing';
   return 'nx-annual-status-badge nx-annual-status-warn';
@@ -112,7 +115,8 @@ export function ClientAnnualReportTab({
   annualTab: AnnualTabModel;
   onCaseUpdated: (next: ClientOperationsCaseResponse) => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const dir = lang === 'he' ? 'rtl' : 'ltr';
   const auth = useAuth();
   const organizationId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
   const boardYears = annualTab.filing_years ?? [];
@@ -135,6 +139,9 @@ export function ClientAnnualReportTab({
     }),
   );
   const [archiveOpenKey, setArchiveOpenKey] = useState<string | null>(null);
+  const [pendingDueDate, setPendingDueDate] = useState<string | null>(null);
+  const [historyOpenKey, setHistoryOpenKey] = useState<string | null>(null);
+  const capitalDateGenRef = useRef(0);
   const [yearPersistPending, setYearPersistPending] = useState(false);
   const yearCacheRef = useRef(new Map<string, (typeof yearViews)[number]>());
   const persistGenRef = useRef(0);
@@ -159,6 +166,8 @@ export function ClientAnnualReportTab({
   useEffect(() => {
     workingYearRef.current = annualTab.working_tax_year ?? null;
     expectedVersionRef.current = annualTab.read_model_version;
+    setPendingDueDate(null);
+    setHistoryOpenKey(null);
     setSelectedYear(
       resolveDisplayedAnnualTaxYear({
         selectedYear: null,
@@ -168,6 +177,13 @@ export function ClientAnnualReportTab({
       }),
     );
   }, [clientId]);
+
+  useEffect(() => {
+    const confirmed = annualTab.assigned_due_date ?? '';
+    if (pendingDueDate != null && pendingDueDate === confirmed) {
+      setPendingDueDate(null);
+    }
+  }, [annualTab.assigned_due_date, annualTab.read_model_version, pendingDueDate]);
 
   useEffect(() => {
     setSelectedYear((current) =>
@@ -248,6 +264,34 @@ export function ClientAnnualReportTab({
       setErr(userFacingApiMessage(e));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const assignCapitalDueDate = async (iso: string) => {
+    if (!iso || iso === (annualTab.assigned_due_date ?? '') && pendingDueDate == null) return;
+    const gen = ++capitalDateGenRef.current;
+    setPendingDueDate(iso);
+    setErr('');
+    try {
+      const out = await apiJson<ClientOperationsCaseResponse>(moduleClientOperationsAnnualCommands(clientId), {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'set_capital_declaration_operational_target_date',
+          payload: {
+            operational_target_date: iso,
+            operational_period_key: annualTab.capital_workspace?.working_panel.operational_period_key,
+          },
+          expected_version: expectedVersionRef.current,
+          tab_scope: annualTab.tab_key,
+        }),
+      });
+      if (gen !== capitalDateGenRef.current) return;
+      applyReturnedVersion(out);
+      onCaseUpdated(out);
+    } catch (e) {
+      if (gen !== capitalDateGenRef.current) return;
+      setPendingDueDate(null);
+      setErr(userFacingApiMessage(e));
     }
   };
 
@@ -492,6 +536,109 @@ export function ClientAnnualReportTab({
             {t('clientOperations.annual.yearContentLoading')}
           </p>
         ) : null}
+      {!isAnnualBoard ? (
+        <div className="nx-annual-dashboard nx-capital-top-panels" data-testid="capital-tab-top-panels">
+          <article className="nx-annual-dash-card nx-capital-ready-panel" data-testid="capital-tab-ready-panel">
+            <h3 className="nx-annual-dash-card-title">
+              {t(annualTab.capital_workspace?.working_panel.title_key ?? 'clientOperations.annual.readyForNewCapital')}
+            </h3>
+            <ClientOperationsFilingDateField
+              id={`capital-due-date-${clientId}`}
+              label={t(annualTab.capital_workspace?.working_panel.date_field_label_key ?? 'clientOperations.annual.assignCapitalDueDate')}
+              value={displayedPendingIsoDate({
+                confirmed: annualTab.assigned_due_date ?? annualTab.capital_workspace?.working_panel.assigned_due_date,
+                pending: pendingDueDate,
+              })}
+              lang={lang}
+              dir={dir}
+              disabled={!annualTab.permissions.can_edit || !(annualTab.capital_workspace?.working_panel.can_assign_due_date ?? annualTab.permissions.can_edit)}
+              pending={pendingDueDate != null}
+              calendarClassName="nx-capital-tab-calendar"
+              onChange={(iso) => void assignCapitalDueDate(iso)}
+            />
+            {annualTab.visibility.show_working_status && annualTab.status.label_key ? (
+              <div className="nx-annual-dash-status-row" data-testid="annual-tab-capital-status">
+                <span className={`nx-annual-status-chip nx-annual-status-chip--${annualTab.status.color}`}>
+                  {localizeSystemLabel(t, annualTab.status.label_key, annualTab.status.label_he)}
+                </span>
+              </div>
+            ) : null}
+            {showDeadline ? (
+              <div className="nx-annual-dash-deadline">
+                <IconCalendarSmall />
+                <span>
+                  {annualTab.deadline_info.is_overdue
+                    ? t('clientOperations.annual.late')
+                    : fillI18n(t('clientOperations.annual.daysLeftToFile'), { n: annualTab.deadline_info.days_left })}
+                </span>
+              </div>
+            ) : null}
+          </article>
+          <article className="nx-annual-dash-card nx-capital-history-panel" data-testid="capital-tab-history-panel">
+            <h3 className="nx-annual-dash-card-title">
+              {t(annualTab.capital_workspace?.history_panel.title_key ?? 'clientOperations.annual.capitalHistory')}
+            </h3>
+            {(annualTab.capital_workspace?.history_panel.entries ?? []).length === 0 ? (
+              <p className="nx-annual-dash">{t(annualTab.capital_workspace?.history_panel.empty_state_key ?? 'clientOperations.annual.capitalHistoryEmpty')}</p>
+            ) : (
+              <ul className="nx-capital-history-list">
+                {(annualTab.capital_workspace?.history_panel.entries ?? []).map((entry) => {
+                  const open = historyOpenKey === entry.folder_key;
+                  return (
+                    <li key={entry.folder_key} className={`nx-capital-history-item${open ? ' is-open' : ''}`}>
+                      <div className="nx-capital-history-row">
+                        <strong>{fillI18n(t(entry.folder_label_key), { n: entry.sequence_no })}</strong>
+                        <span className="nx-annual-status-chip nx-annual-status-chip--neutral">
+                          {t('clientOperations.annual.filedStatus')}
+                        </span>
+                        <span data-testid={`capital-history-submitted-${entry.sequence_no}`}>
+                          {entry.submitted_on || '—'}
+                        </span>
+                        <button
+                          type="button"
+                          className="nx-annual-folder-btn"
+                          data-testid={`annual-tab-capital-folder-${entry.sequence_no}`}
+                          data-instance-id={entry.instance_id}
+                          aria-expanded={open}
+                          onClick={() => setHistoryOpenKey(open ? null : entry.folder_key)}
+                          title={t('clientOperations.annual.expandFolder')}
+                        >
+                          <IconFolder />
+                        </button>
+                      </div>
+                      {open ? (
+                        <ul className="nx-annual-logical-folder-files">
+                          {entry.files.length === 0 ? (
+                            <li className="nx-annual-dash">{t('clientOperations.annual.folderEmpty')}</li>
+                          ) : (
+                            entry.files.map((file) => (
+                              <li key={file.file_asset_id} className="nx-annual-logical-folder-file">
+                                <span className="nx-annual-folder-file-name">
+                                  {file.file_name || t(file.source_kind_label_key)}
+                                </span>
+                                {(file.actions?.can_preview ?? file.can_open) ? (
+                                  <button
+                                    type="button"
+                                    className="nx-annual-folder-file-preview"
+                                    disabled={busy || !(file.actions?.can_open ?? file.can_open)}
+                                    onClick={() => void openFile(file.file_asset_id)}
+                                  >
+                                    {t('clientOperations.annual.previewFile')}
+                                  </button>
+                                ) : null}
+                              </li>
+                            ))
+                          )}
+                        </ul>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </article>
+        </div>
+      ) : (
       <div className={`nx-annual-dashboard${showMissingProblem ? '' : ' is-single'}`}>
         <article className="nx-annual-dash-card nx-annual-dash-card--status" aria-labelledby="nx-annual-dash-status-heading">
           <h3 id="nx-annual-dash-status-heading" className="nx-annual-dash-card-title">
@@ -620,12 +767,13 @@ export function ClientAnnualReportTab({
         </article>
         ) : null}
       </div>
+      )}
 
       {showChecklist ? (
         <section>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
             <h3 className="nx-annual-card-title nx-annual-documents-year-heading" data-testid="annual-tab-documents-year-heading">
-              {displayedYear != null
+              {isAnnualBoard && displayedYear != null
                 ? fillI18n(
                     t(
                       yearView?.documents_year_heading?.label_key ??
@@ -979,6 +1127,9 @@ function DocumentRow({
       <td className="nx-annual-td nx-annual-td--doc-name">
         <div className="nx-annual-doc-name-row">
           <span className="nx-annual-doc-name">{annualDocLabel(t, row)}</span>
+          {capital && row.receipt_hint_key ? (
+            <span className="nx-capital-receipt-hint">{t(row.receipt_hint_key)}</span>
+          ) : null}
           {row.description_he ? (
             <span
               aria-label={localizeSystemLabel(t, row.description_key, row.description_he)}
@@ -1053,9 +1204,13 @@ function DocumentRow({
         )}
       </td>
       <td className="nx-annual-td">
-        <span className={statusBadgeClass(row, capital)}>
-          {localizeSystemLabel(t, row.status_label_key, row.status_label_he)}
-        </span>
+        {statusBadgeClass(row, capital) ? (
+          <span className={statusBadgeClass(row, capital)}>
+            {localizeSystemLabel(t, row.status_label_key, row.status_label_he)}
+          </span>
+        ) : (
+          <span className="nx-annual-dash">—</span>
+        )}
       </td>
       <td className="nx-annual-td">
         <input
@@ -1088,7 +1243,8 @@ function AnnualArchiveFolders({
     setOpenKeys((prev) => ({ ...prev, [forcedOpenKey]: true }));
   }, [forcedOpenKey]);
   const yearFolders = annualTab.year_folders ?? [];
-  const capitalFolders = annualTab.capital_folders ?? [];
+  const showLegacyCapitalFolders = annualTab.visibility.show_legacy_capital_folders === true;
+  const capitalFolders = showLegacyCapitalFolders ? annualTab.capital_folders ?? [] : [];
   useEffect(() => {
     if (capitalFolders.length === 0) return;
     setOpenKeys((prev) => {

@@ -56,10 +56,10 @@ test('Annual premium skin is scoped to the workspace modal and reused for הצה
 });
 
 test('capital archive folders stay linked to instances and default open', () => {
-  assert.match(annualSrc, /annualTab\.capital_folders/);
-  assert.match(annualSrc, /data-instance-id=\{folder\.instance_id\}/);
-  assert.match(annualSrc, /annual-tab-capital-folder-\$\{folder\.sequence_no\}/);
-  assert.match(annualSrc, /next\[folder\.folder_key\] = true/);
+  assert.match(annualSrc, /annualTab\.capital_workspace/);
+  assert.match(annualSrc, /data-instance-id=\{entry\.instance_id\}/);
+  assert.match(annualSrc, /annual-tab-capital-folder-\$\{entry\.sequence_no\}/);
+  assert.match(annualSrc, /show_legacy_capital_folders/);
   assert.match(annualSrc, /file\.actions\?\.can_preview \?\? file\.can_open/);
 });
 
@@ -147,6 +147,28 @@ test('older tax year uses the existing named command and archive stays independe
   const olderIdx = annualSrc.indexOf('annual-tab-older-year-select');
   const notesIdx = annualSrc.indexOf('annualTab.visibility.show_notes');
   assert.ok(olderIdx > 0 && notesIdx > olderIdx && foldersIdx > notesIdx);
+});
+
+test('capital tab shows pending due date, history submitted_on, and Arial without the bottom archive duplicate', () => {
+  assert.match(annualSrc, /set_capital_declaration_operational_target_date/);
+  assert.match(annualSrc, /displayedPendingIsoDate/);
+  assert.match(annualSrc, /pendingDueDate/);
+  assert.match(annualSrc, /capital-tab-history-panel/);
+  assert.match(annualSrc, /capital-history-submitted-\$\{entry\.sequence_no\}/);
+  assert.match(annualSrc, /readyForNewCapital/);
+  assert.match(annualSrc, /nx-capital-receipt-hint/);
+  assert.match(annualSrc, /row\.receipt_hint_key/);
+  assert.match(annualCss, /data-tab-key='capital_declaration'[\s\S]*font-family:\s*Arial/);
+  assert.match(annualCss, /nx-capital-receipt-hint/);
+  assert.match(annualCss, /#ffffff/);
+  assert.doesNotMatch(
+    annualCss,
+    /data-tab-key='capital_declaration'[\s\S]*nx-annual-doc-row--missing[\s\S]*#fecaca/,
+  );
+  const he = readFileSync(join(dir, '../src/i18n/he.json'), 'utf8');
+  assert.match(he, /"fileAttachedNotMarked": "לא סומן כהתקבל"/);
+  assert.match(he, /"readyForNewCapital": "מוכן להצהרת הון חדשה"/);
+  assert.match(he, /"capitalHistory": "היסטוריה"/);
 });
 
 test('capital attach uses this tab version, retries 409 once, and does not treat upload as success', () => {

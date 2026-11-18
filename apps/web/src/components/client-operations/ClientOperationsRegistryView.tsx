@@ -48,7 +48,11 @@ import {
   ClientOperationsAnnualCapitalFilingModal,
   type AnnualCapitalFilingModalState,
 } from './ClientOperationsAnnualCapitalFilingModal';
-import { nextAnnualCapitalPendingKind } from '../../lib/client-operations-filing-date-field.pure';
+import {
+  displayedPendingIsoDate,
+  formatOperationalDateLabel,
+  nextAnnualCapitalPendingKind,
+} from '../../lib/client-operations-filing-date-field.pure';
 import {
   orgClients,
   moduleClientOperationsCase,
@@ -1164,6 +1168,8 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const formatSuppressClickRef = useRef(false);
   const formatPendingToggleRef = useRef<ClientOperationsActiveCell | null>(null);
   const pendingDatePickerRef = useRef<HTMLInputElement | null>(null);
+  const [pendingCapitalDates, setPendingCapitalDates] = useState<Record<string, string>>({});
+  const capitalDateGenRef = useRef<Record<string, number>>({});
   const [columnVisibilityOpen, setColumnVisibilityOpen] = useState(false);
   const [isResizingColumn, setIsResizingColumn] = useState(false);
   // Legacy "+ עמודה" dialog kept in code but hidden — 10 user slots via ensure command.
@@ -4229,6 +4235,38 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       setCommandError(error instanceof Error ? error.message : t('clientOperations.saveDueDateFailed'));
     }
   };
+  const setCapitalDateWithPending = async (row: ClientOperationsRegistryRow, value: string | null) => {
+    if (statusPaintMode) return;
+    if (!canEdit || !onRegistryCommand) return;
+    const clientKey = row.client_id;
+    const gen = (capitalDateGenRef.current[clientKey] ?? 0) + 1;
+    capitalDateGenRef.current[clientKey] = gen;
+    setPendingCapitalDates((prev) => ({ ...prev, [clientKey]: value ?? '' }));
+    setCommandError('');
+    try {
+      await onRegistryCommand({
+        command: 'set_capital_declaration_operational_target_date',
+        client_id: row.client_id,
+        operational_period_key: query?.operational_period_key ?? null,
+        operational_target_date: value,
+        query,
+      });
+      if (capitalDateGenRef.current[clientKey] !== gen) return;
+      setPendingCapitalDates((prev) => {
+        const next = { ...prev };
+        delete next[clientKey];
+        return next;
+      });
+    } catch (error) {
+      if (capitalDateGenRef.current[clientKey] !== gen) return;
+      setPendingCapitalDates((prev) => {
+        const next = { ...prev };
+        delete next[clientKey];
+        return next;
+      });
+      setCommandError(error instanceof Error ? error.message : t('clientOperations.saveDueDateFailed'));
+    }
+  };
   const openCapitalDeclaration = async (row: ClientOperationsRegistryRow) => {
     if (!canEdit || !onRegistryCommand || !row.capital_declaration_cell?.can_open) return;
     setCommandError('');
@@ -5323,8 +5361,15 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           </span>
         );
       }
-      const value = operationalCell.operational_target_date ?? '';
-      const displayValue = displayForColumn(r, col, t);
+      const confirmedDate = operationalCell.operational_target_date ?? '';
+      const value =
+        col.key === 'capital_declaration'
+          ? displayedPendingIsoDate({ confirmed: confirmedDate, pending: pendingCapitalDates[r.client_id] })
+          : confirmedDate;
+      const displayValue =
+        col.key === 'capital_declaration' && pendingCapitalDates[r.client_id] !== undefined
+          ? formatOperationalDateLabel(pendingCapitalDates[r.client_id], lang)
+          : displayForColumn(r, col, t);
       const disabled = !canEdit || !col.editable || !operationalCell.editable || !onRegistryCommand;
       const dateInputId = `co-date-${col.key}-${r.client_id}`;
       const dateInputName = `co_${col.key}_operational_target_date`;
@@ -5383,13 +5428,14 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               if (disabled) return;
               tryShowNativeDatePicker(event.currentTarget);
             }}
-            onChange={(event) =>
-              void setOperationalTargetDate(
-                r,
-                col.key === 'annual_report' ? 'annual_report' : 'capital_declaration',
-                event.currentTarget.value || null,
-              )
-            }
+            onChange={(event) => {
+              const next = event.currentTarget.value || null;
+              if (col.key === 'capital_declaration') {
+                void setCapitalDateWithPending(r, next);
+                return;
+              }
+              void setOperationalTargetDate(r, 'annual_report', next);
+            }}
           />
         </label>,
       );

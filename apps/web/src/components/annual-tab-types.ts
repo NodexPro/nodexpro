@@ -27,6 +27,8 @@ export type AnnualDocumentRowDto = {
   status_label_key?: string;
   row_style: AnnualDocumentRowStyle;
   receipt_mark?: 'none' | 'cyan_check';
+  receipt_hint_key?: string | null;
+  show_missing_badge?: boolean;
   file: AnnualDocumentFileDto;
   actions: {
     can_toggle_received: boolean;
@@ -105,6 +107,41 @@ export type AnnualTabModel = {
     show_document_readiness?: boolean;
     show_missing_as_active_problem?: boolean;
     show_filed_confirmation?: boolean;
+    show_working_status?: boolean;
+    show_legacy_capital_folders?: boolean;
+  };
+  capital_workspace?: {
+    working_panel: {
+      title_key: string;
+      date_field_label_key: string;
+      assigned_due_date: string | null;
+      can_assign_due_date: boolean;
+      operational_period_key: string;
+    };
+    history_panel: {
+      title_key: string;
+      empty_state_key: string;
+      entries: Array<{
+        folder_key: string;
+        instance_id: string;
+        sequence_no: number;
+        folder_label_key: string;
+        status: 'open' | 'completed';
+        operational_target_date: string | null;
+        submitted_on: string | null;
+        filed: boolean;
+        files: Array<{
+          file_asset_id: string;
+          file_name: string | null;
+          source_kind: 'form_1301' | 'additional' | 'checklist';
+          source_kind_label_key: string;
+          can_open: boolean;
+          uploaded_on?: string | null;
+          type_label?: string | null;
+          actions?: { can_open: boolean; can_preview: boolean };
+        }>;
+      }>;
+    };
   };
   assigned_due_date?: string | null;
   actual_submitted_on?: string | null;

@@ -10,6 +10,7 @@ import {
   resolveDisplayedAnnualTaxYear,
   shouldApplyAnnualYearPersistResponse,
 } from '../src/lib/client-operations-annual-year-cache.pure.ts';
+import { displayedPendingIsoDate } from '../src/lib/client-operations-filing-date-field.pure.ts';
 
 test('year snapshots are keyed by organization, client, tax year and aggregate version', () => {
   const cache = new Map<string, { year: number }>();
@@ -142,4 +143,10 @@ test('command refresh invalidates previous version snapshots for the same client
     })?.v,
     3,
   );
+});
+
+test('pending capital date is shown immediately and is not treated as saved until backend confirms', () => {
+  assert.equal(displayedPendingIsoDate({ confirmed: '2026-01-01', pending: '2026-02-02' }), '2026-02-02');
+  assert.equal(displayedPendingIsoDate({ confirmed: '2026-01-01', pending: undefined }), '2026-01-01');
+  assert.equal(displayedPendingIsoDate({ confirmed: null, pending: '' }), '');
 });

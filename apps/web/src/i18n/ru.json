@@ -94,7 +94,12 @@
       "folderEmpty": "В папке нет файлов",
       "expandFolder": "Открыть папку",
       "collapseFolder": "Закрыть папку",
-      "taxYear": "Налоговый год"
+      "taxYear": "Налоговый год",
+      "fileAttachedNotMarked": "Не отмечено как получено",
+      "readyForNewCapital": "Готово к новой декларации о капитале",
+      "assignCapitalDueDate": "Срок подачи",
+      "capitalHistory": "История",
+      "capitalHistoryEmpty": "Нет поданных деклараций о капитале"
     },
     "registry": {
       "saving": "Сохранение…",

@@ -10,6 +10,7 @@ import {
   buildAnnualFilingYearBoard,
   buildAnnualOlderTaxYearOptions,
   buildAnnualYearPresentationFlags,
+  buildCapitalHistoryEntries,
   buildCapitalWorkingControlState,
   CAPITAL_OFFICE_COLLECTION_WARNING_DAYS,
   checklistFileIdsForFilingYear,
@@ -385,6 +386,8 @@ test('capital working control: no assigned date has no overdue/urgency/readiness
   assert.equal(none.visibility.show_deadline, false);
   assert.equal(none.visibility.show_document_readiness, false);
   assert.equal(none.visibility.show_missing_as_active_problem, false);
+  assert.equal(none.visibility.show_working_status, false);
+  assert.equal(none.visibility.show_legacy_capital_folders, false);
   assert.equal(none.visibility.show_documents, true);
   assert.equal(none.assigned_due_date, null);
   assert.equal(none.actual_submitted_on, null);
@@ -400,6 +403,7 @@ test('capital working control uses assigned due date, 30-day office warning, ove
   });
   assert.equal(collect.status.code, 'collect_docs');
   assert.equal(collect.status.color, 'yellow');
+  assert.equal(collect.visibility.show_working_status, true);
   assert.equal(collect.assigned_due_date, '2026-06-01');
   assert.equal(collect.deadline_info.due_date, '2026-06-01');
 
@@ -462,6 +466,8 @@ test('capital שודר stops working control and keeps actual submitted_on separ
   assert.equal(filed.phase, 'filed_idle');
   assert.equal(filed.status.code, 'filed_idle');
   assert.equal(filed.visibility.show_missing_as_active_problem, false);
+  assert.equal(filed.visibility.show_working_status, false);
+  assert.equal(filed.visibility.show_filed_confirmation, false);
   assert.equal(filed.visibility.show_deadline, false);
   assert.equal(filed.actual_submitted_on, '2026-03-15');
   assert.equal(filed.assigned_due_date, null);
@@ -476,7 +482,14 @@ test('capital document rows keep received confirmation separate from attach', ()
   const attached = computeCapitalDocumentRowPresentation(false, 'file-1');
   assert.equal(attached.status, 'attached_only');
   assert.equal(attached.receipt_mark, 'none');
+  assert.equal(attached.row_style, 'neutral');
+  assert.equal(attached.receipt_hint_key, 'clientOperations.annual.fileAttachedNotMarked');
   assert.match(attached.status_label_he, /לא סומן כהתקבל/);
+  const idleMissing = computeCapitalDocumentRowPresentation(false, null, false);
+  assert.equal(idleMissing.show_missing_badge, false);
+  assert.equal(idleMissing.row_style, 'neutral');
+  const activeMissing = computeCapitalDocumentRowPresentation(false, null, true);
+  assert.equal(activeMissing.show_missing_badge, true);
   const received = computeCapitalDocumentRowPresentation(true, 'file-1');
   assert.equal(received.status, 'completed');
   assert.equal(received.status_label_he, 'התקבל');
@@ -499,4 +512,35 @@ test('capital tab does not use May 31 as due date; attach keeps version control'
   assert.ok(may31Idx > 0);
   assert.match(serviceSrc, /assertExpectedVersion/);
   assert.doesNotMatch(serviceSrc, /expected_version:\s*null/);
+  assert.match(serviceSrc, /set_capital_declaration_operational_target_date/);
+  assert.match(serviceSrc, /capital_workspace/);
+  assert.match(serviceSrc, /show_legacy_capital_folders/);
+});
+
+test('capital history uses filed instances and real sequence numbers, not assigned due dates', () => {
+  const entries = buildCapitalHistoryEntries([
+    {
+      folder_key: 'open',
+      filed: false,
+      sequence_no: 2,
+      submitted_on: null,
+    },
+    {
+      folder_key: 'first',
+      filed: true,
+      sequence_no: 1,
+      submitted_on: '2026-01-15',
+    },
+    {
+      folder_key: 'second',
+      filed: true,
+      sequence_no: 2,
+      submitted_on: '2026-04-02',
+    },
+  ]);
+  assert.equal(entries.length, 2);
+  assert.equal(entries[0]?.sequence_no, 1);
+  assert.equal(entries[0]?.submitted_on, '2026-01-15');
+  assert.equal(entries[1]?.sequence_no, 2);
+  assert.equal(entries[1]?.submitted_on, '2026-04-02');
 });

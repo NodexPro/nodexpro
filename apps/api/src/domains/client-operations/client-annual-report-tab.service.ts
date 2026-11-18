@@ -28,9 +28,12 @@ import {
   buildAnnualFilingYearItem,
   buildAnnualOlderTaxYearOptions,
   buildAnnualYearPresentationFlags,
+  applyCapitalDocumentControlPresentation,
+  buildCapitalHistoryEntries,
   buildCapitalWorkingControlState,
   checklistFileIdsForFilingYear,
   computeCapitalDocumentRowPresentation,
+  currentUtcOperationalPeriodKey,
   fileTypeLabelFromMeta,
   isoDateOnly,
   mergeRequiredCatalogRows,
@@ -236,6 +239,8 @@ export type AnnualDocumentRowDto = {
   status_label_key?: string;
   row_style: AnnualDocumentRowStyle;
   receipt_mark?: 'none' | 'cyan_check';
+  receipt_hint_key?: string | null;
+  show_missing_badge?: boolean;
   file: AnnualDocumentFileDto;
   actions: {
     can_toggle_received: boolean;
@@ -325,6 +330,22 @@ export type AnnualTabResponse = {
     show_document_readiness?: boolean;
     show_missing_as_active_problem?: boolean;
     show_filed_confirmation?: boolean;
+    show_working_status?: boolean;
+    show_legacy_capital_folders?: boolean;
+  };
+  capital_workspace?: {
+    working_panel: {
+      title_key: string;
+      date_field_label_key: string;
+      assigned_due_date: string | null;
+      can_assign_due_date: boolean;
+      operational_period_key: string;
+    };
+    history_panel: {
+      title_key: string;
+      empty_state_key: string;
+      entries: CapitalRequirementFolder[];
+    };
   };
   assigned_due_date?: string | null;
   actual_submitted_on?: string | null;
@@ -468,7 +489,8 @@ export type AnnualAnnualCommandType =
   | 'attach_annual_submission_file'
   | 'update_annual_notes'
   | 'copy_previous_capital_declaration'
-  | 'select_annual_working_tax_year';
+  | 'select_annual_working_tax_year'
+  | 'set_capital_declaration_operational_target_date';
 
 function assertOrg(ctx: RequestContext): string {
   const orgId = ctx.organizationId;
@@ -699,6 +721,8 @@ function toAnnualDocumentRowDto(
     status_label_key: pres.status_label_key,
     row_style: pres.row_style,
     receipt_mark: capitalPres?.receipt_mark ?? 'none',
+    receipt_hint_key: capitalPres?.receipt_hint_key ?? null,
+    show_missing_badge: capitalPres?.show_missing_badge ?? false,
     file: {
       state: fid ? 'attached' : 'none',
       file_asset_id: fid,
@@ -746,6 +770,8 @@ function projectCatalogDocumentRow(input: {
     status_label_key: missing.status_label_key,
     row_style: missing.row_style,
     receipt_mark: capitalMissing?.receipt_mark ?? 'none',
+    receipt_hint_key: capitalMissing?.receipt_hint_key ?? null,
+    show_missing_badge: capitalMissing?.show_missing_badge ?? false,
     file: { state: 'none', file_asset_id: null, file_name: null },
     actions: {
       can_toggle_received: input.canEdit,
@@ -1007,16 +1033,45 @@ function capitalWorkingControlFromFolders(
   });
 }
 
+function withCapitalControlRows(
+  rows: AnnualDocumentRowDto[],
+  control: ReturnType<typeof buildCapitalWorkingControlState>,
+): AnnualDocumentRowDto[] {
+  return applyCapitalDocumentControlPresentation(rows, control.phase === 'assigned_open');
+}
+
+function buildCapitalWorkspacePanels(input: {
+  control: ReturnType<typeof buildCapitalWorkingControlState>;
+  folders: CapitalRequirementFolder[];
+  canEdit: boolean;
+}): NonNullable<AnnualTabResponse['capital_workspace']> {
+  return {
+    working_panel: {
+      title_key: 'clientOperations.annual.readyForNewCapital',
+      date_field_label_key: 'clientOperations.annual.assignCapitalDueDate',
+      assigned_due_date: input.control.assigned_due_date,
+      can_assign_due_date: input.canEdit,
+      operational_period_key: currentUtcOperationalPeriodKey(),
+    },
+    history_panel: {
+      title_key: 'clientOperations.annual.capitalHistory',
+      empty_state_key: 'clientOperations.annual.capitalHistoryEmpty',
+      entries: buildCapitalHistoryEntries(input.folders),
+    },
+  };
+}
+
 function buildCapitalFallbackReadModel(
   canEdit: boolean,
   folders: CapitalRequirementFolder[] = [],
 ): AnnualTabResponse {
-  const rows = mergeScopeCatalogRows({
+  const rawRows = mergeScopeCatalogRows({
     scope: 'capital_declaration',
     persisted: [],
     canEdit,
   });
-  const control = capitalWorkingControlFromFolders(rows, folders);
+  const control = capitalWorkingControlFromFolders(rawRows, folders);
+  const rows = withCapitalControlRows(rawRows, control);
   return {
     tab_key: 'capital_declaration',
     tab_title_he: 'הצהרת הון',
@@ -1061,7 +1116,7 @@ function buildCapitalFallbackReadModel(
         received_label_he: 'התקבלו',
         received_count: 0,
         missing_label_he: 'חסרים',
-        missing_count: rows.length,
+        missing_count: rows.filter((row) => row.show_missing_badge).length,
         updated_label_he: 'עודכן לאחרונה',
         updated_display_he: '—',
       },
@@ -1109,6 +1164,7 @@ function buildCapitalFallbackReadModel(
     year_views: [],
     year_folders: [],
     capital_folders: folders,
+    capital_workspace: buildCapitalWorkspacePanels({ control, folders, canEdit }),
   };
 }
 
@@ -2010,6 +2066,8 @@ export async function getAnnualTabReadModel(
   const serverNow = new Date();
   const capitalWorking =
     scope === 'capital_declaration' ? capitalWorkingControlFromFolders(scopedRows, capital_folders, serverNow) : null;
+  const documentRows =
+    capitalWorking ? withCapitalControlRows(scopedRows, capitalWorking) : scopedRows;
   const control = capitalWorking
     ? {
         status: capitalWorking.status,
@@ -2024,11 +2082,13 @@ export async function getAnnualTabReadModel(
 
   const summary = {
     total_label_he: 'סה״כ מסמכים',
-    total_count: scopedRows.length,
+    total_count: documentRows.length,
     received_label_he: 'התקבלו',
-    received_count: scopedRows.filter((r) => r.received).length,
+    received_count: documentRows.filter((r) => r.received).length,
     missing_label_he: 'חסרים',
-    missing_count: scopedRows.filter((r) => r.status === 'missing').length,
+    missing_count: documentRows.filter((r) =>
+      capitalWorking ? Boolean(r.show_missing_badge) : r.status === 'missing',
+    ).length,
     updated_label_he: 'עודכן לאחרונה',
     updated_display_he: p?.updated_at ? formatDateTimeHe(p.updated_at) : '—',
   };
@@ -2079,17 +2139,8 @@ export async function getAnnualTabReadModel(
       add_custom_label_he: 'הוסף מסמך',
       add_custom_label_key: 'clientOperations.annual.addDocument',
       add_custom_enabled: canEdit,
-      summary: {
-        total_label_he: 'סה״כ מסמכים',
-        total_count: scopedRows.length,
-        received_label_he: 'התקבלו',
-        received_count: scopedRows.filter((r) => r.received).length,
-        missing_label_he: 'חסרים',
-        missing_count: scopedRows.filter((r) => r.status === 'missing').length,
-        updated_label_he: 'עודכן לאחרונה',
-        updated_display_he: p?.updated_at ? formatDateTimeHe(p.updated_at) : '—',
-      },
-      rows: scopedRows,
+      summary,
+      rows: documentRows,
     },
     submissions_table: {
       card_title_he: scope === 'capital_declaration' ? 'תאריכי הגשת הצהרות הון קודמות' : 'תאריכי הגשת דוחות שנתיים קודמים',
@@ -2148,6 +2199,10 @@ export async function getAnnualTabReadModel(
     year_views,
     year_folders,
     capital_folders,
+    capital_workspace:
+      scope === 'capital_declaration' && capitalWorking
+        ? buildCapitalWorkspacePanels({ control: capitalWorking, folders: capital_folders, canEdit })
+        : undefined,
   };
 }
 
@@ -2663,6 +2718,24 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         .match(scoped ? { tab_scope: scope } : {});
       if (updateErr) throw new AppError(500, updateErr.message ?? 'copy previous declaration failed', 'SUPABASE_ERROR');
       await auditAnnual(ctx, orgId, clientId, cmd, { from_submission_id: prev.id, target_row_id: targetRowId });
+      break;
+    }
+    case 'set_capital_declaration_operational_target_date': {
+      if (scope !== 'capital_declaration') throw badRequest('פקודה זו זמינה רק בהצהרת הון');
+      const { setCapitalDeclarationOperationalTargetDate } = await import(
+        './client-operations-annual-capital-operational.service.js'
+      );
+      const periodKey = String(payload.operational_period_key ?? '').trim() || currentUtcOperationalPeriodKey();
+      await setCapitalDeclarationOperationalTargetDate({
+        ctx,
+        clientId,
+        operationalPeriodKey: periodKey,
+        operationalTargetDate: payload.operational_target_date,
+      });
+      await auditAnnual(ctx, orgId, clientId, cmd, {
+        operational_period_key: periodKey,
+        operational_target_date: payload.operational_target_date ?? null,
+      });
       break;
     }
     case 'select_annual_working_tax_year': {

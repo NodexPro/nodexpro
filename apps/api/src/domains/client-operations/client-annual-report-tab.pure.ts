@@ -361,12 +361,15 @@ export type CapitalDocumentReceiptMark = 'none' | 'cyan_check';
 export function computeCapitalDocumentRowPresentation(
   received: boolean,
   fileAssetId: string | null,
+  controlActive = true,
 ): {
   status: 'missing' | 'checked_only' | 'attached_only' | 'completed';
   status_label_he: string;
   status_label_key: string;
   row_style: 'neutral' | 'warning' | 'success' | 'missing';
   receipt_mark: CapitalDocumentReceiptMark;
+  receipt_hint_key: string | null;
+  show_missing_badge: boolean;
 } {
   const hasFile = Boolean(fileAssetId);
   if (received) {
@@ -376,15 +379,30 @@ export function computeCapitalDocumentRowPresentation(
       status_label_key: 'clientOperations.annual.received',
       row_style: 'success',
       receipt_mark: 'cyan_check',
+      receipt_hint_key: null,
+      show_missing_badge: false,
     };
   }
   if (hasFile) {
     return {
       status: 'attached_only',
-      status_label_he: 'קובץ מצורף — לא סומן כהתקבל',
+      status_label_he: 'לא סומן כהתקבל',
       status_label_key: 'clientOperations.annual.fileAttachedNotMarked',
-      row_style: 'warning',
+      row_style: 'neutral',
       receipt_mark: 'none',
+      receipt_hint_key: 'clientOperations.annual.fileAttachedNotMarked',
+      show_missing_badge: false,
+    };
+  }
+  if (!controlActive) {
+    return {
+      status: 'missing',
+      status_label_he: '',
+      status_label_key: '',
+      row_style: 'neutral',
+      receipt_mark: 'none',
+      receipt_hint_key: null,
+      show_missing_badge: false,
     };
   }
   return {
@@ -393,7 +411,46 @@ export function computeCapitalDocumentRowPresentation(
     status_label_key: 'clientOperations.annual.missing',
     row_style: 'missing',
     receipt_mark: 'none',
+    receipt_hint_key: null,
+    show_missing_badge: true,
   };
+}
+
+export function applyCapitalDocumentControlPresentation<
+  T extends {
+    received: boolean;
+    file?: { file_asset_id: string | null } | null;
+    status: string;
+    status_label_he: string;
+    status_label_key?: string;
+    row_style: 'neutral' | 'warning' | 'success' | 'missing';
+    receipt_mark?: CapitalDocumentReceiptMark;
+  },
+>(rows: readonly T[], controlActive: boolean): T[] {
+  return rows.map((row) => {
+    const pres = computeCapitalDocumentRowPresentation(Boolean(row.received), row.file?.file_asset_id ?? null, controlActive);
+    return {
+      ...row,
+      status: pres.status,
+      status_label_he: pres.status_label_he,
+      status_label_key: pres.status_label_key,
+      row_style: pres.row_style,
+      receipt_mark: pres.receipt_mark,
+      receipt_hint_key: pres.receipt_hint_key,
+      show_missing_badge: pres.show_missing_badge,
+    };
+  });
+}
+
+/** UTC YYYY-MM clock for the existing capital date command audit field — not a statutory period. */
+export function currentUtcOperationalPeriodKey(now: Date = new Date()): string {
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+export function buildCapitalHistoryEntries<
+  T extends { filed: boolean; sequence_no: number; submitted_on: string | null },
+>(folders: readonly T[]): T[] {
+  return [...folders].filter((folder) => folder.filed).sort((a, b) => a.sequence_no - b.sequence_no);
 }
 
 export type CapitalWorkingControlPhase = 'unassigned' | 'assigned_open' | 'filed_idle';
@@ -429,6 +486,8 @@ export function buildCapitalWorkingControlState(input: {
     show_document_readiness: boolean;
     show_missing_as_active_problem: boolean;
     show_filed_confirmation: boolean;
+    show_working_status: boolean;
+    show_legacy_capital_folders: boolean;
   };
   filing_status: {
     filed: boolean;
@@ -463,6 +522,8 @@ export function buildCapitalWorkingControlState(input: {
     show_document_readiness: false,
     show_missing_as_active_problem: false,
     show_filed_confirmation: false,
+    show_working_status: false,
+    show_legacy_capital_folders: false,
   };
   const emptyDeadline = { due_date: '', days_left: 0, is_overdue: false, label_he: '' };
   const idleRisk = { label_he: '', label_key: 'clientOperations.annual.riskNone' };
@@ -488,7 +549,7 @@ export function buildCapitalWorkingControlState(input: {
       completion_percent: 0,
       deadline_info: emptyDeadline,
       risk_indicator: idleRisk,
-      visibility: { ...idleVisibility, show_filed_confirmation: filedIdle },
+      visibility: idleVisibility,
       filing_status: {
         filed: filedIdle,
         code: filedIdle ? 'filed' : 'not_filed',
@@ -560,6 +621,8 @@ export function buildCapitalWorkingControlState(input: {
       show_document_readiness: false,
       show_missing_as_active_problem: has_missing,
       show_filed_confirmation: false,
+      show_working_status: true,
+      show_legacy_capital_folders: false,
     },
     filing_status: {
       filed: false,
