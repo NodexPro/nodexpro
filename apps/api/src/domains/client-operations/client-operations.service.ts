@@ -1650,7 +1650,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
         new Map(),
         new Map(),
         new Map(),
-        new Map(),
+        new Map() as Awaited<ReturnType<typeof loadAnnualReportYearInstancesForClients>>,
         new Map(),
         new Map(),
         new Map(),
@@ -1698,7 +1698,9 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       ? loadAnnualDateRevisionsForClients({
           organizationId: orgId,
           clientIds: matchingClientIds,
-          instanceIds: [...annualReportInstancesByClient.values()].map((row) => row.id),
+          instanceIds: [...annualReportInstancesByClient.values()].flatMap((rows) =>
+            rows.map((row) => row.id),
+          ),
         })
       : Promise.resolve(new Map()),
     loadAnnualSubmissionFilesForSubmissions({

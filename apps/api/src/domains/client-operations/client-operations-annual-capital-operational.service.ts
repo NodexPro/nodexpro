@@ -20,10 +20,7 @@ import {
 } from './client-annual-report-tab.service.js';
 import {
   annualFilingUsesTabTaxYear,
-  applyAnnualPeriodProjection,
   applyCapitalPeriodProjection,
-  buildAnnualPeriodCycles,
-  buildAnnualReportCell,
   buildCapitalDeclarationCell,
   buildCapitalPeriodCycles,
   isCanonicalIsoDate,
@@ -31,10 +28,11 @@ import {
   mergeAnnualDateRevisions,
   nextCapitalDeclarationSequenceNo,
   operationalPeriodKeyFromEventTimestamp,
-  overlayAnnualProjectionDate,
   projectAnnualCapitalCycleOntoPeriod,
-  resolveAnnualOperationalDateForPeriod,
+  projectAnnualReportCellForOperationalPeriod,
+  resolveAnnualDateCommandTaxYear,
   resolveAnnualReportTaxYearForOperationalPeriod,
+  selectCoveringAnnualInstanceForPeriod,
   type AnnualDateRevision,
   type AnnualCapitalLinkedFile,
   type AnnualCapitalSubmissionFileKind,
@@ -181,24 +179,28 @@ function asLinkedFile(row: AnnualSubmissionFileFactRow): AnnualCapitalLinkedFile
   };
 }
 
-/** Batch: annual year instances for org + clientIds + tax_year. */
+/**
+ * Batch: annual year instances visible for a registry month.
+ * Tab tax year (any status) plus outstanding open instances of other years.
+ * Tenant-scoped; GET never inserts.
+ */
 export async function loadAnnualReportYearInstancesForClients(input: {
   organizationId: string;
   clientIds: string[];
   taxYear: number;
-}): Promise<Map<string, AnnualYearInstanceRow>> {
-  const out = new Map<string, AnnualYearInstanceRow>();
+}): Promise<Map<string, AnnualYearInstanceRow[]>> {
+  const out = new Map<string, AnnualYearInstanceRow[]>();
   if (input.clientIds.length === 0) return out;
   const { data, error } = await supabaseAdmin
     .from('client_annual_report_year_instances')
     .select('id, client_id, tax_year, operational_target_date, status, created_at, updated_at')
     .eq('organization_id', input.organizationId)
-    .eq('tax_year', input.taxYear)
-    .in('client_id', input.clientIds);
+    .in('client_id', input.clientIds)
+    .or(`tax_year.eq.${input.taxYear},status.eq.open`);
   assertQueryError(error, 'Failed to load annual report year instances');
   for (const raw of data ?? []) {
     const row = raw as AnnualYearInstanceRow;
-    out.set(String(row.client_id), {
+    const mapped: AnnualYearInstanceRow = {
       id: String(row.id),
       client_id: String(row.client_id),
       tax_year: Number(row.tax_year),
@@ -208,7 +210,10 @@ export async function loadAnnualReportYearInstancesForClients(input: {
       status: String(row.status),
       created_at: row.created_at ? String(row.created_at) : null,
       updated_at: row.updated_at ? String(row.updated_at) : null,
-    });
+    };
+    const list = out.get(mapped.client_id) ?? [];
+    if (!list.some((existing) => existing.id === mapped.id)) list.push(mapped);
+    out.set(mapped.client_id, list);
   }
   return out;
 }
@@ -629,7 +634,7 @@ export function projectAnnualReportCells(input: {
   clientIds: string[];
   taxYear: number;
   operationalPeriodKey: string;
-  instancesByClientId: Map<string, AnnualYearInstanceRow>;
+  instancesByClientId: Map<string, AnnualYearInstanceRow[]>;
   canEdit: boolean;
   submissionsByClientId?: Map<string, AnnualSubmissionFactRow[]>;
   filesBySubmissionId?: Map<string, AnnualCapitalLinkedFile[]>;
@@ -637,42 +642,41 @@ export function projectAnnualReportCells(input: {
 }): Map<string, AnnualReportOperationalDateCell> {
   const out = new Map<string, AnnualReportOperationalDateCell>();
   for (const clientId of input.clientIds) {
-    const inst = input.instancesByClientId.get(clientId) ?? null;
+    const instances = input.instancesByClientId.get(clientId) ?? [];
     const submissions = input.submissionsByClientId?.get(clientId) ?? [];
-    const tabSubmission = submissions.find((row) => row.tax_year === input.taxYear) ?? null;
-    const revisions = inst ? input.dateRevisionsByInstanceId?.get(inst.id) ?? [] : [];
-    const resolvedDate = resolveAnnualOperationalDateForPeriod({
-      operationalPeriodKey: input.operationalPeriodKey,
-      instanceId: inst?.id ?? null,
-      revisions,
-      instance: inst,
-    });
-    const base = buildAnnualReportCell({
-      taxYear: input.taxYear,
-      instanceId: inst?.id ?? null,
-      operationalTargetDate: resolvedDate.operational_target_date,
-      canEdit: input.canEdit,
-      submissions: submissions.map((row) => ({
-        tax_year: row.tax_year,
-        submitted_on: row.submitted_on,
-      })),
-      filesForTabYear: tabSubmission
-        ? input.filesBySubmissionId?.get(tabSubmission.id) ?? []
-        : [],
-    });
-    const projection = overlayAnnualProjectionDate(
-      projectAnnualCapitalCycleOntoPeriod({
-        operationalPeriodKey: input.operationalPeriodKey,
-        cycles: buildAnnualPeriodCycles({
-          instance: inst
-            ? { ...inst, operational_target_date: resolvedDate.operational_target_date }
-            : null,
-          filingConfirmedAt: tabSubmission?.created_at ?? null,
-        }),
-      }),
-      resolvedDate,
+    const revisions = instances.flatMap(
+      (inst) => input.dateRevisionsByInstanceId?.get(inst.id) ?? [],
     );
-    out.set(clientId, applyAnnualPeriodProjection(base, projection, input.canEdit));
+    const filingConfirmedAtByTaxYear = new Map<number, string | null>();
+    for (const row of submissions) {
+      if (!filingConfirmedAtByTaxYear.has(row.tax_year)) {
+        filingConfirmedAtByTaxYear.set(row.tax_year, row.created_at ?? null);
+      }
+    }
+    const covering = selectCoveringAnnualInstanceForPeriod({
+      operationalPeriodKey: input.operationalPeriodKey,
+      tabTaxYear: input.taxYear,
+      instances,
+      revisionsByInstanceId: input.dateRevisionsByInstanceId,
+      filingConfirmedAtByTaxYear,
+    });
+    const coveringSubmission = covering
+      ? submissions.find((row) => row.tax_year === covering.tax_year) ?? null
+      : submissions.find((row) => row.tax_year === input.taxYear) ?? null;
+    out.set(
+      clientId,
+      projectAnnualReportCellForOperationalPeriod({
+        operationalPeriodKey: input.operationalPeriodKey,
+        tabTaxYear: input.taxYear,
+        instances,
+        revisions,
+        submissions,
+        filesForCoveringYear: coveringSubmission
+          ? input.filesBySubmissionId?.get(coveringSubmission.id) ?? []
+          : [],
+        canEdit: input.canEdit,
+      }),
+    );
   }
   return out;
 }
@@ -799,7 +803,22 @@ export async function setAnnualReportOperationalTargetDate(input: {
     throw badRequest('operational_period_key must be YYYY-MM');
   }
   await ensureActiveClientInOrg(orgId, input.clientId);
-  const taxYear = resolveAnnualReportTaxYearForOperationalPeriod(input.operationalPeriodKey);
+  const tabTaxYear = resolveAnnualReportTaxYearForOperationalPeriod(input.operationalPeriodKey);
+  const instancesByClient = await loadAnnualReportYearInstancesForClients({
+    organizationId: orgId,
+    clientIds: [input.clientId],
+    taxYear: tabTaxYear,
+  });
+  const covering = selectCoveringAnnualInstanceForPeriod({
+    operationalPeriodKey: input.operationalPeriodKey,
+    tabTaxYear,
+    instances: instancesByClient.get(input.clientId) ?? [],
+  });
+  const taxYear = resolveAnnualDateCommandTaxYear({
+    tabTaxYear,
+    coveringOpenInstance:
+      covering && String(covering.status ?? '') === 'open' ? covering : null,
+  });
   const date = dateOrNull(input.operationalTargetDate);
   const nowIso = new Date().toISOString();
   const actorId = input.ctx.user.id;

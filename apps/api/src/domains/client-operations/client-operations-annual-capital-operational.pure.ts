@@ -224,6 +224,93 @@ function cycleCoversOperationalPeriod(
   return true;
 }
 
+export type AnnualInstancePeriodIdentity = {
+  id: string;
+  tax_year: number;
+  operational_target_date: string | null;
+  status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+/** First month the cycle is visible: earliest date revision, else instance created_at. */
+export function earliestAnnualAssignedPeriodKey(input: {
+  instance: { id?: string; created_at?: string | null } | null;
+  revisions?: readonly AnnualDateRevision[];
+}): string | null {
+  const fromCreated = operationalPeriodKeyFromEventTimestamp(input.instance?.created_at);
+  const instanceId = input.instance?.id;
+  let earliestRevision: string | null = null;
+  for (const row of input.revisions ?? []) {
+    if (instanceId && row.instance_id !== instanceId) continue;
+    if (!row.effective_period_key) continue;
+    if (!earliestRevision || row.effective_period_key < earliestRevision) {
+      earliestRevision = row.effective_period_key;
+    }
+  }
+  if (fromCreated && earliestRevision) {
+    return fromCreated < earliestRevision ? fromCreated : earliestRevision;
+  }
+  return earliestRevision ?? fromCreated;
+}
+
+/**
+ * One covering annual instance for a monthly tab. Never mixes tax years into one cell:
+ * outstanding open cycles win (oldest tax year first); otherwise the latest covering cycle.
+ */
+export function selectCoveringAnnualInstanceForPeriod(input: {
+  operationalPeriodKey: string;
+  tabTaxYear: number;
+  instances: readonly AnnualInstancePeriodIdentity[];
+  revisionsByInstanceId?: ReadonlyMap<string, readonly AnnualDateRevision[]>;
+  filingConfirmedAtByTaxYear?: ReadonlyMap<number, string | null>;
+}): AnnualInstancePeriodIdentity | null {
+  const covering: Array<{
+    instance: AnnualInstancePeriodIdentity;
+    assignedFrom: string;
+    open: boolean;
+  }> = [];
+  for (const instance of input.instances) {
+    const revisions = input.revisionsByInstanceId?.get(instance.id) ?? [];
+    const cycles = buildAnnualPeriodCycles({
+      instance,
+      revisions,
+      filingConfirmedAt: input.filingConfirmedAtByTaxYear?.get(instance.tax_year) ?? null,
+    });
+    const projection = projectAnnualCapitalCycleOntoPeriod({
+      operationalPeriodKey: input.operationalPeriodKey,
+      cycles,
+    });
+    if (projection.kind === 'empty') continue;
+    covering.push({
+      instance,
+      assignedFrom: cycles[0]?.assigned_from_period_key ?? '',
+      open: projection.kind === 'assigned' && !projection.cycle_closed,
+    });
+  }
+  if (!covering.length) return null;
+  covering.sort((a, b) => {
+    if (a.open !== b.open) return a.open ? -1 : 1;
+    if (a.open && b.open && a.instance.tax_year !== b.instance.tax_year) {
+      return a.instance.tax_year - b.instance.tax_year;
+    }
+    if (a.instance.tax_year === input.tabTaxYear && b.instance.tax_year !== input.tabTaxYear) return -1;
+    if (b.instance.tax_year === input.tabTaxYear && a.instance.tax_year !== input.tabTaxYear) return 1;
+    if (a.assignedFrom !== b.assignedFrom) return a.assignedFrom < b.assignedFrom ? 1 : -1;
+    return b.instance.tax_year - a.instance.tax_year;
+  });
+  return covering[0]?.instance ?? null;
+}
+
+/** DATE_SET writes the covering open cycle; otherwise the tab tax year (new cycle). */
+export function resolveAnnualDateCommandTaxYear(input: {
+  tabTaxYear: number;
+  coveringOpenInstance: { tax_year: number } | null;
+}): number {
+  if (input.coveringOpenInstance) return input.coveringOpenInstance.tax_year;
+  return input.tabTaxYear;
+}
+
 /**
  * Registry month tabs are independent historical views.
  * Open cycle: date from assignment month forward until filing.
@@ -275,9 +362,13 @@ export function buildAnnualPeriodCycles(input: {
     updated_at?: string | null;
   } | null;
   filingConfirmedAt?: string | null;
+  revisions?: readonly AnnualDateRevision[];
 }): AnnualCapitalPeriodCycle[] {
   if (!input.instance) return [];
-  const assignedFrom = operationalPeriodKeyFromEventTimestamp(input.instance.created_at);
+  const assignedFrom = earliestAnnualAssignedPeriodKey({
+    instance: input.instance,
+    revisions: input.revisions,
+  });
   const filedPeriod = operationalPeriodKeyFromEventTimestamp(input.filingConfirmedAt);
   const date = input.instance.operational_target_date;
   const identity = String(input.instance.tax_year);
@@ -390,6 +481,83 @@ export function overlayAnnualProjectionDate(
     ...projection,
     operational_target_date: resolved.operational_target_date,
   };
+}
+
+/**
+ * Periodized annual cell for one client. Identity is the covering instance for this
+ * operational month — not "the tab tax year row if it happens to exist".
+ */
+export function projectAnnualReportCellForOperationalPeriod(input: {
+  operationalPeriodKey: string;
+  tabTaxYear: number;
+  instances: readonly AnnualInstancePeriodIdentity[];
+  revisions?: readonly AnnualDateRevision[];
+  submissions?: ReadonlyArray<{
+    tax_year: number;
+    submitted_on: string | null;
+    created_at?: string | null;
+  }>;
+  filesForCoveringYear?: readonly AnnualCapitalLinkedFile[];
+  canEdit: boolean;
+}): AnnualReportOperationalDateCell {
+  const submissions = input.submissions ?? [];
+  const revisions = input.revisions ?? [];
+  const revisionsByInstanceId = new Map<string, AnnualDateRevision[]>();
+  for (const row of revisions) {
+    const list = revisionsByInstanceId.get(row.instance_id) ?? [];
+    list.push(row);
+    revisionsByInstanceId.set(row.instance_id, list);
+  }
+  const filingConfirmedAtByTaxYear = new Map<number, string | null>();
+  for (const row of submissions) {
+    if (!Number.isInteger(row.tax_year)) continue;
+    if (!filingConfirmedAtByTaxYear.has(row.tax_year)) {
+      filingConfirmedAtByTaxYear.set(row.tax_year, row.created_at ?? null);
+    }
+  }
+  const covering = selectCoveringAnnualInstanceForPeriod({
+    operationalPeriodKey: input.operationalPeriodKey,
+    tabTaxYear: input.tabTaxYear,
+    instances: input.instances,
+    revisionsByInstanceId,
+    filingConfirmedAtByTaxYear,
+  });
+  const coveringRevisions = covering ? revisionsByInstanceId.get(covering.id) ?? [] : [];
+  const resolvedDate = resolveAnnualOperationalDateForPeriod({
+    operationalPeriodKey: input.operationalPeriodKey,
+    instanceId: covering?.id ?? null,
+    revisions: coveringRevisions,
+    instance: covering,
+  });
+  const cellTaxYear = covering?.tax_year ?? input.tabTaxYear;
+  const coveringSubmission = covering
+    ? submissions.find((row) => row.tax_year === covering.tax_year) ?? null
+    : submissions.find((row) => row.tax_year === input.tabTaxYear) ?? null;
+  const base = buildAnnualReportCell({
+    taxYear: cellTaxYear,
+    instanceId: covering?.id ?? null,
+    operationalTargetDate: resolvedDate.operational_target_date,
+    canEdit: input.canEdit,
+    submissions: submissions.map((row) => ({
+      tax_year: row.tax_year,
+      submitted_on: row.submitted_on,
+    })),
+    filesForTabYear: coveringSubmission ? input.filesForCoveringYear ?? [] : [],
+  });
+  const projection = overlayAnnualProjectionDate(
+    projectAnnualCapitalCycleOntoPeriod({
+      operationalPeriodKey: input.operationalPeriodKey,
+      cycles: buildAnnualPeriodCycles({
+        instance: covering
+          ? { ...covering, operational_target_date: resolvedDate.operational_target_date }
+          : null,
+        revisions: coveringRevisions,
+        filingConfirmedAt: coveringSubmission?.created_at ?? null,
+      }),
+    }),
+    resolvedDate,
+  );
+  return applyAnnualPeriodProjection(base, projection, input.canEdit);
 }
 
 export function buildCapitalPeriodCycles(
