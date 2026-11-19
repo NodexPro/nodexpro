@@ -4,6 +4,7 @@
  * Backend-owned; React must not compute this.
  */
 
+import { businessMonthKey } from '../../shared/business-time.js';
 import { parseOperationalPeriodKey } from './client-operations-operational-period.pure.js';
 
 export type AnnualCapitalFilingSquareChrome = 'empty' | 'filed';
@@ -165,6 +166,256 @@ export function resolveAnnualReportTaxYearForOperationalPeriod(operationalPeriod
     throw new Error(`Invalid operational_period_key: ${operationalPeriodKey}`);
   }
   return parts.year - 1;
+}
+
+/**
+ * Convert a stored event/audit timestamp to an operational month (Asia/Jerusalem).
+ * Never use `submitted_on` or `new Date()` at read time as a stand-in for history.
+ */
+export function operationalPeriodKeyFromEventTimestamp(
+  value: string | Date | null | undefined,
+): string | null {
+  if (value == null || value === '') return null;
+  const instant = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(instant.getTime())) return null;
+  return businessMonthKey(instant);
+}
+
+export type AnnualCapitalPeriodCycle = {
+  /** tax_year for annual, instance id for capital. */
+  identity: string;
+  instance_id: string | null;
+  operational_target_date: string | null;
+  /**
+   * First month this cycle is visible. Null = assignment start is unknown;
+   * do not invent an earlier month — the left edge stays open.
+   */
+  assigned_from_period_key: string | null;
+  /**
+   * Month the filing confirmation event was recorded. Null = not filed.
+   * Green square is only this month, never `submitted_on`.
+   */
+  filed_period_key: string | null;
+};
+
+export type AnnualCapitalPeriodProjection = {
+  kind: 'empty' | 'assigned' | 'filed';
+  operational_target_date: string | null;
+  identity: string | null;
+  instance_id: string | null;
+  /** Covering cycle already has a filing confirmation event. Historical months stay frozen. */
+  cycle_closed: boolean;
+  /** True when the visible cycle has no known assignment-start event. */
+  legacy_unknown_assignment_start: boolean;
+};
+
+function cycleCoversOperationalPeriod(
+  cycle: AnnualCapitalPeriodCycle,
+  operationalPeriodKey: string,
+): boolean {
+  const hasDate = Boolean(cycle.operational_target_date);
+  const filedPeriod = cycle.filed_period_key;
+  if (!hasDate && !filedPeriod) return false;
+  if (cycle.assigned_from_period_key && operationalPeriodKey < cycle.assigned_from_period_key) {
+    return false;
+  }
+  if (filedPeriod && operationalPeriodKey > filedPeriod) return false;
+  if (!hasDate && filedPeriod && operationalPeriodKey !== filedPeriod) return false;
+  return true;
+}
+
+/**
+ * Registry month tabs are independent historical views.
+ * Open cycle: date from assignment month forward until filing.
+ * Filed: green only in the confirmation month; later months empty until a new cycle.
+ */
+export function projectAnnualCapitalCycleOntoPeriod(input: {
+  operationalPeriodKey: string;
+  cycles: readonly AnnualCapitalPeriodCycle[];
+}): AnnualCapitalPeriodProjection {
+  const period = input.operationalPeriodKey;
+  const covering = input.cycles.filter((cycle) => cycleCoversOperationalPeriod(cycle, period));
+  covering.sort((a, b) => {
+    const aStart = a.assigned_from_period_key ?? '';
+    const bStart = b.assigned_from_period_key ?? '';
+    if (aStart !== bStart) return aStart < bStart ? 1 : -1;
+    const aFiled = a.filed_period_key ?? '';
+    const bFiled = b.filed_period_key ?? '';
+    return aFiled < bFiled ? 1 : -1;
+  });
+  const cycle = covering[0];
+  if (!cycle) {
+    return {
+      kind: 'empty',
+      operational_target_date: null,
+      identity: null,
+      instance_id: null,
+      cycle_closed: false,
+      legacy_unknown_assignment_start: false,
+    };
+  }
+  const filedHere = Boolean(cycle.filed_period_key && period === cycle.filed_period_key);
+  return {
+    kind: filedHere ? 'filed' : 'assigned',
+    operational_target_date: cycle.operational_target_date,
+    identity: cycle.identity,
+    instance_id: cycle.instance_id,
+    cycle_closed: Boolean(cycle.filed_period_key),
+    legacy_unknown_assignment_start: cycle.assigned_from_period_key == null,
+  };
+}
+
+export function buildAnnualPeriodCycles(input: {
+  instance: {
+    id: string;
+    tax_year: number;
+    operational_target_date: string | null;
+    status?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+  } | null;
+  filingConfirmedAt?: string | null;
+}): AnnualCapitalPeriodCycle[] {
+  if (!input.instance) return [];
+  const assignedFrom = operationalPeriodKeyFromEventTimestamp(input.instance.created_at);
+  const filedPeriod = operationalPeriodKeyFromEventTimestamp(input.filingConfirmedAt);
+  const date = input.instance.operational_target_date;
+  const identity = String(input.instance.tax_year);
+  const cycles: AnnualCapitalPeriodCycle[] = [
+    {
+      identity,
+      instance_id: input.instance.id,
+      operational_target_date: date,
+      assigned_from_period_key: assignedFrom,
+      filed_period_key: filedPeriod,
+    },
+  ];
+  const updatedPeriod = operationalPeriodKeyFromEventTimestamp(input.instance.updated_at);
+  const reopened =
+    filedPeriod != null &&
+    input.instance.status === 'open' &&
+    Boolean(date) &&
+    updatedPeriod != null &&
+    updatedPeriod > filedPeriod;
+  if (reopened && updatedPeriod) {
+    cycles.push({
+      identity: `${identity}::next`,
+      instance_id: input.instance.id,
+      operational_target_date: date,
+      assigned_from_period_key: updatedPeriod,
+      filed_period_key: null,
+    });
+  }
+  return cycles;
+}
+
+export type AnnualDateRevision = {
+  instance_id: string;
+  operational_target_date: string | null;
+  /** Period in which this value became effective. */
+  effective_period_key: string;
+  recorded_at: string;
+};
+
+export function mergeAnnualDateRevisions(
+  rows: readonly AnnualDateRevision[],
+): AnnualDateRevision[] {
+  const byKey = new Map<string, AnnualDateRevision>();
+  for (const row of rows) {
+    if (!row.instance_id || !row.effective_period_key) continue;
+    const key = `${row.instance_id}\u001f${row.effective_period_key}`;
+    const existing = byKey.get(key);
+    if (!existing || row.recorded_at > existing.recorded_at) byKey.set(key, row);
+  }
+  return [...byKey.values()].sort((a, b) => {
+    if (a.recorded_at !== b.recorded_at) return a.recorded_at < b.recorded_at ? -1 : 1;
+    return a.effective_period_key.localeCompare(b.effective_period_key);
+  });
+}
+
+/**
+ * Date visible on a monthly tab: last recorded value whose effective month is
+ * on or before the selected period. Does not invent values for months before a
+ * later undated change.
+ */
+export function resolveAnnualOperationalDateForPeriod(input: {
+  operationalPeriodKey: string;
+  instanceId: string | null;
+  revisions: readonly AnnualDateRevision[];
+  instance: {
+    operational_target_date: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+  } | null;
+}): { operational_target_date: string | null; source: 'revision' | 'unchanged_instance' | 'unknown' } {
+  const period = input.operationalPeriodKey;
+  const instanceRevisions = input.revisions.filter((row) => row.instance_id === input.instanceId);
+  const applicable = instanceRevisions.filter((row) => row.effective_period_key <= period);
+  if (applicable.length) {
+    applicable.sort((a, b) => {
+      if (a.effective_period_key !== b.effective_period_key) {
+        return a.effective_period_key < b.effective_period_key ? 1 : -1;
+      }
+      return a.recorded_at < b.recorded_at ? 1 : -1;
+    });
+    const latest = applicable[0];
+    return { operational_target_date: latest?.operational_target_date ?? null, source: 'revision' };
+  }
+  if (instanceRevisions.length) {
+    return { operational_target_date: null, source: 'unknown' };
+  }
+  if (!input.instance) return { operational_target_date: null, source: 'unknown' };
+  return {
+    operational_target_date: input.instance.operational_target_date,
+    source: 'unchanged_instance',
+  };
+}
+
+export function overlayAnnualProjectionDate(
+  projection: AnnualCapitalPeriodProjection,
+  resolved: { operational_target_date: string | null; source: 'revision' | 'unchanged_instance' | 'unknown' },
+): AnnualCapitalPeriodProjection {
+  if (projection.kind === 'empty') return projection;
+  if (resolved.source === 'unknown' && projection.kind !== 'filed') {
+    return {
+      kind: 'empty',
+      operational_target_date: null,
+      identity: projection.identity,
+      instance_id: projection.instance_id,
+      cycle_closed: projection.cycle_closed,
+      legacy_unknown_assignment_start: projection.legacy_unknown_assignment_start,
+    };
+  }
+  return {
+    ...projection,
+    operational_target_date: resolved.operational_target_date,
+  };
+}
+
+export function buildCapitalPeriodCycles(
+  instances: ReadonlyArray<{
+    id: string;
+    operational_target_date: string | null;
+    status?: string | null;
+    opened_at?: string | null;
+    completed_at?: string | null;
+    filing_confirmed_at?: string | null;
+  }>,
+): AnnualCapitalPeriodCycle[] {
+  return instances.map((row) => {
+    const filedAt = row.completed_at ?? row.filing_confirmed_at ?? null;
+    const filedPeriod =
+      row.status === 'completed' || filedAt
+        ? operationalPeriodKeyFromEventTimestamp(filedAt)
+        : null;
+    return {
+      identity: row.id,
+      instance_id: row.id,
+      operational_target_date: row.operational_target_date,
+      assigned_from_period_key: operationalPeriodKeyFromEventTimestamp(row.opened_at),
+      filed_period_key: filedPeriod,
+    };
+  });
 }
 
 export const ANNUAL_CAPITAL_FILE_KIND_LABEL_KEY: Record<AnnualCapitalSubmissionFileKind, string> = {
@@ -528,4 +779,78 @@ export function annualFilingUsesTabTaxYear(input: {
   if (input.taxYear === input.tabTaxYear) return { ok: true };
   if (input.confirmOtherTaxYear) return { ok: true };
   return { ok: false, code: 'ANNUAL_OTHER_TAX_YEAR_CONFIRM_REQUIRED' };
+}
+
+export function applyAnnualPeriodProjection(
+  cell: AnnualReportOperationalDateCell,
+  projection: AnnualCapitalPeriodProjection,
+  canEdit: boolean,
+): AnnualReportOperationalDateCell {
+  if (projection.kind === 'empty') {
+    return {
+      ...cell,
+      editable: canEdit,
+      instance_id: projection.instance_id ?? cell.instance_id,
+      operational_target_date: null,
+      filing: {
+        ...cell.filing,
+        square_chrome: 'empty',
+        filed_for_tab_tax_year: false,
+      },
+    };
+  }
+  const frozen = projection.cycle_closed;
+  return {
+    ...cell,
+    editable: canEdit && !frozen,
+    instance_id: projection.instance_id ?? cell.instance_id,
+    operational_target_date: projection.operational_target_date,
+    filing: {
+      ...cell.filing,
+      square_chrome: projection.kind === 'filed' ? 'filed' : 'empty',
+      filed_for_tab_tax_year: projection.kind === 'filed',
+    },
+  };
+}
+
+export function applyCapitalPeriodProjection(
+  cell: CapitalDeclarationOperationalDateCell,
+  projection: AnnualCapitalPeriodProjection,
+  canEdit: boolean,
+): CapitalDeclarationOperationalDateCell {
+  if (projection.kind === 'empty') {
+    const allowed_actions = capitalActions({ assignmentState: 'unassigned', canEdit });
+    return {
+      ...cell,
+      editable: allowed_actions.can_set_date,
+      instance_id: null,
+      operational_target_date: null,
+      sequence_no: null,
+      instance_status: null,
+      assignment_state: 'unassigned',
+      allowed_actions,
+      can_open: allowed_actions.can_open_new,
+      filing: emptyCapitalFiling(canEdit),
+    };
+  }
+  const assignment_state: CapitalDeclarationAssignmentState =
+    projection.kind === 'filed' ? 'filed' : 'assigned';
+  const allowed_actions = capitalActions({ assignmentState: assignment_state, canEdit });
+  return {
+    ...cell,
+    editable: allowed_actions.can_set_date,
+    instance_id: projection.instance_id,
+    operational_target_date: projection.operational_target_date,
+    instance_status: projection.kind === 'filed' ? 'completed' : 'open',
+    assignment_state,
+    allowed_actions,
+    can_open: allowed_actions.can_open_new,
+    filing: {
+      ...cell.filing,
+      square_chrome: projection.kind === 'filed' ? 'filed' : 'empty',
+      filed: projection.kind === 'filed',
+      instance_id: projection.instance_id,
+      operational_target_date: projection.operational_target_date,
+    },
+  };
 }

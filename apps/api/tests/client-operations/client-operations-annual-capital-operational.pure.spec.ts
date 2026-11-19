@@ -285,6 +285,29 @@ test('annual tax year options treat a missing submitted_on as not filed', async 
   assert.equal(options.find((row) => row.tax_year === 2024)?.already_filed, false);
 });
 
+test('registry projection uses event timestamps and does not treat submitted_on as the filed month', () => {
+  const serviceSource = readFileSync(
+    join(dir, '../../src/domains/client-operations/client-operations-annual-capital-operational.service.ts'),
+    'utf8',
+  );
+  const registrySource = readFileSync(
+    join(dir, '../../src/domains/client-operations/client-operations.service.ts'),
+    'utf8',
+  );
+  assert.match(serviceSource, /projectAnnualCapitalCycleOntoPeriod/);
+  assert.match(serviceSource, /filingConfirmedAt: tabSubmission\?\.created_at/);
+  assert.match(serviceSource, /operational_period_key: input.operationalPeriodKey/);
+  assert.match(registrySource, /operationalPeriodKey: selectedPeriodKey/);
+  assert.match(registrySource, /loadCapitalDeclarationInstancesForClients/);
+  assert.doesNotMatch(
+    serviceSource.slice(
+      serviceSource.indexOf('export function projectAnnualReportCells'),
+      serviceSource.indexOf('export async function loadAnnualReportSubmissionsForTaxYear'),
+    ),
+    /submitted_on.*square_chrome/,
+  );
+});
+
 test('capital file command creates an instance when none exists', () => {
   const serviceSource = readFileSync(
     join(dir, '../../src/domains/client-operations/client-operations-annual-capital-operational.service.ts'),
@@ -344,13 +367,197 @@ test('completed capital without a calendar date still files the square and keeps
   assert.doesNotMatch(loader, /operational_target_date',\s*'is',\s*null/);
 });
 
+test('registry month tabs project annual/capital cycles from event timestamps, not global filed', async () => {
+  const {
+    projectAnnualCapitalCycleOntoPeriod,
+    buildAnnualPeriodCycles,
+    buildCapitalPeriodCycles,
+    applyAnnualPeriodProjection,
+    applyCapitalPeriodProjection,
+    buildAnnualReportCell,
+    buildCapitalDeclarationCell,
+    operationalPeriodKeyFromEventTimestamp,
+  } = await import('../../src/domains/client-operations/client-operations-annual-capital-operational.pure.js');
+
+  assert.equal(operationalPeriodKeyFromEventTimestamp('2026-01-12T08:00:00.000Z'), '2026-01');
+  assert.equal(operationalPeriodKeyFromEventTimestamp('2026-10-03T22:30:00.000Z'), '2026-10');
+  assert.equal(operationalPeriodKeyFromEventTimestamp(null), null);
+
+  const annualCycles = buildAnnualPeriodCycles({
+    instance: {
+      id: 'annual-1',
+      tax_year: 2025,
+      operational_target_date: '2026-01-20',
+      status: 'completed',
+      created_at: '2026-01-05T10:00:00.000Z',
+      updated_at: '2026-10-12T10:00:00.000Z',
+    },
+    filingConfirmedAt: '2026-10-12T10:00:00.000Z',
+  });
+  const jan = projectAnnualCapitalCycleOntoPeriod({ operationalPeriodKey: '2026-01', cycles: annualCycles });
+  const sep = projectAnnualCapitalCycleOntoPeriod({ operationalPeriodKey: '2026-09', cycles: annualCycles });
+  const oct = projectAnnualCapitalCycleOntoPeriod({ operationalPeriodKey: '2026-10', cycles: annualCycles });
+  const nov = projectAnnualCapitalCycleOntoPeriod({ operationalPeriodKey: '2026-11', cycles: annualCycles });
+  assert.equal(jan.kind, 'assigned');
+  assert.equal(jan.operational_target_date, '2026-01-20');
+  assert.equal(sep.kind, 'assigned');
+  assert.equal(sep.cycle_closed, true);
+  assert.equal(oct.kind, 'filed');
+  assert.equal(oct.operational_target_date, '2026-01-20');
+  assert.equal(nov.kind, 'empty');
+  assert.equal(nov.operational_target_date, null);
+
+  const annualCell = buildAnnualReportCell({
+    taxYear: 2025,
+    instanceId: 'annual-1',
+    operationalTargetDate: '2026-01-20',
+    canEdit: true,
+    submissions: [{ tax_year: 2025, submitted_on: '2026-09-30' }],
+  });
+  assert.equal(annualCell.filing.square_chrome, 'filed');
+  const janCell = applyAnnualPeriodProjection(annualCell, jan, true);
+  const octCell = applyAnnualPeriodProjection(annualCell, oct, true);
+  const novCell = applyAnnualPeriodProjection(annualCell, nov, true);
+  assert.equal(janCell.filing.square_chrome, 'empty');
+  assert.equal(janCell.operational_target_date, '2026-01-20');
+  assert.equal(janCell.editable, false);
+  assert.equal(octCell.filing.square_chrome, 'filed');
+  assert.equal(octCell.operational_target_date, '2026-01-20');
+  assert.equal(novCell.filing.square_chrome, 'empty');
+  assert.equal(novCell.operational_target_date, null);
+  assert.equal(novCell.editable, true);
+
+  const nextAnnual = buildAnnualPeriodCycles({
+    instance: {
+      id: 'annual-1',
+      tax_year: 2025,
+      operational_target_date: '2026-11-15',
+      status: 'open',
+      created_at: '2026-01-05T10:00:00.000Z',
+      updated_at: '2026-11-02T10:00:00.000Z',
+    },
+    filingConfirmedAt: '2026-10-12T10:00:00.000Z',
+  });
+  assert.equal(
+    projectAnnualCapitalCycleOntoPeriod({ operationalPeriodKey: '2026-10', cycles: nextAnnual }).kind,
+    'filed',
+  );
+  assert.equal(
+    projectAnnualCapitalCycleOntoPeriod({ operationalPeriodKey: '2026-11', cycles: nextAnnual }).kind,
+    'assigned',
+  );
+  assert.equal(
+    projectAnnualCapitalCycleOntoPeriod({ operationalPeriodKey: '2026-11', cycles: nextAnnual }).operational_target_date,
+    '2026-11-15',
+  );
+
+  const capitalCycles = buildCapitalPeriodCycles([
+    {
+      id: 'cap-1',
+      operational_target_date: '2026-01-20',
+      status: 'completed',
+      opened_at: '2026-01-05T10:00:00.000Z',
+      completed_at: '2026-10-12T10:00:00.000Z',
+    },
+  ]);
+  assert.equal(
+    projectAnnualCapitalCycleOntoPeriod({ operationalPeriodKey: '2026-09', cycles: capitalCycles }).kind,
+    'assigned',
+  );
+  assert.equal(
+    projectAnnualCapitalCycleOntoPeriod({ operationalPeriodKey: '2026-10', cycles: capitalCycles }).kind,
+    'filed',
+  );
+  assert.equal(
+    projectAnnualCapitalCycleOntoPeriod({ operationalPeriodKey: '2026-11', cycles: capitalCycles }).kind,
+    'empty',
+  );
+
+  const capitalWithNew = buildCapitalPeriodCycles([
+    {
+      id: 'cap-1',
+      operational_target_date: '2026-01-20',
+      status: 'completed',
+      opened_at: '2026-01-05T10:00:00.000Z',
+      completed_at: '2026-10-12T10:00:00.000Z',
+    },
+    {
+      id: 'cap-2',
+      operational_target_date: '2026-11-08',
+      status: 'open',
+      opened_at: '2026-11-03T10:00:00.000Z',
+      completed_at: null,
+    },
+  ]);
+  const novNew = projectAnnualCapitalCycleOntoPeriod({
+    operationalPeriodKey: '2026-11',
+    cycles: capitalWithNew,
+  });
+  assert.equal(novNew.kind, 'assigned');
+  assert.equal(novNew.instance_id, 'cap-2');
+  assert.equal(novNew.operational_target_date, '2026-11-08');
+  assert.equal(
+    projectAnnualCapitalCycleOntoPeriod({ operationalPeriodKey: '2026-10', cycles: capitalWithNew }).instance_id,
+    'cap-1',
+  );
+
+  const unknownStart = projectAnnualCapitalCycleOntoPeriod({
+    operationalPeriodKey: '2025-12',
+    cycles: [
+      {
+        identity: 'legacy',
+        instance_id: 'cap-legacy',
+        operational_target_date: '2026-01-20',
+        assigned_from_period_key: null,
+        filed_period_key: '2026-10',
+      },
+    ],
+  });
+  assert.equal(unknownStart.kind, 'assigned');
+  assert.equal(unknownStart.legacy_unknown_assignment_start, true);
+
+  const unknownFiled = buildCapitalPeriodCycles([
+    {
+      id: 'cap-legacy-filed',
+      operational_target_date: '2026-01-20',
+      status: 'completed',
+      opened_at: '2026-01-05T10:00:00.000Z',
+      completed_at: null,
+    },
+  ]);
+  assert.equal(
+    projectAnnualCapitalCycleOntoPeriod({ operationalPeriodKey: '2026-10', cycles: unknownFiled }).kind,
+    'assigned',
+  );
+
+  const liveFiled = buildCapitalDeclarationCell({
+    openInstance: null,
+    datedCompletedInstance: {
+      id: 'cap-1',
+      tax_year: null,
+      operational_target_date: '2026-01-20',
+      sequence_no: 1,
+    },
+    canEdit: true,
+    submittedOn: '2026-09-01',
+  });
+  const novCapital = applyCapitalPeriodProjection(
+    liveFiled,
+    projectAnnualCapitalCycleOntoPeriod({ operationalPeriodKey: '2026-11', cycles: capitalCycles }),
+    true,
+  );
+  assert.equal(novCapital.filing.square_chrome, 'empty');
+  assert.equal(novCapital.assignment_state, 'unassigned');
+  assert.equal(novCapital.operational_target_date, null);
+});
+
 test('capital שודר copies checklist file_asset links into the instance archive then clears the working checklist', () => {
   const serviceSource = readFileSync(
     join(dir, '../../src/domains/client-operations/client-operations-annual-capital-operational.service.ts'),
     'utf8',
   );
   const start = serviceSource.indexOf('export async function fileClientOperationsCapitalDeclaration');
-  const slice = serviceSource.slice(start, start + 4500);
+  const slice = serviceSource.slice(start, start + 8000);
   assert.match(slice, /loadChecklistFileLinks/);
   assert.match(slice, /upsertSubmissionFileLinks/);
   assert.match(serviceSource, /source_kind: 'checklist'/);
@@ -359,4 +566,207 @@ test('capital שודר copies checklist file_asset links into the instance archi
   assert.ok(upsertIdx > 0 && resetIdx > upsertIdx);
   assert.match(slice, /tab_scope', 'capital_declaration'/);
   assert.doesNotMatch(slice, /storage\.from\(.*\)\.copy/);
+});
+
+test('annual in-cycle date change restores prior months from dated events and does not leak October onto January–September', async () => {
+  const {
+    applyAnnualPeriodProjection,
+    applyCapitalPeriodProjection,
+    buildAnnualPeriodCycles,
+    buildAnnualReportCell,
+    buildCapitalDeclarationCell,
+    buildCapitalPeriodCycles,
+    overlayAnnualProjectionDate,
+    projectAnnualCapitalCycleOntoPeriod,
+    resolveAnnualOperationalDateForPeriod,
+  } = await import('../../src/domains/client-operations/client-operations-annual-capital-operational.pure.js');
+
+  const instance = {
+    id: 'annual-1',
+    tax_year: 2025,
+    operational_target_date: '2026-10-18',
+    status: 'completed',
+    created_at: '2026-01-08T09:00:00.000Z',
+    updated_at: '2026-10-12T10:00:00.000Z',
+  };
+  const revisions = [
+    {
+      instance_id: 'annual-1',
+      operational_target_date: '2026-01-20',
+      effective_period_key: '2026-01',
+      recorded_at: '2026-01-08T09:00:00.000Z',
+    },
+    {
+      instance_id: 'annual-1',
+      operational_target_date: '2026-10-18',
+      effective_period_key: '2026-10',
+      recorded_at: '2026-10-04T11:00:00.000Z',
+    },
+  ];
+  const filingConfirmedAt = '2026-10-12T10:00:00.000Z';
+  const base = buildAnnualReportCell({
+    taxYear: 2025,
+    instanceId: instance.id,
+    operationalTargetDate: instance.operational_target_date,
+    canEdit: true,
+    submissions: [{ tax_year: 2025, submitted_on: '2026-09-30' }],
+  });
+
+  const cellForPeriod = (operationalPeriodKey: string) => {
+    const resolved = resolveAnnualOperationalDateForPeriod({
+      operationalPeriodKey,
+      instanceId: instance.id,
+      revisions,
+      instance,
+    });
+    const projection = overlayAnnualProjectionDate(
+      projectAnnualCapitalCycleOntoPeriod({
+        operationalPeriodKey,
+        cycles: buildAnnualPeriodCycles({
+          instance: { ...instance, operational_target_date: resolved.operational_target_date },
+          filingConfirmedAt,
+        }),
+      }),
+      resolved,
+    );
+    return applyAnnualPeriodProjection(base, projection, true);
+  };
+
+  const jan = cellForPeriod('2026-01');
+  const sep = cellForPeriod('2026-09');
+  const oct = cellForPeriod('2026-10');
+  const nov = cellForPeriod('2026-11');
+  assert.equal(jan.operational_target_date, '2026-01-20');
+  assert.equal(jan.filing.square_chrome, 'empty');
+  assert.equal(sep.operational_target_date, '2026-01-20');
+  assert.equal(sep.filing.square_chrome, 'empty');
+  assert.equal(oct.operational_target_date, '2026-10-18');
+  assert.equal(oct.filing.square_chrome, 'filed');
+  assert.equal(nov.operational_target_date, null);
+  assert.equal(nov.filing.square_chrome, 'empty');
+
+  const laterOnly = resolveAnnualOperationalDateForPeriod({
+    operationalPeriodKey: '2026-09',
+    instanceId: instance.id,
+    revisions: [revisions[1]],
+    instance,
+  });
+  assert.equal(laterOnly.source, 'unknown');
+  assert.equal(laterOnly.operational_target_date, null);
+
+  const unchangedAfterFiling = resolveAnnualOperationalDateForPeriod({
+    operationalPeriodKey: '2026-09',
+    instanceId: instance.id,
+    revisions: [],
+    instance: { ...instance, operational_target_date: '2026-01-20' },
+  });
+  assert.equal(unchangedAfterFiling.source, 'unchanged_instance');
+  assert.equal(unchangedAfterFiling.operational_target_date, '2026-01-20');
+
+  const capitalCycles = buildCapitalPeriodCycles([
+    {
+      id: 'cap-1',
+      operational_target_date: '2026-01-20',
+      status: 'completed',
+      opened_at: '2026-01-05T10:00:00.000Z',
+      completed_at: '2026-10-12T10:00:00.000Z',
+    },
+  ]);
+  const capitalSep = applyCapitalPeriodProjection(
+    buildCapitalDeclarationCell({
+      openInstance: null,
+      datedCompletedInstance: {
+        id: 'cap-1',
+        tax_year: null,
+        operational_target_date: '2026-01-20',
+        sequence_no: 1,
+      },
+      canEdit: true,
+      submittedOn: '2026-09-01',
+    }),
+    projectAnnualCapitalCycleOntoPeriod({ operationalPeriodKey: '2026-09', cycles: capitalCycles }),
+    true,
+  );
+  assert.equal(capitalSep.operational_target_date, '2026-01-20');
+  assert.equal(capitalSep.assignment_state, 'assigned');
+  assert.equal(capitalSep.filing.square_chrome, 'empty');
+
+  const serviceSource = readFileSync(
+    join(dir, '../../src/domains/client-operations/client-operations-annual-capital-operational.service.ts'),
+    'utf8',
+  );
+  const registrySource = readFileSync(
+    join(dir, '../../src/domains/client-operations/client-operations.service.ts'),
+    'utf8',
+  );
+  const dateSet = serviceSource.slice(
+    serviceSource.indexOf('export async function setAnnualReportOperationalTargetDate'),
+    serviceSource.indexOf('export async function openCapitalDeclarationInstance'),
+  );
+  assert.match(dateSet, /ANNUAL_DATE_SET_RPC/);
+  assert.match(dateSet, /writeAnnualDateSetAudit/);
+  assert.match(dateSet, /isSupabaseMissingRpcError/);
+  assert.match(dateSet, /upsertAnnualYearInstanceDate/);
+  assert.doesNotMatch(dateSet, /persistAnnualDateRevision/);
+  assert.match(serviceSource, /loadAnnualDateRevisionsForClients/);
+  assert.match(serviceSource, /from\('audit_log'\)/);
+  assert.match(serviceSource, /CLIENT_OPERATIONS_ANNUAL_REPORT_OPERATIONAL_TARGET_DATE_SET/);
+  assert.match(serviceSource, /set_client_annual_report_year_instance_date/);
+  assert.match(serviceSource, /client_annual_report_year_instance_date_revisions/);
+  assert.match(serviceSource, /resolveAnnualOperationalDateForPeriod/);
+  assert.match(serviceSource, /overlayAnnualProjectionDate/);
+  assert.match(registrySource, /loadAnnualDateRevisionsForClients/);
+  assert.match(registrySource, /dateRevisionsByInstanceId/);
+  const capitalProject = serviceSource.slice(
+    serviceSource.indexOf('export function projectCapitalDeclarationCells'),
+    serviceSource.indexOf('export async function setAnnualReportOperationalTargetDate'),
+  );
+  assert.doesNotMatch(capitalProject, /resolveAnnualOperationalDateForPeriod/);
+  assert.doesNotMatch(capitalProject, /dateRevisionsByInstanceId/);
+});
+
+test('annual date revisions merge audit and table rows without duplicating the same period', async () => {
+  const { mergeAnnualDateRevisions } = await import(
+    '../../src/domains/client-operations/client-operations-annual-capital-operational.pure.js'
+  );
+  const merged = mergeAnnualDateRevisions([
+    {
+      instance_id: 'annual-1',
+      operational_target_date: '2026-01-20',
+      effective_period_key: '2026-01',
+      recorded_at: '2026-01-08T09:00:00.000Z',
+    },
+    {
+      instance_id: 'annual-1',
+      operational_target_date: '2026-01-20',
+      effective_period_key: '2026-01',
+      recorded_at: '2026-01-08T09:00:00.400Z',
+    },
+    {
+      instance_id: 'annual-1',
+      operational_target_date: '2026-10-18',
+      effective_period_key: '2026-10',
+      recorded_at: '2026-10-04T11:00:00.000Z',
+    },
+  ]);
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0]?.effective_period_key, '2026-01');
+  assert.equal(merged[0]?.operational_target_date, '2026-01-20');
+  assert.equal(merged[1]?.effective_period_key, '2026-10');
+  assert.equal(merged[1]?.operational_target_date, '2026-10-18');
+});
+
+test('migration 220 creates append-only date revisions without rewriting existing history', () => {
+  const sql = readFileSync(
+    join(dir, '../../../../supabase/migrations/220_client_annual_report_year_instance_date_revisions.sql'),
+    'utf8',
+  );
+  assert.match(sql, /create table if not exists public\.client_annual_report_year_instance_date_revisions/);
+  assert.match(sql, /enable row level security/);
+  assert.match(sql, /set_client_annual_report_year_instance_date/);
+  assert.match(sql, /on conflict \(organization_id, client_id, tax_year\)/);
+  assert.doesNotMatch(sql, /drop table/i);
+  assert.doesNotMatch(sql, /update public\.client_annual_report_year_instances/i);
+  assert.doesNotMatch(sql, /delete from/i);
+  assert.match(sql, /Does NOT backfill from the current instance date/);
 });

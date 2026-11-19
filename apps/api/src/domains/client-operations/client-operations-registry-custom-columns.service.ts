@@ -1087,6 +1087,7 @@ export async function executeClientOperationsRegistryCommand(
     await fileClientOperationsCapitalDeclaration({
       ctx,
       clientId: idFrom(body.client_id, 'client_id'),
+      operationalPeriodKey: operationalPeriodKeyFrom(body.operational_period_key),
       instanceId: body.instance_id,
       submittedOn: body.submitted_on ?? body.submitted_at,
       files: body.files,

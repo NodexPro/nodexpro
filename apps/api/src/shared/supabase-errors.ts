@@ -88,6 +88,26 @@ export function isSupabaseMissingTableError(
   return false;
 }
 
+/** PostgREST: RPC not in schema cache. Postgres: undefined_function. */
+export function isSupabaseMissingRpcError(
+  error: SupabaseErrorLike | null | undefined,
+  functionName?: string,
+): boolean {
+  if (!error) return false;
+  const code = String(error.code ?? '');
+  const message = supabaseErrorMessage(error).toLowerCase();
+  const missing =
+    code === 'PGRST202' ||
+    code === '42883' ||
+    ((message.includes('does not exist') ||
+      message.includes('could not find') ||
+      message.includes('schema cache')) &&
+      (message.includes('function') || message.includes('rpc')));
+  if (!missing) return false;
+  if (!functionName) return true;
+  return message.includes(functionName.toLowerCase()) || code === 'PGRST202' || code === '42883';
+}
+
 function schemaDriftAppError(context: string, error: SupabaseErrorLike, migrationHint?: string): AppError {
   const message = supabaseErrorMessage(error);
   const hint =

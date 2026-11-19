@@ -105,12 +105,12 @@ import {
   type CapitalDeclarationOperationalDateCell,
 } from './client-operations-annual-capital-operational.pure.js';
 import {
+  loadAnnualDateRevisionsForClients,
   loadAnnualReportYearInstancesForClients,
   loadAnnualSubmissionFactsForClients,
   loadAnnualSubmissionFilesForSubmissions,
   loadCapitalDeclarationKpiInstances,
-  loadLatestDatedCompletedCapitalInstancesForClients,
-  loadOpenCapitalDeclarationInstancesForClients,
+  loadCapitalDeclarationInstancesForClients,
   projectAnnualReportCells,
   projectCapitalDeclarationCells,
 } from './client-operations-annual-capital-operational.service.js';
@@ -1573,13 +1573,12 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     customValuesByClientAndColumn,
     incomeTaxDeductionsReportedByClient,
     annualReportInstancesByClient,
-    openCapitalInstancesByClient,
+    capitalInstancesByClient,
     niDeductionsPeriodFlagsByClient,
     niDeductions126FactsByClient,
     earliestNiDeductionsApplicableByClient,
     reportingDashboardLoad,
     capitalKpiInstances,
-    completedCapitalByClient,
     annualSubmissionFacts,
     capitalSubmissionFacts,
     filingEvidenceByClient,
@@ -1602,7 +1601,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
           clientIds: matchingClientIds,
           taxYear: annualReportTaxYear,
         }),
-        loadOpenCapitalDeclarationInstancesForClients({
+        loadCapitalDeclarationInstancesForClients({
           organizationId: orgId,
           clientIds: matchingClientIds,
         }),
@@ -1629,10 +1628,6 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
           previousPeriodKeys,
         }),
         loadCapitalDeclarationKpiInstances({
-          organizationId: orgId,
-          clientIds: matchingClientIds,
-        }),
-        loadLatestDatedCompletedCapitalInstancesForClients({
           organizationId: orgId,
           clientIds: matchingClientIds,
         }),
@@ -1667,7 +1662,6 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
           previousPeriodKeys: [],
         }),
         [] as Awaited<ReturnType<typeof loadCapitalDeclarationKpiInstances>>,
-        new Map() as Awaited<ReturnType<typeof loadLatestDatedCompletedCapitalInstancesForClients>>,
         [] as Awaited<ReturnType<typeof loadAnnualSubmissionFactsForClients>>,
         [] as Awaited<ReturnType<typeof loadAnnualSubmissionFactsForClients>>,
         new Map() as Awaited<ReturnType<typeof loadClientOperationsFilingEvidenceByClient>>,
@@ -1687,21 +1681,34 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     }
   }
   const capitalSubmittedOnByInstanceId = new Map<string, string>();
+  const capitalFilingConfirmedAtByInstanceId = new Map<string, string>();
   const capitalSubmissionIdByInstanceId = new Map<string, string>();
   for (const row of capitalSubmissionFacts) {
-    if (!row.capital_declaration_instance_id || !row.submitted_on) continue;
-    if (!capitalSubmittedOnByInstanceId.has(row.capital_declaration_instance_id)) {
+    if (!row.capital_declaration_instance_id) continue;
+    if (row.submitted_on && !capitalSubmittedOnByInstanceId.has(row.capital_declaration_instance_id)) {
       capitalSubmittedOnByInstanceId.set(row.capital_declaration_instance_id, row.submitted_on);
       capitalSubmissionIdByInstanceId.set(row.capital_declaration_instance_id, row.id);
     }
+    if (row.created_at && !capitalFilingConfirmedAtByInstanceId.has(row.capital_declaration_instance_id)) {
+      capitalFilingConfirmedAtByInstanceId.set(row.capital_declaration_instance_id, row.created_at);
+    }
   }
-  const submissionFileMap = await loadAnnualSubmissionFilesForSubmissions({
-    organizationId: orgId,
-    submissionIds: [
-      ...annualSubmissionFacts.map((row) => row.id),
-      ...capitalSubmissionFacts.map((row) => row.id),
-    ],
-  });
+  const [dateRevisionsByInstanceId, submissionFileMap] = await Promise.all([
+    matchingClientIds.length
+      ? loadAnnualDateRevisionsForClients({
+          organizationId: orgId,
+          clientIds: matchingClientIds,
+          instanceIds: [...annualReportInstancesByClient.values()].map((row) => row.id),
+        })
+      : Promise.resolve(new Map()),
+    loadAnnualSubmissionFilesForSubmissions({
+      organizationId: orgId,
+      submissionIds: [
+        ...annualSubmissionFacts.map((row) => row.id),
+        ...capitalSubmissionFacts.map((row) => row.id),
+      ],
+    }),
+  ]);
   const capitalFilesByInstanceId = new Map<string, NonNullable<ReturnType<typeof submissionFileMap.get>>>();
   for (const [instanceId, submissionId] of capitalSubmissionIdByInstanceId) {
     capitalFilesByInstanceId.set(instanceId, submissionFileMap.get(submissionId) ?? []);
@@ -1709,17 +1716,20 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
   const annualReportCells = projectAnnualReportCells({
     clientIds: matchingClientIds,
     taxYear: annualReportTaxYear,
+    operationalPeriodKey: selectedPeriodKey,
     instancesByClientId: annualReportInstancesByClient,
     canEdit: canEditRegistry,
     submissionsByClientId: annualSubmissionsByClientId,
     filesBySubmissionId: submissionFileMap,
+    dateRevisionsByInstanceId,
   });
   const capitalDeclarationCells = projectCapitalDeclarationCells({
     clientIds: matchingClientIds,
-    openByClientId: openCapitalInstancesByClient,
-    completedByClientId: completedCapitalByClient,
+    operationalPeriodKey: selectedPeriodKey,
+    instancesByClientId: capitalInstancesByClient,
     canEdit: canEditRegistry,
     submittedOnByInstanceId: capitalSubmittedOnByInstanceId,
+    filingConfirmedAtByInstanceId: capitalFilingConfirmedAtByInstanceId,
     filesByInstanceId: capitalFilesByInstanceId,
   });
   const capitalOpenByClient = new Map<string, { operational_target_date: string | null; status: string }>();

@@ -230,6 +230,24 @@ test('annual/capital filing square and named file commands stay render-only', ()
   assert.doesNotMatch(viewSource, /resolveAnnualReportTaxYearForOperationalPeriod/);
 });
 
+test('registry month tabs stay GET-only and paint annual/capital cells from backend square_chrome', () => {
+  assert.match(tabsSource, /GET registry/);
+  assert.match(viewSource, /square_chrome === 'filed'/);
+  assert.doesNotMatch(viewSource, /submitted_on\s*&&\s*.*square_chrome/);
+  assert.doesNotMatch(viewSource, /already_filed\s*\?\s*'filed'/);
+  assert.match(viewSource, /operational_period_key: period/);
+  const serviceSource = readFileSync(
+    join(dir, '../../api/src/domains/client-operations/client-operations.service.ts'),
+    'utf8',
+  );
+  assert.match(serviceSource, /operationalPeriodKey: selectedPeriodKey/);
+  assert.match(serviceSource, /loadCapitalDeclarationInstancesForClients/);
+  assert.match(serviceSource, /loadAnnualDateRevisionsForClients/);
+  assert.match(serviceSource, /dateRevisionsByInstanceId/);
+  assert.match(viewSource, /operationalCell\.operational_target_date/);
+  assert.doesNotMatch(viewSource, /new Date\(\)\.toISOString\(\)/);
+});
+
 test('annual and capital registry calendars share one pending overlay', () => {
   assert.match(viewSource, /pendingFilingDateStateKey/);
   assert.match(viewSource, /displayedPendingIsoDate/);

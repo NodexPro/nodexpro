@@ -4376,6 +4376,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         await onRegistryCommand({
           command: 'file_client_operations_capital_declaration',
           client_id: liveRow.client_id,
+          operational_period_key: period,
           instance_id: filing.instance_id,
           submitted_on: annualCapitalModal.submittedOn || null,
           files: annualCapitalModal.pendingFiles,
