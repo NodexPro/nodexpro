@@ -142,6 +142,7 @@ export function ClientAnnualReportTab({
   const [archiveOpenKey, setArchiveOpenKey] = useState<string | null>(null);
   const [pendingDueDate, setPendingDueDate] = useState<string | null>(null);
   const [historyOpenKey, setHistoryOpenKey] = useState<string | null>(null);
+  const [clientListThreadId, setClientListThreadId] = useState('');
   const capitalDateGenRef = useRef(0);
   const [yearPersistPending, setYearPersistPending] = useState(false);
   const yearCacheRef = useRef(new Map<string, (typeof yearViews)[number]>());
@@ -887,6 +888,114 @@ export function ClientAnnualReportTab({
           </div>
         </section>
       ) : null}
+      {annualTab.client_document_list ? (
+        <section className="nx-annual-client-list" data-testid="annual-client-document-list">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <h3 className="nx-annual-card-title">{t(annualTab.client_document_list.title_key)}</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {annualTab.client_document_list.can_generate ? (
+                <button
+                  type="button"
+                  className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
+                  disabled={busy}
+                  onClick={() =>
+                    void (async () => {
+                      setBusy(true);
+                      setErr('');
+                      try {
+                        const out = await postAnnualCommand('generate_client_document_list_pdf', {
+                          declaration_date: annualTab.assigned_due_date ?? null,
+                        });
+                        applyReturnedVersion(out);
+                        onCaseUpdated(out);
+                        const nextTab =
+                          annualTab.tab_key === 'capital_declaration' ? out.capital_declaration_tab : out.annual_tab;
+                        const previewId = nextTab?.client_document_list?.preview?.file_asset_id;
+                        if (previewId) await openFile(previewId);
+                      } catch (e) {
+                        setErr(userFacingApiMessage(e));
+                      } finally {
+                        setBusy(false);
+                      }
+                    })()
+                  }
+                >
+                  {t(annualTab.client_document_list.generate_label_key)}
+                </button>
+              ) : null}
+              {annualTab.client_document_list.preview.can_open && annualTab.client_document_list.preview.file_asset_id ? (
+                <button
+                  type="button"
+                  className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
+                  disabled={busy}
+                  onClick={() => void openFile(annualTab.client_document_list!.preview.file_asset_id!)}
+                >
+                  {t(annualTab.client_document_list.preview_label_key)}
+                </button>
+              ) : null}
+            </div>
+          </div>
+          {annualTab.client_document_list.items.length === 0 ? (
+            <p className="nx-annual-empty-cell">{t(annualTab.client_document_list.empty_key)}</p>
+          ) : (
+            <ul className="nx-annual-client-list__items">
+              {annualTab.client_document_list.items.map((item) => (
+                <li key={item.row_id} className="nx-annual-client-list__item">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={item.include_in_client_list}
+                      disabled={busy || !annualTab.permissions.can_edit}
+                      onChange={() =>
+                        void postCmd('set_annual_document_client_list_inclusion', {
+                          row_id: item.row_id,
+                          include_in_client_list: !item.include_in_client_list,
+                        })
+                      }
+                    />
+                    <span>{item.client_facing_name}</span>
+                  </label>
+                  {item.client_facing_description ? (
+                    <p className="nx-annual-client-list__desc">{item.client_facing_description}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          {annualTab.client_document_list.docflow_threads.length ? (
+            <div className="nx-annual-client-list__send">
+              <label>
+                {t('clientOperations.annual.clientDocumentListThread')}
+                <select
+                  value={clientListThreadId}
+                  disabled={busy || !annualTab.client_document_list.can_send}
+                  onChange={(event) => setClientListThreadId(event.target.value)}
+                >
+                  <option value=""> </option>
+                  {annualTab.client_document_list.docflow_threads.map((thread) => (
+                    <option key={thread.thread_id} value={thread.thread_id}>
+                      {thread.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="nx-btn nx-btn-taxes-compact"
+                disabled={busy || !annualTab.client_document_list.can_send || !clientListThreadId}
+                onClick={() =>
+                  void postCmd('send_client_document_list_via_docflow', {
+                    thread_id: clientListThreadId,
+                    send_id: annualTab.client_document_list?.send_history[0]?.send_id ?? null,
+                  })
+                }
+              >
+                {t(annualTab.client_document_list.send_label_key)}
+              </button>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
       </div>
 
       <div
@@ -1120,12 +1229,17 @@ function DocumentRow({
             <span className="nx-capital-receipt-hint">{t(row.receipt_hint_key)}</span>
           ) : null}
           {row.description_he ? (
-            <span
+            <button
+              type="button"
               className="nx-annual-doc-info"
+              aria-describedby={`annual-doc-tip-${row.row_id}`}
               aria-label={localizeSystemLabel(t, row.description_key, row.description_he)}
             >
-              i
-            </span>
+              <span aria-hidden>i</span>
+              <span id={`annual-doc-tip-${row.row_id}`} role="tooltip" className="nx-annual-doc-tooltip">
+                {localizeSystemLabel(t, row.description_key, row.description_he)}
+              </span>
+            </button>
           ) : null}
           {row.source_type === 'custom' ? <span className="nx-annual-badge">{t('clientOperations.annual.customBadge')}</span> : null}
           {row.actions.can_rename_document || row.actions.can_remove_row ? (

@@ -1230,7 +1230,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [evidencePending, setEvidencePending] = useState(false);
   const [evidenceFeedback, setEvidenceFeedback] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
   const evidenceLockRef = useRef(false);
-  const [niEvidencePrompt, setNiEvidencePrompt] = useState<{ clientId: string } | null>(null);
+  const [niEvidencePrompt, setNiEvidencePrompt] = useState<{
+    clientId: string;
+    filingTarget: 'national_insurance_deductions' | 'income_tax_deductions';
+  } | null>(null);
   const niEvidenceInputRef = useRef<HTMLInputElement | null>(null);
   const [niModal, setNiModal] = useState<{
     row: ClientOperationsRegistryRow;
@@ -4114,7 +4117,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         await onRegistryCommand({
           command: 'attach_client_operations_filing_evidence',
           client_id: clientId,
-          filing_target: 'national_insurance_deductions',
+          filing_target: niEvidencePrompt.filingTarget,
           evidence_kind: evidenceKind,
           operational_period_key: query?.operational_period_key ?? null,
           file_base64: base64,
@@ -5544,7 +5547,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               onClick={(event) => {
                 event.stopPropagation();
                 setEvidenceFeedback(null);
-                setNiEvidencePrompt({ clientId: r.client_id });
+                setNiEvidencePrompt({ clientId: r.client_id, filingTarget: 'national_insurance_deductions' });
               }}
             >
               <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
@@ -5633,37 +5636,56 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         viewedPeriodKey: viewedCheckboxPeriodKey,
       });
       const saving = pendingMarkKeys.has(markKey);
+      const attachLabel = t('clientOperations.registry.reporting.filing.attach');
       return (
-        <label
-          className={`nx-co-sheet__itd-slot${editable ? '' : ' is-inactive'}${saving ? ' is-saving' : ''}`}
-          title={editable ? undefined : t('clientOperations.hasDeductionsFileNoReport')}
-        >
-          <input
-            type="checkbox"
-            className="nx-co-sheet__checkbox"
-            checked={checked}
-            disabled={!editable || !canEdit || !col.editable || !onRegistryCommand}
-            aria-busy={saving}
-            aria-label={`${col.label} — ${clientLabel} — ${periodLabel}${editable ? '' : t('clientOperations.notRequiredThisMonth')}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
-            onChange={() => {
-              if (statusPaintMode) return;
-              if (pendingMarkKeysRef.current.has(markKey)) return;
-              void toggleIncomeTaxDeductions(r);
-            }}
+        <div className="nx-co-sheet__ni-forms" role="group" aria-label={`${col.label} — ${clientLabel}`}>
+          <button
+            type="button"
+            className="nx-co-sheet__ni-clip"
+            title={attachLabel}
+            aria-label={attachLabel}
+            disabled={!canEdit || !onRegistryCommand}
             onClick={(event) => {
               event.stopPropagation();
-              if (statusPaintMode) {
-                event.preventDefault();
-                paintCellManualStatus(r, col.key);
-                return;
-              }
-              // Presentation-only selection — does not change checkbox domain value.
-              if (consumeFormatSelectionClick(event)) {
-                event.preventDefault();
-              }
+              setEvidenceFeedback(null);
+              setNiEvidencePrompt({ clientId: r.client_id, filingTarget: 'income_tax_deductions' });
             }}
-          />
-        </label>
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <path fill="currentColor" d="M16.5 6.5v9.2a4.5 4.5 0 1 1-9 0V6.8a3 3 0 0 1 6 0v8.2a1.5 1.5 0 0 1-3 0V7.2h-1.5v7.8a3 3 0 0 0 6 0V6.8a4.5 4.5 0 0 0-9 0v8.9a6 6 0 0 0 12 0V6.5h-1.5Z" />
+            </svg>
+          </button>
+          <label
+            className={`nx-co-sheet__itd-slot${editable ? '' : ' is-inactive'}${saving ? ' is-saving' : ''}`}
+            title={editable ? undefined : t('clientOperations.hasDeductionsFileNoReport')}
+          >
+            <input
+              type="checkbox"
+              className="nx-co-sheet__checkbox"
+              checked={checked}
+              disabled={!editable || !canEdit || !col.editable || !onRegistryCommand}
+              aria-busy={saving}
+              aria-label={`${col.label} — ${clientLabel} — ${periodLabel}${editable ? '' : t('clientOperations.notRequiredThisMonth')}${saving ? ` — ${t('clientOperations.registry.saving')}` : ''}`}
+              onChange={() => {
+                if (statusPaintMode) return;
+                if (pendingMarkKeysRef.current.has(markKey)) return;
+                void toggleIncomeTaxDeductions(r);
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (statusPaintMode) {
+                  event.preventDefault();
+                  paintCellManualStatus(r, col.key);
+                  return;
+                }
+                // Presentation-only selection — does not change checkbox domain value.
+                if (consumeFormatSelectionClick(event)) {
+                  event.preventDefault();
+                }
+              }}
+            />
+          </label>
+        </div>
       );
     }
     if (col.cell_kind === 'checkbox') {
@@ -6426,8 +6448,24 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       ) : null}
       {niEvidencePrompt ? (() => {
         const liveRow = rows.find((row) => row.client_id === niEvidencePrompt.clientId);
-        const attachment = liveRow?.reporting?.cells?.national_insurance_deductions?.evidence_attachment;
-        if (!attachment) return null;
+        const reportingAttachment =
+          liveRow?.reporting?.cells?.[niEvidencePrompt.filingTarget]?.evidence_attachment;
+        const periodKey = query?.operational_period_key ?? reportingAttachment?.period_key ?? '';
+        const attachment = reportingAttachment ?? {
+          notice_key: 'clientOperations.registry.reporting.filing.attachmentNotice',
+          filing_label_key:
+            niEvidencePrompt.filingTarget === 'income_tax_deductions'
+              ? 'clientOperations.registry.columns.incomeTaxDeductions'
+              : 'clientOperations.registry.columns.niDeductions',
+          period_key: periodKey,
+          period_display: periodKey,
+          evidence: [] as Array<{
+            document_id: string;
+            file_name: string | null;
+            evidence_kind: 'filing' | 'payment';
+            reporting_period_display: string;
+          }>,
+        };
         return (
           <div className="nx-clients-overlay nx-co-ni-overlay">
             <div

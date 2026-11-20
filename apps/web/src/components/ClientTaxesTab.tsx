@@ -1050,7 +1050,9 @@ export function ClientTaxesTab({
           <div className="nx-ws-taxes-summary">
             <h2 className="nx-ws-taxes-summary__title">{localizeSystemLabel(t, taxTab.header.title_key, taxTab.header.title_he)}</h2>
             <dl className="nx-ws-taxes-summary__grid">
-              {taxTab.header.summary_rows.map((row) => (
+              {taxTab.header.summary_rows
+                .filter((row) => row.visible !== false)
+                .map((row) => (
                 <div key={row.row_key} className="nx-ws-taxes-summary__cell">
                   <dt className="nx-ws-taxes-summary__label">{localizeSystemLabel(t, row.label_key, row.label_he)}</dt>
                   <dd className="nx-ws-taxes-summary__value">{localizeSystemLabel(t, row.value_key, row.value_he)}</dd>

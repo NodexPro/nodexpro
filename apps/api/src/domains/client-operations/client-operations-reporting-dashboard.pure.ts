@@ -792,10 +792,11 @@ export function buildReportingCellPresentation(
     allowed_actions,
     payment_modal: paymentModal,
     evidence_attachment:
-      input.kind === 'national_insurance_deductions' && applicable
+      (input.kind === 'national_insurance_deductions' || input.kind === 'income_tax_deductions') && applicable
         ? {
             notice_key: CO_UI.reporting.filing.attachmentNotice,
-            filing_label_key: CO_UI.columns.niDeductions,
+            filing_label_key:
+              input.kind === 'income_tax_deductions' ? CO_UI.columns.incomeTaxDeductions : CO_UI.columns.niDeductions,
             period_key: input.operational_period_key ?? '',
             period_display: input.operational_period_key
               ? formatReportingPeriodDisplayLabel(input.operational_period_key)
@@ -1417,7 +1418,7 @@ export function selfEmployedNiOfficeReminderActive(input: {
     monthSettings: input.monthSettings,
   });
   if (handling.january_confirmation_required) return false;
-  if (handling.method !== 'manual_monthly') return false;
+  if (handling.method === 'standing_order' || handling.method === 'client_pays') return false;
   if (selfEmployedNiActionResolved(input.obligationStatus)) return false;
   const period = String(input.periodKey ?? '').trim();
   const today = String(input.today ?? '').slice(0, 10);

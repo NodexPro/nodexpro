@@ -1462,7 +1462,7 @@
         "caseClosure": "סגירת תיק",
         "vatFilings": "דיווח מע״מ",
         "incomeTaxAdvanceFilings": "דיווח מקדמות",
-        "niDeductionsFilings": "דיווחי ב״ל"
+        "niDeductionsFilings": "דיווחים מ\"ה וב\"ל ניכויים"
       }
     },
     "history": {
@@ -1998,6 +1998,13 @@
       "capitalStatusCard": "סטטוס הצהרת הון",
       "documentsList": "רשימת מסמכים לדוח שנתי",
       "capitalDocumentsList": "רשימת מסמכים להצהרת הון",
+      "clientDocumentList": "רשימת מסמכים ללקוח",
+      "clientDocumentListGenerate": "הפקת PDF",
+      "clientDocumentListPreview": "תצוגה מקדימה",
+      "clientDocumentListSend": "שליחה ב-DocFlow",
+      "clientDocumentListInclude": "לכלול ברשימת הלקוח",
+      "clientDocumentListEmpty": "אין פריטים שנבחרו לרשימת הלקוח",
+      "clientDocumentListThread": "שיחת DocFlow",
       "submissionsCard": "תאריכי הגשת דוחות שנתיים קודמים",
       "capitalSubmissionsCard": "תאריכי הגשת הצהרות הון קודמות",
       "notesCard": "הערות",
@@ -2064,6 +2071,7 @@
         "incomeTaxAdvanceNotApplicable": "חומר מקדמות מס הכנסה אינו רלוונטי לתקופה זו",
         "niDeductionsNotApplicable": "ניכויי ביטוח לאומי אינם רלוונטיים לתקופה זו",
         "incomeTaxDeductionsNotDue": "ניכויי מס הכנסה אינם רלוונטיים לתקופה זו",
+        "aggregateNotApplied": "הרישום המעודכן לא תואם את התקופה שנבחרה.",
         "saveFailed": "שמירת הסימון נכשלה"
       },
       "columns": {

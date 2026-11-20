@@ -1681,12 +1681,15 @@ export async function executeClientOperationsRegistryCommand(
   const { refreshClientOperationsRegistryAfterMutation, listClientOperationsRegistry } =
     await import('./client-operations.service.js');
   const responseQuery = queryFrom(body.query);
-  if (
+  if (typeof body.operational_period_key === 'string' && body.operational_period_key.trim()) {
+    responseQuery.operational_period_key = operationalPeriodKeyFrom(body.operational_period_key);
+  } else if (
     MATERIAL_REGISTRY_COMMANDS.has(command) ||
     OPERATIONAL_DATE_REGISTRY_COMMANDS.has(command) ||
     NI_DEDUCTIONS_REGISTRY_COMMANDS.has(command) ||
     INCOME_TAX_DEDUCTIONS_REGISTRY_COMMANDS.has(command) ||
-    FILING_REGISTRY_COMMANDS.has(command)
+    FILING_REGISTRY_COMMANDS.has(command) ||
+    command === CLIENT_OPERATIONS_CELL_PRESENTATION_COMMAND
   ) {
     responseQuery.operational_period_key = operationalPeriodKeyFrom(
       body.operational_period_key ?? responseQuery.operational_period_key,
@@ -1697,11 +1700,6 @@ export async function executeClientOperationsRegistryCommand(
       body.target_operational_period_key ??
         body.operational_period_key ??
         responseQuery.operational_period_key,
-    );
-  }
-  if (command === CLIENT_OPERATIONS_CELL_PRESENTATION_COMMAND) {
-    responseQuery.operational_period_key = operationalPeriodKeyFrom(
-      body.operational_period_key ?? responseQuery.operational_period_key,
     );
   }
   // No-op ensure: GET already populated the materialization — do not drop it and rebuild.

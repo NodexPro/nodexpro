@@ -300,12 +300,13 @@ test('GET capital tab loads existing instance folders without seeding a profile'
   assert.match(serviceSrc, /Does not seed a profile or create instances/);
   assert.match(serviceSrc, /client_capital_declaration_instances/);
   const readOnlyIdx = serviceSrc.indexOf('if (options?.readOnly)');
-  const elseIdx = serviceSrc.indexOf('} else {', readOnlyIdx);
-  const readOnlyBlock = serviceSrc.slice(readOnlyIdx, elseIdx);
+  const throwIdx = serviceSrc.indexOf("throw annualDbError('annual profile read failed'", readOnlyIdx);
+  const readOnlyBlock = serviceSrc.slice(readOnlyIdx, throwIdx > readOnlyIdx ? throwIdx : readOnlyIdx + 800);
   assert.match(readOnlyBlock, /loadCapitalRequirementFoldersForClient/);
   assert.match(readOnlyBlock, /buildAnnualFallbackReadModel/);
   assert.doesNotMatch(readOnlyBlock, /ensureProfile\(/);
   assert.doesNotMatch(readOnlyBlock, /ensureSystemDocumentRows\(/);
+  assert.match(serviceSrc, /if \(!options\?\.readOnly\) \{[\s\S]*ensureProfile\(/);
 });
 
 test('empty checklist is missing documents, never 100% ready; catalog projects without GET insert', () => {

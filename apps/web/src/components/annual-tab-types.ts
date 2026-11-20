@@ -299,6 +299,37 @@ export type AnnualTabModel = {
       actions?: { can_open: boolean; can_preview: boolean };
     }>;
   }>;
+  client_document_list?: {
+    title_key: string;
+    generate_label_key: string;
+    preview_label_key: string;
+    send_label_key: string;
+    include_label_key: string;
+    empty_key: string;
+    can_generate: boolean;
+    can_send: boolean;
+    items: Array<{
+      row_id: string;
+      internal_name: string;
+      client_facing_name: string;
+      client_facing_description: string | null;
+      include_in_client_list: boolean;
+      source_type: 'system' | 'custom';
+    }>;
+    preview: {
+      file_asset_id: string | null;
+      generated_at: string | null;
+      can_open: boolean;
+    };
+    send_history: Array<{
+      send_id: string;
+      generated_at: string;
+      file_asset_id: string;
+      docflow_message_id: string | null;
+      frozen: true;
+    }>;
+    docflow_threads: Array<{ thread_id: string; label: string }>;
+  };
   capital_folders?: Array<{
     folder_key: string;
     instance_id: string;

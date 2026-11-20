@@ -33,7 +33,7 @@ test('GET case is read-only — no recompute, no document writes', () => {
   assert.doesNotMatch(fn, /recomputeClientObligationsAndTasks/);
   assert.match(fn, /readOnly:\s*true/);
   assert.match(fn, /skipEnsureDefaultFolders:\s*true/);
-  assert.match(fn, /getAnnualTabReadModel\(ctx, clientId, undefined, \{ readOnly: true \}\)/);
+  assert.match(fn, /getAnnualTabReadModel\(ctx, clientId, undefined, \{ readOnly: true, skipClientCheck: true \}\)/);
   assert.match(fn, /getPayrollTabReadModel\(ctx, clientId, \{ readOnly: true \}\)/);
   assert.match(documents, /readOnly\?: boolean/);
   assert.match(documents, /if \(options\?\.readOnly\)/);

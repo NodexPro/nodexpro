@@ -16,7 +16,8 @@ export function SidebarAccountBlock(props: {
   onLogout: () => void | Promise<void>;
   busy?: boolean;
 }) {
-  const { block, expanded, onSelectOrganization, onLogout, busy = false } = props;
+  const { block, expanded, onSelectOrganization, onSetLanguage, onLogout, busy = false } = props;
+  const languageSelectorVisible = block.language_selector?.visible !== false;
   const showLogout = block.logout_action?.visible !== false;
   const showOfficeContext = Boolean(block.office_context?.visible && block.office_context.name);
   const initials = useMemo(() => initialsFromDisplayName(block.user_display_name), [block.user_display_name]);
@@ -65,6 +66,31 @@ export function SidebarAccountBlock(props: {
             {block.organization_switcher.organizations.map((o) => (
               <option key={o.organization_id} value={o.organization_id}>
                 {o.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
+      {languageSelectorVisible ? (
+        <div className="t1-sidebar-account__field" data-testid="sidebar-language-selector">
+          <label className="t1-sidebar-account__label" htmlFor="t1-sidebar-language-select">
+            {block.language_selector.label}
+          </label>
+          <select
+            id="t1-sidebar-language-select"
+            className="t1-sidebar-account__select"
+            disabled={busy}
+            value={block.language_selector.current_value}
+            onChange={(e) => {
+              const code = e.target.value;
+              if (code !== 'en' && code !== 'he') return;
+              void onSetLanguage(code);
+            }}
+          >
+            {block.language_selector.options.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
               </option>
             ))}
           </select>

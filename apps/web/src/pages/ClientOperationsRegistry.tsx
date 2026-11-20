@@ -33,6 +33,10 @@ import {
   type ClientOperationsRegistryCacheQuery,
   type PeriodAggregateCacheEntry,
 } from '../lib/client-operations-period-aggregate-cache.pure';
+import {
+  resolveRegistryCommandApplyDecision,
+  resolveRegistryCommandRequestedPeriod,
+} from '../lib/client-operations-registry-command-apply.pure';
 
 type ClientOperationsReportingDashboard = {
   kpi_cards: Array<{
@@ -791,21 +795,32 @@ export function ClientOperationsRegistry() {
   const onRegistryCommand = useCallback(
     (body: Record<string, unknown>, options?: { applyAggregate?: boolean; requireApplied?: boolean }) => {
       commandInFlightRef.current += 1;
+      const requestedPeriod = resolveRegistryCommandRequestedPeriod({
+        bodyPeriodKey: body.operational_period_key,
+        viewedPeriodKey: viewedPeriodKeyRef.current,
+        queryPeriodKey: query.operational_period_key,
+      });
       return apiJson<RegistryAggregate>(moduleClientOperationsRegistryCommands(), {
         method: 'POST',
         body: JSON.stringify({
           ...body,
           query: {
             ...query,
-            operational_period_key:
-              (typeof body.operational_period_key === 'string' && body.operational_period_key) ||
-              query.operational_period_key,
+            operational_period_key: requestedPeriod,
           },
         }),
       })
         .then((data) => {
-          const applied = options?.applyAggregate === false ? true : applyAggregate(data);
-          if (options?.requireApplied && !applied) {
+          const appliedToView = options?.applyAggregate === false ? false : applyAggregate(data);
+          const decision = resolveRegistryCommandApplyDecision({
+            applyAggregate: options?.applyAggregate !== false,
+            requireApplied: options?.requireApplied === true,
+            appliedToView,
+            requestedPeriodKey: requestedPeriod,
+            responsePeriodKey: resolveRegistryAggregatePeriodKey(data),
+            viewedPeriodKey: viewedPeriodKeyRef.current,
+          });
+          if (!decision.ok) {
             const error = new Error('registry aggregate was not applied to the selected period');
             (error as Error & { code?: string }).code = 'AGGREGATE_NOT_APPLIED';
             throw error;

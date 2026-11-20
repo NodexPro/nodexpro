@@ -6,7 +6,7 @@ const REGISTRY_COMMAND_ERROR_KEYS: Record<string, string> = {
   CLIENT_OPERATIONS_NI_DEDUCTIONS_NOT_APPLICABLE: 'clientOperations.registry.errors.niDeductionsNotApplicable',
   CLIENT_OPERATIONS_INCOME_TAX_DEDUCTIONS_NOT_DUE: 'clientOperations.registry.errors.incomeTaxDeductionsNotDue',
   OBLIGATION_FILING_NOT_RECORDED: 'clientOperations.registry.reporting.filing.notConfirmed',
-  AGGREGATE_NOT_APPLIED: 'clientOperations.registry.reporting.filing.notConfirmed',
+  AGGREGATE_NOT_APPLIED: 'clientOperations.registry.errors.aggregateNotApplied',
   ANNUAL_OTHER_TAX_YEAR_CONFIRM_REQUIRED:
     'clientOperations.registry.reporting.annualCapital.confirmOtherYear',
   ANNUAL_CAPITAL_FILING_MIGRATION_PENDING:
@@ -28,7 +28,7 @@ const LEGACY_MESSAGE_KEYS: Record<string, string> = {
     'clientOperations.registry.errors.incomeTaxDeductionsNotDue',
   'obligation filing was not recorded': 'clientOperations.registry.reporting.filing.notConfirmed',
   'registry aggregate was not applied to the selected period':
-    'clientOperations.registry.reporting.filing.notConfirmed',
+    'clientOperations.registry.errors.aggregateNotApplied',
 };
 
 export function resolveClientOperationsRegistryCommandErrorKey(input: {

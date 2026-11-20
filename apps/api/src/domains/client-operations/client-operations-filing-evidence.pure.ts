@@ -7,7 +7,12 @@
 export const FILING_EVIDENCE_KINDS = ['filing', 'payment'] as const;
 export type FilingEvidenceKind = (typeof FILING_EVIDENCE_KINDS)[number];
 
-export const FILING_EVIDENCE_OBLIGATION_KINDS = ['vat', 'income_tax_advance', 'national_insurance_deductions'] as const;
+export const FILING_EVIDENCE_OBLIGATION_KINDS = [
+  'vat',
+  'income_tax_advance',
+  'national_insurance_deductions',
+  'income_tax_deductions',
+] as const;
 export type FilingEvidenceObligationKind = (typeof FILING_EVIDENCE_OBLIGATION_KINDS)[number];
 
 /** System folders inside the existing client documents workspace. */
@@ -15,6 +20,7 @@ export const FILING_EVIDENCE_FOLDER_SYSTEM_KEY: Record<FilingEvidenceObligationK
   vat: 'vat_filings',
   income_tax_advance: 'income_tax_advance_filings',
   national_insurance_deductions: 'ni_deductions_filings',
+  income_tax_deductions: 'ni_deductions_filings',
 };
 
 const MANUAL_CONFIRM_STATUSES = new Set([
@@ -48,6 +54,11 @@ export function filingEvidenceFolderSystemKey(kind: FilingEvidenceObligationKind
 /** Payroll NI evidence identity for the selected operational month. Not self-employed NI. */
 export function niDeductionsEvidenceCanonicalId(operationalPeriodKey: string): string {
   return `national_insurance_deductions::${operationalPeriodKey}`;
+}
+
+/** Income-tax deductions evidence identity for the selected operational month. */
+export function incomeTaxDeductionsEvidenceCanonicalId(operationalPeriodKey: string): string {
+  return `income_tax_deductions::${operationalPeriodKey}`;
 }
 
 /**

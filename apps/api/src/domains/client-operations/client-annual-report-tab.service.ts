@@ -12,6 +12,15 @@ import { requireGuardedUpload } from '../../shared/file-content-guard.js';
 import { assertFileAssetDownloadable } from '../../shared/document-download-guard.js';
 import { syncAnnualScopeMaterialWorkEvent } from './client-operations-work-engine-bridge.js';
 import { invalidateClientOperationsRegistryMaterializationCache } from './client-operations-registry-materialization-cache.js';
+import {
+  buildAnnualClientDocumentListSection,
+  generateAnnualClientDocumentListPdf,
+  sendAnnualClientDocumentListViaDocflow,
+  setAnnualDocumentClientListInclusion,
+  supportsAnnualClientListColumns,
+  type AnnualClientDocumentListSection,
+} from './client-annual-client-document-list.service.js';
+import { defaultIncludeInClientList } from './client-annual-client-document-list.pure.js';
 import { logClientOperationsTiming } from './client-operations-command-timing.js';
 import {
   ANNUAL_CONTROL_STATUS_LABEL_KEY,
@@ -431,6 +440,7 @@ export type AnnualTabResponse = {
   year_views: AnnualYearViewDto[];
   year_folders: AnnualYearFolder[];
   capital_folders: CapitalRequirementFolder[];
+  client_document_list?: AnnualClientDocumentListSection;
 };
 
 export interface AnnualYearViewDto {
@@ -492,7 +502,10 @@ export type AnnualAnnualCommandType =
   | 'update_annual_notes'
   | 'copy_previous_capital_declaration'
   | 'select_annual_working_tax_year'
-  | 'set_capital_declaration_operational_target_date';
+  | 'set_capital_declaration_operational_target_date'
+  | 'set_annual_document_client_list_inclusion'
+  | 'generate_client_document_list_pdf'
+  | 'send_client_document_list_via_docflow';
 
 function assertOrg(ctx: RequestContext): string {
   const orgId = ctx.organizationId;
@@ -1653,6 +1666,7 @@ async function ensureSystemDocumentRows(
   );
   const missing = templates.filter((t) => !existingKeys.has(t.system_key));
   if (!missing.length) return;
+  const listCols = await supportsAnnualClientListColumns();
   const rows = missing.map((t) => ({
     organization_id: orgId,
     client_id: clientId,
@@ -1662,6 +1676,15 @@ async function ensureSystemDocumentRows(
     system_key: t.system_key,
     document_name_he: t.document_name_he,
     ...(scoped ? { description_he: t.description_he, required: t.required } : {}),
+    ...(listCols
+      ? {
+          include_in_client_list: defaultIncludeInClientList({
+            sourceType: 'system',
+            tabScope: scope,
+            required: t.required,
+          }),
+        }
+      : {}),
     sort_order: t.sort_order,
     received: false,
     row_note: null,
@@ -1750,40 +1773,42 @@ export async function getAnnualTabReadModel(
   ctx: RequestContext,
   clientId: string,
   scopeInput?: AnnualTabScope,
-  options?: { readOnly?: boolean }
+  options?: { readOnly?: boolean; skipClientCheck?: boolean }
 ): Promise<AnnualTabResponse | null> {
   const orgId = assertOrg(ctx);
   const scope = parseAnnualTabScope(scopeInput);
   const scoped = await supportsAnnualScopeColumns();
   if (!canViewAnnualTab(ctx)) return null;
-  await ensureClientInOrg(orgId, clientId);
-  const canEditEarly = canEditAnnualTab(ctx);
-  let prof: { id: string; read_model_version: number };
-  if (options?.readOnly) {
-    const existing = await loadAnnualProfile(orgId, clientId, scope, scoped);
-    if (!existing) {
-      if (scope === 'capital_declaration') {
-        const folders = await loadCapitalRequirementFoldersForClient({ orgId, clientId });
-        return buildCapitalFallbackReadModel(canEditEarly, folders);
-      }
-      return buildAnnualFallbackReadModel(canEditEarly);
-    }
-    prof = existing;
-  } else {
-    prof = await ensureProfile(orgId, clientId, scope);
+  if (!options?.skipClientCheck) {
+    await ensureClientInOrg(orgId, clientId);
   }
-
+  const canEditEarly = canEditAnnualTab(ctx);
   const yearColumnSupported = await supportsAnnualDocumentTaxYearColumns();
   const currentTaxYear = resolveCurrentAnnualTaxYear();
-  const profileWorkingTaxYear = await loadProfileWorkingTaxYear(orgId, clientId, scope, scoped, yearColumnSupported);
-  const workingTaxYear = resolveWorkingTaxYear({ profileWorkingTaxYear, currentTaxYear });
+  let prof: { id: string; read_model_version: number } | null = null;
   if (!options?.readOnly) {
-    await ensureSystemDocumentRows(orgId, clientId, scope, { workingTaxYear, yearColumnSupported });
+    prof = await ensureProfile(orgId, clientId, scope);
+    const profileWorkingTaxYear = await loadProfileWorkingTaxYear(
+      orgId,
+      clientId,
+      scope,
+      scoped,
+      yearColumnSupported,
+    );
+    const seedWorkingTaxYear = resolveWorkingTaxYear({ profileWorkingTaxYear, currentTaxYear });
+    await ensureSystemDocumentRows(orgId, clientId, scope, {
+      workingTaxYear: seedWorkingTaxYear,
+      yearColumnSupported,
+    });
   }
 
   let profileQ = supabaseAdmin
     .from('client_annual_report_profiles')
-    .select('notes, read_model_version, updated_at, updated_by')
+    .select(
+      yearColumnSupported
+        ? 'id, notes, read_model_version, updated_at, updated_by, working_tax_year'
+        : 'id, notes, read_model_version, updated_at, updated_by',
+    )
     .eq('organization_id', orgId)
     .eq('client_id', clientId);
   if (scoped) profileQ = profileQ.eq('tab_scope', scope);
@@ -1800,16 +1825,38 @@ export async function getAnnualTabReadModel(
     .eq('client_id', clientId);
   if (scoped) subQ = subQ.eq('tab_scope', scope);
   const [{ data: profileRow }, { data: docRows }, { data: subRows }] = await Promise.all([
-    profileQ.single(),
+    options?.readOnly ? profileQ.maybeSingle() : profileQ.single(),
     docQ.order('sort_order', { ascending: true }).order('id', { ascending: true }),
     subQ.order('sort_order', { ascending: true }).order('tax_year', { ascending: false }),
   ]);
   const p = profileRow as {
+    id?: string;
     notes: string | null;
     read_model_version: number;
     updated_at: string;
     updated_by: string | null;
+    working_tax_year?: number | null;
   } | null;
+  if (!p) {
+    if (options?.readOnly) {
+      if (scope === 'capital_declaration') {
+        const folders = await loadCapitalRequirementFoldersForClient({ orgId, clientId });
+        return buildCapitalFallbackReadModel(canEditEarly, folders);
+      }
+      return buildAnnualFallbackReadModel(canEditEarly);
+    }
+    throw annualDbError('annual profile read failed', { message: 'annual profile missing after ensure' });
+  }
+  if (!prof) {
+    prof = {
+      id: String(p.id ?? ''),
+      read_model_version: Number(p.read_model_version ?? 1),
+    };
+  }
+  const workingTaxYear = resolveWorkingTaxYear({
+    profileWorkingTaxYear: yearColumnSupported ? parseAnnualWorkingTaxYear(p.working_tax_year) : null,
+    currentTaxYear,
+  });
 
   const userLabels = await loadUserLabels([p?.updated_by ?? ''].filter(Boolean));
   const canEdit = canEditAnnualTab(ctx);
@@ -2210,6 +2257,13 @@ export async function getAnnualTabReadModel(
       scope === 'capital_declaration' && capitalWorking
         ? buildCapitalWorkspacePanels({ control: capitalWorking, folders: capital_folders, canEdit })
         : undefined,
+    client_document_list: await buildAnnualClientDocumentListSection({
+      orgId,
+      clientId,
+      scope,
+      canEdit,
+      documentRows: workingDocRows as Array<Record<string, unknown>>,
+    }),
   };
 }
 
@@ -2518,6 +2572,9 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         system_key: null,
         document_name_he: name,
         ...(scoped ? { description_he: null, required: false } : {}),
+        ...((await supportsAnnualClientListColumns())
+          ? { include_in_client_list: defaultIncludeInClientList({ sourceType: 'custom', tabScope: scope }) }
+          : {}),
         sort_order: Number.isFinite(sortOrder) ? sortOrder : 9990,
         received: false,
         row_note: null,
@@ -2544,6 +2601,9 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         if (!isCustom) throw badRequest('לא ניתן לשנות סדר לשורת מערכת');
         const so = Number(payload.sort_order);
         if (Number.isFinite(so)) patch.sort_order = so;
+      }
+      if (payload.include_in_client_list !== undefined && (await supportsAnnualClientListColumns())) {
+        patch.include_in_client_list = Boolean(payload.include_in_client_list);
       }
       if (Object.keys(patch).length === 0) throw badRequest('אין שדות לעדכון');
       const { error } = await supabaseAdmin
@@ -2772,6 +2832,57 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         operational_period_key: periodKey,
         operational_target_date: payload.operational_target_date ?? null,
       });
+      break;
+    }
+    case 'set_annual_document_client_list_inclusion': {
+      const rowId = await resolveRowId(String(payload.row_id ?? ''));
+      await setAnnualDocumentClientListInclusion({
+        orgId,
+        clientId,
+        rowId,
+        include: Boolean(payload.include_in_client_list),
+      });
+      await auditAnnual(ctx, orgId, clientId, cmd, {
+        row_id: rowId,
+        include_in_client_list: Boolean(payload.include_in_client_list),
+      });
+      break;
+    }
+    case 'generate_client_document_list_pdf': {
+      let listDocQ = supabaseAdmin
+        .from('client_annual_document_rows')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('client_id', clientId);
+      if (scoped) listDocQ = listDocQ.eq('tab_scope', scope);
+      const { data: listDocRows, error: listDocErr } = await listDocQ;
+      if (listDocErr) throw annualDbError('client document list read failed', listDocErr);
+      const listWorkingRows = workingDocumentRowsForTaxYear(
+        ((listDocRows ?? []) as Array<Record<string, unknown> & { tax_year?: number | null }>),
+        { yearColumnSupported, workingTaxYear, tabScope: scope },
+      );
+      await generateAnnualClientDocumentListPdf({
+        ctx,
+        orgId,
+        clientId,
+        scope,
+        documentRows: listWorkingRows as Array<Record<string, unknown>>,
+        workingTaxYear,
+        assignedDueDate: scope === 'capital_declaration' ? String(payload.declaration_date ?? '').trim() || null : null,
+      });
+      await auditAnnual(ctx, orgId, clientId, cmd, { tab_scope: scope, working_tax_year: workingTaxYear });
+      break;
+    }
+    case 'send_client_document_list_via_docflow': {
+      await sendAnnualClientDocumentListViaDocflow({
+        ctx,
+        orgId,
+        clientId,
+        scope,
+        threadId: String(payload.thread_id ?? ''),
+        sendId: payload.send_id != null ? String(payload.send_id) : null,
+      });
+      await auditAnnual(ctx, orgId, clientId, cmd, { thread_id: String(payload.thread_id ?? ''), tab_scope: scope });
       break;
     }
     case 'select_annual_working_tax_year': {

@@ -36,6 +36,9 @@ test('Annual and capital-declaration tabs still render aggregate sections and na
     assert.match(annualSrc, new RegExp(cmd));
   }
   assert.doesNotMatch(annualSrc, /method:\s*'PATCH'/);
+  assert.match(annualSrc, /annualTab\.client_document_list/);
+  assert.match(annualSrc, /generate_client_document_list_pdf/);
+  assert.match(annualSrc, /send_client_document_list_via_docflow/);
 });
 
 test('Annual premium skin is scoped to the workspace modal and reused for הצהרת הון', () => {
@@ -190,15 +193,19 @@ test('capital attach uses this tab version, retries 409 once, and does not treat
   assert.match(annualBase, /nx-annual-status-missing-alert/);
 });
 
-test('annual documents are white Arial with backend not-received hint and no yellow tooltip', () => {
+test('annual documents are white Arial with backend not-received hint and hover/keyboard tooltip', () => {
   assert.match(annualSrc, /nx-annual-doc-info/);
   assert.match(annualSrc, /row\.receipt_hint_key/);
   assert.match(annualSrc, /toggle_annual_document_received/);
   assert.doesNotMatch(annualSrc, /title=\{localizeSystemLabel\(t, row\.description_key/);
+  assert.match(annualSrc, /role="tooltip"/);
+  assert.match(annualSrc, /aria-describedby=\{`annual-doc-tip-\$\{row\.row_id\}`\}/);
   assert.match(annualCss, /data-tab-key='annual_report'[\s\S]*font-family:\s*Arial/);
   assert.match(annualCss, /\.nx-annual-doc-info[\s\S]*color:\s*#ffffff/);
   assert.match(annualCss, /\.nx-annual-doc-name[\s\S]*color:\s*#ffffff/);
   assert.match(annualCss, /nx-annual-doc-row--warning[\s\S]*background:\s*transparent/);
+  assert.match(annualCss, /\.nx-annual-doc-info:hover \.nx-annual-doc-tooltip/);
+  assert.match(annualCss, /\.nx-annual-doc-info:focus-visible \.nx-annual-doc-tooltip/);
 });
 
 test('Taxes interior and portal/raise are not altered by the Annual restyle', () => {

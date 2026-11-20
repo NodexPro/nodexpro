@@ -21,6 +21,8 @@ export type TaxTabDisplayRow = {
   value_he: string;
   value_key?: string;
   tone?: TaxTabDisplayTone;
+  /** When false the row stays in storage/edit models but is not rendered. */
+  visible?: boolean;
 };
 
 /** Edit button + command routing (affordance only). */
@@ -806,11 +808,13 @@ export function buildTaxTabWorkspaceReadModel(bundle: ClientTaxSettingsResponse)
         row_key: 'vat_divuach_next',
         label_he: 'יעד דיווח מע״מ',
         value_he: dash(s.vat_divuach_next_due_display_he),
+        visible: false,
       },
       {
         row_key: 'vat_registry',
         label_he: 'רישום יעד מע״מ',
         value_he: dash(s.vat_due_registry_display_he),
+        visible: false,
       },
     ],
   };

@@ -105,6 +105,15 @@ test('mutated client stays in the command aggregate after search or KPI filter-o
   );
 });
 
+test('command refresh prefers body.operational_period_key so the returned aggregate matches the write', () => {
+  const custom = read('../../src/domains/client-operations/client-operations-registry-custom-columns.service.ts');
+  assert.match(
+    custom,
+    /if \(typeof body\.operational_period_key === 'string' && body\.operational_period_key\.trim\(\)\)/,
+  );
+  assert.match(custom, /responseQuery\.operational_period_key = operationalPeriodKeyFrom\(body\.operational_period_key\)/);
+});
+
 test('no-op ensure slots reuses the GET materialization instead of rebuilding', () => {
   const custom = read('../../src/domains/client-operations/client-operations-registry-custom-columns.service.ts');
   assert.match(custom, /reuseMaterializationCache = true/);

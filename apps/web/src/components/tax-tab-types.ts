@@ -95,6 +95,7 @@ export type TaxTabDisplayRow = {
   value_he: string;
   value_key?: string;
   tone?: TaxTabDisplayTone;
+  visible?: boolean;
 };
 
 /** Edit button + command routing (affordance only). */

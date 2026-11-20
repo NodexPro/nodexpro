@@ -138,8 +138,14 @@
   color: #ffffff;
 }
 
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-td--doc-name {
+  overflow: visible;
+  position: relative;
+}
+
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-info {
   display: inline-flex;
+  position: relative;
   width: 16px;
   height: 16px;
   border-radius: 50%;
@@ -147,11 +153,44 @@
   justify-content: center;
   border: 1px solid #ffffff;
   color: #ffffff;
+  background: transparent;
   font-family: Arial, sans-serif;
   font-size: 11px;
   font-weight: 700;
   line-height: 1;
-  cursor: default;
+  cursor: help;
+  padding: 0;
+  pointer-events: auto;
+  z-index: 2;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-tooltip {
+  display: none;
+  position: absolute;
+  inset-inline-end: 0;
+  top: calc(100% + 8px);
+  z-index: 80;
+  min-width: 180px;
+  max-width: 280px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #0f2748;
+  color: #ffffff;
+  border: 1px solid rgba(210, 238, 255, 0.55);
+  box-shadow: 0 10px 24px rgba(8, 38, 82, 0.35);
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: start;
+  white-space: normal;
+  pointer-events: none;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-info:hover .nx-annual-doc-tooltip,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-info:focus .nx-annual-doc-tooltip,
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-doc-info:focus-visible .nx-annual-doc-tooltip {
+  display: block;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-capital-receipt-hint {
@@ -205,7 +244,7 @@
 
 /* הערת שורה: keep the note input inside the documents table (Annual + Capital). */
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table-wrap {
-  overflow-x: hidden;
+  overflow: visible;
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
@@ -411,4 +450,39 @@
 
 .nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'] .nx-co-filing-date__control.is-pending .nx-co-filing-date__value {
   color: #ffffff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-client-list {
+  margin-top: 16px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-client-list__items {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-client-list__item label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-client-list__desc {
+  margin: 4px 0 0;
+  font-size: 12px;
+  opacity: 0.82;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-client-list__send {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
 }

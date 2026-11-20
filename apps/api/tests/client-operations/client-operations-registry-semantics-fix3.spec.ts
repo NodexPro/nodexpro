@@ -272,7 +272,7 @@ test('22 — no PCN completion command', () => {
 
 test('FE renders disabled ITD checkbox when configured+not due', () => {
   assert.match(registryView, /income_tax_deductions_cell/);
-  assert.match(registryView, /יש תיק ניכויים — אין דיווח בחודש זה/);
+  assert.match(registryView, /clientOperations\.hasDeductionsFileNoReport/);
   assert.match(registryView, /set_income_tax_deductions_reported/);
 });
 

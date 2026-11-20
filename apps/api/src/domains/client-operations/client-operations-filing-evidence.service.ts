@@ -8,12 +8,16 @@ import {
 } from './client-documents-tab.service.js';
 import {
   filingEvidenceFolderSystemKey,
+  incomeTaxDeductionsEvidenceCanonicalId,
   isFilingEvidenceKind,
   isFilingEvidenceObligationKind,
   niDeductionsEvidenceCanonicalId,
   type FilingEvidenceObligationKind,
 } from './client-operations-filing-evidence.pure.js';
-import { isIncomeTaxFrequencyApplicableForOperationalPeriod } from './client-operations-operational-period.pure.js';
+import {
+  isIncomeTaxFrequencyApplicableForOperationalPeriod,
+  resolveIncomeTaxDeductionsFileNumberPresent,
+} from './client-operations-operational-period.pure.js';
 import {
   formatReportingPeriodDisplayLabel,
   vatObligationPeriodKeysForOperationalPeriod,
@@ -155,6 +159,95 @@ async function attachNiDeductionsFilingEvidence(
   });
 }
 
+async function attachIncomeTaxDeductionsFilingEvidence(
+  ctx: RequestContext,
+  orgId: string,
+  clientId: string,
+  evidenceKind: 'filing' | 'payment',
+  operationalPeriodKey: string,
+  body: { file_base64?: unknown; file_name?: unknown; mime_type?: unknown },
+): Promise<void> {
+  if (!MONTH_PERIOD_RE.test(operationalPeriodKey)) {
+    throw badRequest('obligation does not match the selected reporting period');
+  }
+  const { data: tax } = await supabaseAdmin
+    .from('client_tax_settings')
+    .select('income_tax_deductions_file_number, income_tax_deductions_enabled')
+    .eq('organization_id', orgId)
+    .eq('client_id', clientId)
+    .maybeSingle();
+  const fileNumber = String(
+    (tax as { income_tax_deductions_file_number?: string | null } | null)?.income_tax_deductions_file_number ?? '',
+  ).trim();
+  const enabled = (tax as { income_tax_deductions_enabled?: boolean | null } | null)?.income_tax_deductions_enabled;
+  if (!resolveIncomeTaxDeductionsFileNumberPresent(fileNumber) && enabled !== true) {
+    throw badRequest('income-tax deductions are not applicable for this period');
+  }
+
+  const { data: periodRow } = await supabaseAdmin
+    .from('client_income_tax_deductions_period')
+    .select('id, period_key')
+    .eq('organization_id', orgId)
+    .eq('client_id', clientId)
+    .eq('period_key', operationalPeriodKey)
+    .maybeSingle();
+
+  const uploaded = await uploadClientWorkspaceDocument(ctx, orgId, clientId, {
+    file_base64: typeof body.file_base64 === 'string' ? body.file_base64 : '',
+    file_name: typeof body.file_name === 'string' ? body.file_name : '',
+    mime_type: typeof body.mime_type === 'string' ? body.mime_type : null,
+  });
+  await ensureClientDocumentFolders(orgId, clientId);
+  const systemKey = filingEvidenceFolderSystemKey('income_tax_deductions');
+  const { data: folder, error: folderError } = await supabaseAdmin
+    .from('client_document_folders')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('client_id', clientId)
+    .eq('system_key', systemKey)
+    .is('archived_at', null)
+    .maybeSingle();
+  if (folderError || !folder) throw badRequest('filing evidence folder is not available');
+
+  const canonicalId = incomeTaxDeductionsEvidenceCanonicalId(operationalPeriodKey);
+  const { error: insertError } = await supabaseAdmin.from('client_documents').insert({
+    organization_id: orgId,
+    client_id: clientId,
+    folder_id: (folder as { id: string }).id,
+    file_asset_id: uploaded.file_asset_id,
+    display_label_he: uploaded.file_name,
+    uploaded_by_user_id: ctx.user.id,
+    evidence_kind: evidenceKind,
+    obligation_id: (periodRow as { id?: string } | null)?.id ?? null,
+    obligation_canonical_id: canonicalId,
+    operational_period_key: operationalPeriodKey,
+    reporting_period_key: operationalPeriodKey,
+    filing_kind: 'income_tax_deductions',
+  });
+  if (insertError) throw badRequest('filing evidence storage is not ready');
+
+  await writeAudit({
+    organizationId: orgId,
+    actorUserId: ctx.user.id,
+    moduleCode: 'client-operations',
+    entityType: 'client_documents_workspace',
+    entityId: clientId,
+    action: AUDIT_ACTIONS.CLIENT_FILE_ATTACHED,
+    payload: {
+      client_id: clientId,
+      obligation_canonical_id: canonicalId,
+      operational_period_key: operationalPeriodKey,
+      reporting_period_key: operationalPeriodKey,
+      filing_kind: 'income_tax_deductions',
+      evidence_kind: evidenceKind,
+      file_asset_id: uploaded.file_asset_id,
+      proves_filing: false,
+      proves_payment: false,
+      replaces_itd_commands: false,
+    },
+  });
+}
+
 /**
  * Attach optional evidence to the obligation resolved from the selected tab.
  * Upload reuses client-files storage and the client documents workspace.
@@ -183,6 +276,10 @@ export async function attachClientOperationsFilingEvidence(
   if (!isFilingEvidenceKind(evidenceKind)) throw badRequest('evidence_kind required');
   if (filingTarget === 'national_insurance_deductions') {
     await attachNiDeductionsFilingEvidence(ctx, orgId, clientId, evidenceKind, operationalPeriodKey, body);
+    return;
+  }
+  if (filingTarget === 'income_tax_deductions') {
+    await attachIncomeTaxDeductionsFilingEvidence(ctx, orgId, clientId, evidenceKind, operationalPeriodKey, body);
     return;
   }
   if (!obligationId) throw badRequest('filing evidence target required');

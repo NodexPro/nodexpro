@@ -140,7 +140,7 @@ test('self-employed NI three handling methods stay mutually exclusive and histor
       today: '2026-11-20',
       obligationStatus: 'not_paid',
     }),
-    false,
+    true,
   );
   const historicalStanding = resolveSelfEmployedNiHandlingMethod({
     periodKey: '2026-11',

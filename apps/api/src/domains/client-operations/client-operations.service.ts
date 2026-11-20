@@ -2142,8 +2142,8 @@ export async function getClientOperationsCase(
     timed('tab_accounting', getAccountingSettingsTabReadModel(ctx, clientId)),
     timed('tab_fees', getFeesTabReadModel(ctx, clientId, chartView)),
     timed('tab_payroll', getPayrollTabReadModel(ctx, clientId, { readOnly: true })),
-    timed('tab_annual', getAnnualTabReadModel(ctx, clientId, undefined, { readOnly: true })),
-    timed('tab_capital', getAnnualTabReadModel(ctx, clientId, 'capital_declaration', { readOnly: true })),
+    timed('tab_annual', getAnnualTabReadModel(ctx, clientId, undefined, { readOnly: true, skipClientCheck: true })),
+    timed('tab_capital', getAnnualTabReadModel(ctx, clientId, 'capital_declaration', { readOnly: true, skipClientCheck: true })),
     timed(
       'tab_documents',
       getClientDocumentsTabReadModel(ctx, clientId, {

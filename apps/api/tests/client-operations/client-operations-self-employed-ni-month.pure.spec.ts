@@ -207,7 +207,7 @@ test('9-10 reminder tone uses the selected month effective method only', () => {
   assert.equal(manualFrom15th, true);
   assert.equal(standing, false);
   assert.equal(clientPays, false);
-  assert.equal(unresolved, false);
+  assert.equal(unresolved, true);
   const septemberManual = buildSelfEmployedNiOperations({
     applicable: true,
     periodKey: '2026-09',

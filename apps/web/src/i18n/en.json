@@ -1462,7 +1462,7 @@
         "caseClosure": "Case closure",
         "vatFilings": "VAT filings",
         "incomeTaxAdvanceFilings": "Income-tax advance filings",
-        "niDeductionsFilings": "Payroll NI filings"
+        "niDeductionsFilings": "ITD and NI deductions filings"
       }
     },
     "history": {
@@ -1998,6 +1998,13 @@
       "capitalStatusCard": "Capital declaration status",
       "documentsList": "Annual-report document list",
       "capitalDocumentsList": "Capital-declaration document list",
+      "clientDocumentList": "Client document list",
+      "clientDocumentListGenerate": "Create PDF",
+      "clientDocumentListPreview": "Preview",
+      "clientDocumentListSend": "Send via DocFlow",
+      "clientDocumentListInclude": "Include in client list",
+      "clientDocumentListEmpty": "No items selected for the client list",
+      "clientDocumentListThread": "DocFlow thread",
       "submissionsCard": "Previous annual-report submission dates",
       "capitalSubmissionsCard": "Previous capital-declaration submission dates",
       "notesCard": "Notes",
@@ -2064,6 +2071,7 @@
         "incomeTaxAdvanceNotApplicable": "Income-tax advance material is not applicable for this period",
         "niDeductionsNotApplicable": "National-insurance deductions are not applicable for this period",
         "incomeTaxDeductionsNotDue": "Income-tax deductions are not due for this period",
+        "aggregateNotApplied": "The updated registry does not match the selected period.",
         "saveFailed": "Could not save the mark"
       },
       "columns": {

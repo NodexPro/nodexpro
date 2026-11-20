@@ -125,6 +125,7 @@ export const CLIENT_OPERATIONS_REGISTRY_COLUMNS: ClientOperationsRegistryColumn[
     editable: false,
     freeze_default: false,
     align: 'right',
+    default_width_px: 56,
   },
   {
     key: 'material_brought',

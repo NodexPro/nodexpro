@@ -38,6 +38,7 @@ test('evidence follows the obligation, not the column label, and is not required
   assert.equal(filingEvidenceFolderSystemKey('vat'), 'vat_filings');
   assert.equal(filingEvidenceFolderSystemKey('income_tax_advance'), 'income_tax_advance_filings');
   assert.equal(filingEvidenceFolderSystemKey('national_insurance_deductions'), 'ni_deductions_filings');
+  assert.equal(filingEvidenceFolderSystemKey('income_tax_deductions'), 'ni_deductions_filings');
   const rows: FilingEvidenceRow[] = [
     {
       document_id: 'doc-1',

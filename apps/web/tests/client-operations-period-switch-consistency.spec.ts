@@ -55,6 +55,8 @@ test('0 — INITIAL BOOTSTRAP: null viewed accepts backend selected period', () 
   assert.match(page, /allowUnresolvedBootstrap/);
   // Commands must not pass bootstrap by default.
   assert.match(page, /applyAggregate\(data\)/);
+  assert.match(page, /resolveRegistryCommandRequestedPeriod/);
+  assert.match(page, /resolveRegistryCommandApplyDecision/);
 });
 
 test('1 — cache miss: selected B cannot keep A rows visible (contract)', () => {

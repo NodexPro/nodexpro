@@ -44,12 +44,15 @@ X-Internal-Cron-Secret: <from WORK_ENGINE_CRON_SECRET>
 
 The workflow:
 
+- First sends **GET** `/api/v1/health` with up to **3 attempts** (20s each). The scheduler POST is not sent if health never returns 200.
+- Then sends **one** **POST** to `/internal/scheduler/run` with a **360s** curl timeout and **`--retry 0`**.
+- **Does not retry POST** on curl exit 28 (timeout), other curl failures, missing HTTP status, or 5xx. Those are treated as uncertain results; a second POST would risk duplicate Work Engine side effects.
+- Logs HTTP status, connect time, time to first byte, total duration, and curl exit for both health and POST.
 - Fails on non-2xx HTTP status (or `ok: false` in JSON when parseable)
 - Prints only a **safe summary** (counts and flags — no secrets, no raw tokens)
-- Uses a **10-minute job timeout** and **180s curl timeout**
-- **Retries once** after 15s on transient failures (5xx, 408, 429, or curl network/timeout errors)
+- Uses a **12-minute job timeout**
 
-Overlapping GitHub runs are serialized via `concurrency: work-engine-scheduler`. The API also skips duplicate in-process runs when a previous invocation is still active.
+Overlapping GitHub runs are serialized via `concurrency: work-engine-scheduler`. The API also skips duplicate in-process runs when a previous invocation is still active. GitHub Actions remains a clock + HTTP client; it does not change Work Engine business logic.
 
 ## 4. Trigger only — backend owns all logic
 

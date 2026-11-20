@@ -19,6 +19,15 @@ const BUCKET = CLIENT_DOCUMENT_STORAGE_BUCKET;
 const MAX_B64 = 12_000_000;
 const MAX_FILE = 8_000_000;
 
+const PREVIOUS_SYSTEM_FOLDER_NAMES: Record<string, readonly string[]> = {
+  ni_deductions_filings: ['דיווחי ב״ל', 'דיווחי ב"ל', 'דיווחי ביטוח לאומי'],
+};
+
+function isKnownPreviousSystemFolderName(systemKey: string | null | undefined, nameHe: string | null | undefined): boolean {
+  if (!systemKey || !nameHe) return false;
+  return (PREVIOUS_SYSTEM_FOLDER_NAMES[systemKey] ?? []).includes(nameHe);
+}
+
 /** Default folders — server-only source of truth; stable system_key. */
 export const CLIENT_DOCUMENT_DEFAULT_FOLDERS: ReadonlyArray<{ system_key: string; name_he: string; sort_order: number }> = [
   { system_key: 'opening_dossier', name_he: 'פתיחת תיק', sort_order: 10 },
@@ -32,7 +41,7 @@ export const CLIENT_DOCUMENT_DEFAULT_FOLDERS: ReadonlyArray<{ system_key: string
   { system_key: 'case_closure', name_he: 'סגירת תיק', sort_order: 90 },
   { system_key: 'vat_filings', name_he: 'דיווח מע״מ', sort_order: 100 },
   { system_key: 'income_tax_advance_filings', name_he: 'דיווח מקדמות', sort_order: 110 },
-  { system_key: 'ni_deductions_filings', name_he: 'דיווחי ב״ל', sort_order: 120 },
+  { system_key: 'ni_deductions_filings', name_he: 'דיווחים מ"ה וב"ל ניכויים', sort_order: 120 },
 ];
 
 export type ClientDocumentsBrandVariant = 'primary' | 'secondary' | 'neutral';
@@ -421,7 +430,12 @@ export async function getClientDocumentsTabReadModel(
     const is_system = Boolean(f.system_key);
     const canArchive = canEdit && !is_system && agg.n === 0;
     const defaultName = CLIENT_DOCUMENT_DEFAULT_FOLDERS.find((d) => d.system_key === f.system_key)?.name_he;
-    const renamed = Boolean(f.system_key && defaultName && f.name_he !== defaultName);
+    const renamed = Boolean(
+      f.system_key &&
+        defaultName &&
+        f.name_he !== defaultName &&
+        !isKnownPreviousSystemFolderName(f.system_key, f.name_he),
+    );
     return {
       folder_id: f.id,
       name_he: f.name_he,
@@ -507,7 +521,12 @@ export async function getClientDocumentsTabReadModel(
       const documents = mapped;
 
       const defaultOpenName = CLIENT_DOCUMENT_DEFAULT_FOLDERS.find((d) => d.system_key === folderMeta.system_key)?.name_he;
-      const openRenamed = Boolean(folderMeta.system_key && defaultOpenName && folderMeta.name_he !== defaultOpenName);
+      const openRenamed = Boolean(
+        folderMeta.system_key &&
+          defaultOpenName &&
+          folderMeta.name_he !== defaultOpenName &&
+          !isKnownPreviousSystemFolderName(folderMeta.system_key, folderMeta.name_he),
+      );
       open_folder = {
         folder_id: openFolderMeta.id,
         folder_name_he: folderMeta.name_he,

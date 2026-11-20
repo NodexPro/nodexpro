@@ -70,6 +70,7 @@ test('default widths keep tax columns compact and date columns calendar-sized', 
   assert.match(apiPresentationSource, /key:\s*'annual_report'[\s\S]*?default_width_px:\s*138/);
   assert.match(apiPresentationSource, /key:\s*'capital_declaration'[\s\S]*?default_width_px:\s*138/);
   assert.match(apiPresentationSource, /key:\s*'material_brought'[\s\S]*?default_width_px:\s*120/);
+  assert.match(apiPresentationSource, /key:\s*'payroll'[\s\S]*?default_width_px:\s*56/);
 });
 
 test('frontend renders integrated date/calendar control without tax year math', () => {

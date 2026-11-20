@@ -159,8 +159,8 @@ test('8 filters + search remain combinable (search carries active filters; filte
   assert.match(pageSource, /\.\.\.query,\s*\.\.\.next,\s*operational_period_key: query\.operational_period_key,/);
 });
 
-test('9 unrelated routes retain account header chrome; office language lives on Dashboard', () => {
-  // AppHeader kept org + user chrome. Language is the Dashboard UiLanguageSwitch only.
+test('9 unrelated routes retain account header chrome; office language lives in the sidebar', () => {
+  // AppHeader kept org + user chrome. Per-user language is the sidebar selector, not the CO header.
   assert.doesNotMatch(appHeaderSource, /t\('topBar\.language'\)/);
   assert.doesNotMatch(appHeaderSource, /<option value="en">EN<\/option>/);
   assert.match(appHeaderSource, /\{user\.fullName \|\| user\.email\}/);
@@ -171,6 +171,8 @@ test('9 unrelated routes retain account header chrome; office language lives on 
   assert.match(layoutSource, /isClientOperationsModule \? coHeaderSearchSlot : null/);
   const sidebar = read('../src/templates/template-1/components/SidebarAccountBlock.tsx');
   assert.doesNotMatch(sidebar, /UiLanguageSwitch/);
+  assert.match(sidebar, /data-testid="sidebar-language-selector"/);
+  assert.match(sidebar, /onSetLanguage/);
 });
 
 test('10 header styles: KPI slot in the approved navy header — scoped to CO only', () => {
