@@ -68,6 +68,19 @@ test('tax summary hides יעד דיווח מע״מ and רישום יעד מע״�
   assert.match(webTaxes, /row\.visible !== false/);
 });
 
+test('annual received toggle overlaps Work Engine intake with case GET and still awaits delivery', () => {
+  const annualSrc = read('../../src/domains/client-operations/client-annual-report-tab.service.ts');
+  const routesSrc = read('../../src/domains/client-operations/client-operations.routes.ts');
+  assert.match(annualSrc, /workEngineSync/);
+  assert.match(annualSrc, /await syncAnnualScopeMaterialWorkEvent/);
+  assert.match(annualSrc, /selected_row_ids/);
+  assert.match(annualSrc, /send_client_document_list_via_email/);
+  assert.match(annualSrc, /applyAnnualDocumentClientListSelection/);
+  assert.doesNotMatch(annualSrc, /void syncAnnualScopeMaterialWorkEvent/);
+  assert.match(routesSrc, /Promise\.all\(\[\s*getClientOperationsCase/);
+  assert.match(routesSrc, /workEngineSync \?\? Promise\.resolve\(\)/);
+});
+
 test('capital case GET skips duplicate client checks and profile seeding', () => {
   const caseSrc = read('../../src/domains/client-operations/client-operations.service.ts');
   const annualSrc = read('../../src/domains/client-operations/client-annual-report-tab.service.ts');

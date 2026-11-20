@@ -303,11 +303,15 @@ export type AnnualTabModel = {
     title_key: string;
     generate_label_key: string;
     preview_label_key: string;
+    download_label_key?: string;
     send_label_key: string;
+    email_label_key?: string;
     include_label_key: string;
     empty_key: string;
     can_generate: boolean;
     can_send: boolean;
+    can_send_email?: boolean;
+    recipient_email?: string | null;
     items: Array<{
       row_id: string;
       internal_name: string;

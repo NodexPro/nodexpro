@@ -78,6 +78,18 @@ export function selectedClientDocumentListItems(
   return rows.filter((row) => row.include_in_client_list && row.client_facing_name);
 }
 
+/** PDF include flags only — never reorders, renames, or changes received/status. */
+export function overlayClientListSelection(
+  items: readonly ClientFacingDocumentListItem[],
+  selectedRowIds: readonly string[],
+): ClientFacingDocumentListItem[] {
+  const selected = new Set(selectedRowIds.map((id) => String(id)));
+  return items.map((item) => ({
+    ...item,
+    include_in_client_list: selected.has(item.row_id),
+  }));
+}
+
 export function defaultIncludeInClientList(input: {
   sourceType: 'system' | 'custom';
   tabScope?: 'annual_report' | 'capital_declaration';

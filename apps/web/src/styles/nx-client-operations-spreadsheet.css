@@ -1295,9 +1295,11 @@
   margin: 0;
 }
 
-/* NI deductions clip is taken out of flow so the 102/100/126 grid stays one row. */
-.nx-co-sheet__table td[data-col='national_insurance_deductions'] {
+/* NI / ITD clip is taken out of flow so the checkbox grid stays one row. */
+.nx-co-sheet__table td[data-col='national_insurance_deductions'],
+.nx-co-sheet__table td[data-col='income_tax_deductions'] {
   position: relative;
+  overflow: visible;
 }
 
 .nx-co-sheet__ni-forms {
@@ -1316,6 +1318,10 @@
 .nx-co-sheet__material-header.is-ni-evidence .nx-co-sheet__material-header-subs {
   box-sizing: border-box;
   padding-inline-start: 22px;
+}
+
+.nx-co-sheet__table td[data-col='income_tax_deductions'] .nx-co-sheet__itd-slot {
+  margin-inline-start: 22px;
 }
 
 .nx-co-sheet__ni-clip {

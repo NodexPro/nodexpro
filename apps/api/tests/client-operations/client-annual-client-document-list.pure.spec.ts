@@ -8,6 +8,7 @@ import {
   buildClientDocumentListPdfSnapshot,
   clientDocumentListPdfContainsForbiddenClientContent,
   defaultIncludeInClientList,
+  overlayClientListSelection,
   projectClientDocumentListItems,
   selectedClientDocumentListItems,
 } from '../../src/domains/client-operations/client-annual-client-document-list.pure.js';
@@ -71,6 +72,38 @@ test('client PDF snapshot omits internal codes, statuses and accountant notes', 
   assert.equal(clientDocumentListPdfContainsForbiddenClientContent(html), false);
 });
 
+test('PDF include overlay does not reorder or rename checklist items', () => {
+  const items = projectClientDocumentListItems([
+    {
+      row_id: 'a',
+      source_type: 'system',
+      system_key: 'form_1301',
+      document_name_he: 'דוח 1301',
+      description_he: null,
+      include_in_client_list: false,
+      client_facing_name_he: 'דוח 1301',
+      client_facing_description_he: null,
+    },
+    {
+      row_id: 'b',
+      source_type: 'custom',
+      system_key: null,
+      document_name_he: 'נספח',
+      description_he: null,
+      include_in_client_list: true,
+      client_facing_name_he: 'נספח',
+      client_facing_description_he: null,
+    },
+  ]);
+  const overlaid = overlayClientListSelection(items, ['a']);
+  assert.equal(overlaid[0]?.row_id, 'a');
+  assert.equal(overlaid[1]?.row_id, 'b');
+  assert.equal(overlaid[0]?.client_facing_name, 'דוח 1301');
+  assert.equal(overlaid[1]?.client_facing_name, 'נספח');
+  assert.equal(overlaid[0]?.include_in_client_list, true);
+  assert.equal(overlaid[1]?.include_in_client_list, false);
+});
+
 test('sent PDF snapshot is frozen; send only records DocFlow message id', () => {
   const service = readFileSync(
     join(dir, '../../src/domains/client-operations/client-annual-client-document-list.service.ts'),
@@ -89,4 +122,7 @@ test('sent PDF snapshot is frozen; send only records DocFlow message id', () => 
   assert.match(migration, /client_annual_document_list_sends_freeze/);
   assert.match(migration, /snapshot_json is distinct from old\.snapshot_json/);
   assert.match(migration, /file_asset_id is distinct from old\.file_asset_id/);
+  assert.match(service, /sendAnnualClientDocumentListViaEmail/);
+  assert.match(service, /applyAnnualDocumentClientListSelection/);
+  assert.doesNotMatch(service, /received:/);
 });

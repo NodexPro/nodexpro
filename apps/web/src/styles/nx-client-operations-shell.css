@@ -508,10 +508,39 @@ body:has(.t1-appShell--client-operations .nx-co-sheet) {
   background: rgba(0, 207, 239, 0.18);
 }
 
+.t1-appShell--client-operations .t1-sidebar {
+  overflow: visible;
+}
+
 .t1-appShell--client-operations .t1-sidebar-account__select {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(66, 165, 255, 0.32);
   color: #e8f2ff;
+  color-scheme: dark;
+}
+
+.t1-appShell--client-operations .t1-sidebar-account__select option {
+  background: #123756;
+  color: #ffffff;
+}
+
+.t1-appShell--client-operations .t1-sidebar-account__language-menu {
+  background: #0a2d55;
+  border-color: rgba(57, 230, 244, 0.35);
+  color: #ffffff;
+}
+
+.t1-appShell--client-operations .t1-sidebar-account__language-option {
+  color: #ffffff;
+}
+
+.t1-appShell--client-operations .t1-sidebar-account__language-option:hover,
+.t1-appShell--client-operations .t1-sidebar-account__language-option:focus-visible {
+  background: rgba(0, 207, 239, 0.22);
+}
+
+.t1-appShell--client-operations .t1-sidebar-account__language-option.is-selected {
+  background: rgba(38, 140, 255, 0.48);
 }
 
 @media (max-width: 768px) {

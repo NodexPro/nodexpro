@@ -462,9 +462,12 @@ router.post('/clients/:clientId/annual/commands', ...withAnnualEdit, async (req,
     if (!clientId) return res.status(400).json({ code: 'BAD_REQUEST', message: 'clientId required' });
     const feesPv = parseFeesPriceChartView((req.body as { fees_price_chart_view?: unknown })?.fees_price_chart_view);
     const writeMs = Date.now();
-    await executeAnnualTabCommand(ctx, clientId, body);
+    const { workEngineSync } = await executeAnnualTabCommand(ctx, clientId, body);
     const afterWrite = Date.now();
-    const out = await getClientOperationsCase(ctx, clientId, { feesPriceChartView: feesPv });
+    const [out] = await Promise.all([
+      getClientOperationsCase(ctx, clientId, { feesPriceChartView: feesPv }),
+      workEngineSync ?? Promise.resolve(),
+    ]);
     logClientOperationsTiming({
       event: 'annual_command_with_refreshed_case',
       command,

@@ -13,9 +13,11 @@ import { assertFileAssetDownloadable } from '../../shared/document-download-guar
 import { syncAnnualScopeMaterialWorkEvent } from './client-operations-work-engine-bridge.js';
 import { invalidateClientOperationsRegistryMaterializationCache } from './client-operations-registry-materialization-cache.js';
 import {
+  applyAnnualDocumentClientListSelection,
   buildAnnualClientDocumentListSection,
   generateAnnualClientDocumentListPdf,
   sendAnnualClientDocumentListViaDocflow,
+  sendAnnualClientDocumentListViaEmail,
   setAnnualDocumentClientListInclusion,
   supportsAnnualClientListColumns,
   type AnnualClientDocumentListSection,
@@ -505,7 +507,8 @@ export type AnnualAnnualCommandType =
   | 'set_capital_declaration_operational_target_date'
   | 'set_annual_document_client_list_inclusion'
   | 'generate_client_document_list_pdf'
-  | 'send_client_document_list_via_docflow';
+  | 'send_client_document_list_via_docflow'
+  | 'send_client_document_list_via_email';
 
 function assertOrg(ctx: RequestContext): string {
   const orgId = ctx.organizationId;
@@ -2294,27 +2297,32 @@ async function resolveWritableAnnualDocumentRowId(input: {
   if (!catalog) return rowId;
   if (catalog.scope !== input.scope) throw badRequest('שורה לא נמצאה');
   const taxYear = catalog.taxYear ?? input.workingTaxYear;
+  const scoped = await supportsAnnualScopeColumns();
+  const lookup = async () => {
+    let q = supabaseAdmin
+      .from('client_annual_document_rows')
+      .select('id')
+      .eq('organization_id', input.orgId)
+      .eq('client_id', input.clientId)
+      .eq('source_type', 'system')
+      .eq('system_key', catalog.systemKey);
+    if (scoped) q = q.eq('tab_scope', input.scope);
+    if (input.yearColumnSupported && input.scope === 'annual_report' && isProvenAnnualTaxYear(catalog.taxYear)) {
+      q = q.eq('tax_year', catalog.taxYear);
+    }
+    const { data, error } = await q.maybeSingle();
+    if (error) throw annualDbError('catalog row resolve failed', error);
+    return data ? String((data as { id: string }).id) : '';
+  };
+  const existingId = await lookup();
+  if (existingId) return existingId;
   await ensureSystemDocumentRows(input.orgId, input.clientId, input.scope, {
     workingTaxYear: taxYear,
     yearColumnSupported: input.yearColumnSupported,
   });
-  const scoped = await supportsAnnualScopeColumns();
-  let q = supabaseAdmin
-    .from('client_annual_document_rows')
-    .select('id')
-    .eq('organization_id', input.orgId)
-    .eq('client_id', input.clientId)
-    .eq('source_type', 'system')
-    .eq('system_key', catalog.systemKey);
-  if (scoped) q = q.eq('tab_scope', input.scope);
-  if (input.yearColumnSupported && input.scope === 'annual_report' && isProvenAnnualTaxYear(catalog.taxYear)) {
-    q = q.eq('tax_year', catalog.taxYear);
-  }
-  const { data, error } = await q.maybeSingle();
-  if (error) throw annualDbError('catalog row resolve failed', error);
-  const id = data ? String((data as { id: string }).id) : '';
-  if (!id) throw badRequest('שורה לא נמצאה');
-  return id;
+  const seededId = await lookup();
+  if (!seededId) throw badRequest('שורה לא נמצאה');
+  return seededId;
 }
 
 export async function assertAnnualReportFileOpenAllowed(
@@ -2512,7 +2520,16 @@ async function annualHasMissingDocuments(
   return rows.some((row) => !row.received || !row.file_asset_id);
 }
 
-export async function executeAnnualTabCommand(ctx: RequestContext, clientId: string, body: AnnualTabCommandBody): Promise<void> {
+export type AnnualTabCommandResult = {
+  /** Existing Work Engine intake; awaited by the route before HTTP 200. */
+  workEngineSync: Promise<void> | null;
+};
+
+export async function executeAnnualTabCommand(
+  ctx: RequestContext,
+  clientId: string,
+  body: AnnualTabCommandBody,
+): Promise<AnnualTabCommandResult> {
   const started = Date.now();
   const stage_timings: Record<string, number> = {};
   const mark = (name: string, from: number) => {
@@ -2861,6 +2878,18 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         ((listDocRows ?? []) as Array<Record<string, unknown> & { tax_year?: number | null }>),
         { yearColumnSupported, workingTaxYear, tabScope: scope },
       );
+      const selectedRowIds = Array.isArray(payload.selected_row_ids)
+        ? payload.selected_row_ids.map((id) => String(id ?? '').trim()).filter(Boolean)
+        : null;
+      const workingIds = (listWorkingRows as Array<{ id?: string }>).map((row) => String(row.id ?? '')).filter(Boolean);
+      if (selectedRowIds) {
+        await applyAnnualDocumentClientListSelection({
+          orgId,
+          clientId,
+          rowIds: workingIds,
+          selectedRowIds,
+        });
+      }
       await generateAnnualClientDocumentListPdf({
         ctx,
         orgId,
@@ -2869,8 +2898,13 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         documentRows: listWorkingRows as Array<Record<string, unknown>>,
         workingTaxYear,
         assignedDueDate: scope === 'capital_declaration' ? String(payload.declaration_date ?? '').trim() || null : null,
+        selectedRowIds,
       });
-      await auditAnnual(ctx, orgId, clientId, cmd, { tab_scope: scope, working_tax_year: workingTaxYear });
+      await auditAnnual(ctx, orgId, clientId, cmd, {
+        tab_scope: scope,
+        working_tax_year: workingTaxYear,
+        selected_count: selectedRowIds?.length ?? null,
+      });
       break;
     }
     case 'send_client_document_list_via_docflow': {
@@ -2883,6 +2917,17 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
         sendId: payload.send_id != null ? String(payload.send_id) : null,
       });
       await auditAnnual(ctx, orgId, clientId, cmd, { thread_id: String(payload.thread_id ?? ''), tab_scope: scope });
+      break;
+    }
+    case 'send_client_document_list_via_email': {
+      await sendAnnualClientDocumentListViaEmail({
+        ctx,
+        orgId,
+        clientId,
+        scope,
+        sendId: payload.send_id != null ? String(payload.send_id) : null,
+      });
+      await auditAnnual(ctx, orgId, clientId, cmd, { tab_scope: scope, channel: 'email' });
       break;
     }
     case 'select_annual_working_tax_year': {
@@ -2911,14 +2956,32 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
   const bumpMs = Date.now();
   await bumpReadModelVersion(orgId, clientId, expected, ctx.user.id, scope);
   mark('bump_version', bumpMs);
-  invalidateClientOperationsRegistryMaterializationCache(orgId);
+  const skipRegistryInvalidate =
+    cmd === 'set_annual_document_client_list_inclusion' ||
+    cmd === 'generate_client_document_list_pdf' ||
+    cmd === 'send_client_document_list_via_docflow' ||
+    cmd === 'send_client_document_list_via_email';
+  if (!skipRegistryInvalidate) {
+    invalidateClientOperationsRegistryMaterializationCache(orgId);
+  }
 
   const orgIdCtx = ctx.organizationId;
-  if (orgIdCtx) {
-    const missingMs = Date.now();
-    const hasMissingDocs = await annualHasMissingDocuments(orgId, clientId, scope);
-    mark('missing_docs_flag', missingMs);
-    await syncAnnualScopeMaterialWorkEvent(ctx, orgIdCtx, clientId, scope, hasMissingDocs);
+  let workEngineSync: Promise<void> | null = null;
+  if (orgIdCtx && !skipRegistryInvalidate) {
+    workEngineSync = (async () => {
+      const missingMs = Date.now();
+      const hasMissingDocs = await annualHasMissingDocuments(orgId, clientId, scope);
+      mark('missing_docs_flag', missingMs);
+      await syncAnnualScopeMaterialWorkEvent(ctx, orgIdCtx, clientId, scope, hasMissingDocs);
+    })().catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn('[annual_tab → work_engine] sync failed', {
+        organization_id: orgId,
+        client_id: clientId,
+        command: cmd,
+        error: (err as { message?: string } | undefined)?.message ?? String(err),
+      });
+    });
   }
   logClientOperationsTiming({
     event: 'annual_tab_named_command',
@@ -2927,4 +2990,5 @@ export async function executeAnnualTabCommand(ctx: RequestContext, clientId: str
     stage_timings,
     organization_id: orgId,
   });
+  return { workEngineSync };
 }

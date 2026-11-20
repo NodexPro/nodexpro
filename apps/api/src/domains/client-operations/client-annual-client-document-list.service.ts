@@ -3,12 +3,14 @@ import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, forbidden } from '../../shared/errors.js';
 import { requireGuardedUpload } from '../../shared/file-content-guard.js';
+import { beginAttempt, finalizeAttempt, sendEmail } from '../delivery/index.js';
 import { renderIncomeDocumentPdfBufferFromHtml } from '../income/income-document-pdf.renderer.js';
 import { executeDocflowOfficeCommand } from '../docflow/docflow-commands.service.js';
 import {
   buildClientDocumentListPdfHtml,
   buildClientDocumentListPdfSnapshot,
   defaultIncludeInClientList,
+  overlayClientListSelection,
   projectClientDocumentListItems,
   type ClientDocumentListItemInput,
   type ClientDocumentListPdfSnapshot,
@@ -22,11 +24,15 @@ export type AnnualClientDocumentListSection = {
   title_key: string;
   generate_label_key: string;
   preview_label_key: string;
+  download_label_key: string;
   send_label_key: string;
+  email_label_key: string;
   include_label_key: string;
   empty_key: string;
   can_generate: boolean;
   can_send: boolean;
+  can_send_email: boolean;
+  recipient_email: string | null;
   items: ClientFacingDocumentListItem[];
   preview: {
     file_asset_id: string | null;
@@ -47,7 +53,9 @@ const LIST_KEYS = {
   title: 'clientOperations.annual.clientDocumentList',
   generate: 'clientOperations.annual.clientDocumentListGenerate',
   preview: 'clientOperations.annual.clientDocumentListPreview',
+  download: 'clientOperations.annual.clientDocumentListDownload',
   send: 'clientOperations.annual.clientDocumentListSend',
+  email: 'clientOperations.annual.clientDocumentListEmail',
   include: 'clientOperations.annual.clientDocumentListInclude',
   empty: 'clientOperations.annual.clientDocumentListEmpty',
 };
@@ -96,20 +104,25 @@ export async function buildAnnualClientDocumentListSection(input: {
   documentRows: Array<Record<string, unknown>>;
 }): Promise<AnnualClientDocumentListSection> {
   const items = projectClientDocumentListItems(input.documentRows.map(asDocumentListInput));
-  const [sends, threads] = await Promise.all([
+  const [sends, threads, clientEmail] = await Promise.all([
     loadDocumentListSends(input.orgId, input.clientId, input.scope),
     loadDocflowThreads(input.orgId, input.clientId),
+    loadClientEmail(input.orgId, input.clientId),
   ]);
   const latest = sends[0] ?? null;
   return {
     title_key: LIST_KEYS.title,
     generate_label_key: LIST_KEYS.generate,
     preview_label_key: LIST_KEYS.preview,
+    download_label_key: LIST_KEYS.download,
     send_label_key: LIST_KEYS.send,
+    email_label_key: LIST_KEYS.email,
     include_label_key: LIST_KEYS.include,
     empty_key: LIST_KEYS.empty,
     can_generate: input.canEdit,
     can_send: input.canEdit && Boolean(latest?.file_asset_id) && threads.length > 0,
+    can_send_email: input.canEdit && Boolean(latest?.file_asset_id) && Boolean(clientEmail),
+    recipient_email: clientEmail,
     items,
     preview: {
       file_asset_id: latest?.file_asset_id ?? null,
@@ -159,6 +172,18 @@ async function loadDocumentListSends(
   }));
 }
 
+async function loadClientEmail(orgId: string, clientId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('clients')
+    .select('email')
+    .eq('organization_id', orgId)
+    .eq('id', clientId)
+    .maybeSingle();
+  if (error) return null;
+  const email = String((data as { email?: string | null } | null)?.email ?? '').trim();
+  return email || null;
+}
+
 async function loadDocflowThreads(
   orgId: string,
   clientId: string,
@@ -194,6 +219,32 @@ export async function setAnnualDocumentClientListInclusion(input: {
     .select('id');
   if (error) throw badRequest('client document list update failed');
   if (!data?.length) throw badRequest('שורה לא נמצאה');
+}
+
+/** Persists PDF include flags only. Does not touch received, names, order, or files. */
+export async function applyAnnualDocumentClientListSelection(input: {
+  orgId: string;
+  clientId: string;
+  rowIds: string[];
+  selectedRowIds: string[];
+}): Promise<void> {
+  if (!(await supportsAnnualClientListColumns())) throw badRequest('client document list is not available');
+  const allowed = new Set(input.rowIds.map((id) => String(id)).filter(Boolean));
+  const selected = new Set(input.selectedRowIds.map((id) => String(id)).filter((id) => allowed.has(id)));
+  const includeIds = [...allowed].filter((id) => selected.has(id));
+  const excludeIds = [...allowed].filter((id) => !selected.has(id));
+  const patch = async (ids: string[], include: boolean) => {
+    if (!ids.length) return;
+    const { error } = await supabaseAdmin
+      .from('client_annual_document_rows')
+      .update({ include_in_client_list: include })
+      .eq('organization_id', input.orgId)
+      .eq('client_id', input.clientId)
+      .in('id', ids);
+    if (error) throw badRequest('client document list update failed');
+  };
+  await patch(includeIds, true);
+  await patch(excludeIds, false);
 }
 
 async function uploadGeneratedListPdf(input: {
@@ -259,6 +310,7 @@ export async function generateAnnualClientDocumentListPdf(input: {
   documentRows: Array<Record<string, unknown>>;
   workingTaxYear: number | null;
   assignedDueDate: string | null;
+  selectedRowIds?: string[] | null;
 }): Promise<{ file_asset_id: string; snapshot: ClientDocumentListPdfSnapshot }> {
   const [{ data: org }, { data: client }] = await Promise.all([
     supabaseAdmin.from('organizations').select('name').eq('id', input.orgId).maybeSingle(),
@@ -272,7 +324,9 @@ export async function generateAnnualClientDocumentListPdf(input: {
   const officeName = String((org as { name?: string | null } | null)?.name ?? '').trim() || 'NodexPro';
   const clientName =
     String((client as { display_name?: string | null } | null)?.display_name ?? '').trim() || input.clientId;
-  const items = projectClientDocumentListItems(input.documentRows.map(asDocumentListInput));
+  const projected = projectClientDocumentListItems(input.documentRows.map(asDocumentListInput));
+  const items =
+    input.selectedRowIds != null ? overlayClientListSelection(projected, input.selectedRowIds) : projected;
   const snapshot = buildClientDocumentListPdfSnapshot({
     tabScope: input.scope,
     officeName,
@@ -305,16 +359,12 @@ export async function generateAnnualClientDocumentListPdf(input: {
   return { file_asset_id: fileAssetId, snapshot };
 }
 
-export async function sendAnnualClientDocumentListViaDocflow(input: {
-  ctx: RequestContext;
+async function loadLatestDocumentListSend(input: {
   orgId: string;
   clientId: string;
   scope: AnnualTabScope;
-  threadId: string;
   sendId?: string | null;
-}): Promise<void> {
-  const threadId = String(input.threadId ?? '').trim();
-  if (!threadId) throw badRequest('thread_id required');
+}): Promise<{ id: string; file_asset_id: string }> {
   let sendQ = supabaseAdmin
     .from('client_annual_document_list_sends')
     .select('id, file_asset_id, snapshot_json')
@@ -324,11 +374,20 @@ export async function sendAnnualClientDocumentListViaDocflow(input: {
   if (input.sendId) sendQ = sendQ.eq('id', input.sendId);
   const { data: sendRow, error } = await sendQ.order('created_at', { ascending: false }).limit(1).maybeSingle();
   if (error || !sendRow) throw badRequest('generate the client document list PDF before sending');
-  const fileAssetId = String((sendRow as { file_asset_id: string }).file_asset_id);
+  return {
+    id: String((sendRow as { id: string }).id),
+    file_asset_id: String((sendRow as { file_asset_id: string }).file_asset_id),
+  };
+}
+
+async function downloadDocumentListPdf(input: {
+  orgId: string;
+  fileAssetId: string;
+}): Promise<{ fileName: string; mimeType: string; fileBase64: string }> {
   const { data: asset, error: assetError } = await supabaseAdmin
     .from('file_assets')
     .select('id, organization_id, storage_bucket, storage_key, file_name, mime_type')
-    .eq('id', fileAssetId)
+    .eq('id', input.fileAssetId)
     .eq('organization_id', input.orgId)
     .maybeSingle();
   if (assetError || !asset) throw forbidden('File not found');
@@ -351,8 +410,27 @@ export async function sendAnnualClientDocumentListViaDocflow(input: {
     if (!downloaded.error && downloaded.data) fileData = downloaded.data;
   }
   if (!fileData) throw badRequest('document file is not available');
-  const fileBase64 = Buffer.from(await fileData.arrayBuffer()).toString('base64');
-  const fileName = fileAsset.file_name?.trim() || 'client-document-list.pdf';
+  return {
+    fileName: fileAsset.file_name?.trim() || 'client-document-list.pdf',
+    mimeType: fileAsset.mime_type || 'application/pdf',
+    fileBase64: Buffer.from(await fileData.arrayBuffer()).toString('base64'),
+  };
+}
+
+export async function sendAnnualClientDocumentListViaDocflow(input: {
+  ctx: RequestContext;
+  orgId: string;
+  clientId: string;
+  scope: AnnualTabScope;
+  threadId: string;
+  sendId?: string | null;
+}): Promise<void> {
+  const threadId = String(input.threadId ?? '').trim();
+  if (!threadId) throw badRequest('thread_id required');
+  const sendRow = await loadLatestDocumentListSend(input);
+  const file = await downloadDocumentListPdf({ orgId: input.orgId, fileAssetId: sendRow.file_asset_id });
+  const fileBase64 = file.fileBase64;
+  const fileName = file.fileName;
   const body =
     input.ctx.user.uiLanguage === 'en' ? 'Client document list' : 'רשימת מסמכים ללקוח';
   const sendId = String((sendRow as { id: string }).id);
@@ -362,7 +440,7 @@ export async function sendAnnualClientDocumentListViaDocflow(input: {
     thread_id: threadId,
     file_base64: fileBase64,
     file_name: fileName,
-    mime_type: fileAsset.mime_type || 'application/pdf',
+    mime_type: file.mimeType,
     body,
     idempotency_key: idempotencyKey,
   });
@@ -382,5 +460,68 @@ export async function sendAnnualClientDocumentListViaDocflow(input: {
       .eq('organization_id', input.orgId)
       .eq('client_id', input.clientId);
     if (sendUpdateError) throw badRequest('client document list send history update failed');
+  }
+}
+
+export async function sendAnnualClientDocumentListViaEmail(input: {
+  ctx: RequestContext;
+  orgId: string;
+  clientId: string;
+  scope: AnnualTabScope;
+  sendId?: string | null;
+}): Promise<void> {
+  const sendRow = await loadLatestDocumentListSend(input);
+  const email = await loadClientEmail(input.orgId, input.clientId);
+  if (!email) throw badRequest('client email is required', 'missing_client_email');
+  const file = await downloadDocumentListPdf({ orgId: input.orgId, fileAssetId: sendRow.file_asset_id });
+  const english = input.ctx.user.uiLanguage === 'en';
+  const subject = english ? 'Client document list' : 'רשימת מסמכים ללקוח';
+  const text = english ? `A document is attached: ${file.fileName}` : `מצורף מסמך: ${file.fileName}`;
+  const html = english
+    ? `<p>A document is attached: ${file.fileName}</p>`
+    : `<div dir="rtl"><p>מצורף מסמך: ${file.fileName}</p></div>`;
+  const attempt = await beginAttempt({
+    organizationId: input.orgId,
+    representedClientId: input.clientId,
+    sourceModule: 'client-operations',
+    sourceEntityType: 'client_annual_document_list',
+    sourceEntityId: sendRow.id,
+    channel: 'email',
+    recipientEmail: email,
+    senderSnapshotJson: { module: 'client-operations', tab_scope: input.scope },
+    messageSnapshotJson: { subject, text },
+    attachmentRefsJson: [
+      {
+        asset_id: sendRow.file_asset_id,
+        filename: file.fileName,
+        content_type: file.mimeType,
+      },
+    ],
+    idempotencyKey: `client-document-list-email:${sendRow.id}:${crypto.randomUUID()}`,
+    sentByUserId: input.ctx.user.id,
+  });
+  const sendResult = await sendEmail({
+    organizationId: input.orgId,
+    to: email,
+    subject,
+    body_text: text,
+    body_html: html,
+    attachments: [
+      {
+        filename: file.fileName,
+        content_type: file.mimeType,
+        content_base64: file.fileBase64,
+      },
+    ],
+  });
+  const finalized = await finalizeAttempt({
+    attemptId: attempt.id,
+    organizationId: input.orgId,
+    result: sendResult.status,
+    failureReason: sendResult.failure_reason,
+    providerMessageId: sendResult.provider_message_id,
+  });
+  if (finalized.result !== 'sent') {
+    throw badRequest(finalized.failureReason || 'email send failed');
   }
 }

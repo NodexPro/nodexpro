@@ -221,7 +221,7 @@ export const CLIENT_OPERATIONS_REGISTRY_COLUMNS: ClientOperationsRegistryColumn[
     editable: true,
     freeze_default: false,
     align: 'center',
-    default_width_px: 72,
+    default_width_px: 96,
   },
   {
     key: 'annual_report',

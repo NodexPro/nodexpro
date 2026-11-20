@@ -66,7 +66,7 @@ test('default widths keep tax columns compact and date columns calendar-sized', 
   assert.match(apiPresentationSource, /key:\s*'income_tax_advance'[\s\S]*?default_width_px:\s*72/);
   assert.match(apiPresentationSource, /key:\s*'national_insurance'[\s\S]*?default_width_px:\s*72/);
   assert.match(apiPresentationSource, /key:\s*'national_insurance_deductions'[\s\S]*?default_width_px:\s*120/);
-  assert.match(apiPresentationSource, /key:\s*'income_tax_deductions'[\s\S]*?default_width_px:\s*72/);
+  assert.match(apiPresentationSource, /key:\s*'income_tax_deductions'[\s\S]*?default_width_px:\s*96/);
   assert.match(apiPresentationSource, /key:\s*'annual_report'[\s\S]*?default_width_px:\s*138/);
   assert.match(apiPresentationSource, /key:\s*'capital_declaration'[\s\S]*?default_width_px:\s*138/);
   assert.match(apiPresentationSource, /key:\s*'material_brought'[\s\S]*?default_width_px:\s*120/);

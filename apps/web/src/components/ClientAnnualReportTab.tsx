@@ -22,6 +22,7 @@ import {
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
 import { displayedPendingIsoDate } from '../lib/client-operations-filing-date-field.pure';
 import type { AnnualDocumentRowDto, AnnualSubmissionRowDto, AnnualTabModel } from './annual-tab-types';
+import { ClientAnnualClientDocumentListModal } from './client-operations/ClientAnnualClientDocumentListModal';
 import { ClientOperationsFilingDateField } from './client-operations/ClientOperationsFilingDateField';
 import { WorkspaceNestedDialogClose } from './WorkspaceNestedDialogClose';
 
@@ -143,6 +144,10 @@ export function ClientAnnualReportTab({
   const [pendingDueDate, setPendingDueDate] = useState<string | null>(null);
   const [historyOpenKey, setHistoryOpenKey] = useState<string | null>(null);
   const [clientListThreadId, setClientListThreadId] = useState('');
+  const [pdfListOpen, setPdfListOpen] = useState(false);
+  const [pdfListBusy, setPdfListBusy] = useState(false);
+  const [optimisticReceived, setOptimisticReceived] = useState<Record<string, boolean>>({});
+  const receivedGenRef = useRef<Record<string, number>>({});
   const capitalDateGenRef = useRef(0);
   const [yearPersistPending, setYearPersistPending] = useState(false);
   const yearCacheRef = useRef(new Map<string, (typeof yearViews)[number]>());
@@ -170,6 +175,9 @@ export function ClientAnnualReportTab({
     expectedVersionRef.current = annualTab.read_model_version;
     setPendingDueDate(null);
     setHistoryOpenKey(null);
+    setPdfListOpen(false);
+    setOptimisticReceived({});
+    receivedGenRef.current = {};
     setSelectedYear(
       resolveDisplayedAnnualTaxYear({
         selectedYear: null,
@@ -297,6 +305,54 @@ export function ClientAnnualReportTab({
     }
   };
 
+  const toggleReceived = async (rowId: string, nextReceived: boolean) => {
+    const gen = (receivedGenRef.current[rowId] ?? 0) + 1;
+    receivedGenRef.current[rowId] = gen;
+    setOptimisticReceived((current) => ({ ...current, [rowId]: nextReceived }));
+    setErr('');
+    try {
+      const out = await postAnnualCommand('toggle_annual_document_received', {
+        row_id: rowId,
+        received: nextReceived,
+      });
+      if (receivedGenRef.current[rowId] !== gen) return;
+      applyReturnedVersion(out);
+      onCaseUpdated(out);
+      setOptimisticReceived((current) => {
+        const next = { ...current };
+        delete next[rowId];
+        return next;
+      });
+    } catch (e) {
+      if (receivedGenRef.current[rowId] !== gen) return;
+      setOptimisticReceived((current) => {
+        const next = { ...current };
+        delete next[rowId];
+        return next;
+      });
+      setErr(userFacingApiMessage(e));
+    }
+  };
+
+  const runPdfListCommand = async (
+    type: string,
+    payload: Record<string, unknown>,
+  ): Promise<ClientOperationsCaseResponse | null> => {
+    setPdfListBusy(true);
+    setErr('');
+    try {
+      const out = await postAnnualCommand(type, payload);
+      applyReturnedVersion(out);
+      onCaseUpdated(out);
+      return out;
+    } catch (e) {
+      setErr(userFacingApiMessage(e));
+      return null;
+    } finally {
+      setPdfListBusy(false);
+    }
+  };
+
   const assignCapitalDueDate = async (iso: string) => {
     if (!iso || iso === (annualTab.assigned_due_date ?? '') && pendingDueDate == null) return;
     const gen = ++capitalDateGenRef.current;
@@ -371,12 +427,22 @@ export function ClientAnnualReportTab({
     persistWorkingYear(taxYear);
   };
 
-  const openFile = async (fileAssetId: string) => {
+  const openFile = async (fileAssetId: string, download = false) => {
     setErr('');
     try {
       const { url } = await apiJson<{ url: string }>(`${moduleClientOperationsAnnualFileOpen(clientId, fileAssetId)}?tab_scope=${annualTab.tab_key}`, {
         method: 'GET',
       });
+      if (download) {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'client-document-list.pdf';
+        link.rel = 'noopener';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        return;
+      }
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (e) {
       setErr(userFacingApiMessage(e));
@@ -797,6 +863,17 @@ export function ClientAnnualReportTab({
                   )}
                 </button>
               ) : null}
+              {annualTab.client_document_list ? (
+                <button
+                  type="button"
+                  className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
+                  disabled={busy}
+                  data-testid="annual-client-document-list-open"
+                  onClick={() => setPdfListOpen(true)}
+                >
+                  {t(annualTab.client_document_list.generate_label_key)}
+                </button>
+              ) : null}
             </div>
           </div>
           {activeDocuments.summary ? (
@@ -857,10 +934,16 @@ export function ClientAnnualReportTab({
                   activeDocuments.rows.map((row) => (
                     <DocumentRow
                       key={row.row_id}
-                      row={row}
+                      row={{
+                        ...row,
+                        received: optimisticReceived[row.row_id] ?? row.received,
+                      }}
                       capital={!isAnnualBoard}
                       busy={busy}
-                      onToggle={() => void postCmd('toggle_annual_document_received', { row_id: row.row_id, received: !row.received })}
+                      togglePending={optimisticReceived[row.row_id] != null}
+                      onToggle={() =>
+                        void toggleReceived(row.row_id, !(optimisticReceived[row.row_id] ?? row.received))
+                      }
                       onPickFile={() => pickFileForRow(row.row_id)}
                       onOpenFile={() => row.file.file_asset_id && void openFile(row.file.file_asset_id)}
                       onRemoveFile={() => void postCmd('remove_annual_document_file', { row_id: row.row_id })}
@@ -887,114 +970,18 @@ export function ClientAnnualReportTab({
             </table>
           </div>
         </section>
-      ) : null}
-      {annualTab.client_document_list ? (
-        <section className="nx-annual-client-list" data-testid="annual-client-document-list">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-            <h3 className="nx-annual-card-title">{t(annualTab.client_document_list.title_key)}</h3>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              {annualTab.client_document_list.can_generate ? (
-                <button
-                  type="button"
-                  className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
-                  disabled={busy}
-                  onClick={() =>
-                    void (async () => {
-                      setBusy(true);
-                      setErr('');
-                      try {
-                        const out = await postAnnualCommand('generate_client_document_list_pdf', {
-                          declaration_date: annualTab.assigned_due_date ?? null,
-                        });
-                        applyReturnedVersion(out);
-                        onCaseUpdated(out);
-                        const nextTab =
-                          annualTab.tab_key === 'capital_declaration' ? out.capital_declaration_tab : out.annual_tab;
-                        const previewId = nextTab?.client_document_list?.preview?.file_asset_id;
-                        if (previewId) await openFile(previewId);
-                      } catch (e) {
-                        setErr(userFacingApiMessage(e));
-                      } finally {
-                        setBusy(false);
-                      }
-                    })()
-                  }
-                >
-                  {t(annualTab.client_document_list.generate_label_key)}
-                </button>
-              ) : null}
-              {annualTab.client_document_list.preview.can_open && annualTab.client_document_list.preview.file_asset_id ? (
-                <button
-                  type="button"
-                  className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
-                  disabled={busy}
-                  onClick={() => void openFile(annualTab.client_document_list!.preview.file_asset_id!)}
-                >
-                  {t(annualTab.client_document_list.preview_label_key)}
-                </button>
-              ) : null}
-            </div>
-          </div>
-          {annualTab.client_document_list.items.length === 0 ? (
-            <p className="nx-annual-empty-cell">{t(annualTab.client_document_list.empty_key)}</p>
-          ) : (
-            <ul className="nx-annual-client-list__items">
-              {annualTab.client_document_list.items.map((item) => (
-                <li key={item.row_id} className="nx-annual-client-list__item">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={item.include_in_client_list}
-                      disabled={busy || !annualTab.permissions.can_edit}
-                      onChange={() =>
-                        void postCmd('set_annual_document_client_list_inclusion', {
-                          row_id: item.row_id,
-                          include_in_client_list: !item.include_in_client_list,
-                        })
-                      }
-                    />
-                    <span>{item.client_facing_name}</span>
-                  </label>
-                  {item.client_facing_description ? (
-                    <p className="nx-annual-client-list__desc">{item.client_facing_description}</p>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-          {annualTab.client_document_list.docflow_threads.length ? (
-            <div className="nx-annual-client-list__send">
-              <label>
-                {t('clientOperations.annual.clientDocumentListThread')}
-                <select
-                  value={clientListThreadId}
-                  disabled={busy || !annualTab.client_document_list.can_send}
-                  onChange={(event) => setClientListThreadId(event.target.value)}
-                >
-                  <option value=""> </option>
-                  {annualTab.client_document_list.docflow_threads.map((thread) => (
-                    <option key={thread.thread_id} value={thread.thread_id}>
-                      {thread.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                className="nx-btn nx-btn-taxes-compact"
-                disabled={busy || !annualTab.client_document_list.can_send || !clientListThreadId}
-                onClick={() =>
-                  void postCmd('send_client_document_list_via_docflow', {
-                    thread_id: clientListThreadId,
-                    send_id: annualTab.client_document_list?.send_history[0]?.send_id ?? null,
-                  })
-                }
-              >
-                {t(annualTab.client_document_list.send_label_key)}
-              </button>
-            </div>
-          ) : null}
-        </section>
+      ) : annualTab.client_document_list ? (
+        <div className="nx-annual-pdf-open-row">
+          <button
+            type="button"
+            className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
+            disabled={busy}
+            data-testid="annual-client-document-list-open"
+            onClick={() => setPdfListOpen(true)}
+          >
+            {t(annualTab.client_document_list.generate_label_key)}
+          </button>
+        </div>
       ) : null}
       </div>
 
@@ -1156,6 +1143,44 @@ export function ClientAnnualReportTab({
         onOpenFile={(fileAssetId) => void openFile(fileAssetId)}
       />
 
+      {pdfListOpen && annualTab.client_document_list ? (
+        <ClientAnnualClientDocumentListModal
+          list={{
+            ...annualTab.client_document_list,
+            download_label_key:
+              annualTab.client_document_list.download_label_key ??
+              'clientOperations.annual.clientDocumentListDownload',
+            email_label_key:
+              annualTab.client_document_list.email_label_key ?? 'clientOperations.annual.clientDocumentListEmail',
+            can_send_email: Boolean(annualTab.client_document_list.can_send_email),
+            recipient_email: annualTab.client_document_list.recipient_email ?? null,
+          }}
+          dir={dir}
+          t={t}
+          busy={pdfListBusy}
+          threadId={clientListThreadId}
+          onThreadIdChange={setClientListThreadId}
+          onClose={() => setPdfListOpen(false)}
+          onGenerate={(selectedRowIds) => {
+            void runPdfListCommand('generate_client_document_list_pdf', {
+              declaration_date: annualTab.assigned_due_date ?? null,
+              selected_row_ids: selectedRowIds,
+            });
+          }}
+          onPreview={(fileAssetId) => void openFile(fileAssetId)}
+          onDownload={(fileAssetId) => void openFile(fileAssetId, true)}
+          onSendDocflow={(threadId, sendId) => {
+            void runPdfListCommand('send_client_document_list_via_docflow', {
+              thread_id: threadId,
+              send_id: sendId,
+            });
+          }}
+          onSendEmail={(sendId) => {
+            void runPdfListCommand('send_client_document_list_via_email', { send_id: sendId });
+          }}
+        />
+      ) : null}
+
       {submissionDlg ? (
         <SubmissionDialog
           state={submissionDlg}
@@ -1180,6 +1205,7 @@ function DocumentRow({
   row,
   capital,
   busy,
+  togglePending,
   onToggle,
   onPickFile,
   onOpenFile,
@@ -1191,6 +1217,7 @@ function DocumentRow({
   row: AnnualDocumentRowDto;
   capital: boolean;
   busy: boolean;
+  togglePending?: boolean;
   onToggle: () => void;
   onPickFile: () => void;
   onOpenFile: () => void;
@@ -1219,7 +1246,13 @@ function DocumentRow({
               ✓
             </span>
           ) : null}
-          <input type="checkbox" checked={row.received} disabled={!row.actions.can_toggle_received || busy} onChange={onToggle} />
+          <input
+            type="checkbox"
+            checked={row.received}
+            disabled={!row.actions.can_toggle_received || (busy && !togglePending)}
+            aria-busy={togglePending ? true : undefined}
+            onChange={onToggle}
+          />
         </span>
       </td>
       <td className="nx-annual-td nx-annual-td--doc-name">
