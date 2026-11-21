@@ -81,9 +81,11 @@
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-missing-dropdown,
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-notes-ta,
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-note-inp {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  color: #0b2248;
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  color: #ffffff;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 

@@ -122,15 +122,18 @@ test('premium modal skin is scoped and keeps a 3-column client-profile grid on d
   assert.match(premium, /@container nx-workspace-modal \(max-width: 860px\)/);
   assert.match(premium, /@container nx-workspace-modal \(max-width: 520px\)/);
   assert.doesNotMatch(premium, /url\(|\.png|\.svg|animation:/);
-  assert.match(premium, /0 0 12px rgba\(44, 196, 255, 0\.4\)/);
+  assert.match(premium, /0 0 12px rgba\(54, 169, 198, 0\.28\)/);
   assert.doesNotMatch(premium, /#659ad8|#457fca|#2c65ae/);
   assert.match(
     premium,
     /linear-gradient\(\s*180deg,\s*rgba\(248,\s*252,\s*255,\s*0\.2\) 0%,\s*rgba\(186,\s*216,\s*246,\s*0\.14\) 100%\)/,
   );
-  assert.match(premium, /linear-gradient\(\s*115deg,\s*#277cff 0%,\s*#165dff 52%,\s*#6558e8 100%\)/);
+  assert.match(
+    premium,
+    /linear-gradient\(180deg, rgba\(54, 169, 198, 0\.62\) 0%, rgba\(19, 191, 208, 0\.48\) 100%\)/,
+  );
   assert.match(premium, /:focus-within/);
-  assert.match(premium, /linear-gradient\(\s*180deg,\s*#061733 0%,\s*#020d24 100%\)/);
+  assert.match(premium, /linear-gradient\(\s*180deg,\s*#102d49 0%,\s*#17547a 100%\)/);
   assert.match(premium, /-webkit-text-fill-color:\s*#eaf6ff/);
   assert.match(premium, /column-gap:\s*22px/);
   assert.match(premium, /row-gap:\s*12px/);

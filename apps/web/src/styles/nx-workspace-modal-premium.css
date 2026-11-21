@@ -13,7 +13,7 @@
   inset: 0;
   height: unset;
   max-height: unset;
-  background: rgba(4, 12, 28, 0.52);
+  background: rgba(16, 45, 73, 0.48);
 }
 
 .nx-modal.nx-workspace-modal,
@@ -33,16 +33,18 @@
   max-height: 100% !important;
   min-height: 0;
   border-radius: 22px !important;
-  border: 1px solid rgba(70, 213, 255, 0.42) !important;
+  border: 1px solid rgba(54, 169, 198, 0.62) !important;
   background:
-    radial-gradient(ellipse at 92% 0%, rgba(101, 88, 232, 0.16), transparent 36%),
-    radial-gradient(ellipse at 78% 0%, rgba(39, 124, 255, 0.26), transparent 48%),
-    linear-gradient(165deg, #04152f 0%, #082652 46%, #124c9a 78%, #04152f 100%) !important;
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%),
+    #102d49 !important;
   box-shadow:
-    0 24px 56px rgba(2, 8, 24, 0.5),
-    0 0 18px rgba(70, 213, 255, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -28px 36px rgba(2, 10, 28, 0.28) !important;
+    0 0 0 1px rgba(54, 169, 198, 0.28),
+    0 0 28px rgba(19, 191, 208, 0.18),
+    0 16px 36px rgba(16, 45, 73, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(19, 191, 208, 0.12) !important;
   overflow: hidden;
   font-family: Arial, sans-serif !important;
 }
@@ -66,9 +68,9 @@
   border-radius: 22px 22px 0 0 !important;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 28%),
-    radial-gradient(ellipse at 88% -12%, rgba(70, 213, 255, 0.34), transparent 44%),
-    radial-gradient(ellipse at 98% 18%, rgba(101, 88, 232, 0.22), transparent 36%),
-    linear-gradient(112deg, #04152f 0%, #082652 52%, #124c9a 100%) !important;
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%) !important;
   box-shadow: none !important;
 }
 
@@ -79,7 +81,7 @@
   height: 1px;
   z-index: 0;
   pointer-events: none;
-  background: linear-gradient(90deg, transparent 8%, rgba(255, 255, 255, 0.34) 48%, rgba(70, 213, 255, 0.28) 78%, transparent);
+  background: linear-gradient(90deg, transparent 8%, rgba(255, 255, 255, 0.34) 48%, rgba(19, 191, 208, 0.28) 78%, transparent);
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-header::after {
@@ -89,7 +91,7 @@
   height: 150%;
   z-index: 0;
   pointer-events: none;
-  background: radial-gradient(ellipse at 50% 0%, rgba(39, 124, 255, 0.28) 0%, rgba(101, 88, 232, 0.1) 42%, transparent 70%);
+  background: radial-gradient(ellipse at 50% 0%, rgba(54, 169, 198, 0.28) 0%, rgba(19, 191, 208, 0.1) 42%, transparent 70%);
   opacity: 0.85;
 }
 
@@ -123,14 +125,14 @@
 
 .nx-modal.nx-workspace-modal .nx-workspace-header-divider {
   height: 1px;
-  background: linear-gradient(90deg, rgba(70, 213, 255, 0.08) 0%, rgba(70, 213, 255, 0.42) 50%, rgba(101, 88, 232, 0.28) 100%);
-  box-shadow: 0 0 8px rgba(70, 213, 255, 0.18);
+  background: linear-gradient(90deg, rgba(54, 169, 198, 0.08) 0%, rgba(54, 169, 198, 0.42) 50%, rgba(19, 191, 208, 0.28) 100%);
+  box-shadow: 0 0 8px rgba(19, 191, 208, 0.18);
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-tabs-bar,
 .nx-modal.nx-workspace-modal .nx-workspace-panel-root .nx-workspace-tabs-bar {
-  background: linear-gradient(180deg, #061733 0%, #020d24 100%) !important;
-  border-bottom: 1px solid rgba(70, 213, 255, 0.12) !important;
+  background: linear-gradient(180deg, #102d49 0%, #17547a 100%) !important;
+  border-bottom: 1px solid rgba(54, 169, 198, 0.28) !important;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-tab-link,
@@ -141,19 +143,19 @@
 
 .nx-modal.nx-workspace-modal .nx-workspace-tab-link:hover,
 .nx-modal.nx-workspace-modal .nx-workspace-panel-root .nx-workspace-tab-link:hover {
-  background: rgba(39, 124, 255, 0.1) !important;
+  background: rgba(19, 191, 208, 0.12) !important;
   color: #ffffff !important;
   -webkit-text-fill-color: #ffffff !important;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-tab-link-active,
 .nx-modal.nx-workspace-modal .nx-workspace-panel-root .nx-workspace-tab-link-active {
-  background: rgba(39, 124, 255, 0.18) !important;
+  background: rgba(19, 191, 208, 0.18) !important;
   color: #ffffff !important;
   -webkit-text-fill-color: #ffffff !important;
   box-shadow:
-    inset 0 -3px 0 #46d5ff,
-    0 3px 10px rgba(70, 213, 255, 0.12) !important;
+    inset 0 -3px 0 #13bfd0,
+    0 3px 10px rgba(19, 191, 208, 0.18) !important;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-tab-link::after,
@@ -163,13 +165,13 @@
   bottom: 0;
   height: 3px;
   border-radius: 2px 2px 0 0;
-  background: #46d5ff;
-  box-shadow: 0 0 8px rgba(70, 213, 255, 0.4);
+  background: #13bfd0;
+  box-shadow: 0 0 8px rgba(19, 191, 208, 0.4);
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-tab-link:focus-visible,
 .nx-modal.nx-workspace-modal .nx-workspace-panel-root .nx-workspace-tab-link:focus-visible {
-  outline: 2px solid rgba(70, 213, 255, 0.85);
+  outline: 2px solid rgba(19, 191, 208, 0.85);
   outline-offset: -2px;
 }
 
@@ -242,10 +244,12 @@
   position: relative;
   display: flex;
   align-items: center;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(232, 244, 255, 0.88)) !important;
-  border: 1px solid rgba(255, 255, 255, 0.92) !important;
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%) !important;
+  border: 1px solid rgba(54, 169, 198, 0.58) !important;
   border-radius: 11px !important;
-  color: #0b2248 !important;
+  color: #ffffff !important;
   font-weight: 500 !important;
   overflow: visible;
   height: 38px;
@@ -255,28 +259,23 @@
   gap: 8px;
   box-sizing: border-box;
   box-shadow:
-    0 0 0 1px rgba(70, 213, 255, 0.28),
-    0 0 12px rgba(44, 196, 255, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 0 -1px 0 rgba(75, 139, 216, 0.12) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 0 1px rgba(19, 191, 208, 0.04) !important;
   transition: border-color 180ms ease, box-shadow 180ms ease;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box:hover {
-  border-color: rgba(255, 255, 255, 1) !important;
+  border-color: rgba(19, 191, 208, 0.7) !important;
   box-shadow:
-    0 0 0 1px rgba(70, 213, 255, 0.38),
-    0 0 12px rgba(44, 196, 255, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 1),
-    inset 0 -1px 0 rgba(75, 139, 216, 0.12) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 0 0 1px rgba(19, 191, 208, 0.08) !important;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box:focus-within {
-  border-color: #46d5ff !important;
+  border-color: rgba(19, 191, 208, 0.92) !important;
   box-shadow:
-    0 0 0 1px rgba(39, 124, 255, 0.55),
-    0 0 16px rgba(70, 213, 255, 0.48),
-    inset 0 1px 0 rgba(255, 255, 255, 1) !important;
+    0 0 0 2px rgba(19, 191, 208, 0.3),
+    0 0 12px rgba(54, 169, 198, 0.28) !important;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box:has(input[readonly]),
@@ -286,7 +285,8 @@
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box input,
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box select {
-  color: #0b2248;
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
   font-weight: 500;
   min-width: 0;
   flex: 1 1 auto;
@@ -295,7 +295,7 @@
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box input::placeholder {
-  color: #8aa3c4;
+  color: rgba(255, 255, 255, 0.86);
   font-weight: 400;
 }
 
@@ -310,8 +310,8 @@
   top: 50%;
   width: 6px;
   height: 6px;
-  border-right: 1.5px solid #4a74a8;
-  border-bottom: 1.5px solid #4a74a8;
+  border-right: 1.5px solid #36a9c6;
+  border-bottom: 1.5px solid #36a9c6;
   transform: translateY(-70%) rotate(45deg);
   pointer-events: none;
   opacity: 0.5;
@@ -331,7 +331,7 @@
   flex: 0 0 16px;
   order: 2;
   margin-inline-start: auto;
-  color: #4a74a8;
+  color: #36a9c6;
   opacity: 0.82;
   pointer-events: none;
   display: block;
@@ -370,18 +370,26 @@
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .nx-workspace-client-footer .nx-btn-primary {
   min-width: 104px;
-  background: linear-gradient(115deg, #277cff 0%, #165dff 52%, #6558e8 100%) !important;
-  box-shadow: 0 6px 14px rgba(18, 76, 154, 0.28) !important;
+  border: 1px solid rgba(19, 191, 208, 0.78) !important;
   color: #ffffff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.34), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.62) 0%, rgba(19, 191, 208, 0.48) 100%) !important;
+  box-shadow:
+    0 0 16px rgba(19, 191, 208, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38) !important;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .nx-workspace-client-footer .nx-btn-primary:hover:not(:disabled) {
-  filter: saturate(1.05) brightness(1.03);
+  border-color: rgba(120, 232, 240, 0.92);
+  background: linear-gradient(180deg, rgba(54, 169, 198, 0.74) 0%, rgba(19, 191, 208, 0.58) 100%) !important;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .nx-workspace-client-footer .nx-btn-primary:focus-visible {
-  outline: 2px solid rgba(70, 213, 255, 0.9);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.42),
+    0 0 14px rgba(19, 191, 208, 0.32) !important;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .nx-workspace-client-footer .nx-btn-primary:disabled {
@@ -389,7 +397,11 @@
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .nx-workspace-client-footer .nx-btn-secondary {
-  color: #5b7190;
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  color: #ffffff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -424,4 +436,66 @@
   .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card > .client-profile-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Create Account / Deep Ocean action buttons inside Client Workspace tabs. Sizes stay as authored. */
+.nx-modal.nx-workspace-modal .nx-btn-primary,
+.nx-modal.nx-workspace-modal .nx-glass-btn--purple {
+  border: 1px solid rgba(19, 191, 208, 0.78) !important;
+  color: #ffffff !important;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.34), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.62) 0%, rgba(19, 191, 208, 0.48) 100%) !important;
+  box-shadow:
+    0 0 16px rgba(19, 191, 208, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38) !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-btn-primary:hover:not(:disabled),
+.nx-modal.nx-workspace-modal .nx-glass-btn--purple:hover:not(:disabled) {
+  border-color: rgba(120, 232, 240, 0.92) !important;
+  background: linear-gradient(180deg, rgba(54, 169, 198, 0.74) 0%, rgba(19, 191, 208, 0.58) 100%) !important;
+  filter: none;
+}
+
+.nx-modal.nx-workspace-modal .nx-btn-secondary,
+.nx-modal.nx-workspace-modal .nx-glass-btn--secondary,
+.nx-modal.nx-workspace-modal .nx-btn-ghost {
+  border: 1px solid rgba(54, 169, 198, 0.58) !important;
+  color: #ffffff !important;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-btn-secondary:hover:not(:disabled),
+.nx-modal.nx-workspace-modal .nx-glass-btn--secondary:hover:not(:disabled),
+.nx-modal.nx-workspace-modal .nx-btn-ghost:hover:not(:disabled) {
+  border-color: rgba(19, 191, 208, 0.7) !important;
+  background: rgba(23, 84, 122, 0.38) !important;
+  color: #ffffff !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-btn-danger-ghost {
+  color: #ffd6de !important;
+  background: rgba(96, 24, 48, 0.28) !important;
+  border: 1px solid rgba(255, 138, 165, 0.5) !important;
+}
+
+.nx-modal.nx-workspace-modal .nx-btn:disabled,
+.nx-modal.nx-workspace-modal .nx-glass-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.nx-modal.nx-workspace-modal input[type='checkbox'],
+.nx-modal.nx-workspace-modal input[type='radio'] {
+  accent-color: #13bfd0;
+}
+
+.nx-modal.nx-workspace-modal .client-field-box option,
+.nx-modal.nx-workspace-modal select option {
+  background: #102d49;
+  color: #ffffff;
 }

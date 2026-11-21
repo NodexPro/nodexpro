@@ -30,16 +30,19 @@ test('Nested dialog skin is scoped and imported from the workspace panel', () =>
   assert.match(panelSrc, /nx-workspace-nested-dialogs\.css/);
   assert.match(nestedCss, /\.nx-modal\.nx-workspace-modal \.nx-modal-overlay > \.nx-modal:not\(\.nx-workspace-modal\)/);
   assert.match(nestedCss, /font-family:\s*Arial, sans-serif/);
-  assert.match(nestedCss, /linear-gradient\(165deg, #04152f 0%, #082652 46%, #124c9a 78%, #04152f 100%\)/);
-  assert.match(nestedCss, /rgba\(255, 255, 255, 0\.94\).*rgba\(232, 244, 255, 0\.84\)/s);
-  assert.match(nestedCss, /color:\s*#0b2248/);
+  assert.match(
+    nestedCss,
+    /linear-gradient\(180deg, rgba\(23, 84, 122, 0\.38\) 0%, rgba\(16, 45, 73, 0\.44\) 100%\)/,
+  );
+  assert.match(nestedCss, /#102d49/);
+  assert.match(nestedCss, /color:\s*#ffffff/);
   assert.match(nestedCss, /\.nx-history-section-modal/);
   assert.match(nestedCss, /\.nx-annual-dialog/);
   assert.match(nestedCss, /inset:\s*12px auto auto 12px/);
   assert.match(nestedCss, /min-height:\s*56px/);
   assert.match(nestedCss, /#B8D9FF/);
   assert.match(nestedCss, /\.nx-em-modal-2col/);
-  assert.match(nestedCss, /#0B2248/);
+  assert.match(nestedCss, /#ffffff/);
   assert.doesNotMatch(nestedCss, /createPortal|translateY\(max\(-60px/);
   assert.doesNotMatch(nestedCss, /\.nx-workspace-close\s*\{[^}]*inset:\s*(?!14px 16px auto auto)/);
 });
@@ -57,7 +60,7 @@ test('Primary workspace portal, raise and Close stay on the premium shell', () =
 
 test('Redundant footer סגירה is replaced with a top-left X; functional actions remain', () => {
   assert.match(closeSrc, /className=.*nx-modal-close/);
-  assert.match(closeSrc, /aria-label=\{labelHe\}/);
+  assert.match(closeSrc, /aria-label=\{label\}/);
   assert.match(feesSrc, /className="nx-modal-close"/);
   assert.match(feesSrc, /clientOperations\.save/);
   assert.doesNotMatch(feesSrc, /nx-modal-footer[\s\S]*סגירה[\s\S]*שמירה/);
@@ -91,7 +94,10 @@ test('Documents overlay and Fees editor keep aggregate reads and named commands'
   assert.match(docsSrc, /documentsTab\.open_folder/);
   assert.match(docsSrc, /moduleClientOperationsDocumentsCommands/);
   assert.match(docsSrc, /onCaseUpdated\(out\)/);
-  assert.match(docsCss, /linear-gradient\(165deg, #04152f 0%, #082652 46%, #124c9a 78%, #04152f 100%\)/);
+  assert.match(
+    docsCss,
+    /linear-gradient\(180deg, rgba\(23, 84, 122, 0\.38\) 0%, rgba\(16, 45, 73, 0\.44\) 100%\)/,
+  );
   assert.match(feesSrc, /feesTab\.edit_modal/);
   assert.match(feesSrc, /moduleClientOperationsFeesCommands/);
   assert.match(feesSrc, /onCaseUpdated/);

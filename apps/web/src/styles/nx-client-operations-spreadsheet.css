@@ -1759,13 +1759,24 @@ button.nx-co-sheet__ni-clip:disabled {
   gap: 6px;
 }
 
-.nx-co-sheet__number-format select,
-.nx-co-sheet__dialog input,
-.nx-co-sheet__dialog select {
+.nx-co-sheet__number-format select {
   border: 1px solid #cfd8e3;
   border-radius: 6px;
   padding: 6px 8px;
   background: #fff;
+  font: inherit;
+}
+
+.nx-co-sheet__dialog input,
+.nx-co-sheet__dialog select {
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: #ffffff;
+  color-scheme: dark;
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
   font: inherit;
 }
 
@@ -1775,7 +1786,7 @@ button.nx-co-sheet__ni-clip:disabled {
   z-index: 1000;
   display: grid;
   place-items: center;
-  background: rgba(15, 23, 42, 0.35);
+  background: rgba(16, 45, 73, 0.48);
 }
 
 .nx-co-sheet__dialog,
@@ -1785,6 +1796,20 @@ button.nx-co-sheet__ni-clip:disabled {
   border: 1px solid var(--nx-co-grid);
   border-radius: 8px;
   box-shadow: 0 20px 50px rgba(15, 23, 42, 0.25);
+}
+
+.nx-co-sheet__dialog {
+  color: #ffffff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%),
+    #102d49;
+  border: 1px solid rgba(54, 169, 198, 0.62);
+  box-shadow:
+    0 0 0 1px rgba(54, 169, 198, 0.28),
+    0 0 28px rgba(19, 191, 208, 0.18),
+    0 16px 36px rgba(16, 45, 73, 0.22);
 }
 
 .nx-co-sheet__dialog {
@@ -3539,14 +3564,17 @@ button.nx-co-sheet__date-open {
   overflow-x: hidden;
   color: #eef6ff;
   border-radius: 16px;
-  border: 1px solid rgba(70, 213, 255, 0.42);
+  border: 1px solid rgba(54, 169, 198, 0.62);
   background:
-    radial-gradient(ellipse at 92% 0%, rgba(101, 88, 232, 0.16), transparent 36%),
-    radial-gradient(ellipse at 78% 0%, rgba(39, 124, 255, 0.26), transparent 48%),
-    linear-gradient(165deg, #04152f 0%, #082652 46%, #124c9a 78%, #04152f 100%);
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%),
+    #102d49;
   box-shadow:
-    0 24px 56px rgba(2, 8, 24, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    0 0 0 1px rgba(54, 169, 198, 0.28),
+    0 0 28px rgba(19, 191, 208, 0.18),
+    0 16px 36px rgba(16, 45, 73, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -3636,14 +3664,14 @@ button.nx-co-sheet__date-open {
   min-inline-size: 0;
   margin: 0;
   padding: 8px 10px;
-  border: 1px solid rgba(70, 213, 255, 0.42);
+  border: 1px solid rgba(54, 169, 198, 0.58);
   border-radius: 8px;
   display: flex;
   flex-direction: column;
   align-self: stretch;
   gap: 6px;
   box-sizing: border-box;
-  background: linear-gradient(180deg, rgba(10, 48, 108, 0.96), rgba(6, 32, 78, 0.94));
+  background: linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%);
   box-shadow: none;
 }
 
@@ -3711,11 +3739,13 @@ button.nx-co-sheet__date-open {
   margin: 0;
   padding: 4px 8px;
   white-space: nowrap;
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(54, 169, 198, 0.58);
   border-radius: 8px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  color: #0b2248;
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  color: #ffffff;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.25;
@@ -3725,15 +3755,17 @@ button.nx-co-sheet__date-open {
 
 .nx-co-ni-modal__option:hover:not(:has(input:disabled)),
 .nx-co-ni-modal__month-action:hover:not(:has(input:disabled)) {
-  border-color: rgba(56, 189, 248, 0.9);
+  border-color: rgba(19, 191, 208, 0.7);
 }
 
 .nx-co-ni-modal__option.is-selected,
 .nx-co-ni-overlay .nx-co-ni-modal .nx-clients-form label.nx-co-ni-modal__option.is-selected {
-  border-color: rgba(56, 189, 248, 0.95);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(214, 236, 255, 0.96));
-  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.65);
-  color: #0b2248;
+  border-color: rgba(19, 191, 208, 0.78);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.34), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.62) 0%, rgba(19, 191, 208, 0.48) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38);
+  color: #ffffff;
 }
 
 .nx-co-ni-modal__row dt {
@@ -3763,7 +3795,7 @@ button.nx-co-sheet__date-open {
   width: 16px;
   height: 16px;
   margin: 0;
-  accent-color: #3b82f6;
+  accent-color: #13bfd0;
 }
 
 .nx-co-ni-modal__option:has(input:disabled),
@@ -3775,8 +3807,8 @@ button.nx-co-sheet__date-open {
 .nx-co-ni-modal__option:focus-within,
 .nx-co-ni-modal__month-action:focus-within {
   outline: none;
-  border-color: #38bdf8;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  border-color: rgba(19, 191, 208, 0.92);
+  box-shadow: 0 0 0 2px rgba(19, 191, 208, 0.3);
 }
 
 .nx-co-ni-overlay .nx-co-ni-modal .nx-clients-form__footer.nx-co-ni-modal__footer {
@@ -3803,26 +3835,35 @@ button.nx-co-sheet__date-open {
 
 .nx-co-ni-overlay .nx-co-ni-modal__footer .nx-glass-btn--purple {
   color: #ffffff;
-  border: none;
-  background: linear-gradient(135deg, #38bdf8 0%, #3b82f6 30%, #4f46e5 65%, #7c3aed 100%);
-  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.22);
+  border: 1px solid rgba(19, 191, 208, 0.78);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.34), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.62) 0%, rgba(19, 191, 208, 0.48) 100%);
+  box-shadow:
+    0 0 16px rgba(19, 191, 208, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }
 
 .nx-co-ni-overlay .nx-co-ni-modal__footer .nx-glass-btn--purple:hover:not(:disabled) {
-  box-shadow: 0 6px 18px rgba(79, 70, 229, 0.3);
+  border-color: rgba(120, 232, 240, 0.92);
+  background: linear-gradient(180deg, rgba(54, 169, 198, 0.74) 0%, rgba(19, 191, 208, 0.58) 100%);
   filter: none;
 }
 
 .nx-co-ni-overlay .nx-co-ni-modal__footer .nx-glass-btn--purple:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.28);
+  box-shadow:
+    0 0 0 2px rgba(19, 191, 208, 0.42),
+    0 0 14px rgba(19, 191, 208, 0.32);
 }
 
 .nx-co-ni-overlay .nx-co-ni-modal__footer .nx-glass-btn--secondary {
-  color: #334155;
-  border: 1px solid #dbe3ee;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(232, 244, 255, 0.92));
-  box-shadow: none;
+  color: #ffffff;
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 .nx-co-column-settings-modal.nx-co-ni-modal.nx-clients-modal,
@@ -4302,9 +4343,11 @@ button.nx-co-sheet__date-open {
   box-sizing: border-box;
   padding: 8px;
   border-radius: 8px;
-  border: 1px solid rgba(70, 213, 255, 0.42);
+  border: 1px solid rgba(54, 169, 198, 0.62);
   background:
-    linear-gradient(180deg, #082652 0%, #04152f 100%);
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%),
+    #102d49;
   box-shadow: 0 16px 32px rgba(2, 8, 24, 0.45);
   color: #eef6ff;
   font-family: Arial, sans-serif;
@@ -4377,4 +4420,95 @@ button.nx-co-sheet__date-open {
   .nx-co-annual-capital-modal__layout {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Notes modal (Client Operations only — `.nx-co-ops-modal`). Create Account glass. */
+.nx-co-ops-modal-overlay {
+  background: rgba(16, 45, 73, 0.48);
+}
+
+.nx-modal.nx-co-ops-modal {
+  color: #ffffff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%),
+    #102d49;
+  border: 1px solid rgba(54, 169, 198, 0.62);
+  box-shadow:
+    0 0 0 1px rgba(54, 169, 198, 0.28),
+    0 0 28px rgba(19, 191, 208, 0.18),
+    0 16px 36px rgba(16, 45, 73, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.nx-modal.nx-co-ops-modal .nx-modal-header,
+.nx-modal.nx-co-ops-modal .nx-modal-footer {
+  background: transparent;
+  border-color: rgba(54, 169, 198, 0.28);
+}
+
+.nx-modal.nx-co-ops-modal .nx-modal-title,
+.nx-modal.nx-co-ops-modal .nx-modal-subtitle,
+.nx-modal.nx-co-ops-modal .nx-field-label,
+.nx-modal.nx-co-ops-modal .nx-note-card-meta,
+.nx-modal.nx-co-ops-modal .nx-note-card-body,
+.nx-modal.nx-co-ops-modal .nx-empty-note,
+.nx-modal.nx-co-ops-modal h3,
+.nx-modal.nx-co-ops-modal p,
+.nx-modal.nx-co-ops-modal li {
+  color: #ffffff !important;
+}
+
+.nx-modal.nx-co-ops-modal .nx-modal-close {
+  color: #ffffff;
+  background: rgba(23, 84, 122, 0.28);
+  border: 1px solid rgba(54, 169, 198, 0.58);
+}
+
+.nx-modal.nx-co-ops-modal input,
+.nx-modal.nx-co-ops-modal select,
+.nx-modal.nx-co-ops-modal textarea {
+  color: #ffffff !important;
+  color-scheme: dark;
+  border: 1px solid rgba(54, 169, 198, 0.58) !important;
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%) !important;
+}
+
+.nx-modal.nx-co-ops-modal option {
+  background: #102d49;
+  color: #ffffff;
+}
+
+.nx-modal.nx-co-ops-modal .nx-btn-primary {
+  border: 1px solid rgba(19, 191, 208, 0.78) !important;
+  color: #ffffff !important;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.34), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.62) 0%, rgba(19, 191, 208, 0.48) 100%) !important;
+  box-shadow:
+    0 0 16px rgba(19, 191, 208, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38) !important;
+}
+
+.nx-modal.nx-co-ops-modal .nx-btn-secondary,
+.nx-modal.nx-co-ops-modal .nx-btn-ghost {
+  border: 1px solid rgba(54, 169, 198, 0.58) !important;
+  color: #ffffff !important;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%) !important;
+}
+
+.nx-co-route .nx-btn-primary {
+  border: 1px solid rgba(19, 191, 208, 0.78);
+  color: #ffffff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.34), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.62) 0%, rgba(19, 191, 208, 0.48) 100%);
+  box-shadow:
+    0 0 16px rgba(19, 191, 208, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }

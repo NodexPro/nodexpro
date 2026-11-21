@@ -207,12 +207,14 @@
   font-size: 13px;
   font-weight: 600;
   line-height: 1.35;
-  color: #0b2248;
+  color: #ffffff;
   white-space: normal;
   overflow-wrap: break-word;
   word-break: normal;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
+  border: 1px solid rgba(54, 169, 198, 0.58);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
@@ -241,12 +243,14 @@
   font-size: 13px;
   font-weight: 600;
   line-height: 1.45;
-  color: #0b2248;
+  color: #ffffff;
   white-space: normal;
   overflow-wrap: break-word;
   word-break: normal;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
+  border: 1px solid rgba(54, 169, 198, 0.58);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 

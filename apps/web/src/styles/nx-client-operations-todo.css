@@ -27,7 +27,7 @@
   justify-content: center;
   padding: 24px;
   box-sizing: border-box;
-  background: rgba(8, 36, 71, 0.55);
+  background: rgba(16, 45, 73, 0.48);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
@@ -40,10 +40,15 @@
   border-radius: 12px;
   overflow: hidden;
   background:
-    radial-gradient(ellipse at 70% 0%, rgba(38, 140, 255, 0.18), transparent 50%),
-    linear-gradient(180deg, #0a2d55 0%, #082447 100%);
-  border: 1px solid rgba(0, 207, 239, 0.35);
-  box-shadow: 0 24px 64px rgba(2, 20, 45, 0.45);
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%),
+    #102d49;
+  border: 1px solid rgba(54, 169, 198, 0.62);
+  box-shadow:
+    0 0 0 1px rgba(54, 169, 198, 0.28),
+    0 0 28px rgba(19, 191, 208, 0.18),
+    0 16px 36px rgba(16, 45, 73, 0.22);
   color: #f4f8fc;
   direction: inherit;
 }
@@ -117,9 +122,12 @@
   min-width: 200px;
   padding: 0 12px;
   border-radius: 6px;
-  border: 1px solid rgba(38, 140, 255, 0.5);
-  background: rgba(255, 255, 255, 0.95);
-  color: #0a2d55;
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  color: #ffffff;
+  color-scheme: dark;
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
   font-size: 14px;
 }
 
@@ -508,7 +516,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(8, 36, 71, 0.4);
+  background: rgba(16, 45, 73, 0.48);
   padding: 24px;
 }
 
@@ -517,9 +525,17 @@
   max-height: calc(100% - 24px);
   overflow: auto;
   border-radius: 10px;
-  background: #fff;
-  color: #0a2d55;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+  color: #ffffff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%),
+    #102d49;
+  border: 1px solid rgba(54, 169, 198, 0.62);
+  box-shadow:
+    0 0 0 1px rgba(54, 169, 198, 0.28),
+    0 0 28px rgba(19, 191, 208, 0.18),
+    0 16px 36px rgba(16, 45, 73, 0.22);
 }
 
 .nx-co-todo-form__header,
@@ -532,8 +548,9 @@
 }
 
 .nx-co-todo-form .nx-co-todo-board__close {
-  color: #0a2d55;
-  background: #eef4fb;
+  color: #ffffff;
+  background: rgba(23, 84, 122, 0.38);
+  border: 1px solid rgba(54, 169, 198, 0.58);
 }
 
 .nx-co-todo-form__header h3 {
@@ -572,15 +589,29 @@
 
 .nx-co-todo-form__footer .nx-btn-primary,
 .nx-co-todo-board__topbar .nx-btn-primary {
-  background: #1d7dff !important;
-  border-color: #1d7dff !important;
-  color: #fff !important;
+  border: 1px solid rgba(19, 191, 208, 0.78) !important;
+  color: #ffffff !important;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.34), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.62) 0%, rgba(19, 191, 208, 0.48) 100%) !important;
+  box-shadow:
+    0 0 16px rgba(19, 191, 208, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38) !important;
   min-width: 96px;
+}
+
+.nx-co-todo-form__footer .nx-btn-secondary,
+.nx-co-todo-board__topbar .nx-btn-secondary {
+  border: 1px solid rgba(54, 169, 198, 0.58) !important;
+  color: #ffffff !important;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%) !important;
 }
 
 .nx-co-todo-form__footer {
   justify-content: center;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid rgba(54, 169, 198, 0.28);
 }
 
 .nx-co-todo-form__body {
@@ -605,7 +636,12 @@
   font-weight: 400;
   padding: 8px 12px;
   border-radius: 6px;
-  border: 1px solid #d1d5db;
+  color: #ffffff;
+  color-scheme: dark;
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
   font-size: 14px;
 }
 
@@ -619,8 +655,8 @@
   z-index: 5;
   max-height: 240px;
   overflow: auto;
-  background: #fff;
-  border: 1px solid #d1d5db;
+  background: #102d49;
+  border: 1px solid rgba(54, 169, 198, 0.58);
   border-radius: 6px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
 }
@@ -636,12 +672,12 @@
   background: transparent;
   cursor: pointer;
   text-align: start;
-  color: #0a2d55;
+  color: #ffffff;
 }
 
 .nx-co-todo-form__suggest button:hover,
 .nx-co-todo-form__suggest li.is-active button {
-  background: #f0f7ff;
+  background: rgba(23, 84, 122, 0.38);
 }
 
 .nx-co-todo-form__suggest li.is-active button {
@@ -690,7 +726,7 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgba(8, 36, 71, 0.45);
+  background: rgba(16, 45, 73, 0.48);
 }
 
 .nx-co-todo-archive {
@@ -807,9 +843,14 @@
   height: 36px;
   padding: 0 14px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 214, 102, 0.65);
-  background: linear-gradient(180deg, #ffe566, #ffd24d);
-  color: #3b2f0b;
+  border: 1px solid rgba(19, 191, 208, 0.78);
+  color: #ffffff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.34), transparent 48%),
+    linear-gradient(180deg, rgba(54, 169, 198, 0.62) 0%, rgba(19, 191, 208, 0.48) 100%);
+  box-shadow:
+    0 0 16px rgba(19, 191, 208, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
   font-size: 14px;
   font-weight: 700;
   line-height: 1.2;
@@ -818,7 +859,8 @@
 }
 
 .nx-co-app-header__todo-btn:hover {
-  filter: brightness(1.03);
+  border-color: rgba(120, 232, 240, 0.92);
+  background: linear-gradient(180deg, rgba(54, 169, 198, 0.74) 0%, rgba(19, 191, 208, 0.58) 100%);
 }
 
 .nx-co-app-header__end-cluster {
@@ -853,7 +895,7 @@
   font-size: 13px;
   font-weight: 400;
   line-height: 1.3;
-  color: #0a2d55;
+  color: #ffffff;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -864,7 +906,7 @@
 .nx-co-todo-form__save-state {
   font-size: 12px;
   font-weight: 400;
-  color: #5b6b80;
+  color: rgba(255, 255, 255, 0.86);
 }
 
 .nx-co-todo-form__save-state.is-error {
@@ -883,8 +925,8 @@
   box-sizing: border-box;
   padding: 8px 10px;
   border-radius: 6px;
-  background: #0a2d55;
-  border: 1px solid rgba(0, 207, 239, 0.35);
+  background: #102d49;
+  border: 1px solid rgba(54, 169, 198, 0.62);
   box-shadow: 0 8px 20px rgba(2, 20, 45, 0.35);
   color: #f4f8fc;
   font-size: 12px;

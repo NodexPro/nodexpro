@@ -139,21 +139,23 @@
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-overlay {
-  background: rgba(4, 12, 28, 0.42);
+  background: rgba(16, 45, 73, 0.48);
   border-radius: 14px;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-folder-panel {
   position: relative;
   background:
-    radial-gradient(ellipse at 92% 0%, rgba(101, 88, 232, 0.16), transparent 36%),
-    radial-gradient(ellipse at 78% 0%, rgba(39, 124, 255, 0.26), transparent 48%),
-    linear-gradient(165deg, #04152f 0%, #082652 46%, #124c9a 78%, #04152f 100%);
-  border: 1px solid rgba(70, 213, 255, 0.42);
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%),
+    #102d49;
+  border: 1px solid rgba(54, 169, 198, 0.62);
   box-shadow:
-    0 24px 56px rgba(2, 8, 24, 0.5),
-    0 0 18px rgba(70, 213, 255, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    0 0 0 1px rgba(54, 169, 198, 0.28),
+    0 0 28px rgba(19, 191, 208, 0.18),
+    0 16px 36px rgba(16, 45, 73, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
   padding: 16px 20px 20px;
 }
 
@@ -208,7 +210,7 @@
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-doc-label {
-  color: #0b2248;
+  color: #ffffff;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-documents .nx-cdocs-doc-sub {

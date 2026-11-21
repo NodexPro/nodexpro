@@ -49,14 +49,14 @@ export function ClientNoteModal({
 
   return (
     <div
-      className="nx-modal-overlay"
+      className="nx-modal-overlay nx-co-ops-modal-overlay"
       role="presentation"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
-        className="nx-modal"
+        className="nx-modal nx-co-ops-modal"
         role="dialog"
         aria-modal="true"
         aria-label={notesTitle}
