@@ -193,6 +193,7 @@ import { formatClientOperationsOperationalPeriodTabLabel } from '../../lib/clien
 import { PageHeader } from '../../templates/template-1/components/PageHeader';
 import { SectionCard } from '../../templates/template-1/components/SectionCard';
 import { ClientNoteModal } from '../ClientNoteModal';
+import { ClientOperationsConfirmDialog } from './ClientOperationsChromeDialogs';
 import {
   ClientWorkspaceModal,
   buildPlaceholderClientCaseFromRegistryRow,
@@ -1112,6 +1113,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [notesModalClientName, setNotesModalClientName] = useState('');
   const [notesLoading, setNotesLoading] = useState(false);
   const [notesError, setNotesError] = useState('');
+  const [noteDeleteId, setNoteDeleteId] = useState<string | null>(null);
   const [operationalNotes, setOperationalNotes] = useState<OperationalNoteRow[]>([]);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [formTypeCode, setFormTypeCode] = useState('');
@@ -1899,7 +1901,6 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
   const deleteNote = async (noteId: string) => {
     if (!notesModalClientId || !canEdit) return;
-    if (!window.confirm(t('clientOperations.deleteNoteConfirm'))) return;
     setNotesError('');
     const res = await apiFetch(moduleClientOperationsDeleteNote(notesModalClientId, noteId), {
       method: 'POST',
@@ -7224,7 +7225,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                             type="button"
                             className="nx-btn nx-btn-ghost"
                             style={{ color: '#2563eb' }}
-                            onClick={() => deleteNote(n.id)}
+                            onClick={() => setNoteDeleteId(n.id)}
                           >
                             {t('clientOperations.delete')}
                           </button>
@@ -7270,6 +7271,20 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           )}
         </ClientNoteModal>
       )}
+      {noteDeleteId ? (
+        <ClientOperationsConfirmDialog
+          title={t('clientOperations.deleteNoteConfirm')}
+          confirmLabel={t('clientOperations.confirmAction')}
+          cancelLabel={t('clientOperations.cancel')}
+          danger
+          onClose={() => setNoteDeleteId(null)}
+          onConfirm={() => {
+            const id = noteDeleteId;
+            setNoteDeleteId(null);
+            if (id) void deleteNote(id);
+          }}
+        />
+      ) : null}
     </>
   );
 

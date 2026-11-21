@@ -71,7 +71,7 @@ test('Expense Management editor keeps named commands and a harness-seeded popula
   assert.match(accountingSrc, /WorkspaceNestedDialogClose/);
   const nestedCss = readFileSync(join(dir, '../src/styles/nx-workspace-nested-dialogs.css'), 'utf8');
   assert.match(nestedCss, /\.nx-em-modal-2col/);
-  assert.match(nestedCss, /linear-gradient\(180deg, rgba\(8, 38, 82, 0\.42\)/);
+  assert.match(nestedCss, /linear-gradient\(180deg, rgba\(23, 84, 122, 0\.38\) 0%, rgba\(16, 45, 73, 0\.44\) 100%\)/);
   const harness = readFileSync(join(dir, 'client-workspace-accounting-tab-harness.tsx'), 'utf8');
   assert.match(harness, /dump=expense-editor|expense-editor/);
   assert.match(harness, /עריכת ניהול הוצאות/);

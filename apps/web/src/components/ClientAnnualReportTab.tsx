@@ -23,6 +23,10 @@ import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
 import { displayedPendingIsoDate } from '../lib/client-operations-filing-date-field.pure';
 import type { AnnualDocumentRowDto, AnnualSubmissionRowDto, AnnualTabModel } from './annual-tab-types';
 import { ClientAnnualClientDocumentListModal } from './client-operations/ClientAnnualClientDocumentListModal';
+import {
+  ClientOperationsConfirmDialog,
+  ClientOperationsPromptDialog,
+} from './client-operations/ClientOperationsChromeDialogs';
 import { ClientOperationsFilingDateField } from './client-operations/ClientOperationsFilingDateField';
 import { WorkspaceNestedDialogClose } from './WorkspaceNestedDialogClose';
 
@@ -146,6 +150,12 @@ export function ClientAnnualReportTab({
   const [clientListThreadId, setClientListThreadId] = useState('');
   const [pdfListOpen, setPdfListOpen] = useState(false);
   const [pdfListBusy, setPdfListBusy] = useState(false);
+  const [namePrompt, setNamePrompt] = useState<
+    { kind: 'add' } | { kind: 'rename'; rowId: string; name: string } | null
+  >(null);
+  const [confirmDlg, setConfirmDlg] = useState<
+    { kind: 'delete-row'; rowId: string } | { kind: 'delete-submission'; submissionId: string } | null
+  >(null);
   const [optimisticReceived, setOptimisticReceived] = useState<Record<string, boolean>>({});
   const receivedGenRef = useRef<Record<string, number>>({});
   const capitalDateGenRef = useRef(0);
@@ -846,15 +856,7 @@ export function ClientAnnualReportTab({
                   type="button"
                   className="nx-btn nx-btn-secondary nx-btn-taxes-compact"
                   disabled={busy}
-                  onClick={() => {
-                    const name = window.prompt(t('clientOperations.annual.documentName'));
-                    if (name != null && name.trim()) {
-                      void postCmd('add_annual_document_row', {
-                        document_name_he: name.trim(),
-                        ...(displayedYear != null ? { tax_year: displayedYear } : {}),
-                      });
-                    }
-                  }}
+                  onClick={() => setNamePrompt({ kind: 'add' })}
                 >
                   {localizeSystemLabel(
                     t,
@@ -952,17 +954,10 @@ export function ClientAnnualReportTab({
                         if (next === row.row_note) return;
                         void postCmd('update_annual_document_row', { row_id: row.row_id, row_note: next });
                       }}
-                      onRemoveRow={() => {
-                        if (window.confirm(t('clientOperations.annual.deleteRowConfirm'))) {
-                          void postCmd('remove_annual_document_row', { row_id: row.row_id });
-                        }
-                      }}
-                      onRename={() => {
-                        const n = window.prompt(t('clientOperations.annual.documentName'), row.document_name_he);
-                        if (n != null && n.trim() && n.trim() !== row.document_name_he) {
-                          void postCmd('update_annual_document_row', { row_id: row.row_id, document_name_he: n.trim() });
-                        }
-                      }}
+                      onRemoveRow={() => setConfirmDlg({ kind: 'delete-row', rowId: row.row_id })}
+                      onRename={() =>
+                        setNamePrompt({ kind: 'rename', rowId: row.row_id, name: row.document_name_he })
+                      }
                     />
                   ))
                 )}
@@ -1089,11 +1084,9 @@ export function ClientAnnualReportTab({
                                 type="button"
                                 className="nx-annual-icon-action"
                                 disabled={busy}
-                                onClick={() => {
-                                  if (window.confirm(t('clientOperations.annual.deleteRecordConfirm'))) {
-                                    void postCmd('remove_annual_submission_date', { submission_id: s.submission_id });
-                                  }
-                                }}
+                                onClick={() =>
+                                  setConfirmDlg({ kind: 'delete-submission', submissionId: s.submission_id })
+                                }
                                 aria-label={t('clientOperations.delete')}
                                 title={t('clientOperations.delete')}
                               >
@@ -1177,6 +1170,67 @@ export function ClientAnnualReportTab({
           }}
           onSendEmail={(sendId) => {
             void runPdfListCommand('send_client_document_list_via_email', { send_id: sendId });
+          }}
+        />
+      ) : null}
+
+      {namePrompt ? (
+        <ClientOperationsPromptDialog
+          title={
+            namePrompt.kind === 'add'
+              ? t('clientOperations.annual.addDocumentNamed')
+              : t('clientOperations.annual.renameDocumentNamed')
+          }
+          initialValue={namePrompt.kind === 'rename' ? namePrompt.name : ''}
+          placeholder={t('clientOperations.annual.documentName')}
+          confirmLabel={
+            namePrompt.kind === 'add'
+              ? t('clientOperations.annual.addConfirm')
+              : t('clientOperations.save')
+          }
+          cancelLabel={t('clientOperations.cancel')}
+          emptyError={t('clientOperations.annual.documentNameRequired')}
+          busy={busy}
+          onClose={() => setNamePrompt(null)}
+          onSubmit={(name) => {
+            if (namePrompt.kind === 'add') {
+              setNamePrompt(null);
+              void postCmd('add_annual_document_row', {
+                document_name_he: name,
+                ...(displayedYear != null ? { tax_year: displayedYear } : {}),
+              });
+              return;
+            }
+            const rowId = namePrompt.rowId;
+            const previous = namePrompt.name;
+            setNamePrompt(null);
+            if (name !== previous) {
+              void postCmd('update_annual_document_row', { row_id: rowId, document_name_he: name });
+            }
+          }}
+        />
+      ) : null}
+
+      {confirmDlg ? (
+        <ClientOperationsConfirmDialog
+          title={
+            confirmDlg.kind === 'delete-row'
+              ? t('clientOperations.annual.deleteRowConfirm')
+              : t('clientOperations.annual.deleteRecordConfirm')
+          }
+          confirmLabel={t('clientOperations.confirmAction')}
+          cancelLabel={t('clientOperations.cancel')}
+          busy={busy}
+          danger
+          onClose={() => setConfirmDlg(null)}
+          onConfirm={() => {
+            const next = confirmDlg;
+            setConfirmDlg(null);
+            if (next.kind === 'delete-row') {
+              void postCmd('remove_annual_document_row', { row_id: next.rowId });
+            } else {
+              void postCmd('remove_annual_submission_date', { submission_id: next.submissionId });
+            }
           }}
         />
       ) : null}

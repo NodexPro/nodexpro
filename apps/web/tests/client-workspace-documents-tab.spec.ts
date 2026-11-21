@@ -40,7 +40,7 @@ test('Documents premium skin is scoped to the workspace modal Documents interior
   assert.match(docsSrc, /nx-cdocs-root nx-ws-documents/);
   assert.match(docsCss, /\.nx-modal\.nx-workspace-modal \.nx-ws-documents/);
   assert.match(docsCss, /background:\s*transparent/);
-  assert.match(docsCss, /radial-gradient\(ellipse at 12% 0%, rgba\(255, 255, 255, 0\.2\)/);
+  assert.match(docsCss, /linear-gradient\(180deg, rgba\(23, 84, 122, 0\.38\) 0%, rgba\(16, 45, 73, 0\.44\) 100%\)/);
   assert.match(docsCss, /overflow-y:\s*auto/);
   assert.doesNotMatch(docsCss, /display:\s*none/);
   assert.doesNotMatch(docsCss, /createPortal|translateY\(max\(-60px/);

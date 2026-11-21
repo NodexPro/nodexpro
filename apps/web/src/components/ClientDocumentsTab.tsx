@@ -8,6 +8,7 @@ import { useI18n } from '../i18n/I18nProvider';
 import { fillI18n, localizeSystemLabel } from '../lib/co-display-label.pure';
 import type { ClientDocumentsTabModel, ClientDocumentsTabFolderCardDto } from './client-documents-tab-types';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
+import { ClientOperationsConfirmDialog } from './client-operations/ClientOperationsChromeDialogs';
 import { WorkspaceNestedDialogClose } from './WorkspaceNestedDialogClose';
 import '../styles/nx-client-documents-tab.css';
 import '../styles/nx-workspace-documents-tab.css';
@@ -109,6 +110,11 @@ export function ClientDocumentsTab({
   const [openingFileId, setOpeningFileId] = useState<string | null>(null);
   const [sendingDocumentId, setSendingDocumentId] = useState<string | null>(null);
   const [expandedDocumentId, setExpandedDocumentId] = useState<string | null>(null);
+  const [confirmDlg, setConfirmDlg] = useState<
+    | { kind: 'folder'; folderId: string; message: string }
+    | { kind: 'document'; documentId: string; message: string }
+    | null
+  >(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const uploadLockRef = useRef(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -274,8 +280,11 @@ export function ClientDocumentsTab({
 
   const confirmArchiveFolder = (folder: ClientDocumentsTabFolderCardDto) => {
     if (!folder.actions.can_archive_or_delete) return;
-    if (!window.confirm(t('clientOperations.documents.deleteFolderConfirm'))) return;
-    void runCommand('archive_or_delete_client_document_folder', { folder_id: folder.folder_id });
+    setConfirmDlg({
+      kind: 'folder',
+      folderId: folder.folder_id,
+      message: t('clientOperations.documents.deleteFolderConfirm'),
+    });
   };
 
   const sendDocument = async (documentId: string) => {
@@ -315,8 +324,11 @@ export function ClientDocumentsTab({
   };
 
   const confirmDeleteDocument = (documentId: string) => {
-    if (!window.confirm(t('clientOperations.documents.deleteDocumentConfirm'))) return;
-    void runCommand('delete_client_document', { document_id: documentId });
+    setConfirmDlg({
+      kind: 'document',
+      documentId,
+      message: t('clientOperations.documents.deleteDocumentConfirm'),
+    });
   };
 
   const folders = documentsTab.folders_grid.folders;
@@ -657,6 +669,26 @@ export function ClientDocumentsTab({
             </div>
           </div>
         </div>
+      ) : null}
+
+      {confirmDlg ? (
+        <ClientOperationsConfirmDialog
+          title={confirmDlg.message}
+          confirmLabel={t('clientOperations.confirmAction')}
+          cancelLabel={t('clientOperations.cancel')}
+          busy={busy}
+          danger
+          onClose={() => setConfirmDlg(null)}
+          onConfirm={() => {
+            const next = confirmDlg;
+            setConfirmDlg(null);
+            if (next.kind === 'folder') {
+              void runCommand('archive_or_delete_client_document_folder', { folder_id: next.folderId });
+            } else {
+              void runCommand('delete_client_document', { document_id: next.documentId });
+            }
+          }}
+        />
       ) : null}
     </div>
   );

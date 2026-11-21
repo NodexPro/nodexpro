@@ -201,10 +201,11 @@
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card {
   background:
-    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.2), transparent 48%),
-    linear-gradient(180deg, rgba(248, 252, 255, 0.2) 0%, rgba(186, 216, 246, 0.14) 100%) !important;
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%) !important;
   border-radius: 16px !important;
-  border: 1px solid rgba(210, 238, 255, 0.5) !important;
+  border: 1px solid rgba(54, 169, 198, 0.62) !important;
   box-shadow:
     0 0 0 1px rgba(70, 213, 255, 0.14),
     0 8px 18px rgba(8, 38, 82, 0.12),
@@ -295,8 +296,10 @@
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box input::placeholder {
-  color: rgba(255, 255, 255, 0.86);
+  color: rgba(183, 217, 255, 0.72);
+  -webkit-text-fill-color: rgba(183, 217, 255, 0.72);
   font-weight: 400;
+  opacity: 1;
 }
 
 .nx-modal.nx-workspace-modal .nx-workspace-content > .client-profile-card .client-field-box:has(select) {
@@ -498,4 +501,29 @@
 .nx-modal.nx-workspace-modal select option {
   background: #102d49;
   color: #ffffff;
+}
+
+/* Create Account action buttons: same height/radius/type, not one global width. */
+.nx-modal.nx-workspace-modal .nx-btn.nx-btn-taxes-compact {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 96px;
+  min-height: 36px;
+  height: 36px;
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  border-radius: 8px;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+.nx-modal.nx-workspace-modal input::placeholder,
+.nx-modal.nx-workspace-modal textarea::placeholder {
+  color: rgba(183, 217, 255, 0.72);
+  -webkit-text-fill-color: rgba(183, 217, 255, 0.72);
+  opacity: 1;
 }

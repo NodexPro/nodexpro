@@ -38,7 +38,7 @@
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-meta {
-  color: rgba(238, 246, 255, 0.72);
+  color: #d7ecff;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-dash-card,
@@ -46,8 +46,9 @@
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-notes-card,
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-summary-bar {
   background:
-    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.2), transparent 48%),
-    linear-gradient(180deg, rgba(248, 252, 255, 0.2) 0%, rgba(186, 216, 246, 0.14) 100%);
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%);
   border: 1px solid rgba(210, 238, 255, 0.5);
   box-shadow:
     0 0 0 1px rgba(70, 213, 255, 0.14),
@@ -86,7 +87,7 @@
     linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
   border: 1px solid rgba(54, 169, 198, 0.58);
   color: #ffffff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-dash-progress {
@@ -94,7 +95,7 @@
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-summary-label {
-  color: rgba(238, 246, 255, 0.72);
+  color: #d7ecff;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-summary-value,
@@ -108,7 +109,7 @@
 
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-table th {
   background: transparent;
-  color: rgba(238, 246, 255, 0.78);
+  color: #eef6ff;
   border-bottom: 1px solid rgba(232, 244, 255, 0.22);
 }
 
@@ -209,7 +210,7 @@
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-inline-action {
-  color: rgba(210, 238, 255, 0.7);
+  color: #d7ecff;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-file-name {
@@ -224,16 +225,19 @@
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-folder-btn,
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-icon-action,
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-report-file-action {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  color: #165dff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%);
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  color: #ffffff;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-icon-action:hover:not(:disabled),
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-folder-btn:hover:not(:disabled),
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-report-file-action:hover:not(:disabled) {
-  background: linear-gradient(180deg, #ffffff, rgba(232, 244, 255, 0.96));
-  border-color: #ffffff;
+  background: linear-gradient(180deg, rgba(54, 169, 198, 0.42) 0%, rgba(19, 191, 208, 0.28) 100%);
+  border-color: rgba(19, 191, 208, 0.78);
+  color: #ffffff;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-err {
@@ -326,8 +330,9 @@
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-filing-year-card,
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-logical-folder {
   background:
-    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.16), transparent 48%),
-    linear-gradient(180deg, rgba(248, 252, 255, 0.16) 0%, rgba(186, 216, 246, 0.1) 100%);
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%);
   border: 1px solid rgba(210, 238, 255, 0.42);
   color: #eef6ff;
 }
@@ -340,15 +345,18 @@
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-folder-file-preview {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(232, 244, 255, 0.84));
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  color: #165dff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%);
+  border: 1px solid rgba(54, 169, 198, 0.58);
+  color: #ffffff;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-logical-folders--archive {
   margin-top: 4px;
 }
 
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-status-chip,
 .nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'] .nx-annual-status-chip {
   display: inline-flex;
   align-items: center;
@@ -358,7 +366,12 @@
   font-weight: 700;
   line-height: 1.2;
   background: #f8fafc;
-  color: #0f172a;
+  color: #102d49;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-annual .nx-annual-badge {
+  background: #e0e7ff;
+  color: #3730a3;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'] .nx-annual-status-chip--yellow {
@@ -401,7 +414,7 @@
 
 .nx-modal.nx-workspace-modal .nx-ws-annual[data-tab-key='capital_declaration'] .nx-annual-filed-confirm {
   background: #f8fafc;
-  color: #0f172a;
+  color: #102d49;
   border-radius: 6px;
   padding: 8px 12px;
 }

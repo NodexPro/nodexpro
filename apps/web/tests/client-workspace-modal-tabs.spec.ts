@@ -126,7 +126,7 @@ test('premium modal skin is scoped and keeps a 3-column client-profile grid on d
   assert.doesNotMatch(premium, /#659ad8|#457fca|#2c65ae/);
   assert.match(
     premium,
-    /linear-gradient\(\s*180deg,\s*rgba\(248,\s*252,\s*255,\s*0\.2\) 0%,\s*rgba\(186,\s*216,\s*246,\s*0\.14\) 100%\)/,
+    /linear-gradient\(180deg, rgba\(23, 84, 122, 0\.38\) 0%, rgba\(16, 45, 73, 0\.44\) 100%\)/,
   );
   assert.match(
     premium,

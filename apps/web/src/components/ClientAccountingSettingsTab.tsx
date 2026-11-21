@@ -19,6 +19,7 @@ import {
   moduleClientOperationsVehicleFleetItemModalVisibility,
 } from '../api/endpoints';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
+import { ClientOperationsConfirmDialog } from './client-operations/ClientOperationsChromeDialogs';
 import { WorkspaceNestedDialogClose } from './WorkspaceNestedDialogClose';
 import '../styles/nx-workspace-accounting-tab.css';
 
@@ -364,6 +365,11 @@ export function ClientAccountingSettingsTab({
   const [tab, setTab] = useState<AccountingTabResponse | null>(() => initialAccountingTab);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [confirmDlg, setConfirmDlg] = useState<
+    | { kind: 'vehicle'; vehicleId: string; plateRaw: string; message: string }
+    | { kind: 'field'; fieldKey: string; message: string }
+    | null
+  >(null);
   const [modal, setModal] = useState<AccountingBlockModalResponse | null>(() =>
     autopenExpenseEditor ? seededExpenseModal : null,
   );
@@ -563,18 +569,23 @@ export function ClientAccountingSettingsTab({
     }
   };
 
-  const requestDeleteVehicleItem = async (vehicleId: string, plateRaw: string) => {
+  const requestDeleteVehicleItem = (vehicleId: string, plateRaw: string) => {
     const block = tab?.blocks?.find((x) => x.block_key === 'vehicles');
     if (!block || !tab) return;
     if (vehicleDeleteInFlightRef.current) return;
     const plateForMsg = plateRaw && plateRaw !== '—' ? plateRaw : t('clientOperations.accounting.noPlate');
-    if (
-      !window.confirm(
-        fillI18n(t('clientOperations.accounting.deleteVehicleConfirm'), { plate: plateForMsg })
-      )
-    ) {
-      return;
-    }
+    setConfirmDlg({
+      kind: 'vehicle',
+      vehicleId,
+      plateRaw,
+      message: fillI18n(t('clientOperations.accounting.deleteVehicleConfirm'), { plate: plateForMsg }),
+    });
+  };
+
+  const executeDeleteVehicleItem = async (vehicleId: string) => {
+    const block = tab?.blocks?.find((x) => x.block_key === 'vehicles');
+    if (!block || !tab) return;
+    if (vehicleDeleteInFlightRef.current) return;
     const editingSnap = vehicleItemModal;
     const snapVersion = block.version;
     vehicleDeleteInFlightRef.current = true;
@@ -783,7 +794,16 @@ export function ClientAccountingSettingsTab({
   const deleteEmCustomField = async (fieldKey: string) => {
     const id = fieldKey.replace(/^em_cf_/, '');
     if (!id) return;
-    if (!window.confirm(t('clientOperations.accounting.deleteFieldConfirm'))) return;
+    setConfirmDlg({
+      kind: 'field',
+      fieldKey,
+      message: t('clientOperations.accounting.deleteFieldConfirm'),
+    });
+  };
+
+  const executeDeleteEmCustomField = async (fieldKey: string) => {
+    const id = fieldKey.replace(/^em_cf_/, '');
+    if (!id) return;
     setModalError('');
     try {
       const fullCase = await apiJson<ClientOperationsCaseResponse>(
@@ -2548,6 +2568,23 @@ export function ClientAccountingSettingsTab({
       ) : null}
 
       {modalError && !modalOpen ? <p style={{ color: '#b91c1c', marginTop: 8 }}>{modalError}</p> : null}
+
+      {confirmDlg ? (
+        <ClientOperationsConfirmDialog
+          title={confirmDlg.message}
+          confirmLabel={t('clientOperations.confirmAction')}
+          cancelLabel={t('clientOperations.cancel')}
+          busy={vehicleDeleteBusy || modalSaving}
+          danger
+          onClose={() => setConfirmDlg(null)}
+          onConfirm={() => {
+            const next = confirmDlg;
+            setConfirmDlg(null);
+            if (next.kind === 'vehicle') void executeDeleteVehicleItem(next.vehicleId);
+            else void executeDeleteEmCustomField(next.fieldKey);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

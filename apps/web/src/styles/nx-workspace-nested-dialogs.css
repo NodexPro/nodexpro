@@ -169,6 +169,24 @@
   max-width: 100%;
 }
 
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) input::placeholder,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) textarea::placeholder,
+.nx-modal.nx-workspace-modal .nx-annual-dialog input::placeholder,
+.nx-modal.nx-workspace-modal .nx-annual-dialog textarea::placeholder,
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal input::placeholder,
+.nx-modal-overlay.nx-history-section-overlay > .nx-modal.nx-history-section-modal textarea::placeholder {
+  color: rgba(183, 217, 255, 0.72);
+  -webkit-text-fill-color: rgba(183, 217, 255, 0.72);
+  opacity: 1;
+}
+
+.nx-modal.nx-workspace-modal .nx-co-prompt-error {
+  color: #fecaca !important;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 8px 0 0;
+}
+
 .nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .client-field-box {
   background:
     radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
@@ -318,8 +336,9 @@
 
 .nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal:not(.nx-workspace-modal) .nx-em-modal-2col {
   background:
-    linear-gradient(180deg, rgba(8, 38, 82, 0.42), rgba(4, 21, 47, 0.32));
-  border: 1px solid rgba(210, 238, 255, 0.28);
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%);
+  border: 1px solid rgba(54, 169, 198, 0.62);
   overflow: visible;
 }
 
@@ -351,4 +370,53 @@
   padding-left: 52px;
   padding-right: 8px;
   box-sizing: border-box;
+}
+
+/* CO prompt/confirm — Create Account glass even when not nested in workspace modal. */
+.nx-annual-dialog-backdrop.nx-co-prompt-backdrop {
+  background: rgba(16, 45, 73, 0.48);
+  z-index: 11000;
+}
+
+.nx-annual-dialog.nx-co-prompt-dialog {
+  color: #ffffff;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%),
+    #102d49;
+  border: 1px solid rgba(54, 169, 198, 0.62);
+  border-radius: 16px;
+  box-shadow:
+    0 0 0 1px rgba(54, 169, 198, 0.28),
+    0 0 28px rgba(19, 191, 208, 0.18),
+    0 16px 36px rgba(16, 45, 73, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.nx-annual-dialog.nx-co-prompt-dialog h4,
+.nx-annual-dialog.nx-co-prompt-dialog p,
+.nx-annual-dialog.nx-co-prompt-dialog label {
+  color: #ffffff;
+}
+
+.nx-annual-dialog.nx-co-prompt-dialog input,
+.nx-annual-dialog.nx-co-prompt-dialog textarea {
+  color: #ffffff;
+  color-scheme: dark;
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(255, 255, 255, 0.22), transparent 56%),
+    linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.16) 100%);
+  border: 1px solid rgba(54, 169, 198, 0.58);
+}
+
+.nx-annual-dialog.nx-co-prompt-dialog input::placeholder,
+.nx-annual-dialog.nx-co-prompt-dialog textarea::placeholder {
+  color: rgba(183, 217, 255, 0.72);
+  -webkit-text-fill-color: rgba(183, 217, 255, 0.72);
+  opacity: 1;
+}
+
+.nx-co-prompt-error {
+  color: #fecaca;
 }

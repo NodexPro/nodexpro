@@ -63,3 +63,32 @@ test('Office Deep Ocean / Register files are not rewritten as a second design sy
   assert.match(officeOcean, /Scope: `\.nx-office-ocean` only/);
   assert.doesNotMatch(registerPage, /nx-workspace-modal/);
 });
+
+test('Taxes/payroll/history interiors are ocean glass, not white chips with white text', () => {
+  const taxes = read('../src/styles/nx-workspace-taxes-tab.css');
+  const payroll = read('../src/styles/nx-workspace-payroll-tab.css');
+  const history = read('../src/styles/nx-workspace-history-tab.css');
+  const annual = read('../src/styles/nx-workspace-annual-tab.css');
+  assert.match(taxes, /nx-ws-taxes-row__value[\s\S]*#ffffff/);
+  assert.doesNotMatch(taxes, /nx-ws-taxes-row__value[\s\S]*rgba\(255, 255, 255, 0\.94\)/);
+  assert.match(taxes, /nx-ws-taxes-row--warning[\s\S]*#9a3412/);
+  assert.match(payroll, CARD_FILL);
+  assert.doesNotMatch(payroll, /rgba\(255, 255, 255, 0\.9\)/);
+  assert.match(history, CARD_FILL);
+  assert.match(annual, /nx-annual-status-chip[\s\S]*#102d49/);
+});
+
+test('Annual add-document uses CO prompt dialog, not window.prompt', () => {
+  const annualSrc = read('../src/components/ClientAnnualReportTab.tsx');
+  const dialogs = read('../src/components/client-operations/ClientOperationsChromeDialogs.tsx');
+  const he = read('../src/i18n/he.json');
+  assert.doesNotMatch(annualSrc, /window\.prompt/);
+  assert.doesNotMatch(annualSrc, /window\.confirm/);
+  assert.match(annualSrc, /ClientOperationsPromptDialog/);
+  assert.match(annualSrc, /addDocumentNamed/);
+  assert.match(dialogs, /autofocus|inputRef/);
+  assert.match(dialogs, /Escape/);
+  assert.match(dialogs, /Enter/);
+  assert.match(he, /"addDocumentNamed": "להוסיף מסמך בשם:"/);
+  assert.match(he, /"addConfirm": "הוסף"/);
+});
