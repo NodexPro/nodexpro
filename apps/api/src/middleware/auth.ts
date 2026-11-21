@@ -18,7 +18,8 @@ import { getPrivilegedMfaGate } from '../shared/privileged-mfa-gate.js';
 import { deviceCredentialFromCookie } from '../domains/auth/mfa-trusted-device.pure.js';
 import { recognizeTrustedDevice } from '../domains/auth/mfa-trusted-device.service.js';
 import { assertRequestNotContained } from '../shared/security-containment.service.js';
-import { isHighRiskChallengePath, isHighRiskLoginPending } from '../shared/login-risk.service.js';
+import { isHighRiskChallengePath, isHighRiskLoginPending, isMfaChallengePending } from '../shared/login-risk.service.js';
+import { aal1RequestRequiresMfaChallenge, classifyMfaEnrollmentFromListed } from '../shared/mfa-session-state.pure.js';
 
 // `timedFetch` only adds per-request call accounting for the Server-Timing header (measurement, no behavior).
 const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey, { global: { fetch: timedFetch } });
@@ -102,6 +103,7 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
       const headerDecision = explicitOrgHeaderDecision({
         headerPresent: true,
         membershipFound: Boolean(membership),
+        identityBootstrap: isHighRiskChallengePath(path),
       });
       if (headerDecision === 'reject_not_member') {
         return { ok: false };
@@ -121,9 +123,24 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
       ? recognizeTrustedDevice(user.id, deviceCredential).catch(() => false)
       : Promise.resolve(false);
 
+  const identityBootstrap = isHighRiskChallengePath(path);
   const highRiskPromise =
-    authenticatorAssurance !== 'aal2' && !isHighRiskChallengePath(path)
-      ? isHighRiskLoginPending(user.authUserId)
+    authenticatorAssurance !== 'aal2' && !identityBootstrap
+      ? Promise.all([
+          isHighRiskLoginPending(user.authUserId),
+          isMfaChallengePending(user.authUserId),
+          user.authUserId
+            ? supabaseAdmin.auth.admin.mfa.listFactors({ userId: user.authUserId }).catch(() => null)
+            : Promise.resolve(null),
+        ]).then(([highRisk, mfaPending, listed]) =>
+          aal1RequestRequiresMfaChallenge({
+            identityBootstrap: false,
+            assurance: authenticatorAssurance,
+            enrollment: listed ? classifyMfaEnrollmentFromListed(listed) : null,
+            highRiskPending: highRisk,
+            mfaChallengePending: mfaPending,
+          }),
+        )
       : Promise.resolve(false);
 
   const [orgResult, trustedDevice] = await Promise.all([orgPromise, trustedDevicePromise]);

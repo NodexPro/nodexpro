@@ -8,6 +8,7 @@ import { peekPublishedTranslationOverlay } from '../i18n/I18nProvider';
 import en from '../i18n/en.json';
 import he from '../i18n/he.json';
 import { getBackendActiveOrganizationId } from './org-context';
+import { shouldAttachOrganizationHeader } from '../lib/login-mfa-challenge.pure';
 
 const API_URL = resolvePublicApiBaseUrl(import.meta.env.VITE_API_URL, import.meta.env.PROD);
 
@@ -58,9 +59,9 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
     ...(options.headers as Record<string, string>),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  // Platform-owner endpoints must never run in tenant organization context.
-  // DocFlow client portal is scoped by portal session only — never send office org context.
-  if (orgId && !path.startsWith('/owner/') && !path.startsWith('/docflow/portal')) {
+  // Identity bootstrap (/auth/session) must not send a leftover tenant header.
+  // Platform-owner and DocFlow portal stay outside office org context.
+  if (orgId && shouldAttachOrganizationHeader(path)) {
     headers['X-Organization-Id'] = orgId;
   }
   return fetch(`${API_URL}${path}`, { ...options, headers });

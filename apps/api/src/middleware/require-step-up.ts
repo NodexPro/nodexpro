@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { supabaseAdmin } from '../db/client.js';
 import { classifySensitiveCommand, decideSensitiveCommandStepUp } from '../shared/step-up-auth.pure.js';
+import { classifyMfaEnrollmentFromListed } from '../shared/mfa-session-state.pure.js';
 import { unauthorized } from '../shared/errors.js';
 
 export function requireSensitiveStepUp() {
@@ -14,7 +15,7 @@ export function requireSensitiveStepUp() {
       const authUserId = req.context?.user.authUserId;
       if (authUserId) {
         const factors = await supabaseAdmin.auth.admin.mfa.listFactors({ userId: authUserId }).catch(() => null);
-        mfaEnrolled = (factors?.data?.factors ?? []).some((factor) => factor.status === 'verified');
+        mfaEnrolled = classifyMfaEnrollmentFromListed(factors) === 'enabled';
       }
       const decision = decideSensitiveCommandStepUp({ commandClass, assurance, mfaEnrolled });
       if (decision === 'require_aal2') {

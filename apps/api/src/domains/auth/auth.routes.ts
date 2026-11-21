@@ -12,6 +12,7 @@ import {
 import { mayUseLegacyOrganizationUsersAccessFallback } from '../memberships/organization-membership-access.js';
 import type {
   AuthSessionAggregateResponse,
+  AuthSessionMfaSnapshot,
   MeResponse,
   SidebarAccountBlockModel,
   UiLanguageCode,
@@ -46,9 +47,18 @@ import { filterSessionEnabledModuleCodes } from '../modules/entitlement.service.
 import { loadEnabledMemberModuleIdSet } from '../modules/member-module-access.service.js';
 import { roleHasOfficeClientAccess } from '../client-operations/organization-client-access.pure.js';
 import { buildSidebarAccountBlock } from './sidebar-account-block.pure.js';
-import { decideHighRiskPasswordLogin, highRiskLoginChallenge } from '../../shared/login-risk.pure.js';
-import { isHighRiskLoginPending, markHighRiskLoginPending } from '../../shared/login-risk.service.js';
-import { readAuthenticatorAssurance } from '../../shared/privileged-mfa.pure.js';
+import { decideHighRiskPasswordLogin } from '../../shared/login-risk.pure.js';
+import { isHighRiskLoginPending, markHighRiskLoginPending, markMfaChallengePending } from '../../shared/login-risk.service.js';
+import { isPlatformOwnerSession, readAuthenticatorAssurance } from '../../shared/privileged-mfa.pure.js';
+import { getPrivilegedMfaGate } from '../../shared/privileged-mfa-gate.js';
+import {
+  classifyMfaEnrollmentFromListed,
+  decideMfaChallenge,
+  loginChallengePayload,
+  mfaPolicyRequirement,
+  mfaSessionSnapshot,
+  type MfaSessionSnapshot,
+} from '../../shared/mfa-session-state.pure.js';
 import { enqueueSecurityAlert, processSecurityAlertDeliveries } from '../../shared/security-alert-delivery.service.js';
 import { officeAlertDedupeKey } from '../../shared/office-login-alert.pure.js';
 import { maskAttemptedIdentifier, publicLoginFailure, waitPublicLoginMinimum } from '../../shared/failed-login-policy.pure.js';
@@ -247,38 +257,80 @@ async function buildMeResponse(
   };
 }
 
-function toAuthSessionAggregate(me: MeResponse, challengeRequired = false): AuthSessionAggregateResponse {
+const defaultSessionMfa: AuthSessionMfaSnapshot = {
+  enrollment_state: 'not_enrolled',
+  challenge_required: false,
+  policy_requirement: 'optional',
+};
+
+function toAuthSessionAggregate(
+  me: MeResponse,
+  mfa: MfaSessionSnapshot = defaultSessionMfa,
+): AuthSessionAggregateResponse {
   const ownerEmail = (config.platformOwner.email ?? '').trim().toLowerCase();
   const userEmail = (me.user.email ?? '').trim().toLowerCase();
   const isPlatformOwner = Boolean(ownerEmail) && userEmail === ownerEmail && me.organizations.length === 0;
   const isBlocked = (me.user.status ?? '').trim().toLowerCase() !== 'active';
+  const snapshot: AuthSessionMfaSnapshot = {
+    enrollment_state: mfa.enrollment_state,
+    challenge_required: mfa.challenge_required,
+    policy_requirement: mfa.policy_requirement,
+  };
 
-  if (challengeRequired) {
+  if (snapshot.challenge_required) {
     return {
       ...me,
       session_state: 'mfa_challenge',
       redirect_to: '/login',
       allowed_actions: ['verify_mfa'],
+      mfa: snapshot,
     };
   }
   if (isBlocked) {
-    return { ...me, session_state: 'blocked', redirect_to: '/login', allowed_actions: [] };
+    return { ...me, session_state: 'blocked', redirect_to: '/login', allowed_actions: [], mfa: snapshot };
   }
   if (isPlatformOwner) {
-    return { ...me, session_state: 'platform_owner', redirect_to: '/platform-owner/legal-control', allowed_actions: [] };
+    return { ...me, session_state: 'platform_owner', redirect_to: '/platform-owner/legal-control', allowed_actions: [], mfa: snapshot };
   }
   if (me.organizations.length === 0) {
-    return { ...me, session_state: 'needs_onboarding', redirect_to: '/onboarding', allowed_actions: ['create_organization'] };
+    return { ...me, session_state: 'needs_onboarding', redirect_to: '/onboarding', allowed_actions: ['create_organization'], mfa: snapshot };
   }
   if (!me.activeOrganizationId) {
-    return { ...me, session_state: 'needs_org_selection', redirect_to: '/select-org', allowed_actions: ['select_organization'] };
+    return { ...me, session_state: 'needs_org_selection', redirect_to: '/select-org', allowed_actions: ['select_organization'], mfa: snapshot };
   }
   return {
     ...me,
     session_state: 'ready',
     redirect_to: me.default_route || '/dashboard',
     allowed_actions: [],
+    mfa: snapshot,
   };
+}
+
+async function resolveSessionMfa(ctx: RequestContext): Promise<MfaSessionSnapshot> {
+  const listed = ctx.user.authUserId
+    ? await supabaseAdmin.auth.admin.mfa.listFactors({ userId: ctx.user.authUserId }).catch(() => null)
+    : null;
+  const enrollment = classifyMfaEnrollmentFromListed(listed);
+  const highRiskPending = await isHighRiskLoginPending(ctx.user.authUserId).catch(() => false);
+  const challenge = decideMfaChallenge({
+    enrollment,
+    assurance: ctx.authenticatorAssurance ?? 'aal1',
+    highRiskAal2Required: highRiskPending && enrollment === 'enabled',
+  });
+  const platformOwner = isPlatformOwnerSession({
+    userEmail: ctx.user.email,
+    configuredOwnerEmail: config.platformOwner.email,
+    tenantRoleCode: ctx.membership?.roleCode ?? null,
+  });
+  return mfaSessionSnapshot({
+    enrollment,
+    challengeRequired: challenge.challengeRequired,
+    policyRequirement: mfaPolicyRequirement({
+      platformOwner,
+      activationState: getPrivilegedMfaGate().activationState,
+    }),
+  });
 }
 
 async function sendPublicLoginFailure(
@@ -379,10 +431,19 @@ router.post(
           ? supabaseAdmin.auth.admin.mfa.listFactors({ userId: authUserId }).catch(() => null)
           : Promise.resolve(null),
       ]);
-      const mfaEnrolled = (factors?.data?.factors ?? []).some((factor) => factor.status === 'verified');
+      const enrollment = classifyMfaEnrollmentFromListed(factors);
+      const mfaEnrolled = enrollment === 'enabled';
       const assurance = readAuthenticatorAssurance(result.session?.access_token ?? '');
       const decision = decideHighRiskPasswordLogin({ recentFailCount, mfaEnrolled, assurance });
-      const login_challenge = highRiskLoginChallenge(decision);
+      const mfaChallenge = decideMfaChallenge({
+        enrollment,
+        assurance,
+        highRiskAal2Required: decision === 'require_aal2',
+      });
+      const login_challenge = loginChallengePayload({
+        required: mfaChallenge.challengeRequired,
+        reason: mfaChallenge.reason,
+      });
       if (decision !== 'allow') {
         const displayIp = displaySourceIp(req.trustedClientIp ?? null);
         const actorKey = authUserId || email;
@@ -426,6 +487,9 @@ router.post(
       }
       if (decision === 'require_aal2' && authUserId) {
         await markHighRiskLoginPending(authUserId);
+      }
+      if (mfaChallenge.challengeRequired && authUserId) {
+        await markMfaChallengePending(authUserId);
       }
       return res.json({ session: result.session, user: result.user, login_challenge });
     } catch (e) {
@@ -482,9 +546,8 @@ router.get('/me', authMiddleware, async (req, res, next) => {
   try {
     const ctx = req.context!;
     const body = await buildMeResponse(ctx);
-    const challengeRequired = (ctx.authenticatorAssurance ?? 'aal1') !== 'aal2'
-      && await isHighRiskLoginPending(ctx.user.authUserId);
-    return res.json(challengeRequired ? toAuthSessionAggregate(body, true) : body);
+    const mfa = await resolveSessionMfa(ctx);
+    return res.json(toAuthSessionAggregate(body, mfa));
   } catch (e) {
     next(e);
   }
@@ -494,9 +557,8 @@ router.get('/session', authMiddleware, async (req, res, next) => {
   try {
     const ctx = req.context!;
     const me = await buildMeResponse(ctx);
-    const challengeRequired = (ctx.authenticatorAssurance ?? 'aal1') !== 'aal2'
-      && await isHighRiskLoginPending(ctx.user.authUserId);
-    return res.json(toAuthSessionAggregate(me, challengeRequired));
+    const mfa = await resolveSessionMfa(ctx);
+    return res.json(toAuthSessionAggregate(me, mfa));
   } catch (e) {
     next(e);
   }

@@ -5,6 +5,8 @@ import { apiJson, apiJsonPublic, ApiError } from '../api/client';
 import { AUTH, OWNER } from '../api/endpoints';
 import { useAuth } from '../contexts/AuthContext';
 import { signInWithIdentifier } from '../lib/sign-in-with-identifier';
+import { loginMfaFormVisible } from '../lib/login-mfa-challenge.pure';
+import { setBackendActiveOrganizationId } from '../api/org-context';
 import { useI18n } from '../i18n/I18nProvider';
 import {
   loginCooldownMessage,
@@ -76,22 +78,41 @@ export function PlatformOwnerLogin() {
     setError('');
     setLoading(true);
     try {
+      setBackendActiveOrganizationId(null);
       if (challengeRequired) {
-        await apiJson(AUTH.mfaCommand('verify_mfa'), {
+        const verified = await apiJson<{ access_token?: string; refresh_token?: string }>(AUTH.mfaCommand('verify_mfa'), {
           method: 'POST',
           credentials: 'include',
           body: JSON.stringify({ code: mfaCode.trim() }),
         });
+        if (verified.access_token && verified.refresh_token) {
+          const saved = await supabase.auth.setSession({
+            access_token: verified.access_token,
+            refresh_token: verified.refresh_token,
+          });
+          if (saved.error) throw saved.error;
+        }
       } else {
         const signedIn = await signInWithIdentifier(supabase, email.trim().toLowerCase(), password);
-        if (signedIn.challengeRequired) {
+        if (loginMfaFormVisible({ loginChallengeRequired: signedIn.challengeRequired })) {
           setChallengeRequired(true);
           setError(loginSecurityText(uiLang, 'mfaChallenge'));
           setLoading(false);
           return;
         }
       }
-      await refetchMe();
+      const me = await refetchMe();
+      if (
+        loginMfaFormVisible({
+          sessionState: me?.session_state,
+          sessionChallengeRequired: me?.mfa?.challenge_required,
+        })
+      ) {
+        setChallengeRequired(true);
+        setError(loginSecurityText(uiLang, 'mfaChallenge'));
+        setLoading(false);
+        return;
+      }
       try {
         await apiJson(OWNER.session);
       } catch (se) {

@@ -21,6 +21,8 @@ import {
   readStoredInviteReturnPath,
   resolvePostLoginDestination,
 } from '../lib/invite-return-path.pure';
+import { loginMfaFormVisible } from '../lib/login-mfa-challenge.pure';
+import { setBackendActiveOrganizationId } from '../api/org-context';
 
 export function Login() {
   const { t, lang } = useI18n();
@@ -51,7 +53,13 @@ export function Login() {
   const passwordResetOk = Boolean((location.state as { passwordResetOk?: boolean } | null)?.passwordResetOk);
 
   useEffect(() => {
-    if (auth.status === 'authenticated' && auth.me.session_state === 'mfa_challenge') {
+    if (
+      auth.status === 'authenticated' &&
+      loginMfaFormVisible({
+        sessionState: auth.me.session_state,
+        sessionChallengeRequired: auth.me.mfa?.challenge_required,
+      })
+    ) {
       setChallengeRequired(true);
     }
   }, [auth]);
@@ -62,11 +70,29 @@ export function Login() {
     return () => window.clearInterval(timer);
   }, [cooldownSeconds]);
 
+  async function applyVerifiedMfaSession(result: { access_token?: string; refresh_token?: string }) {
+    if (!result.access_token || !result.refresh_token) return;
+    const { error } = await supabase.auth.setSession({
+      access_token: result.access_token,
+      refresh_token: result.refresh_token,
+    });
+    if (error) throw error;
+  }
+
   async function finishAuthenticatedNavigation() {
     const me = await refetchMe();
-    if (!me || me.session_state === 'mfa_challenge') {
+    if (
+      loginMfaFormVisible({
+        sessionState: me?.session_state,
+        sessionChallengeRequired: me?.mfa?.challenge_required,
+      })
+    ) {
       setChallengeRequired(true);
       setError(loginSecurityText(uiLang, 'mfaChallenge'));
+      return;
+    }
+    if (!me) {
+      setError(loginSecurityText(uiLang, 'invalidCredentials'));
       return;
     }
     const inviteAfterAuth = readStoredInviteReturnPath(
@@ -89,18 +115,20 @@ export function Login() {
     setError('');
     setLoading(true);
     try {
+      setBackendActiveOrganizationId(null);
       if (challengeRequired) {
-        await apiJson(AUTH.mfaCommand('verify_mfa'), {
+        const verified = await apiJson<{ access_token?: string; refresh_token?: string }>(AUTH.mfaCommand('verify_mfa'), {
           method: 'POST',
           credentials: 'include',
           body: JSON.stringify({ code: mfaCode.trim() }),
         });
+        await applyVerifiedMfaSession(verified);
         await finishAuthenticatedNavigation();
         return;
       }
       const emailNorm = email.trim().toLowerCase();
       const signedIn = await signInWithIdentifier(supabase, emailNorm, password);
-      if (signedIn.challengeRequired) {
+      if (loginMfaFormVisible({ loginChallengeRequired: signedIn.challengeRequired })) {
         setChallengeRequired(true);
         setError(loginSecurityText(uiLang, 'mfaChallenge'));
         return;

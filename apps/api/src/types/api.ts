@@ -123,10 +123,19 @@ export type AuthSessionState =
   | 'blocked'
   | 'mfa_challenge';
 
+export type MfaEnrollmentState = 'not_enrolled' | 'enrollment_pending' | 'enabled';
+
+export interface AuthSessionMfaSnapshot {
+  enrollment_state: MfaEnrollmentState;
+  challenge_required: boolean;
+  policy_requirement: 'optional' | 'mandatory';
+}
+
 export interface AuthSessionAggregateResponse extends MeResponse {
   session_state: AuthSessionState;
   redirect_to: string;
   allowed_actions: string[];
+  mfa: AuthSessionMfaSnapshot;
 }
 
 export type EntitlementStatus = 'not_entitled' | 'entitled' | 'trial' | 'expired' | 'restricted';

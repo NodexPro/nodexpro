@@ -51,6 +51,11 @@ export interface MeData {
   session_state?: 'platform_owner' | 'needs_onboarding' | 'needs_org_selection' | 'ready' | 'blocked' | 'mfa_challenge';
   redirect_to?: string;
   allowed_actions?: string[];
+  mfa?: {
+    enrollment_state: 'not_enrolled' | 'enrollment_pending' | 'enabled';
+    challenge_required: boolean;
+    policy_requirement: 'optional' | 'mandatory';
+  };
 }
 
 type AuthState =
@@ -78,6 +83,9 @@ function isMeEqual(a: MeData, b: MeData): boolean {
     a.user.id === b.user.id &&
     a.activeOrganizationId === b.activeOrganizationId &&
     a.organizations.length === b.organizations.length &&
+    a.session_state === b.session_state &&
+    a.mfa?.enrollment_state === b.mfa?.enrollment_state &&
+    a.mfa?.challenge_required === b.mfa?.challenge_required &&
     sortedStringArrayKey(a.permissions) === sortedStringArrayKey(b.permissions) &&
     sortedStringArrayKey(a.enabledModules) === sortedStringArrayKey(b.enabledModules)
   );

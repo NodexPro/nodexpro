@@ -44,6 +44,7 @@ import {
   recoveryCodeMatches,
 } from './mfa-recovery.pure.js';
 import { refreshSessionMatchesCaller } from './session-refresh.pure.js';
+import { resolveLoginMfaFactor } from '../../shared/mfa-session-state.pure.js';
 import { issueTrustedDevice, listTrustedDevices, revokeAllTrustedDevices, revokeTrustedDeviceForUser } from './mfa-trusted-device.service.js';
 
 function userClient(accessToken: string) {
@@ -301,10 +302,19 @@ export async function verifyMfaFactor(ctx: RequestContext, accessToken: string, 
   refresh_token: string;
   aggregate: Awaited<ReturnType<typeof buildMfaOnboardingAggregate>>;
 }> {
-  const factor = factorId.trim();
   const otp = code.trim();
-  if (!factor || !/^\d{6}$/.test(otp)) throw badRequest('factor_id and a 6-digit code are required');
-  await requireRecoveryEnrollment(ctx, grantInput, false);
+  if (!/^\d{6}$/.test(otp)) throw badRequest('factor_id and a 6-digit code are required');
+  const listed = await totpFactors(accessToken);
+  const resolved = resolveLoginMfaFactor({
+    requestedFactorId: factorId,
+    verifiedIds: listed.verifiedIds,
+    pendingIds: listed.pendingIds,
+  });
+  const factor = resolved.factorId ?? '';
+  if (!factor || resolved.mode === 'none') throw badRequest('factor_id and a 6-digit code are required');
+  if (resolved.mode !== 'login_step_up') {
+    await requireRecoveryEnrollment(ctx, grantInput, false);
+  }
   const client = userClient(accessToken);
   const challenge = await client.auth.mfa.challenge({ factorId: factor });
   if (challenge.error || !challenge.data?.id) {
@@ -321,6 +331,7 @@ export async function verifyMfaFactor(ctx: RequestContext, accessToken: string, 
     throw new AppError(401, 'הקוד לא נכון. נסו שוב.', 'MFA_VERIFICATION_FAILED');
   }
   if (
+    resolved.mode !== 'login_step_up' &&
     getPrivilegedMfaGate().activationState === 'permanently_active' &&
     isCurrentPlatformOwner(ctx) &&
     (ctx.authenticatorAssurance ?? 'aal1') !== 'aal2'
