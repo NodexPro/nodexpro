@@ -15,8 +15,10 @@ import type {
   FeesTabModel,
   FeesTableSectionModel,
 } from './fees-tab-types';
+import { ClientOperationsSectionEditButton } from './client-operations/ClientOperationsSectionEditButton';
 import '../styles/nx-fees-tab.css';
 import '../styles/nx-workspace-fees-tab.css';
+import '../styles/nx-workspace-taxes-tab.css';
 import '../styles/nx-modal.css';
 
 export type { FeesTabModel } from './fees-tab-types';
@@ -29,14 +31,6 @@ function IconTrash() {
   );
 }
 
-/** Primary blue pencil — workspace edit entry (no "ערוך" text button). */
-function IconPencil() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden>
-      <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z" />
-    </svg>
-  );
-}
 
 /** תצוגה בלבד — ערכים מהאגרגט; החיתוך ל-15/הכל בשרת */
 function feeOptLabel(
@@ -282,9 +276,7 @@ function FeesWorkspaceBlockHeader({
         {chip}
       </div>
       {canEdit && onEdit ? (
-        <button type="button" className="nx-fees-pencil-btn" onClick={onEdit} aria-label={t('clientOperations.edit')} title={t('clientOperations.edit')}>
-          <IconPencil />
-        </button>
+        <ClientOperationsSectionEditButton onClick={onEdit} label={t('clientOperations.edit')} />
       ) : null}
     </div>
   );

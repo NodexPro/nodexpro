@@ -1,4 +1,4 @@
-/** Shared Client Workspace section-edit control — Deep Ocean glass square used by מיסים / שכר. */
+/** Shared Client Workspace section-edit control — Deep Ocean glass square used by מיסים / שכר / שכ״ט. */
 
 export function ClientOperationsSectionEditButton({
   onClick,

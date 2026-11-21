@@ -870,7 +870,7 @@ function selectThenDump(): void {
   }
   if (dumpKey === 'fees-editor') {
     if (!document.querySelector('.nx-fees-editor-modal')) {
-      const pencil = document.querySelector('.nx-fees-pencil-btn') as HTMLButtonElement | null;
+      const pencil = document.querySelector('.nx-ws-fees .nx-taxes-section-edit-btn') as HTMLButtonElement | null;
       pencil?.click();
       requestAnimationFrame(selectThenDump);
       return;

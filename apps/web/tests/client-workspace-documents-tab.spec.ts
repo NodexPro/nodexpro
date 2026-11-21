@@ -47,6 +47,17 @@ test('Documents premium skin is scoped to the workspace modal Documents interior
   assert.match(baseCss, /\.nx-cdocs-root/);
 });
 
+test('Documents folder open is instant when loaded and non-blocking when a command is required', () => {
+  assert.match(docsSrc, /documentsTab\.open_folder\?\.folder_id === folder\.folder_id/);
+  assert.match(
+    docsSrc,
+    /open_client_document_folder',\s*\{\s*folder_id: folder\.folder_id\s*\},\s*\{\s*skipBusy: true\s*\}/,
+  );
+  assert.match(docsSrc, /setFolderPanelDismissed\(false\)/);
+  assert.match(docsSrc, /WorkspaceNestedDialogClose/);
+  assert.doesNotMatch(docsSrc, /open_client_document_folder',\s*\{\s*folder_id: folder\.folder_id\s*\}\)/);
+});
+
 test('Documents folder overlay uses the nested glass close control and Arial', () => {
   assert.match(docsSrc, /nx-cdocs-folder-panel-close/);
   assert.match(docsSrc, /WorkspaceNestedDialogClose/);

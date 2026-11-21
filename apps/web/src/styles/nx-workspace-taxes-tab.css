@@ -146,7 +146,8 @@
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-taxes .nx-taxes-section-edit-btn,
-.nx-modal.nx-workspace-modal .nx-ws-payroll .nx-taxes-section-edit-btn {
+.nx-modal.nx-workspace-modal .nx-ws-payroll .nx-taxes-section-edit-btn,
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-taxes-section-edit-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -172,7 +173,8 @@
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-taxes .nx-taxes-section-edit-btn:hover:not(:disabled),
-.nx-modal.nx-workspace-modal .nx-ws-payroll .nx-taxes-section-edit-btn:hover:not(:disabled) {
+.nx-modal.nx-workspace-modal .nx-ws-payroll .nx-taxes-section-edit-btn:hover:not(:disabled),
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-taxes-section-edit-btn:hover:not(:disabled) {
   background: linear-gradient(180deg, rgba(54, 169, 198, 0.42) 0%, rgba(19, 191, 208, 0.28) 100%);
   border-color: rgba(19, 191, 208, 0.78);
   color: #ffffff;
@@ -182,13 +184,15 @@
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-taxes .nx-taxes-section-edit-btn:focus-visible,
-.nx-modal.nx-workspace-modal .nx-ws-payroll .nx-taxes-section-edit-btn:focus-visible {
+.nx-modal.nx-workspace-modal .nx-ws-payroll .nx-taxes-section-edit-btn:focus-visible,
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-taxes-section-edit-btn:focus-visible {
   outline: 2px solid rgba(70, 213, 255, 0.9);
   outline-offset: 2px;
 }
 
 .nx-modal.nx-workspace-modal .nx-ws-taxes .nx-taxes-section-edit-btn:disabled,
-.nx-modal.nx-workspace-modal .nx-ws-payroll .nx-taxes-section-edit-btn:disabled {
+.nx-modal.nx-workspace-modal .nx-ws-payroll .nx-taxes-section-edit-btn:disabled,
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-taxes-section-edit-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }

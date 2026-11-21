@@ -727,6 +727,27 @@ export function ClientAccountingSettingsTab({
     return blockOrder.map((k) => by.get(k)).filter(Boolean) as AccountingBlockCard[];
   }, [tab]);
 
+  useEffect(() => {
+    if (!tab) return;
+    const prefetchKeys: BlockKey[] = ['income', 'expense_management', 'expenses'];
+    for (const key of prefetchKeys) {
+      const block = tab.blocks.find((b) => b.block_key === key);
+      if (!block) continue;
+      const cached = modalCacheRef.current[key];
+      if (cached && cached.version === block.version) continue;
+      void loadBlockModal(key).catch(() => {
+        /* click path still fetches and surfaces modalError */
+      });
+    }
+  }, [tab, loadBlockModal]);
+
+  const applyBlockModal = (out: AccountingBlockModalResponse) => {
+    setModal(out);
+    setDraft(buildDraftFromModal(out));
+    setFieldVisibility(visibilityFromModal(out));
+    setModalLoading(false);
+  };
+
   const openModal = async (block: AccountingBlockCard) => {
     setError('');
     setModalError('');
@@ -736,10 +757,7 @@ export function ClientAccountingSettingsTab({
 
     const cached = modalCacheRef.current[block.block_key];
     if (cached && cached.version === block.version) {
-      setModal(cached);
-      setDraft(buildDraftFromModal(cached));
-      setFieldVisibility(visibilityFromModal(cached));
-      setModalLoading(false);
+      applyBlockModal(cached);
       return;
     }
 
@@ -747,12 +765,9 @@ export function ClientAccountingSettingsTab({
     setModal(null);
     try {
       const out = await loadBlockModal(block.block_key);
-      setModal(out);
-      setDraft(buildDraftFromModal(out));
-      setFieldVisibility(visibilityFromModal(out));
+      applyBlockModal(out);
     } catch (e) {
       setModalError(userFacingApiMessage(e));
-    } finally {
       setModalLoading(false);
     }
   };
@@ -1455,7 +1470,7 @@ export function ClientAccountingSettingsTab({
               <WorkspaceNestedDialogClose disabled={modalSaving} onClick={() => setModalOpen(false)} />
             </div>
             <div className="nx-modal-body">
-              {modalLoading ? (
+              {modalLoading && !modal ? (
                 <div style={{ minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontWeight: 700 }}>
                   {t('clientOperations.loading')}
                 </div>

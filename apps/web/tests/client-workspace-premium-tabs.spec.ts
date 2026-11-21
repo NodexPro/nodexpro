@@ -71,8 +71,9 @@ test('Client Details, Taxes, portal and raise are not altered by remaining-tab r
     /transform:\s*translateY\(\s*max\(\s*-60px,\s*calc\(\s*16px\s*-\s*50dvh\s*\+\s*50%\s*\)\s*\)\s*\)/,
   );
   assert.doesNotMatch(premium, /nx-ws-fees|nx-ws-payroll|nx-ws-history/);
-  assert.doesNotMatch(taxesCss, /nx-ws-fees|nx-ws-history/);
+  assert.doesNotMatch(taxesCss, /nx-ws-history/);
   assert.match(taxesCss, /nx-ws-payroll \.nx-taxes-section-edit-btn/);
+  assert.match(taxesCss, /nx-ws-fees \.nx-taxes-section-edit-btn/);
   assert.match(taxesSrc, /client-profile-card nx-ws-taxes/);
   assert.match(panelSrc, /activeTab === 'fees'/);
   assert.match(panelSrc, /activeTab === 'salary'/);
@@ -90,6 +91,14 @@ test('Price-history chart keeps bars/values/axes and drops helper captions', () 
   assert.doesNotMatch(feesSrc, /chart\.y_axis_hint_he/);
   assert.match(feesCss, /nx-fees-price-chart-value[\s\S]*#ffffff/);
   assert.match(feesCss, /nx-fees-price-chart-tooltip-line[\s\S]*#111827/);
+});
+
+test('Fees reuses the shared Taxes/Payroll section edit button', () => {
+  assert.match(feesSrc, /ClientOperationsSectionEditButton/);
+  assert.doesNotMatch(feesSrc, /nx-fees-pencil-btn/);
+  assert.doesNotMatch(feesSrc, /function IconPencil/);
+  assert.match(taxesCss, /nx-ws-fees \.nx-taxes-section-edit-btn/);
+  assert.doesNotMatch(feesCss, /nx-fees-pencil-btn/);
 });
 
 test('Payroll reuses Taxes edit button, hides reporting card, and compacts nested editors', () => {

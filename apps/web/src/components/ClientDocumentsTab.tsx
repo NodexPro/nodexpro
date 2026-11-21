@@ -120,6 +120,7 @@ export function ClientDocumentsTab({
   const panelRef = useRef<HTMLDivElement>(null);
   const savedScrollRef = useRef(0);
   const openedFolderRef = useRef<string | null>(null);
+  const openFolderInflightRef = useRef<string | null>(null);
   const canEdit = documentsTab.permissions.can_edit;
 
   useEffect(() => {
@@ -181,9 +182,22 @@ export function ClientDocumentsTab({
   };
 
   const openFolder = (folder: ClientDocumentsTabFolderCardDto) => {
+    const alreadyLoaded = documentsTab.open_folder?.folder_id === folder.folder_id;
+    const wasDismissed = folderPanelDismissed;
     setFolderPanelDismissed(false);
-    setPendingOpenFolder({ folder_id: folder.folder_id, folder_name_he: folder.name_he });
-    void runCommand('open_client_document_folder', { folder_id: folder.folder_id }).then((ok) => {
+    if (alreadyLoaded && !wasDismissed) {
+      setPendingOpenFolder(null);
+      return;
+    }
+    if (alreadyLoaded) {
+      setPendingOpenFolder(null);
+    } else {
+      if (openFolderInflightRef.current === folder.folder_id) return;
+      setPendingOpenFolder({ folder_id: folder.folder_id, folder_name_he: folder.name_he });
+    }
+    openFolderInflightRef.current = folder.folder_id;
+    void runCommand('open_client_document_folder', { folder_id: folder.folder_id }, { skipBusy: true }).then((ok) => {
+      if (openFolderInflightRef.current === folder.folder_id) openFolderInflightRef.current = null;
       if (!ok) setPendingOpenFolder(null);
     });
   };
@@ -467,7 +481,9 @@ export function ClientDocumentsTab({
               <p className="nx-cdocs-panel-loading" role="status">{t('clientOperations.documents.uploading')}</p>
             ) : null}
             {folderPanelLoading ? (
-              <p className="nx-cdocs-panel-loading">{t('clientOperations.documents.loading')}</p>
+              <p className="nx-cdocs-panel-loading" role="status" aria-live="polite">
+                {t('clientOperations.documents.loading')}
+              </p>
             ) : openFolderView && openFolderView.period_navigation ? (
               <div className="nx-cdocs-period-browser">
                 <nav className="nx-cdocs-period-nav" aria-label={t('clientOperations.registry.reporting.filing.period')}>

@@ -459,3 +459,43 @@
       "vehicles";
   }
 }
+
+/* Nested income / expense editors: white fields keep dark text. Scoped to this modal only. */
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal.nx-accounting-editor-modal input,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal.nx-accounting-editor-modal select,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal.nx-accounting-editor-modal textarea {
+  color: #102d49 !important;
+  -webkit-text-fill-color: #102d49 !important;
+  caret-color: #102d49;
+  color-scheme: light;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal.nx-accounting-editor-modal input::placeholder,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal.nx-accounting-editor-modal textarea::placeholder {
+  color: rgba(16, 45, 73, 0.45) !important;
+  -webkit-text-fill-color: rgba(16, 45, 73, 0.45) !important;
+  opacity: 1;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal.nx-accounting-editor-modal input:-webkit-autofill,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal.nx-accounting-editor-modal input:-webkit-autofill:hover,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal.nx-accounting-editor-modal input:-webkit-autofill:focus,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal.nx-accounting-editor-modal textarea:-webkit-autofill {
+  -webkit-text-fill-color: #102d49 !important;
+  caret-color: #102d49;
+  box-shadow: 0 0 0 1000px #ffffff inset;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal.nx-accounting-editor-modal .client-field-box {
+  color: #102d49;
+}
+
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal.nx-accounting-editor-modal .client-field-box input,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal.nx-accounting-editor-modal .client-field-box select,
+.nx-modal.nx-workspace-modal .nx-modal-overlay > .nx-modal.nx-accounting-editor-modal .client-field-box textarea {
+  background: transparent !important;
+  color: #102d49 !important;
+  -webkit-text-fill-color: #102d49 !important;
+  caret-color: #102d49;
+}

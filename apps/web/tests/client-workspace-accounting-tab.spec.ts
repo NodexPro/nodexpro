@@ -122,6 +122,19 @@ test('Accounting Settings premium skin is scoped to the workspace modal Accounti
   assert.doesNotMatch(accountingCss, /createPortal|translateY\(max\(-60px/);
 });
 
+test('Income and expense editors prefetch block modals and keep dark text on white fields', () => {
+  assert.match(accountingSrc, /prefetchKeys:\s*BlockKey\[\]\s*=\s*\['income',\s*'expense_management',\s*'expenses'\]/);
+  assert.match(accountingSrc, /void loadBlockModal\(key\)/);
+  assert.match(accountingSrc, /setModalOpen\(true\)/);
+  assert.match(accountingSrc, /cached && cached\.version === block\.version/);
+  assert.match(accountingCss, /nx-accounting-editor-modal input[\s\S]*#102d49/);
+  assert.match(accountingCss, /caret-color:\s*#102d49/);
+  assert.match(accountingCss, /-webkit-autofill/);
+  assert.match(accountingCss, /input::placeholder[\s\S]*rgba\(16,\s*45,\s*73,\s*0\.45\)/);
+  assert.match(accountingSrc, /save_accounting_income_block/);
+  assert.match(accountingSrc, /save_accounting_expense_management_block/);
+});
+
 test('Accounting Settings empty fleet and split rows do not use a parent two-column subgrid', () => {
   assert.match(accountingSrc, /nx-ws-accounting-empty-fleet/);
   assert.match(accountingSrc, /t\('clientOperations\.accounting\.noVehicles'\)/);
