@@ -57,53 +57,68 @@
 
 .nx-payroll-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 0.9fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
-    "top-left process-wide process-wide"
-    "bottom-left row-employees row-turnover";
+    "employer-stack process-wide"
+    "deductions bank"
+    "row-turnover complexity";
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .nx-payroll-col {
   display: grid;
   grid-auto-rows: minmax(0, auto);
   gap: 14px;
+  min-width: 0;
 }
 
-.nx-payroll-col--top-left {
-  grid-area: top-left;
-}
-
-.nx-payroll-col--bottom-left {
-  grid-area: bottom-left;
+.nx-payroll-col--employer-stack {
+  grid-area: employer-stack;
   display: flex;
   flex-direction: column;
-  align-self: stretch;
+  gap: 14px;
+  min-height: 0;
 }
 
-.nx-payroll-col--bottom-left .nx-payroll-card--bank,
-.nx-payroll-col--bottom-left .nx-payroll-card--complexity {
+.nx-payroll-col--employer-stack .nx-payroll-card--employer_details {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
 }
 
-.nx-payroll-col--bottom-left .nx-payroll-card--bank .nx-payroll-card-body,
-.nx-payroll-col--bottom-left .nx-payroll-card--complexity .nx-payroll-card-body {
+.nx-payroll-col--employer-stack .nx-payroll-card--employer_details .nx-payroll-card-body,
+.nx-payroll-col--process-wide .nx-payroll-card--process .nx-payroll-card-body {
   flex: 1 1 auto;
+}
+
+.nx-payroll-col--employer-stack .nx-payroll-card--employees {
+  flex: 0 0 auto;
 }
 
 .nx-payroll-col--process-wide {
   grid-area: process-wide;
+  display: flex;
+  flex-direction: column;
 }
 
-.nx-payroll-col--row-complexity {
-  grid-area: row-complexity;
+.nx-payroll-col--process-wide .nx-payroll-card--process {
+  flex: 1 1 auto;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-.nx-payroll-col--row-employees {
-  grid-area: row-employees;
+.nx-payroll-col--deductions {
+  grid-area: deductions;
+}
+
+.nx-payroll-col--bank {
+  grid-area: bank;
+}
+
+.nx-payroll-col--complexity {
+  grid-area: complexity;
 }
 
 .nx-payroll-col--row-turnover {
@@ -269,7 +284,11 @@
   min-height: 180px;
 }
 
-.nx-payroll-card--employees .nx-payroll-card-body,
+.nx-payroll-card--employees .nx-payroll-card-body {
+  min-height: 0;
+  padding-top: 0;
+}
+
 .nx-payroll-card--complexity .nx-payroll-card-body {
   min-height: 116px;
 }
@@ -316,31 +335,18 @@
   .nx-payroll-grid {
     grid-template-columns: 1fr;
     grid-template-areas:
-      "top-left"
+      "employer-stack"
       "process-wide"
-      "bottom-left"
-      "row-employees"
-      "row-turnover";
+      "deductions"
+      "bank"
+      "row-turnover"
+      "complexity";
     gap: 14px;
   }
 
-  .nx-payroll-col--row-employees,
-  .nx-payroll-col--row-turnover,
-  .nx-payroll-col--row-complexity {
-    margin-top: 0;
-  }
-
-  .nx-payroll-col--bottom-left {
-    display: grid;
-  }
-
-  .nx-payroll-col--bottom-left .nx-payroll-card--bank,
-  .nx-payroll-col--bottom-left .nx-payroll-card--complexity {
-    display: block;
-  }
-
-  .nx-payroll-col--bottom-left .nx-payroll-card--bank .nx-payroll-card-body,
-  .nx-payroll-col--bottom-left .nx-payroll-card--complexity .nx-payroll-card-body {
+  .nx-payroll-col--employer-stack .nx-payroll-card--employer_details,
+  .nx-payroll-col--process-wide .nx-payroll-card--process {
     flex: none;
+    height: auto;
   }
 }

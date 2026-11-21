@@ -109,8 +109,14 @@ test('Payroll reuses Taxes edit button, hides reporting card, and compacts neste
   assert.match(payrollSrc, /nx-payroll-editor-modal--compact/);
   assert.match(payrollSrc, /nx-payroll-editor-modal--employer/);
   const payrollBase = readFileSync(join(dir, '../src/styles/nx-payroll-tab.css'), 'utf8');
-  assert.match(payrollBase, /top-left process-wide process-wide/);
-  assert.match(payrollSrc, /sectionsForColumn\(\['deductions', 'bank', 'complexity'\]\)/);
-  assert.doesNotMatch(payrollBase, /top-right top-right/);
+  assert.match(payrollBase, /employer-stack process-wide/);
+  assert.match(payrollBase, /deductions bank/);
+  assert.match(payrollBase, /row-turnover complexity/);
+  assert.match(payrollSrc, /nx-payroll-col--employer-stack/);
+  assert.match(payrollSrc, /section_key === 'employees'/);
+  assert.match(payrollSrc, /section_key === 'process'/);
+  assert.match(payrollSrc, /section_key === 'bank'/);
+  assert.match(payrollSrc, /section_key === 'complexity'/);
+  assert.doesNotMatch(payrollBase, /top-left process-wide process-wide/);
   assert.doesNotMatch(payrollCss, /nx-fees-pencil-btn/);
 });

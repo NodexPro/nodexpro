@@ -135,6 +135,17 @@ test('Income and expense editors prefetch block modals and keep dark text on whi
   assert.match(accountingSrc, /save_accounting_expense_management_block/);
 });
 
+test('Fixed-expense circles toggle locally and add-vehicle chrome opens before the GET', () => {
+  assert.match(accountingSrc, /next\[idx\] = \{ \.\.\.next\[idx\], selected: e\.target\.checked \}/);
+  assert.match(accountingSrc, /setDraft\(\(d\) => \(\{ \.\.\.d, \[f\.key\]: next \}\)\)/);
+  assert.doesNotMatch(accountingSrc, /NormalizeDraft\(clientId, 'expenses'\)/);
+  assert.match(accountingSrc, /save_accounting_fixed_expenses_block/);
+  assert.match(accountingSrc, /setVehicleItemOpen\(true\)/);
+  assert.match(accountingSrc, /fetchVehicleItemModal\(null\)/);
+  assert.match(accountingSrc, /vehicleItemLoading && !vehicleItemModal/);
+  assert.match(accountingSrc, /create_vehicle_fleet_item/);
+});
+
 test('Accounting Settings empty fleet and split rows do not use a parent two-column subgrid', () => {
   assert.match(accountingSrc, /nx-ws-accounting-empty-fleet/);
   assert.match(accountingSrc, /t\('clientOperations\.accounting\.noVehicles'\)/);

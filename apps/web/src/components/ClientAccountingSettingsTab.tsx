@@ -391,6 +391,7 @@ export function ClientAccountingSettingsTab({
   const [revealedSecureFields, setRevealedSecureFields] = useState<Record<string, boolean>>({});
 
   const [vehicleItemOpen, setVehicleItemOpen] = useState(false);
+  const [vehicleItemLoading, setVehicleItemLoading] = useState(false);
   const [vehicleItemModal, setVehicleItemModal] = useState<VehicleFleetItemModalResponse | null>(null);
   const [vehicleItemDraft, setVehicleItemDraft] = useState<Record<string, unknown>>({});
   const [vehicleItemVis, setVehicleItemVis] = useState<Record<string, boolean> | null>(null);
@@ -456,62 +457,47 @@ export function ClientAccountingSettingsTab({
     [clientId]
   );
 
+  const applyVehicleItemModal = (m: VehicleFleetItemModalResponse) => {
+    setVehicleItemModal(m);
+    setVehicleItemDraft(draftFromVehicleModalFields(m.fields));
+    setVehicleItemVis(m.field_visibility);
+    setVehicleItemLoading(false);
+  };
+
   const openVehicleItemModal = async (vehicleId: string | null) => {
     setError('');
     setVehicleItemError('');
+    setVehicleItemOpen(true);
+
+    const vb = tab?.blocks?.find((b) => b.block_key === 'vehicles');
+    const v = vb != null ? Number(vb.version) : NaN;
     if (vehicleId != null) {
-      const vb = tab?.blocks?.find((b) => b.block_key === 'vehicles');
-      const v = vb != null ? Number(vb.version) : NaN;
       const hit = vehicleFleetEditModalCacheRef.current.get(vehicleId);
       if (vb && Number.isFinite(v) && hit?.version === v) {
-        const m = { ...hit.payload, parent_vehicles_version: v };
-        setVehicleItemModal(m);
-        setVehicleItemDraft(draftFromVehicleModalFields(m.fields));
-        setVehicleItemVis(m.field_visibility);
-        setVehicleItemOpen(true);
+        applyVehicleItemModal({ ...hit.payload, parent_vehicles_version: v });
         return;
       }
-    }
-    if (vehicleId == null) {
-      const vb = tab?.blocks?.find((b) => b.block_key === 'vehicles');
-      const v = vb != null ? Number(vb.version) : NaN;
+    } else {
       const hit = vehicleFleetAddModalCacheRef.current;
       if (vb && Number.isFinite(v) && hit?.version === v) {
-        const m = hit.payload;
-        setVehicleItemModal(m);
-        setVehicleItemDraft(draftFromVehicleModalFields(m.fields));
-        setVehicleItemVis(m.field_visibility);
-        setVehicleItemOpen(true);
+        applyVehicleItemModal(hit.payload);
         return;
       }
     }
+
+    setVehicleItemLoading(true);
+    setVehicleItemModal(null);
     try {
       const m = await fetchVehicleItemModal(vehicleId);
-      setVehicleItemModal(m);
-      setVehicleItemDraft(draftFromVehicleModalFields(m.fields));
-      setVehicleItemVis(m.field_visibility);
-      setVehicleItemOpen(true);
-      if (vehicleId == null) {
-        const vb = tab?.blocks?.find((b) => b.block_key === 'vehicles');
-        const v = vb != null ? Number(vb.version) : NaN;
-        if (vb && Number.isFinite(v)) {
-          vehicleFleetAddModalCacheRef.current = {
-            version: v,
-            payload: { ...m, parent_vehicles_version: v },
-          };
-        }
-      } else {
-        const vb = tab?.blocks?.find((b) => b.block_key === 'vehicles');
-        const v = vb != null ? Number(vb.version) : NaN;
-        if (vb && Number.isFinite(v)) {
-          vehicleFleetEditModalCacheRef.current.set(vehicleId, {
-            version: v,
-            payload: { ...m, parent_vehicles_version: v },
-          });
-        }
+      applyVehicleItemModal(m);
+      if (vb && Number.isFinite(v)) {
+        const payload = { ...m, parent_vehicles_version: v };
+        if (vehicleId == null) vehicleFleetAddModalCacheRef.current = { version: v, payload };
+        else vehicleFleetEditModalCacheRef.current.set(vehicleId, { version: v, payload });
       }
     } catch (e) {
-      setError(userFacingApiMessage(e));
+      setVehicleItemError(userFacingApiMessage(e));
+      setVehicleItemLoading(false);
     }
   };
 
@@ -739,7 +725,23 @@ export function ClientAccountingSettingsTab({
         /* click path still fetches and surfaces modalError */
       });
     }
-  }, [tab, loadBlockModal]);
+    const vehicles = tab.blocks.find((b) => b.block_key === 'vehicles');
+    if (!vehicles) return;
+    const v = Number(vehicles.version);
+    if (!Number.isFinite(v)) return;
+    const hit = vehicleFleetAddModalCacheRef.current;
+    if (hit?.version === v) return;
+    void fetchVehicleItemModal(null)
+      .then((m) => {
+        vehicleFleetAddModalCacheRef.current = {
+          version: v,
+          payload: { ...m, parent_vehicles_version: v },
+        };
+      })
+      .catch(() => {
+        /* click path still fetches and surfaces vehicleItemError */
+      });
+  }, [tab, loadBlockModal, fetchVehicleItemModal]);
 
   const applyBlockModal = (out: AccountingBlockModalResponse) => {
     setModal(out);
@@ -1751,23 +1753,9 @@ export function ClientAccountingSettingsTab({
                                       checked={Boolean(it.selected)}
                                       disabled={disabled}
                                       onChange={(e) => {
-                                        void (async () => {
-                                          const next = [...(value as Array<any>)];
-                                          next[idx] = { ...next[idx], selected: e.target.checked };
-                                          try {
-                                            const out = await apiJson<{
-                                              expense_items: unknown[];
-                                              field_visibility?: Record<string, boolean>;
-                                            }>(moduleClientOperationsAccountingSettingsBlockNormalizeDraft(clientId, 'expenses'), {
-                                              method: 'POST',
-                                              body: JSON.stringify({ expense_items: next }),
-                                            });
-                                            setDraft((d) => ({ ...d, [f.key]: out.expense_items }));
-                                            if (out.field_visibility) setFieldVisibility(out.field_visibility);
-                                          } catch (err) {
-                                            setModalError(err instanceof Error ? err.message : t('clientOperations.accounting.error'));
-                                          }
-                                        })();
+                                        const next = [...(value as Array<any>)];
+                                        next[idx] = { ...next[idx], selected: e.target.checked };
+                                        setDraft((d) => ({ ...d, [f.key]: next }));
                                       }}
                                     />
                                     <span>{localizeSystemLabel(t, it.expense_type_label_key, it.expense_type_label_he)}</span>
@@ -2087,7 +2075,11 @@ export function ClientAccountingSettingsTab({
               <WorkspaceNestedDialogClose onClick={() => setVehicleItemOpen(false)} />
             </div>
             <div className="nx-modal-body" style={{ flex: '0 1 auto' }}>
-              {vehicleItemModal ? (
+              {vehicleItemLoading && !vehicleItemModal ? (
+                <div style={{ minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontWeight: 700 }}>
+                  {t('clientOperations.loading')}
+                </div>
+              ) : vehicleItemModal ? (
                 <div className="client-profile-grid">
                   {(() => {
                     const vis = vehicleItemVis ?? vehicleItemModal.field_visibility;

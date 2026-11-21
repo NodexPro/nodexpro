@@ -187,8 +187,6 @@ export function ClientPayrollTab({
   const employeesSection = sectionByKey.get('employees') ?? null;
   const processSection = sectionByKey.get('process') ?? null;
   const employerSection = sectionByKey.get('employer_details') ?? null;
-  const sectionsForColumn = (keys: string[]) =>
-    keys.map((k) => sectionByKey.get(k)).filter((s): s is PayrollSectionModel => Boolean(s));
 
   const employeesCountLine = findLine(employeesSection, 'employees_count');
   const payrollSoftwareLine = findLine(processSection, 'payroll_software');
@@ -335,20 +333,24 @@ export function ClientPayrollTab({
           </div>
 
           <div className="nx-payroll-grid">
-            <div className="nx-payroll-col nx-payroll-col--top-left">
+            <div className="nx-payroll-col nx-payroll-col--employer-stack">
               {employerSection ? renderCard(employerSection) : null}
+              {employeesSection ? renderCard(employeesSection) : null}
             </div>
             <div className="nx-payroll-col nx-payroll-col--process-wide">
               {processSection ? renderCard(processSection) : null}
             </div>
-            <div className="nx-payroll-col nx-payroll-col--bottom-left">
-              {sectionsForColumn(['deductions', 'bank', 'complexity']).map((s) => renderCard(s))}
+            <div className="nx-payroll-col nx-payroll-col--deductions">
+              {sectionByKey.get('deductions') ? renderCard(sectionByKey.get('deductions')!) : null}
             </div>
-            <div className="nx-payroll-col nx-payroll-col--row-employees">
-              {employeesSection ? renderCard(employeesSection) : null}
+            <div className="nx-payroll-col nx-payroll-col--bank">
+              {sectionByKey.get('bank') ? renderCard(sectionByKey.get('bank')!) : null}
             </div>
             <div className="nx-payroll-col nx-payroll-col--row-turnover">
               {renderTurnoverCard()}
+            </div>
+            <div className="nx-payroll-col nx-payroll-col--complexity">
+              {sectionByKey.get('complexity') ? renderCard(sectionByKey.get('complexity')!) : null}
             </div>
           </div>
 
@@ -362,7 +364,11 @@ export function ClientPayrollTab({
             className={`nx-modal nx-fees-editor-modal${
               editSection.section_key === 'deductions'
                 ? ' nx-payroll-editor-modal nx-payroll-editor-modal--compact'
-                : editSection.section_key === 'employer_details'
+                : editSection.section_key === 'employer_details' ||
+                    editSection.section_key === 'employees' ||
+                    editSection.section_key === 'process' ||
+                    editSection.section_key === 'bank' ||
+                    editSection.section_key === 'complexity'
                   ? ' nx-payroll-editor-modal nx-payroll-editor-modal--employer'
                   : ''
             }`}

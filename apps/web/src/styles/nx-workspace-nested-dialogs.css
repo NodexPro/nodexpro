@@ -302,9 +302,21 @@
 .nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--compact .nx-fees-inp,
 .nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--employer .nx-fees-inp {
   width: 100%;
-  max-width: 100%;
+  max-width: 16rem;
   min-width: 0;
   box-sizing: border-box;
+}
+
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--compact textarea.nx-fees-inp,
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--employer textarea.nx-fees-inp {
+  max-width: 100%;
+}
+
+@media (max-width: 720px) {
+  .nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--compact .nx-fees-inp,
+  .nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--employer .nx-fees-inp {
+    max-width: 100%;
+  }
 }
 
 .nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--compact .nx-fees-save-error,
