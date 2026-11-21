@@ -57,12 +57,11 @@
 
 .nx-payroll-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.65fr) minmax(0, 0.65fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(0, 0.9fr);
   grid-template-areas:
-    "top-left top-right top-right"
-    "bottom-left process-wide process-wide"
-    "row-complexity row-employees row-turnover";
-  gap: 18px;
+    "top-left process-wide process-wide"
+    "bottom-left row-employees row-turnover";
+  gap: 14px;
   align-items: start;
 }
 
@@ -76,10 +75,6 @@
   grid-area: top-left;
 }
 
-.nx-payroll-col--top-right {
-  grid-area: top-right;
-}
-
 .nx-payroll-col--bottom-left {
   grid-area: bottom-left;
   display: flex;
@@ -87,13 +82,15 @@
   align-self: stretch;
 }
 
-.nx-payroll-col--bottom-left .nx-payroll-card--bank {
+.nx-payroll-col--bottom-left .nx-payroll-card--bank,
+.nx-payroll-col--bottom-left .nx-payroll-card--complexity {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
 }
 
-.nx-payroll-col--bottom-left .nx-payroll-card--bank .nx-payroll-card-body {
+.nx-payroll-col--bottom-left .nx-payroll-card--bank .nx-payroll-card-body,
+.nx-payroll-col--bottom-left .nx-payroll-card--complexity .nx-payroll-card-body {
   flex: 1 1 auto;
 }
 
@@ -102,18 +99,15 @@
 }
 
 .nx-payroll-col--row-complexity {
-  grid-area: row-turnover;
-  margin-top: -12px;
+  grid-area: row-complexity;
 }
 
 .nx-payroll-col--row-employees {
   grid-area: row-employees;
-  margin-top: -12px;
 }
 
 .nx-payroll-col--row-turnover {
-  grid-area: row-complexity;
-  margin-top: -10px;
+  grid-area: row-turnover;
 }
 
 .nx-payroll-card {
@@ -323,10 +317,8 @@
     grid-template-columns: 1fr;
     grid-template-areas:
       "top-left"
-      "top-right"
-      "bottom-left"
       "process-wide"
-      "row-complexity"
+      "bottom-left"
       "row-employees"
       "row-turnover";
     gap: 14px;
@@ -342,11 +334,13 @@
     display: grid;
   }
 
-  .nx-payroll-col--bottom-left .nx-payroll-card--bank {
+  .nx-payroll-col--bottom-left .nx-payroll-card--bank,
+  .nx-payroll-col--bottom-left .nx-payroll-card--complexity {
     display: block;
   }
 
-  .nx-payroll-col--bottom-left .nx-payroll-card--bank .nx-payroll-card-body {
+  .nx-payroll-col--bottom-left .nx-payroll-card--bank .nx-payroll-card-body,
+  .nx-payroll-col--bottom-left .nx-payroll-card--complexity .nx-payroll-card-body {
     flex: none;
   }
 }

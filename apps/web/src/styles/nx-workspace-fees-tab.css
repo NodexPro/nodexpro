@@ -122,6 +122,47 @@
   background: rgba(70, 213, 255, 0.16);
 }
 
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-price-chart-toggle {
+  color: #7decf7;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-price-chart-toggle--active,
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-price-chart-toggle--active:hover {
+  color: #ffffff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-price-chart-value,
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-price-chart-x {
+  color: #ffffff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-price-chart-delta--up {
+  color: #6ee7b7;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-price-chart-delta--down {
+  color: #fca5a5;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-price-chart-delta--flat {
+  color: #d7ecff;
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-price-chart-bar-wrap {
+  border-bottom-color: rgba(210, 238, 255, 0.45);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-price-chart-tooltip {
+  background: #f8fafc;
+  border: 1px solid #dbe3ee;
+  color: #102d49;
+  box-shadow: 0 10px 25px rgba(16, 45, 73, 0.22);
+}
+
+.nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-price-chart-tooltip-line {
+  color: #111827;
+}
+
 .nx-modal.nx-workspace-modal .nx-ws-fees .nx-fees-tab-shell .nx-fees-table-wrap {
   background: transparent;
   border-color: rgba(210, 238, 255, 0.28);

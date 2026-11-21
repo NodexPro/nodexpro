@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'reac
 import { apiJson, userFacingApiMessage } from '../api/client';
 import { moduleClientOperationsCase, moduleClientOperationsFeesCommands } from '../api/endpoints';
 import { useI18n } from '../i18n/I18nProvider';
-import { fillI18n, localizeFilledLabel, localizeSystemLabel } from '../lib/co-display-label.pure';
+import { localizeFilledLabel, localizeSystemLabel } from '../lib/co-display-label.pure';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
 import type {
   FeesAgreementFieldModel,
@@ -66,26 +66,7 @@ function FeesPriceHistoryChart({
 
   return (
     <div className="nx-fees-price-chart-block">
-      {chart.view_caption_he ? (
-        <p className="nx-fees-price-chart-view-caption">
-          {fillI18n(localizeSystemLabel(t, chart.view_caption_key, chart.view_caption_he), chart.view_caption_fill ?? {})}
-        </p>
-      ) : null}
-      {chart.overflow_hint_he ? (
-        <p className="nx-fees-price-chart-overflow-hint">
-          {localizeSystemLabel(t, chart.overflow_hint_key, chart.overflow_hint_he)}
-        </p>
-      ) : null}
-      {chart.subtitle_he ? (
-        <p className="nx-fees-price-chart-sub">
-          {fillI18n(localizeSystemLabel(t, chart.subtitle_key, chart.subtitle_he), chart.subtitle_fill ?? {})}
-        </p>
-      ) : null}
-      {chart.y_axis_hint_he ? (
-        <p className="nx-fees-price-chart-hint">{localizeSystemLabel(t, chart.y_axis_hint_key, chart.y_axis_hint_he)}</p>
-      ) : null}
-
-      <div className="nx-fees-price-chart-toolbar nx-fees-price-chart-toolbar--modes" >
+      <div className="nx-fees-price-chart-toolbar nx-fees-price-chart-toolbar--modes">
         <button
           type="button"
           className={`nx-fees-price-chart-toggle ${chart.chart_view_mode === 'last_15' ? 'nx-fees-price-chart-toggle--active' : ''}`}

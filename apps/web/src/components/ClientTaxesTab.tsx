@@ -14,6 +14,7 @@ import {
 } from '../api/endpoints';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
 import { WorkspaceNestedDialogClose } from './WorkspaceNestedDialogClose';
+import { ClientOperationsSectionEditButton } from './client-operations/ClientOperationsSectionEditButton';
 import type {
   ClientTaxSettingsPublic,
   TaxTabCommandType,
@@ -52,26 +53,6 @@ function CopySecretIcon() {
     >
       <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-    </svg>
-  );
-}
-
-function EditPencilIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
     </svg>
   );
 }
@@ -363,16 +344,11 @@ function TaxWorkspaceSectionCard({
       <div className="nx-ws-taxes-card__head">
         <h3 className="nx-ws-taxes-card__title">{title}</h3>
         {sec.edit.enabled ? (
-          <button
-            type="button"
-            className="nx-taxes-section-edit-btn"
+          <ClientOperationsSectionEditButton
             onClick={() => onOpenEditor(sec.section_key)}
             disabled={isSaving}
-            aria-label={editLabel}
-            title={editLabel}
-          >
-            <EditPencilIcon />
-          </button>
+            label={editLabel}
+          />
         ) : null}
       </div>
       <dl className="nx-ws-taxes-card__rows">

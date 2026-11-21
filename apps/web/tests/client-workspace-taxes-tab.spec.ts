@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const taxesSrc = readFileSync(join(dir, '../src/components/ClientTaxesTab.tsx'), 'utf8');
+const editBtnSrc = readFileSync(join(dir, '../src/components/client-operations/ClientOperationsSectionEditButton.tsx'), 'utf8');
 const taxesCss = readFileSync(join(dir, '../src/styles/nx-workspace-taxes-tab.css'), 'utf8');
 const premium = readFileSync(join(dir, '../src/styles/nx-workspace-modal-premium.css'), 'utf8');
 const panelSrc = readFileSync(join(dir, '../src/components/ClientWorkspacePanel.tsx'), 'utf8');
@@ -45,7 +46,10 @@ test('Taxes premium skin is scoped to the workspace modal Taxes interior', () =>
   assert.match(taxesCss, /nx-ws-taxes-summary__grid/);
   assert.match(taxesCss, /repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(taxesCss, /nx-ws-taxes-card/);
+  assert.match(taxesSrc, /ClientOperationsSectionEditButton/);
+  assert.match(editBtnSrc, /nx-taxes-section-edit-btn/);
   assert.match(taxesCss, /nx-taxes-section-edit-btn/);
+  assert.match(taxesCss, /nx-ws-payroll \.nx-taxes-section-edit-btn/);
   assert.match(taxesCss, /overflow-y:\s*auto/);
   assert.match(taxesCss, /\.nx-workspace-content > \.client-profile-card\.nx-ws-taxes/);
   assert.match(taxesCss, /background:\s*transparent\s*!important/);

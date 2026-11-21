@@ -49,7 +49,7 @@ test('Fees, payroll and history premium skins are scoped to the workspace modal 
   assert.match(historySrc, /nx-history-root nx-ws-history/);
   for (const css of [feesCss, payrollCss, historyCss]) {
     assert.match(css, /\.nx-modal\.nx-workspace-modal/);
-    assert.match(css, /radial-gradient\(ellipse at 12% 0%, rgba\(255, 255, 255, 0\.2\)/);
+    assert.match(css, /radial-gradient\(ellipse at 12% 0%, rgba\(51, 116, 147, 0\.34\)/);
     assert.match(css, /overflow-y:\s*auto/);
     assert.match(css, /overflow-x:\s*hidden/);
     assert.doesNotMatch(css, /createPortal|translateY\(max\(-60px/);
@@ -71,9 +71,37 @@ test('Client Details, Taxes, portal and raise are not altered by remaining-tab r
     /transform:\s*translateY\(\s*max\(\s*-60px,\s*calc\(\s*16px\s*-\s*50dvh\s*\+\s*50%\s*\)\s*\)\s*\)/,
   );
   assert.doesNotMatch(premium, /nx-ws-fees|nx-ws-payroll|nx-ws-history/);
-  assert.doesNotMatch(taxesCss, /nx-ws-fees|nx-ws-payroll|nx-ws-history/);
+  assert.doesNotMatch(taxesCss, /nx-ws-fees|nx-ws-history/);
+  assert.match(taxesCss, /nx-ws-payroll \.nx-taxes-section-edit-btn/);
   assert.match(taxesSrc, /client-profile-card nx-ws-taxes/);
   assert.match(panelSrc, /activeTab === 'fees'/);
   assert.match(panelSrc, /activeTab === 'salary'/);
   assert.match(panelSrc, /activeTab === 'history'/);
+});
+
+test('Price-history chart keeps bars/values/axes and drops helper captions', () => {
+  assert.match(feesSrc, /nx-fees-price-chart-block/);
+  assert.match(feesSrc, /nx-fees-price-chart-value/);
+  assert.match(feesSrc, /nx-fees-price-chart-x/);
+  assert.match(feesSrc, /onChartViewRequest\('last_15'\)/);
+  assert.doesNotMatch(feesSrc, /chart\.view_caption_he/);
+  assert.doesNotMatch(feesSrc, /chart\.overflow_hint_he/);
+  assert.doesNotMatch(feesSrc, /chart\.subtitle_he/);
+  assert.doesNotMatch(feesSrc, /chart\.y_axis_hint_he/);
+  assert.match(feesCss, /nx-fees-price-chart-value[\s\S]*#ffffff/);
+  assert.match(feesCss, /nx-fees-price-chart-tooltip-line[\s\S]*#111827/);
+});
+
+test('Payroll reuses Taxes edit button, hides reporting card, and compacts nested editors', () => {
+  assert.match(payrollSrc, /ClientOperationsSectionEditButton/);
+  assert.doesNotMatch(payrollSrc, /nx-fees-pencil-btn/);
+  assert.doesNotMatch(payrollSrc, /reportingSection \? renderCard\(reportingSection\)/);
+  assert.match(payrollSrc, /sectionByKey\.get\('process'\)/);
+  assert.match(payrollSrc, /nx-payroll-editor-modal--compact/);
+  assert.match(payrollSrc, /nx-payroll-editor-modal--employer/);
+  const payrollBase = readFileSync(join(dir, '../src/styles/nx-payroll-tab.css'), 'utf8');
+  assert.match(payrollBase, /top-left process-wide process-wide/);
+  assert.match(payrollSrc, /sectionsForColumn\(\['deductions', 'bank', 'complexity'\]\)/);
+  assert.doesNotMatch(payrollBase, /top-right top-right/);
+  assert.doesNotMatch(payrollCss, /nx-fees-pencil-btn/);
 });

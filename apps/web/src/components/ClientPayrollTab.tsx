@@ -5,16 +5,9 @@ import { useI18n } from '../i18n/I18nProvider';
 import { localizeSystemLabel } from '../lib/co-display-label.pure';
 import type { ClientOperationsCaseResponse } from './ClientWorkspacePanel';
 import type { PayrollFieldModel, PayrollLineModel, PayrollSectionModel, PayrollTabModel } from './payroll-tab-types';
+import { ClientOperationsSectionEditButton } from './client-operations/ClientOperationsSectionEditButton';
 import '../styles/nx-payroll-tab.css';
 import '../styles/nx-workspace-payroll-tab.css';
-
-function IconPencil() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden>
-      <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z" />
-    </svg>
-  );
-}
 
 function sectionIconHe(sectionKey: string): string {
   if (sectionKey === 'employer_details') return '🏢';
@@ -193,9 +186,7 @@ export function ClientPayrollTab({
 
   const employeesSection = sectionByKey.get('employees') ?? null;
   const processSection = sectionByKey.get('process') ?? null;
-  const complexitySection = sectionByKey.get('complexity') ?? null;
   const employerSection = sectionByKey.get('employer_details') ?? null;
-  const reportingSection = sectionByKey.get('reporting') ?? null;
   const sectionsForColumn = (keys: string[]) =>
     keys.map((k) => sectionByKey.get(k)).filter((s): s is PayrollSectionModel => Boolean(s));
 
@@ -260,9 +251,7 @@ export function ClientPayrollTab({
             {title}
           </h3>
           {allowEdit ? (
-            <button type="button" className="nx-fees-pencil-btn" onClick={() => openSection(s)} aria-label={editLabel} title={editLabel}>
-              <IconPencil />
-            </button>
+            <ClientOperationsSectionEditButton onClick={() => openSection(s)} label={editLabel} />
           ) : null}
         </div>
         <div className="nx-payroll-card-body">
@@ -349,23 +338,17 @@ export function ClientPayrollTab({
             <div className="nx-payroll-col nx-payroll-col--top-left">
               {employerSection ? renderCard(employerSection) : null}
             </div>
-            <div className="nx-payroll-col nx-payroll-col--top-right">
-              {reportingSection ? renderCard(reportingSection) : null}
-            </div>
-            <div className="nx-payroll-col nx-payroll-col--bottom-left">
-              {sectionsForColumn(['deductions', 'bank']).map((s) => renderCard(s))}
-            </div>
             <div className="nx-payroll-col nx-payroll-col--process-wide">
               {processSection ? renderCard(processSection) : null}
+            </div>
+            <div className="nx-payroll-col nx-payroll-col--bottom-left">
+              {sectionsForColumn(['deductions', 'bank', 'complexity']).map((s) => renderCard(s))}
             </div>
             <div className="nx-payroll-col nx-payroll-col--row-employees">
               {employeesSection ? renderCard(employeesSection) : null}
             </div>
             <div className="nx-payroll-col nx-payroll-col--row-turnover">
               {renderTurnoverCard()}
-            </div>
-            <div className="nx-payroll-col nx-payroll-col--row-complexity">
-              {complexitySection ? renderCard(complexitySection) : null}
             </div>
           </div>
 
@@ -375,7 +358,18 @@ export function ClientPayrollTab({
 
       {editSection ? (
         <div className="nx-modal-overlay" role="presentation" onClick={(e) => e.target === e.currentTarget && !busy && setEditSection(null)}>
-          <div className="nx-modal nx-fees-editor-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+          <div
+            className={`nx-modal nx-fees-editor-modal${
+              editSection.section_key === 'deductions'
+                ? ' nx-payroll-editor-modal nx-payroll-editor-modal--compact'
+                : editSection.section_key === 'employer_details'
+                  ? ' nx-payroll-editor-modal nx-payroll-editor-modal--employer'
+                  : ''
+            }`}
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="nx-modal-header">
               <div className="nx-modal-title-wrap">
                 <h2 className="nx-modal-title">{localizeSystemLabel(t, editSection.section_title_key, editSection.section_title_he)}</h2>

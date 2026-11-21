@@ -103,6 +103,10 @@ test('Documents overlay and Fees editor keep aggregate reads and named commands'
   assert.match(feesSrc, /onCaseUpdated/);
   assert.match(nestedCss, /\.nx-fees-editor-modal \.nx-fees-table-wrap/);
   assert.match(nestedCss, /overflow-x:\s*auto/);
+  assert.match(nestedCss, /nx-payroll-editor-modal--compact/);
+  assert.match(nestedCss, /min\(420px, calc\(100vw - 48px\)\)/);
+  assert.match(nestedCss, /nx-payroll-editor-modal--employer/);
+  assert.match(nestedCss, /min\(560px, calc\(100vw - 48px\)\)/);
   for (const src of [docsSrc, feesSrc, taxesSrc, accountingSrc, payrollSrc, historySrc, annualSrc, profileSrc]) {
     assert.doesNotMatch(src, /method:\s*'PATCH'/);
   }

@@ -145,7 +145,11 @@
   line-height: 1.25;
 }
 
-.nx-modal.nx-workspace-modal .nx-ws-taxes .nx-taxes-section-edit-btn {
+.nx-modal.nx-workspace-modal .nx-ws-taxes .nx-taxes-section-edit-btn,
+.nx-modal.nx-workspace-modal .nx-ws-payroll .nx-taxes-section-edit-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 32px;
   width: 32px;
   height: 32px;
@@ -159,13 +163,16 @@
     radial-gradient(ellipse at 12% 0%, rgba(255, 255, 255, 0.14), transparent 52%),
     linear-gradient(180deg, rgba(51, 116, 147, 0.28) 0%, rgba(23, 84, 122, 0.22) 100%);
   color: #ffffff;
+  line-height: 0;
+  cursor: pointer;
   box-shadow:
     0 0 0 1px rgba(70, 213, 255, 0.28),
     0 0 10px rgba(44, 196, 255, 0.28);
   transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
-.nx-modal.nx-workspace-modal .nx-ws-taxes .nx-taxes-section-edit-btn:hover:not(:disabled) {
+.nx-modal.nx-workspace-modal .nx-ws-taxes .nx-taxes-section-edit-btn:hover:not(:disabled),
+.nx-modal.nx-workspace-modal .nx-ws-payroll .nx-taxes-section-edit-btn:hover:not(:disabled) {
   background: linear-gradient(180deg, rgba(54, 169, 198, 0.42) 0%, rgba(19, 191, 208, 0.28) 100%);
   border-color: rgba(19, 191, 208, 0.78);
   color: #ffffff;
@@ -174,12 +181,14 @@
     0 0 12px rgba(19, 191, 208, 0.28);
 }
 
-.nx-modal.nx-workspace-modal .nx-ws-taxes .nx-taxes-section-edit-btn:focus-visible {
+.nx-modal.nx-workspace-modal .nx-ws-taxes .nx-taxes-section-edit-btn:focus-visible,
+.nx-modal.nx-workspace-modal .nx-ws-payroll .nx-taxes-section-edit-btn:focus-visible {
   outline: 2px solid rgba(70, 213, 255, 0.9);
   outline-offset: 2px;
 }
 
-.nx-modal.nx-workspace-modal .nx-ws-taxes .nx-taxes-section-edit-btn:disabled {
+.nx-modal.nx-workspace-modal .nx-ws-taxes .nx-taxes-section-edit-btn:disabled,
+.nx-modal.nx-workspace-modal .nx-ws-payroll .nx-taxes-section-edit-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }

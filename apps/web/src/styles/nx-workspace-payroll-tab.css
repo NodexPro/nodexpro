@@ -102,14 +102,6 @@
   color: #eef6ff;
 }
 
-.nx-modal.nx-workspace-modal .nx-ws-payroll .nx-fees-pencil-btn {
-  color: #7decf7;
-}
-
-.nx-modal.nx-workspace-modal .nx-ws-payroll .nx-fees-pencil-btn:hover:not(:disabled) {
-  background: rgba(70, 213, 255, 0.16);
-}
-
 .nx-modal.nx-workspace-modal .nx-ws-payroll .nx-payroll-employees-graph,
 .nx-modal.nx-workspace-modal .nx-ws-payroll .nx-payroll-turnover-chart {
   background: rgba(8, 38, 82, 0.22);

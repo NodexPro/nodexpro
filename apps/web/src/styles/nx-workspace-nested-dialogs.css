@@ -271,6 +271,49 @@
   min-width: 0;
 }
 
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--compact {
+  width: min(420px, calc(100vw - 48px));
+  max-height: min(90vh, 420px);
+  height: auto;
+}
+
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--employer {
+  width: min(560px, calc(100vw - 48px));
+  max-height: min(90vh, 720px);
+  height: auto;
+}
+
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--compact .nx-modal-body,
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--compact .nx-fees-editor-modal-body,
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--employer .nx-modal-body,
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--employer .nx-fees-editor-modal-body {
+  flex: 0 1 auto;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--compact .client-field,
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--employer .client-field {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--compact .nx-fees-inp,
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--employer .nx-fees-inp {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--compact .nx-fees-save-error,
+.nx-modal.nx-workspace-modal .nx-fees-editor-modal.nx-payroll-editor-modal--employer .nx-fees-save-error {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .nx-modal.nx-workspace-modal .nx-fees-editor-modal .nx-fees-editor-modal-body {
   overflow-x: auto;
   overflow-y: auto;
