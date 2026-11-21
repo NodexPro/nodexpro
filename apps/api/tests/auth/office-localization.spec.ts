@@ -24,11 +24,19 @@ test('1-2. first-time default: Israel → Hebrew, any other registration country
   assert.match(orgs, /if \(!ctx\.user\.uiLanguage\)/);
   assert.match(orgs, /defaultUiLanguageFromCountry\(params\.countryCode\)/);
   assert.match(orgs, /\.is\('ui_language', null\)/);
-  const register = read('apps/web/src/pages/Register.tsx');
-  assert.doesNotMatch(register, /country/i);
-  const ensure = read('apps/api/src/domains/auth/auth.service.ts');
-  assert.match(ensure, /insert\(\{ auth_user_id: authUserId, email, full_name: fullName \?\? null, status: 'active' \}\)/);
-  assert.doesNotMatch(ensure, /ui_language/);
+  const registerPage = read('apps/web/src/pages/Register.tsx');
+  assert.doesNotMatch(registerPage, /country/i);
+  const authServiceSrc = read('apps/api/src/domains/auth/auth.service.ts');
+  const ensureAppUser = authServiceSrc.slice(authServiceSrc.indexOf('export async function ensureAppUser'));
+  assert.match(ensureAppUser, /insert\(\{ auth_user_id: authUserId, email, full_name: fullName \?\? null, status: 'active' \}\)/);
+  assert.doesNotMatch(ensureAppUser, /ui_language/);
+  const registerFn = authServiceSrc.slice(
+    authServiceSrc.indexOf('export async function register'),
+    authServiceSrc.indexOf('export async function login'),
+  );
+  assert.match(registerFn, /languageCode/);
+  assert.match(registerFn, /ui_language: languageCode/);
+  assert.match(registerFn, /\.is\('ui_language', null\)/);
 });
 
 test('3-4. explicit English is kept for an Israeli org; explicit Hebrew is kept regardless of country', () => {

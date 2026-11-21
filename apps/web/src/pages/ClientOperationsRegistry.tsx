@@ -268,16 +268,19 @@ export function ClientOperationsRegistry() {
 
   const activeOrganizationId =
     auth.status === 'authenticated' ? (auth.me.activeOrganizationId ?? null) : null;
+  const identityEpoch = auth.identityEpoch;
 
   useEffect(() => {
-    if (cacheOrganizationIdRef.current === activeOrganizationId) return;
-    cacheOrganizationIdRef.current = activeOrganizationId;
+    if (cacheOrganizationIdRef.current === `${identityEpoch}:${activeOrganizationId ?? ''}`) return;
+    cacheOrganizationIdRef.current = `${identityEpoch}:${activeOrganizationId ?? ''}`;
     periodCacheRef.current.clear();
     prefetchInflightRef.current.clear();
     backendAvailablePeriodsRef.current = [];
     viewedPeriodKeyRef.current = null;
     setRenderedAggregatePeriodKey(null);
-  }, [activeOrganizationId]);
+    loadAbortRef.current?.abort();
+    loadSeqRef.current += 1;
+  }, [activeOrganizationId, identityEpoch]);
 
   const toCacheQuery = useCallback(
     (src: {

@@ -3,7 +3,22 @@ import { supabase } from '../lib/supabase';
 import { apiJson } from '../api/client';
 import { AUTH } from '../api/endpoints';
 import { setBackendActiveOrganizationId } from '../api/org-context';
-import { shouldClearLocalAuthSession } from '../lib/session-auth-failure.pure';
+import {
+  classifyAuthIdentityTransition,
+  isStaleRequestGeneration,
+  nextRequestGeneration,
+  shouldDropAuthenticatedUi,
+  shouldRefetchSessionAfterAuthEvent,
+} from '../lib/auth-identity-transition.pure';
+import { classifySessionFetchFailure } from '../lib/onboarding-session-route.pure';
+import { shouldApplyOfficeSwitchAggregate } from '../lib/org-switch-queue.pure';
+import { isStaleWorkspaceError } from '../lib/session-auth-failure.pure';
+import {
+  clearTabWorkspace,
+  decideSessionWorkspaceApply,
+  readTabWorkspace,
+  writeTabWorkspace,
+} from '../lib/tab-workspace.pure';
 import type { SessionNavItemDto, ShellProfile, SidebarAccountBlockModel, UiLanguageCode } from '../types/session';
 
 export interface MeData {
@@ -61,6 +76,7 @@ export interface MeData {
 type AuthState =
   | { status: 'loading' }
   | { status: 'unauthenticated' }
+  | { status: 'session_error' }
   | { status: 'authenticated'; me: MeData };
 
 const AuthContext = createContext<
@@ -70,6 +86,7 @@ const AuthContext = createContext<
     setUiLanguage: (languageCode: UiLanguageCode) => Promise<MeData | null>;
     refetchMe: () => Promise<MeData | null>;
     signOut: () => Promise<void>;
+    identityEpoch: number;
   }
   | null
 >(null);
@@ -91,88 +108,197 @@ function isMeEqual(a: MeData, b: MeData): boolean {
   );
 }
 
+function tabStorage(): Storage | null {
+  return typeof sessionStorage === 'undefined' ? null : sessionStorage;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({ status: 'loading' });
-  const isFetchingMe = useRef(false);
-  const inFlightMe = useRef<Promise<MeData | null> | null>(null);
+  const [identityEpoch, setIdentityEpoch] = useState(0);
+  const generationRef = useRef(0);
+  const authUserIdRef = useRef<string | null>(null);
+  const lastWorkspaceRef = useRef<{ userId: string; orgId: string | null } | null>(null);
+  const inFlightMe = useRef<{ generation: number; promise: Promise<MeData | null> } | null>(null);
+  const orgSwitchLatestRef = useRef<string | null>(null);
+  const orgSwitchInFlightRef = useRef<Promise<MeData | null> | null>(null);
+
+  const bumpGeneration = useCallback(() => {
+    generationRef.current = nextRequestGeneration(generationRef.current);
+    setIdentityEpoch(generationRef.current);
+    inFlightMe.current = null;
+    lastWorkspaceRef.current = null;
+  }, []);
+
+  const applyAuthenticated = useCallback((me: MeData, authUserId: string | null) => {
+    const stored = readTabWorkspace(tabStorage());
+    const claimed =
+      stored && stored.userId === authUserId ? stored.organizationId : null;
+    if (decideSessionWorkspaceApply({
+      sessionActiveOrganizationId: me.activeOrganizationId,
+      workingOrganizationId: claimed,
+      membershipOrgIds: me.organizations.map((org) => org.id),
+    }) === 'mismatch') {
+      setBackendActiveOrganizationId(claimed);
+      return null;
+    }
+    setBackendActiveOrganizationId(me.activeOrganizationId);
+    writeTabWorkspace(tabStorage(), authUserId, me.activeOrganizationId);
+    const prevWorkspace = lastWorkspaceRef.current;
+    lastWorkspaceRef.current = { userId: me.user.id, orgId: me.activeOrganizationId };
+    if (
+      !prevWorkspace ||
+      prevWorkspace.userId !== me.user.id ||
+      prevWorkspace.orgId !== me.activeOrganizationId
+    ) {
+      setIdentityEpoch((value) => value + 1);
+    }
+    setState((prev) => {
+      if (prev.status === 'authenticated' && isMeEqual(prev.me, me)) return prev;
+      return { status: 'authenticated', me };
+    });
+    return me;
+  }, []);
+
+  const dropAuthenticatedWorkspace = useCallback(() => {
+    orgSwitchLatestRef.current = null;
+    bumpGeneration();
+    setBackendActiveOrganizationId(null);
+    clearTabWorkspace(tabStorage());
+  }, [bumpGeneration]);
+
+  const drainOfficeSwitch = useCallback(async (): Promise<MeData | null> => {
+    let lastApplied: MeData | null = null;
+    while (orgSwitchLatestRef.current) {
+      const target = orgSwitchLatestRef.current;
+      const started = generationRef.current;
+      try {
+        const me = await apiJson<MeData>(AUTH.selectActiveOrgCommand, {
+          method: 'POST',
+          body: JSON.stringify({ organization_id: target }),
+        });
+        if (isStaleRequestGeneration(started, generationRef.current)) {
+          orgSwitchLatestRef.current = null;
+          return null;
+        }
+        if (!shouldApplyOfficeSwitchAggregate({
+          commandOrganizationId: target,
+          aggregateOrganizationId: me.activeOrganizationId,
+          latestRequestedId: orgSwitchLatestRef.current,
+        })) {
+          if (orgSwitchLatestRef.current === target) orgSwitchLatestRef.current = null;
+          continue;
+        }
+        writeTabWorkspace(tabStorage(), authUserIdRef.current, me.activeOrganizationId);
+        lastApplied = applyAuthenticated(me, authUserIdRef.current);
+        if (orgSwitchLatestRef.current === target) orgSwitchLatestRef.current = null;
+      } catch (error) {
+        if (isStaleWorkspaceError(error) || isStaleRequestGeneration(started, generationRef.current)) {
+          orgSwitchLatestRef.current = null;
+          return lastApplied;
+        }
+        if (orgSwitchLatestRef.current !== target) continue;
+        throw error;
+      }
+    }
+    return lastApplied;
+  }, [applyAuthenticated]);
+
+  const selectActiveOrg = useCallback(async (organizationId: string): Promise<MeData | null> => {
+    const org = String(organizationId ?? '').trim();
+    if (!org) return null;
+    orgSwitchLatestRef.current = org;
+    if (!orgSwitchInFlightRef.current) {
+      const run = drainOfficeSwitch().finally(() => {
+        if (orgSwitchInFlightRef.current === run) orgSwitchInFlightRef.current = null;
+      });
+      orgSwitchInFlightRef.current = run;
+    }
+    const me = await orgSwitchInFlightRef.current;
+    if (orgSwitchLatestRef.current && orgSwitchLatestRef.current !== me?.activeOrganizationId) {
+      return selectActiveOrg(orgSwitchLatestRef.current);
+    }
+    return me;
+  }, [drainOfficeSwitch]);
 
   const refetchMe = useCallback(async (signal?: AbortSignal): Promise<MeData | null> => {
-    if (inFlightMe.current && !signal) return inFlightMe.current;
+    const started = generationRef.current;
+    if (!signal && inFlightMe.current?.generation === started) return inFlightMe.current.promise;
+    setState((prev) => (prev.status === 'session_error' ? { status: 'loading' } : prev));
     const run = (async () => {
-      isFetchingMe.current = true;
       try {
+        const stored = readTabWorkspace(tabStorage());
+        if (stored && stored.userId === authUserIdRef.current) {
+          setBackendActiveOrganizationId(stored.organizationId);
+        }
         const me = await apiJson<MeData>(AUTH.session, signal ? { signal } : undefined);
-        if (signal?.aborted) return null;
-        setState((prev) => {
-          if (prev.status === 'authenticated' && isMeEqual(prev.me, me)) return prev;
-          return { status: 'authenticated', me };
-        });
-        setBackendActiveOrganizationId(me.activeOrganizationId);
-        return me;
+        if (signal?.aborted || isStaleRequestGeneration(started, generationRef.current)) return null;
+        const applied = applyAuthenticated(me, authUserIdRef.current);
+        if (!applied) {
+          setState((prev) => (prev.status === 'authenticated' ? prev : { status: 'session_error' }));
+        }
+        return applied;
       } catch (e) {
-        if (signal?.aborted) return null;
-        setBackendActiveOrganizationId(null);
-        setState({ status: 'unauthenticated' });
-        // Leftover JWT would remount → /auth/session 401 → login. Clear Auth session
-        // locally; do not call /auth/logout (that route also requires an active user).
-        if (shouldClearLocalAuthSession(e)) {
+        if (signal?.aborted || isStaleRequestGeneration(started, generationRef.current)) return null;
+        const outcome = classifySessionFetchFailure(e);
+        if (outcome === 'ignore') return null;
+        if (outcome === 'clear_auth') {
+          dropAuthenticatedWorkspace();
+          setState({ status: 'unauthenticated' });
           try {
             await supabase.auth.signOut();
           } catch {
             // best-effort local clear
           }
+          return null;
         }
+        setState({ status: 'session_error' });
         return null;
-      } finally {
-        isFetchingMe.current = false;
       }
     })();
-    if (!signal) inFlightMe.current = run;
+    if (!signal) inFlightMe.current = { generation: started, promise: run };
     const result = await run;
-    if (!signal && inFlightMe.current === run) inFlightMe.current = null;
+    if (!signal && inFlightMe.current?.promise === run) inFlightMe.current = null;
     return result;
-  }, []);
-
-  const selectActiveOrg = useCallback(async (organizationId: string) => {
-    const me = await apiJson<MeData>(AUTH.selectActiveOrgCommand, {
-      method: 'POST',
-      body: JSON.stringify({ organization_id: organizationId }),
-    });
-    setState({ status: 'authenticated', me });
-    setBackendActiveOrganizationId(me.activeOrganizationId);
-    return me;
-  }, []);
+  }, [applyAuthenticated, dropAuthenticatedWorkspace]);
 
   const setActiveOrg = useCallback(async (organizationId: string) => {
     await selectActiveOrg(organizationId);
   }, [selectActiveOrg]);
 
   const setUiLanguage = useCallback(async (languageCode: UiLanguageCode) => {
-    const me = await apiJson<MeData>(AUTH.setUiLanguageCommand, {
-      method: 'POST',
-      body: JSON.stringify({ language_code: languageCode }),
-    });
-    setState({ status: 'authenticated', me });
-    setBackendActiveOrganizationId(me.activeOrganizationId);
-    return me;
-  }, []);
+    const started = generationRef.current;
+    try {
+      const me = await apiJson<MeData>(AUTH.setUiLanguageCommand, {
+        method: 'POST',
+        body: JSON.stringify({ language_code: languageCode }),
+      });
+      if (isStaleRequestGeneration(started, generationRef.current)) return null;
+      return applyAuthenticated(me, authUserIdRef.current);
+    } catch (error) {
+      if (isStaleWorkspaceError(error)) return null;
+      throw error;
+    }
+  }, [applyAuthenticated]);
 
   const signOut = useCallback(async () => {
     try {
       await apiJson(AUTH.logout, { method: 'POST' });
     } finally {
+      authUserIdRef.current = null;
+      dropAuthenticatedWorkspace();
       await supabase.auth.signOut();
-      setBackendActiveOrganizationId(null);
       setState({ status: 'unauthenticated' });
     }
-  }, []);
+  }, [dropAuthenticatedWorkspace]);
 
   useEffect(() => {
     const ac = new AbortController();
     const load = async () => {
       const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        setBackendActiveOrganizationId(null);
+      const authUserId = data.session?.user.id ?? null;
+      authUserIdRef.current = authUserId;
+      if (!authUserId) {
+        dropAuthenticatedWorkspace();
         setState({ status: 'unauthenticated' });
         return;
       }
@@ -180,28 +306,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     load();
     return () => ac.abort();
-  }, [refetchMe]);
+  }, [dropAuthenticatedWorkspace, refetchMe]);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
-      if (event === 'SIGNED_OUT') {
-        setBackendActiveOrganizationId(null);
-        setState({ status: 'unauthenticated' });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const nextAuthUserId = session?.user.id ?? null;
+      const transition = classifyAuthIdentityTransition({
+        event,
+        previousAuthUserId: authUserIdRef.current,
+        nextAuthUserId,
+      });
+      if (shouldDropAuthenticatedUi(transition)) {
+        authUserIdRef.current = nextAuthUserId;
+        dropAuthenticatedWorkspace();
+        if (transition === 'signed_out') {
+          setState({ status: 'unauthenticated' });
+          return;
+        }
+        setState({ status: 'loading' });
+      } else {
+        authUserIdRef.current = nextAuthUserId;
       }
-      if (event === 'TOKEN_REFRESHED') {
-        // Token refresh should not force a /auth/session refetch.
-        // Session aggregate is backend-truth but mostly stable (org list, permissions, enabled modules).
-        // Avoids unrelated network traffic during normal app usage (e.g. DocFlow client switching).
-        // If backend-truth must be refreshed, do it explicitly via `refetchMe()` in relevant flows.
+      // TOKEN_REFRESHED for the same user keeps UI; identity mismatch drops and refetches.
+      if (shouldRefetchSessionAfterAuthEvent(transition) && nextAuthUserId) {
+        await refetchMe();
       }
     });
     return () => subscription.unsubscribe();
-  }, [refetchMe]);
+  }, [dropAuthenticatedWorkspace, refetchMe]);
 
   const value = useMemo(
     () =>
       state.status === 'authenticated'
-        ? { ...state, setActiveOrg, selectActiveOrg, setUiLanguage, refetchMe, signOut }
+        ? { ...state, setActiveOrg, selectActiveOrg, setUiLanguage, refetchMe, signOut, identityEpoch }
         : {
             ...state,
             setActiveOrg: async () => {},
@@ -209,8 +346,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUiLanguage: async () => null,
             refetchMe,
             signOut,
+            identityEpoch,
           },
-    [state, setActiveOrg, selectActiveOrg, setUiLanguage, refetchMe, signOut]
+    [state, setActiveOrg, selectActiveOrg, setUiLanguage, refetchMe, signOut, identityEpoch]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

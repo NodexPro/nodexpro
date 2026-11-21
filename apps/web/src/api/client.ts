@@ -7,8 +7,13 @@ import {
 import { peekPublishedTranslationOverlay } from '../i18n/I18nProvider';
 import en from '../i18n/en.json';
 import he from '../i18n/he.json';
-import { getBackendActiveOrganizationId } from './org-context';
+import { getBackendActiveOrganizationId, getWorkspaceGeneration } from './org-context';
 import { shouldAttachOrganizationHeader } from '../lib/login-mfa-challenge.pure';
+import {
+  classifyUnauthorizedRetry,
+  classifyWorkspaceApplyDecision,
+  sessionAccessTokenNeedsRefresh,
+} from '../lib/session-auth-failure.pure';
 
 const API_URL = resolvePublicApiBaseUrl(import.meta.env.VITE_API_URL, import.meta.env.PROD);
 
@@ -45,9 +50,25 @@ async function getToken(): Promise<string | null> {
   try {
     const { supabase } = await import('../lib/supabase');
     const { data } = await supabase.auth.getSession();
-    return data.session?.access_token ?? null;
+    const session = data.session;
+    if (!session?.access_token) return null;
+    if (sessionAccessTokenNeedsRefresh(session.expires_at ?? null, Date.now())) {
+      const refreshed = await supabase.auth.refreshSession();
+      if (refreshed.data.session?.access_token) return refreshed.data.session.access_token;
+    }
+    return session.access_token;
   } catch {
     return null;
+  }
+}
+
+async function refreshAccessToken(): Promise<'session' | 'none' | 'transient'> {
+  try {
+    const { supabase } = await import('../lib/supabase');
+    const { data } = await supabase.auth.refreshSession();
+    return data.session?.access_token ? 'session' : 'none';
+  } catch {
+    return 'transient';
   }
 }
 
@@ -59,8 +80,9 @@ export async function apiFetch(path: string, options: RequestInit = {}): Promise
     ...(options.headers as Record<string, string>),
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  // Identity bootstrap (/auth/session) must not send a leftover tenant header.
-  // Platform-owner and DocFlow portal stay outside office org context.
+  // /auth/session and /auth/me send a membership-checked header so this tab's
+  // aggregate matches the selected office. MFA verify / logout / owner / portal
+  // stay outside office org context.
   if (orgId && shouldAttachOrganizationHeader(path)) {
     headers['X-Organization-Id'] = orgId;
   }
@@ -102,35 +124,83 @@ export async function apiDocflowPortalJson<T>(
   return res.json();
 }
 
+function throwIfWorkspaceChanged(startedGeneration: number): void {
+  if (classifyWorkspaceApplyDecision({
+    startedGeneration,
+    currentGeneration: getWorkspaceGeneration(),
+  }) === 'apply') return;
+  const err = new Error('Workspace changed');
+  err.name = 'StaleWorkspaceError';
+  throw err;
+}
+
+function apiErrorFromBody(res: Response, body: Record<string, unknown>): ApiError {
+  const code = typeof body.code === 'string' ? body.code : undefined;
+  const message = typeof body.message === 'string' ? body.message : undefined;
+  const { code: _c, message: _m, ...rest } = body;
+  void _c;
+  void _m;
+  const details = Object.keys(rest).length ? rest : undefined;
+  const encryptionFallbackHe =
+    'לא ניתן לשמור או להציג פרטי תשלום רגישים: הגדרות האבטחה של השרת אינן מלאות. פנה למנהל המערכת.';
+  return new ApiError(
+    message ||
+      (code === 'ENCRYPTION_NOT_CONFIGURED' ? encryptionFallbackHe : undefined) ||
+      res.statusText,
+    code,
+    res.status,
+    details,
+  );
+}
+
 export async function apiJson<T>(path: string, options?: RequestInit): Promise<T> {
-  let res: Response;
-  try {
-    res = await apiFetch(path, options);
-  } catch (e) {
-    // AbortController cleanup (e.g. React StrictMode double mount)
-    if (e instanceof Error && e.name === 'AbortError') throw e;
-    throw e;
-  }
-  if (!res.ok) {
+  const startedGeneration = getWorkspaceGeneration();
+  let alreadyRetried = false;
+  while (true) {
+    let res: Response;
+    try {
+      res = await apiFetch(path, options);
+    } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') throw e;
+      throw e;
+    }
+    throwIfWorkspaceChanged(startedGeneration);
+    if (res.ok) {
+      const payload = (await res.json()) as T;
+      throwIfWorkspaceChanged(startedGeneration);
+      return payload;
+    }
     const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     const code = typeof body.code === 'string' ? body.code : undefined;
-    const message = typeof body.message === 'string' ? body.message : undefined;
-    const { code: _c, message: _m, ...rest } = body;
-    void _c;
-    void _m;
-    const details = Object.keys(rest).length ? rest : undefined;
-    const encryptionFallbackHe =
-      'לא ניתן לשמור או להציג פרטי תשלום רגישים: הגדרות האבטחה של השרת אינן מלאות. פנה למנהל המערכת.';
-    throw new ApiError(
-      message ||
-        (code === 'ENCRYPTION_NOT_CONFIGURED' ? encryptionFallbackHe : undefined) ||
-        res.statusText,
+    const refreshOutcome = !alreadyRetried && res.status === 401
+      ? await refreshAccessToken()
+      : 'none';
+    const decision = classifyUnauthorizedRetry({
+      status: res.status,
       code,
-      res.status,
-      details
-    );
+      alreadyRetried,
+      refreshReturnedSession: refreshOutcome === 'session',
+      refreshFailedTransient: refreshOutcome === 'transient',
+    });
+    if (decision === 'retry') {
+      alreadyRetried = true;
+      continue;
+    }
+    if (decision === 'transient_refresh') {
+      const err = new Error('Token refresh failed');
+      err.name = 'TokenRefreshError';
+      throw err;
+    }
+    if (decision === 'clear_auth') {
+      try {
+        const { supabase } = await import('../lib/supabase');
+        await supabase.auth.signOut();
+      } catch {
+        // confirmed unauth; local drop is best-effort
+      }
+    }
+    throw apiErrorFromBody(res, body);
   }
-  return res.json();
 }
 
 /** Public POST JSON — no Authorization / org headers (platform-owner SMS recovery, etc.). */

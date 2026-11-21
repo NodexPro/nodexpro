@@ -43,7 +43,6 @@ export function SelectOrganization() {
           </li>
         ))}
       </ul>
-      <p><a href="/onboarding">Create new organization</a></p>
     </div>
   );
 }

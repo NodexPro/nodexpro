@@ -10,7 +10,12 @@ import { maskAttemptedIdentifier } from '../../shared/failed-login-policy.pure.j
 
 const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey);
 
-export async function register(params: { email: string; password: string; fullName?: string }) {
+export async function register(params: {
+  email: string;
+  password: string;
+  fullName?: string;
+  languageCode?: string;
+}) {
   const { data, error } = await supabaseAuth.auth.signUp({
     email: params.email,
     password: params.password,
@@ -23,6 +28,14 @@ export async function register(params: { email: string; password: string; fullNa
   if (data.user) {
     const appUserId = await ensureAppUser(data.user.id, data.user.email ?? '', data.user.user_metadata?.full_name);
     if (appUserId) {
+      const languageCode = String(params.languageCode ?? '').trim();
+      if (languageCode === 'en' || languageCode === 'he' || languageCode === 'ru') {
+        await supabaseAdmin
+          .from('users')
+          .update({ ui_language: languageCode, updated_at: new Date().toISOString() })
+          .eq('id', appUserId)
+          .is('ui_language', null);
+      }
       await writeAudit({ organizationId: null, actorUserId: appUserId, entityType: 'user', action: AUDIT_ACTIONS.USER_CREATED, payload: { email: params.email } });
     }
   }

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useI18n } from '../../i18n/I18nProvider';
 import { PublicLanguageSwitch } from '../landing/PublicLanguageSwitch';
+import { SessionLanguageSync } from './SessionLanguageSync';
 import logoSrc from '../../templates/template-1/assets/nodexpro-logo.png';
 import '../../styles/nx-glass-surface.css';
 import '../../styles/nx-office-deep-ocean.css';
@@ -24,6 +25,7 @@ export function PublicAuthShell({
       dir={dir}
       lang={lang}
     >
+      <SessionLanguageSync />
       <div className="nx-glass-auth__lang">
         <PublicLanguageSwitch compact />
       </div>

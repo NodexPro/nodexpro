@@ -220,6 +220,8 @@
   },
   "common": {
     "loading": "טוען…",
+    "retry": "ניסיון נוסף",
+    "sessionError": "לא ניתן לטעון את סביבת העבודה. בדקו את החיבור ונסו שוב.",
     "save": "שמור",
     "cancel": "בטל",
     "close": "סגירה",
@@ -703,7 +705,20 @@
     "savingPassword": "שומרים…",
     "passwordMin": "הסיסמה חייבת להכיל לפחות 6 תווים.",
     "passwordsMismatch": "הסיסמאות אינן תואמות.",
-    "updatePasswordFailed": "לא ניתן לעדכן את הסיסמה"
+    "updatePasswordFailed": "לא ניתן לעדכן את הסיסמה",
+    "onboardingTitle": "יצירת ארגון",
+    "organizationName": "שם הארגון",
+    "country": "מדינה",
+    "timezone": "אזור זמן",
+    "selectCountry": "בחירת מדינה",
+    "selectTimezone": "בחירת אזור זמן",
+    "createOrganization": "יצירת ארגון",
+    "creatingOrganization": "יוצרים ארגון…",
+    "organizationNameRequired": "יש להזין שם ארגון",
+    "countryRequired": "יש לבחור מדינה",
+    "timezoneRequired": "יש לבחור אזור זמן",
+    "createOrganizationFailed": "לא ניתן ליצור את הארגון",
+    "organizationCreatedSessionFailed": "הארגון נוצר, אך סביבת העבודה אינה מסונכרנת. רעננו או עברו ללוח הבקרה."
   },
   "landing": {
     "brandHome": "דף הבית של NodexPro",

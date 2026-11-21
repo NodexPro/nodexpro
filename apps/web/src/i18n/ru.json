@@ -65,7 +65,20 @@
     "savingPassword": "Сохранение…",
     "passwordMin": "Пароль должен содержать не менее 6 символов.",
     "passwordsMismatch": "Пароли не совпадают.",
-    "updatePasswordFailed": "Не удалось обновить пароль"
+    "updatePasswordFailed": "Не удалось обновить пароль",
+    "onboardingTitle": "Создание организации",
+    "organizationName": "Название организации",
+    "country": "Страна",
+    "timezone": "Часовой пояс",
+    "selectCountry": "Выберите страну",
+    "selectTimezone": "Выберите часовой пояс",
+    "createOrganization": "Создать организацию",
+    "creatingOrganization": "Создаём организацию…",
+    "organizationNameRequired": "Укажите название организации",
+    "countryRequired": "Выберите страну",
+    "timezoneRequired": "Выберите часовой пояс",
+    "createOrganizationFailed": "Не удалось создать организацию",
+    "organizationCreatedSessionFailed": "Организация создана, но рабочая среда не синхронизирована. Обновите страницу или откройте панель."
   },
   "clientOperations": {
     "retry": "Повторить",

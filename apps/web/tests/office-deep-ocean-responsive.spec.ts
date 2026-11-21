@@ -18,6 +18,7 @@ const dashboardSrc = read('../src/pages/Dashboard.tsx');
 const usersRolesSrc = read('../src/pages/UsersRoles.tsx');
 const usersRolesCss = read('../src/components/users-roles/UsersRoles.css');
 const registerSrc = read('../src/pages/Register.tsx');
+const publicAuthShellSrc = read('../src/components/auth/PublicAuthShell.tsx');
 const billingSrc = read('../src/pages/Billing.tsx');
 const settingsSrc = read('../src/pages/Settings.tsx');
 const clientsSrc = read('../src/pages/Clients.tsx');
@@ -47,7 +48,8 @@ test('office pages opt into Deep Ocean V3; Modules commercial cards do not', () 
   assert.match(clientsSrc, /nx-office-ocean/);
   assert.match(documentsSrc, /nx-office-ocean/);
   assert.match(usersRolesSrc, /nx-ur-page nx-office-ocean/);
-  assert.match(registerSrc, /nx-office-ocean nx-register-ocean/);
+  assert.match(publicAuthShellSrc, /nx-office-ocean nx-register-ocean/);
+  assert.match(registerSrc, /PublicAuthShell/);
   assert.doesNotMatch(modulesSrc, /nx-office-ocean/);
   assert.match(modulesSrc, /nx-modules--deep-ocean/);
   assert.doesNotMatch(dashboardSrc, /nx-office-ocean/);
@@ -78,8 +80,8 @@ test('Register keeps the existing auth protocol and gains Deep Ocean V3 presenta
   assert.match(registerSrc, /AUTH\.register/);
   assert.match(registerSrc, /signInWithPassword/);
   assert.match(registerSrc, /resolvePostRegisterDestination/);
-  assert.match(registerSrc, /dir=\{dir\}/);
-  assert.match(registerSrc, /lang=\{lang\}/);
+  assert.match(publicAuthShellSrc, /dir=\{dir\}/);
+  assert.match(publicAuthShellSrc, /lang=\{lang\}/);
   assert.match(registerSrc, /inputMode="email"/);
   assert.match(registerSrc, /placeholder=\{t\('auth\.email'\)\}/);
   assert.match(registerSrc, /nx-glass-btn--purple/);

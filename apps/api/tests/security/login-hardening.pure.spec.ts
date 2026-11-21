@@ -123,7 +123,9 @@ test('existing and nonexistent emails stay private and recovery stays available'
   assert.equal(routes.includes('USER_NOT_ACTIVE'), false);
   assert.equal(routes.includes('Слишком много'), false);
   const forgot = read('../../../web/src/pages/ForgotPassword.tsx');
-  assert.match(forgot, /If an account exists for that address/);
+  const en = JSON.parse(read('../../../web/src/i18n/en.json')) as { auth: Record<string, string> };
+  assert.match(forgot, /t\('auth\.checkEmailBody'\)/);
+  assert.match(en.auth.checkEmailBody, /If an account exists for that address/);
   assert.match(forgot, /requestPasswordReset/);
   assert.equal(forgot.includes('resetPasswordForEmail'), false);
 });

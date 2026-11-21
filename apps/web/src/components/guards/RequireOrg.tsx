@@ -10,7 +10,7 @@ export function RequireOrg({ children }: { children: React.ReactNode }) {
   if (auth.status !== 'authenticated') return null;
   if ((auth.me.session_state ?? 'ready') !== 'ready') {
     const inviteReturn = readStoredInviteReturnPath(typeof sessionStorage !== 'undefined' ? sessionStorage : null);
-    if (inviteReturn && auth.me.session_state === 'needs_onboarding') {
+    if (inviteReturn && (auth.me.session_state ?? 'ready') === 'needs_onboarding') {
       return <Navigate to={inviteReturn} replace />;
     }
     const redirectTo = (auth.me.redirect_to ?? '/select-org').trim() || '/select-org';

@@ -1,14 +1,22 @@
 /**
- * Last active organization id returned from GET /auth/session (Core aggregate).
- * apiFetch reads this so X-Organization-Id matches backend truth — not sessionStorage.
+ * Working organization id for this tab.
+ * JWT remains origin-wide via Supabase Auth. Tenant access is still membership-checked
+ * on the backend. sessionStorage persistence lives in tab-workspace.pure.ts.
  */
 let backendActiveOrganizationId: string | null = null;
+let workspaceGeneration = 0;
 
 export function setBackendActiveOrganizationId(id: string | null | undefined): void {
-  if (typeof id === 'string' && id.trim()) backendActiveOrganizationId = id.trim();
-  else backendActiveOrganizationId = null;
+  const next = typeof id === 'string' && id.trim() ? id.trim() : null;
+  if (next === backendActiveOrganizationId) return;
+  backendActiveOrganizationId = next;
+  workspaceGeneration += 1;
 }
 
 export function getBackendActiveOrganizationId(): string | null {
   return backendActiveOrganizationId;
+}
+
+export function getWorkspaceGeneration(): number {
+  return workspaceGeneration;
 }

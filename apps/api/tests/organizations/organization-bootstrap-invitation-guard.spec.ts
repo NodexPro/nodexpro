@@ -1,5 +1,6 @@
 /**
- * Organization bootstrap must not turn a pending invitation into a new Owner office.
+ * Organization bootstrap must not turn a pending invitation into a new Owner office
+ * and must not duplicate an existing active membership through primary onboarding.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,7 +8,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  ORGANIZATION_ALREADY_EXISTS,
   PENDING_ORGANIZATION_INVITATION,
+  organizationBootstrapRefusal,
   shouldRefuseOrganizationBootstrap,
 } from '../../src/domains/organizations/organization-bootstrap-guard.pure.js';
 
@@ -20,9 +23,21 @@ test('ordinary self-signup with no pending invitation may create an organization
     false,
   );
   assert.equal(
-    shouldRefuseOrganizationBootstrap({ hasActiveMembership: true, hasPendingUnexpiredInvitation: true }),
-    false,
+    organizationBootstrapRefusal({ hasActiveMembership: false, hasPendingUnexpiredInvitation: false }),
+    null,
   );
+});
+
+test('existing active membership cannot use primary onboarding to create another office', () => {
+  assert.equal(
+    organizationBootstrapRefusal({ hasActiveMembership: true, hasPendingUnexpiredInvitation: false }),
+    'already_member',
+  );
+  assert.equal(
+    organizationBootstrapRefusal({ hasActiveMembership: true, hasPendingUnexpiredInvitation: true }),
+    'already_member',
+  );
+  assert.equal(ORGANIZATION_ALREADY_EXISTS, 'ORGANIZATION_ALREADY_EXISTS');
 });
 
 test('new user with a valid pending invitation cannot bootstrap an Owner organization', () => {
@@ -30,16 +45,21 @@ test('new user with a valid pending invitation cannot bootstrap an Owner organiz
     shouldRefuseOrganizationBootstrap({ hasActiveMembership: false, hasPendingUnexpiredInvitation: true }),
     true,
   );
+  assert.equal(
+    organizationBootstrapRefusal({ hasActiveMembership: false, hasPendingUnexpiredInvitation: true }),
+    'pending_invitation',
+  );
   assert.equal(PENDING_ORGANIZATION_INVITATION, 'PENDING_ORGANIZATION_INVITATION');
 });
 
-test('createOrganization refuses pending invite before insert and still creates Owner otherwise', () => {
+test('createOrganization refuses existing membership and pending invite before insert', () => {
   const service = read('../../src/domains/organizations/organizations.service.ts');
-  const guardAt = service.indexOf('shouldRefuseOrganizationBootstrap');
+  const guardAt = service.indexOf('organizationBootstrapRefusal');
   const insertAt = service.indexOf(".from('organizations')");
   assert.ok(guardAt > 0);
   assert.ok(insertAt > guardAt);
   assert.match(service, /PENDING_ORGANIZATION_INVITATION/);
+  assert.match(service, /ORGANIZATION_ALREADY_EXISTS/);
   assert.match(service, /eq\('status', 'pending'\)/);
   assert.match(service, /\.gt\('expires_at'/);
   assert.match(service, /eq\('status', 'active'\)/);

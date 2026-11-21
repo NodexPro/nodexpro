@@ -23,6 +23,7 @@ import {
 } from '../lib/invite-return-path.pure';
 import { loginMfaFormVisible } from '../lib/login-mfa-challenge.pure';
 import { setBackendActiveOrganizationId } from '../api/org-context';
+import { clearTabWorkspace } from '../lib/tab-workspace.pure';
 
 export function Login() {
   const { t, lang } = useI18n();
@@ -116,6 +117,7 @@ export function Login() {
     setLoading(true);
     try {
       setBackendActiveOrganizationId(null);
+      clearTabWorkspace(typeof sessionStorage === 'undefined' ? null : sessionStorage);
       if (challengeRequired) {
         const verified = await apiJson<{ access_token?: string; refresh_token?: string }>(AUTH.mfaCommand('verify_mfa'), {
           method: 'POST',

@@ -1,9 +1,26 @@
 import { useI18n } from '../../i18n/I18nProvider';
+import { useAuth } from '../../contexts/AuthContext';
 import { EnglishLangFlag, HebrewLangFlag } from '../public/PublicLanguageFlags';
 import '../../styles/nx-public-shell.css';
 
 export function PublicLanguageSwitch({ compact = false }: { compact?: boolean }) {
   const { lang, setLang, t } = useI18n();
+  const auth = useAuth();
+
+  const select = (code: 'en' | 'he') => {
+    if (code === lang) return;
+    if (auth.status !== 'authenticated') {
+      setLang(code);
+      return;
+    }
+    void auth.setUiLanguage(code).then((refreshed) => {
+      const next = refreshed?.sidebar_account_block?.language_selector?.current_value;
+      if (next === 'en' || next === 'he' || next === 'ru') setLang(next);
+      else setLang(code);
+    }).catch(() => {
+      setLang(code);
+    });
+  };
 
   return (
     <div
@@ -18,7 +35,7 @@ export function PublicLanguageSwitch({ compact = false }: { compact?: boolean })
         aria-pressed={lang === 'en'}
         aria-label={t('landing.lang.en')}
         title={t('landing.lang.en')}
-        onClick={() => setLang('en')}
+        onClick={() => select('en')}
       >
         <EnglishLangFlag />
         <span className="nx-public-sr-only">{t('landing.lang.en')}</span>
@@ -29,7 +46,7 @@ export function PublicLanguageSwitch({ compact = false }: { compact?: boolean })
         aria-pressed={lang === 'he'}
         aria-label={t('landing.lang.he')}
         title={t('landing.lang.he')}
-        onClick={() => setLang('he')}
+        onClick={() => select('he')}
       >
         <HebrewLangFlag />
         <span className="nx-public-sr-only">{t('landing.lang.he')}</span>

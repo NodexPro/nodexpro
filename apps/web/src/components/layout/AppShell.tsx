@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../i18n/I18nProvider';
@@ -9,21 +9,7 @@ import { isClientOperationsReminderToastsEnabled } from '../../lib/client-operat
 import { RequireWorkerRoute } from '../guards/RequireWorkerRoute';
 import { AccountSecurityPanel } from '../../security/AccountSecurityPanel';
 import { sidebarNavLabel } from '../../lib/sidebar-nav-label.pure';
-
-function SessionLanguageSync() {
-  const auth = useAuth();
-  const { lang, setLang } = useI18n();
-
-  useEffect(() => {
-    if (auth.status !== 'authenticated') return;
-    const next = auth.me.sidebar_account_block?.language_selector?.current_value;
-    if ((next === 'en' || next === 'he' || next === 'ru') && next !== lang) {
-      setLang(next);
-    }
-  }, [auth, lang, setLang]);
-
-  return null;
-}
+import { SessionLanguageSync } from '../auth/SessionLanguageSync';
 
 export function AppShell() {
   const auth = useAuth();
@@ -75,8 +61,10 @@ export function AppShell() {
     permissions: me.permissions,
   });
 
+  const workspaceKey = `${me.user.id}:${me.activeOrganizationId ?? ''}:${auth.identityEpoch}`;
+
   return (
-    <>
+    <Fragment key={workspaceKey}>
       <SessionLanguageSync />
       <AccountSecurityPanel mode="prompt" />
       <TemplateLayout
@@ -112,7 +100,7 @@ export function AppShell() {
       </TemplateLayout>
       <ReminderToasts enabled={reminderEnabled} />
       {docflowWidgetAllowed ? <DocflowFloatingWidget /> : null}
-    </>
+    </Fragment>
   );
 }
 

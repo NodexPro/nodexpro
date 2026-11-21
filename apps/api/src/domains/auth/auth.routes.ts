@@ -360,9 +360,14 @@ router.post(
   }),
   async (req, res, next) => {
   try {
-    const { email, password, fullName } = req.body ?? {};
+    const { email, password, fullName, language_code } = req.body ?? {};
     if (!email || !password) return res.status(400).json({ code: 'BAD_REQUEST', message: 'email and password required' });
-    const result = await authService.register({ email, password, fullName });
+    const result = await authService.register({
+      email,
+      password,
+      fullName,
+      languageCode: typeof language_code === 'string' ? language_code : undefined,
+    });
     return res.status(201).json(result);
   } catch (e) {
     next(e);

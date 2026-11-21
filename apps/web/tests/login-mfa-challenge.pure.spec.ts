@@ -13,8 +13,9 @@ test('ordinary new user without MFA does not see the authenticator form', () => 
   assert.equal(loginMfaFormVisible({ loginChallengeRequired: false, sessionState: 'ready' }), false);
   assert.equal(loginMfaFormVisible({ loginChallengeRequired: false, sessionState: 'needs_onboarding' }), false);
   assert.equal(loginMfaFormVisible({ sessionState: null }), false);
-  assert.equal(shouldAttachOrganizationHeader('/auth/session'), false);
-  assert.equal(shouldAttachOrganizationHeader('/auth/me'), false);
+  assert.equal(shouldAttachOrganizationHeader('/auth/session'), true);
+  assert.equal(shouldAttachOrganizationHeader('/auth/me'), true);
+  assert.equal(shouldAttachOrganizationHeader('/auth/logout'), false);
 });
 
 test('enabled MFA shows the code form only after backend challenge truth', () => {

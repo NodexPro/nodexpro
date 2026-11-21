@@ -16,6 +16,16 @@ export function RequireAuth({ children }: { children: ReactNode }) {
       </div>
     );
   }
+  if (auth.status === 'session_error') {
+    return (
+      <div className="nx-session-boot" role="alert">
+        <p>{t('common.sessionError')}</p>
+        <button type="button" className="nx-btn nx-btn-taxes-compact" onClick={() => void auth.refetchMe()}>
+          {t('common.retry')}
+        </button>
+      </div>
+    );
+  }
   if (auth.status === 'unauthenticated') return <Navigate to="/login" state={{ from: location }} replace />;
   return <>{children}</>;
 }

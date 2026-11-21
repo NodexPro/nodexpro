@@ -16,8 +16,11 @@ export function shouldAttachOrganizationHeader(path: string): boolean {
   if (!value) return false;
   if (value.startsWith('/owner/')) return false;
   if (value.startsWith('/docflow/portal')) return false;
+  // /auth/session and /auth/me accept a membership-checked header so the
+  // returned aggregate matches this tab. Stale headers for a non-member are
+  // ignored on the backend (resolve_stored), not 403.
   return !(
-    /\/auth\/(me|session|logout)$/.test(value)
+    /\/auth\/logout$/.test(value)
     || /\/auth\/aggregates\/mfa$/.test(value)
     || /\/auth\/commands\/verify_mfa$/.test(value)
     || /\/auth\/commands\/verify_mfa_recovery$/.test(value)

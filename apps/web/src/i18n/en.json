@@ -220,6 +220,8 @@
   },
   "common": {
     "loading": "Loading…",
+    "retry": "Try again",
+    "sessionError": "Could not load your workspace. Check your connection and try again.",
     "save": "Save",
     "cancel": "Cancel",
     "close": "Close",
@@ -703,7 +705,20 @@
     "savingPassword": "Saving…",
     "passwordMin": "Password must be at least 6 characters.",
     "passwordsMismatch": "Passwords do not match.",
-    "updatePasswordFailed": "Could not update password"
+    "updatePasswordFailed": "Could not update password",
+    "onboardingTitle": "Create organization",
+    "organizationName": "Organization name",
+    "country": "Country",
+    "timezone": "Timezone",
+    "selectCountry": "Select country",
+    "selectTimezone": "Select timezone",
+    "createOrganization": "Create organization",
+    "creatingOrganization": "Creating organization…",
+    "organizationNameRequired": "Organization name is required",
+    "countryRequired": "Country is required",
+    "timezoneRequired": "Timezone is required",
+    "createOrganizationFailed": "Could not create the organization",
+    "organizationCreatedSessionFailed": "Organization created but the workspace is out of sync. Refresh or open Dashboard."
   },
   "landing": {
     "brandHome": "NodexPro home",

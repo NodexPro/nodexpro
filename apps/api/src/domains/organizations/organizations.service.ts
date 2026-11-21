@@ -1,8 +1,9 @@
 import { supabaseAdmin } from '../../db/client.js';
 import { AppError, conflict, forbidden } from '../../shared/errors.js';
 import {
+  ORGANIZATION_ALREADY_EXISTS,
   PENDING_ORGANIZATION_INVITATION,
-  shouldRefuseOrganizationBootstrap,
+  organizationBootstrapRefusal,
 } from './organization-bootstrap-guard.pure.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import {
@@ -61,7 +62,14 @@ export async function createOrganization(ctx: RequestContext, params: { name: st
     hasPendingUnexpiredInvitation = (pendingRows?.length ?? 0) > 0;
   }
 
-  if (shouldRefuseOrganizationBootstrap({ hasActiveMembership, hasPendingUnexpiredInvitation })) {
+  const bootstrapRefusal = organizationBootstrapRefusal({ hasActiveMembership, hasPendingUnexpiredInvitation });
+  if (bootstrapRefusal === 'already_member') {
+    throw conflict(
+      'An active organization membership already exists for this account',
+      ORGANIZATION_ALREADY_EXISTS,
+    );
+  }
+  if (bootstrapRefusal === 'pending_invitation') {
     throw conflict(
       'A pending organization invitation must be accepted before creating an organization',
       PENDING_ORGANIZATION_INVITATION,

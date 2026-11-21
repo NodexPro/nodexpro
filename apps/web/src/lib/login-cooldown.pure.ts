@@ -4,7 +4,11 @@ import ru from '../i18n/ru.json';
 
 export type LoginUiLang = 'en' | 'he' | 'ru';
 
-const catalogs: Record<LoginUiLang, { auth: Record<string, string> }> = {
+type AuthStringKey = {
+  [K in keyof typeof en.auth]: (typeof en.auth)[K] extends string ? K : never;
+}[keyof typeof en.auth];
+
+const catalogs: Record<LoginUiLang, { auth: typeof en.auth }> = {
   en: { auth: en.auth },
   he: { auth: he.auth },
   ru: { auth: ru.auth },
@@ -19,7 +23,7 @@ export function formatLoginSecurityTemplate(template: string, seconds: number): 
   return template.replaceAll('{seconds}', String(Math.max(1, seconds)));
 }
 
-export function loginSecurityText(lang: LoginUiLang, key: keyof typeof en.auth, seconds?: number): string {
+export function loginSecurityText(lang: LoginUiLang, key: AuthStringKey, seconds?: number): string {
   const template = catalogs[lang].auth[key] ?? catalogs.en.auth[key] ?? key;
   return seconds == null ? template : formatLoginSecurityTemplate(template, seconds);
 }

@@ -1,90 +1,164 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { apiJson } from '../api/client';
+import { apiJson, userFacingApiMessage } from '../api/client';
 import { ORGS } from '../api/endpoints';
+import { PublicAuthShell } from '../components/auth/PublicAuthShell';
 import { useAuth } from '../contexts/AuthContext';
+import { useI18n } from '../i18n/I18nProvider';
 import { readStoredInviteReturnPath } from '../lib/invite-return-path.pure';
+import { localizationValueAllowed } from '../lib/onboarding-form.pure';
+import {
+  destinationWhenOnboardingBlocked,
+  isPrimaryOnboardingState,
+} from '../lib/onboarding-session-route.pure';
 
 export function CreateOrganization() {
+  const auth = useAuth();
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  const inviteReturn = readStoredInviteReturnPath(typeof sessionStorage !== 'undefined' ? sessionStorage : null);
+  const localization = auth.status === 'authenticated' ? auth.me.localization : undefined;
+  const countryOptions = localization?.country.options ?? [];
+  const timezoneOptions = localization?.timezone.options ?? [];
   const [name, setName] = useState('');
-  const [countryCode, setCountryCode] = useState('US');
-  const [timezone, setTimezone] = useState('UTC');
+  const [countryCode, setCountryCode] = useState('');
+  const [timezone, setTimezone] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
-  const auth = useAuth();
-  const inviteReturn = readStoredInviteReturnPath(typeof sessionStorage !== 'undefined' ? sessionStorage : null);
+
+  const countryReady = countryOptions.length > 0;
+  const timezoneReady = timezoneOptions.length > 0;
+
+  const selectedCountry = useMemo(
+    () => (localizationValueAllowed(countryCode, countryOptions) ? countryCode : ''),
+    [countryCode, countryOptions],
+  );
+  const selectedTimezone = useMemo(
+    () => (localizationValueAllowed(timezone, timezoneOptions) ? timezone : ''),
+    [timezone, timezoneOptions],
+  );
+
+  if (auth.status !== 'authenticated') return null;
   if (inviteReturn) return <Navigate to={inviteReturn} replace />;
+  if (!isPrimaryOnboardingState(auth.me.session_state)) {
+    return (
+      <Navigate
+        to={destinationWhenOnboardingBlocked({
+          sessionState: auth.me.session_state,
+          redirectTo: auth.me.redirect_to,
+        })}
+        replace
+      />
+    );
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (loading) return;
-    if (!name.trim()) return;
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError(t('auth.organizationNameRequired'));
+      return;
+    }
+    if (!selectedCountry) {
+      setError(t('auth.countryRequired'));
+      return;
+    }
+    if (!selectedTimezone) {
+      setError(t('auth.timezoneRequired'));
+      return;
+    }
     setError('');
     setLoading(true);
     try {
       const res = await apiJson<{ id: string; name: string; activeOrganizationId: string; membershipCreated: boolean }>(ORGS, {
         method: 'POST',
-        body: JSON.stringify({ name: name.trim(), countryCode, timezone }),
+        body: JSON.stringify({ name: trimmedName, countryCode: selectedCountry, timezone: selectedTimezone }),
       });
-      // [DEBUG] create organization API response
-      console.debug('[CreateOrg] API response', { id: res.id, activeOrganizationId: res.activeOrganizationId, membershipCreated: res.membershipCreated });
-
       const me = await auth.refetchMe();
-      // [DEBUG] /me refetch result
-      console.debug('[CreateOrg] refetchMe result', {
-        meReturned: !!me,
-        activeOrganizationId: me?.activeOrganizationId,
-        orgIds: me?.organizations?.map((o) => o.id) ?? [],
-      });
-
       if (!me) {
-        setError('Organization created but could not load session. Please refresh or go to Dashboard.');
+        setError(t('auth.organizationCreatedSessionFailed'));
         setLoading(false);
         return;
       }
       if (me.activeOrganizationId !== res.id) {
-        setError('Organization created but context out of sync. Try opening Dashboard.');
+        setError(t('auth.organizationCreatedSessionFailed'));
         setLoading(false);
         return;
       }
-
-      // [DEBUG] navigation decision after success
-      console.debug('[CreateOrg] navigating to /dashboard');
-      navigate('/dashboard', { replace: true });
+      navigate(me.redirect_to || '/dashboard', { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create organization');
+      setError(userFacingApiMessage(err) || t('auth.createOrganizationFailed'));
       setLoading(false);
     }
   }
 
   return (
-    <div style={{ maxWidth: 480, margin: '80px auto', padding: 24 }}>
-      <h1>Create organization</h1>
-      {/* Do not reset form on submit: we only navigate on success; on failure we keep fields so user can retry. */}
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: 16 }}>
-          <label htmlFor="name">Organization name</label>
-          <input id="name" type="text" value={name} onChange={(e) => setName(e.target.value)} required style={{ display: 'block', width: '100%', padding: 8 }} />
+    <PublicAuthShell title={t('auth.onboardingTitle')} testId="nx-onboarding">
+      <form onSubmit={handleSubmit} aria-busy={loading} noValidate>
+        <div className="nx-glass-field">
+          <label className="nx-glass-label" htmlFor="organization-name">
+            {t('auth.organizationName')}
+          </label>
+          <input
+            id="organization-name"
+            className="nx-glass-input"
+            type="text"
+            autoComplete="organization"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
         </div>
-        <div style={{ marginBottom: 16 }}>
-          <label htmlFor="countryCode">Country</label>
-          <select id="countryCode" value={countryCode} onChange={(e) => setCountryCode(e.target.value)} style={{ display: 'block', width: '100%', padding: 8 }}>
-            <option value="US">United States</option>
-            <option value="IL">Israel</option>
-            <option value="GB">United Kingdom</option>
+        <div className="nx-glass-field">
+          <label className="nx-glass-label" htmlFor="organization-country">
+            {t('auth.country')}
+          </label>
+          <select
+            id="organization-country"
+            className="nx-glass-input"
+            value={selectedCountry}
+            onChange={(e) => setCountryCode(e.target.value)}
+            disabled={!countryReady || loading}
+            required
+          >
+            <option value="">{t('auth.selectCountry')}</option>
+            {countryOptions.map((option) => (
+              <option key={option.code} value={option.code}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </div>
-        <div style={{ marginBottom: 16 }}>
-          <label htmlFor="timezone">Timezone</label>
-          <input id="timezone" type="text" value={timezone} onChange={(e) => setTimezone(e.target.value)} style={{ display: 'block', width: '100%', padding: 8 }} />
+        <div className="nx-glass-field">
+          <label className="nx-glass-label" htmlFor="organization-timezone">
+            {t('auth.timezone')}
+          </label>
+          <select
+            id="organization-timezone"
+            className="nx-glass-input"
+            value={selectedTimezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            disabled={!timezoneReady || loading}
+            required
+          >
+            <option value="">{t('auth.selectTimezone')}</option>
+            {timezoneOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
-        {error && <p style={{ color: 'red', marginBottom: 16 }}>{error}</p>}
-        {loading && <p style={{ marginBottom: 16 }}>Creating organization...</p>}
-        <button type="submit" disabled={loading}>
-          {loading ? 'Creating...' : 'Create'}
+        {error ? (
+          <p className="nx-glass-alert nx-glass-alert--error" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <button className="nx-glass-btn nx-glass-btn--purple" type="submit" disabled={loading || !countryReady || !timezoneReady}>
+          {loading ? t('auth.creatingOrganization') : t('auth.createOrganization')}
         </button>
       </form>
-    </div>
+    </PublicAuthShell>
   );
 }

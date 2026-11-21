@@ -62,8 +62,9 @@ test('English Client Operations chrome is English and Hebrew chrome stays Hebrew
 test('Client Operations uses the existing I18nProvider and session language sync', () => {
   assert.match(provider, /document\.documentElement\.dir = lang === 'he' \? 'rtl' : 'ltr'/);
   assert.match(provider, /public\/i18n\//);
-  assert.match(appShell, /function SessionLanguageSync/);
-  assert.match(appShell, /language_selector\?\.current_value/);
+  assert.match(appShell, /SessionLanguageSync/);
+  const sessionLang = readFileSync(join(root, 'src/components/auth/SessionLanguageSync.tsx'), 'utf8');
+  assert.match(sessionLang, /language_selector\?\.current_value/);
   assert.match(header, /useI18n/);
   assert.match(panel, /useI18n/);
   assert.match(registry, /useI18n/);

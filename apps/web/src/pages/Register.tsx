@@ -19,7 +19,7 @@ export function Register() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const redirectParam = new URLSearchParams(location.search).get('redirect');
   captureInviteReturnPath(typeof sessionStorage !== 'undefined' ? sessionStorage : null, redirectParam);
 
@@ -30,10 +30,21 @@ export function Register() {
     try {
       await apiJson(AUTH.register, {
         method: 'POST',
-        body: JSON.stringify({ email, password, fullName: fullName || undefined }),
+        body: JSON.stringify({
+          email,
+          password,
+          fullName: fullName || undefined,
+          language_code: lang,
+        }),
       });
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (signInError) throw new Error(signInError.message);
+      if (lang === 'en' || lang === 'he' || lang === 'ru') {
+        await apiJson(AUTH.setUiLanguageCommand, {
+          method: 'POST',
+          body: JSON.stringify({ language_code: lang }),
+        }).catch(() => undefined);
+      }
       const inviteReturnPath = readStoredInviteReturnPath(
         typeof sessionStorage !== 'undefined' ? sessionStorage : null,
       );
