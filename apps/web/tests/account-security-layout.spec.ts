@@ -19,6 +19,8 @@ test('AppShell MFA prompt is a fixed overlay and does not reserve document-flow 
   assert.match(css, /\.nx-mfa-prompt-overlay \{[\s\S]*?inset:\s*0/);
   assert.doesNotMatch(css, /margin-top:\s*8vh/);
   assert.doesNotMatch(css, /margin-top:\s*-/);
+  assert.match(css, /\.nx-mfa-prompt-overlay[\s\S]*font-family:\s*Arial/);
+  assert.match(css, /\.nx-mfa-prompt-overlay \*[\s\S]*font-family:\s*Arial/);
 });
 
 test('MFA chrome uses I18nProvider keys instead of hardcoded HE/EN', () => {

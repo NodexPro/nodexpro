@@ -238,10 +238,56 @@ export function publishedLanguageOptions(
     }));
 }
 
-export function timezoneOptions(orgTimezone: string | null): Array<{ value: string; label: string }> {
+/** Map persisted UI language to an Intl locale. ISO / IANA codes stay unchanged. */
+export function intlLocaleFromUiLanguage(language: string | null | undefined): string {
+  const code = String(language ?? '').trim().toLowerCase();
+  if (code === 'he' || code.startsWith('he-')) return 'he';
+  if (code === 'ru' || code.startsWith('ru-')) return 'ru';
+  return 'en';
+}
+
+/** Display label for an ISO 3166-1 country code. Country Pack still owns which rows exist. */
+export function localizeCountryOptionLabel(
+  iso3166: string,
+  language: string | null | undefined,
+  fallbackName: string,
+): string {
+  const code = String(iso3166 ?? '').trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return fallbackName || code;
+  try {
+    const label = new Intl.DisplayNames([intlLocaleFromUiLanguage(language)], { type: 'region' }).of(code);
+    if (label && label.trim()) return label;
+  } catch {
+    // keep Country Pack fallback name
+  }
+  return fallbackName || code;
+}
+
+/** Display label for an IANA time zone. Value stays the IANA id. */
+export function localizeTimezoneLabel(timeZone: string, language: string | null | undefined): string {
+  const tz = String(timeZone ?? '').trim();
+  if (!tz) return tz;
+  const locale = intlLocaleFromUiLanguage(language);
+  try {
+    const parts = new Intl.DateTimeFormat(locale, { timeZone: tz, timeZoneName: 'long' }).formatToParts(new Date());
+    const name = parts.find((part) => part.type === 'timeZoneName')?.value;
+    if (name && name.trim()) return name === tz ? tz : `${name} (${tz})`;
+  } catch {
+    // invalid tz
+  }
+  return tz;
+}
+
+export function timezoneOptions(
+  orgTimezone: string | null,
+  language: string | null | undefined = 'en',
+): Array<{ value: string; label: string }> {
   const values = new Set<string>(DISPLAY_TIMEZONE_OPTIONS);
   if (orgTimezone && isIanaTimeZone(orgTimezone)) values.add(orgTimezone);
-  return [...values].map((value) => ({ value, label: value }));
+  return [...values].map((value) => ({
+    value,
+    label: localizeTimezoneLabel(value, language),
+  }));
 }
 
 export function validateLocalizationPreferences(input: {

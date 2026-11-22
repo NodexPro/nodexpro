@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useLayoutEffect, useMemo } from 'react';
 import en from './en.json';
 import he from './he.json';
 import ru from './ru.json';
@@ -80,7 +80,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [overlay, setOverlay] = useState<Record<string, string>>(() => publishedOverlayCache.get(readInitialUiLang()) ?? {});
   const [overlayEpoch, setOverlayEpoch] = useState(0);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (typeof document !== 'undefined') {
       document.documentElement.lang = lang;
       document.documentElement.dir = lang === 'he' ? 'rtl' : 'ltr';

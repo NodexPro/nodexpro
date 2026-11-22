@@ -6,7 +6,11 @@ import {
   selectUserFacingRegistryCountries,
 } from '../country-pack/country-registry-availability.pure.js';
 import { buildUserLocalizationAggregate } from '../platform-localization/platform-localization.service.js';
-import { resolvePersistedUiLanguage } from '../platform-localization/platform-localization.pure.js';
+import {
+  localizeCountryOptionLabel,
+  localizeTimezoneLabel,
+  resolvePersistedUiLanguage,
+} from '../platform-localization/platform-localization.pure.js';
 import type { AccountSecurityAggregate, LocalizationAggregate } from '../../types/api.js';
 
 function fallbackSlices(ctx: RequestContext): {
@@ -34,6 +38,7 @@ function fallbackSlices(ctx: RequestContext): {
       },
       language: {
         current: resolvePersistedUiLanguage(ctx.user.uiLanguage),
+        persisted: Boolean(ctx.user.uiLanguage),
         options: [
           { locale: 'en', name: 'English', direction: 'ltr' },
           { locale: 'he', name: 'עברית', direction: 'rtl' },
@@ -41,7 +46,13 @@ function fallbackSlices(ctx: RequestContext): {
       },
       timezone: {
         current: 'Asia/Jerusalem',
-        options: [{ value: 'Asia/Jerusalem', label: 'Asia/Jerusalem' }, { value: 'UTC', label: 'UTC' }],
+        options: [
+          {
+            value: 'Asia/Jerusalem',
+            label: localizeTimezoneLabel('Asia/Jerusalem', ctx.user.uiLanguage),
+          },
+          { value: 'UTC', label: localizeTimezoneLabel('UTC', ctx.user.uiLanguage) },
+        ],
         historical_note: 'Does not rewrite stored timestamps.',
       },
       date_format: {
@@ -104,12 +115,21 @@ export async function loadSessionPreferenceSlices(
       status: row.status,
     })),
   );
-  const countryOptions = visibleRows.map((row) => ({
-    code: row.code,
-    label: row.name,
-  }));
+  const uiLanguageRaw =
+    ctx.user.uiLanguage ?? (typeof userRow?.ui_language === 'string' ? userRow.ui_language : null);
+  const uiLanguage = resolvePersistedUiLanguage(uiLanguageRaw);
+  const intlLocale = uiLanguage === 'he' ? 'he' : 'en';
+  const countryOptions = visibleRows
+    .map((row) => ({
+      code: row.code,
+      label: localizeCountryOptionLabel(row.code, uiLanguage, row.name),
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, intlLocale, { sensitivity: 'base' }));
   if (orgCountryCode && !countryOptions.some((row) => row.code === orgCountryCode)) {
-    countryOptions.unshift({ code: orgCountryCode, label: orgCountryCode });
+    countryOptions.unshift({
+      code: orgCountryCode,
+      label: localizeCountryOptionLabel(orgCountryCode, uiLanguage, orgCountryCode),
+    });
   }
 
   const [account_security, localization] = await Promise.all([
@@ -118,9 +138,8 @@ export async function loadSessionPreferenceSlices(
       timezone: typeof userRow?.timezone === 'string' ? userRow.timezone : null,
       dateFormat: typeof userRow?.date_format === 'string' ? userRow.date_format : null,
       displayCurrencyCode: typeof userRow?.display_currency_code === 'string' ? userRow.display_currency_code : null,
-      uiLanguage: resolvePersistedUiLanguage(
-        ctx.user.uiLanguage ?? (typeof userRow?.ui_language === 'string' ? userRow.ui_language : null),
-      ),
+      uiLanguage,
+      uiLanguagePersisted: Boolean(uiLanguageRaw && String(uiLanguageRaw).trim()),
       orgTimezone: typeof orgRow?.timezone === 'string' ? orgRow.timezone : null,
       orgCountryCode,
       countryOptions,

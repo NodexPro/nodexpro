@@ -42,10 +42,13 @@ test('account register does not collect or require Teudat Zehut', () => {
   const registerPage = readFileSync(join(dir, '../../../web/src/pages/Register.tsx'), 'utf8');
   const authService = readFileSync(join(dir, '../../src/domains/auth/auth.service.ts'), 'utf8');
   const authRoutes = readFileSync(join(dir, '../../src/domains/auth/auth.routes.ts'), 'utf8');
-  assert.match(authService, /register\(params: \{ email: string; password: string; fullName\?: string \}\)/);
+  assert.match(authService, /export async function register\(params: \{/);
+  assert.match(authService, /languageCode\?: string/);
+  assert.doesNotMatch(authService, /legalIdentity|teudat|legal_identity/);
   assert.doesNotMatch(registerPage, /legalIdentity|teudat|tzPlaceholder|legal_identity/i);
   assert.doesNotMatch(authRoutes, /legalIdentity|teudat zehut/i);
-  assert.match(authRoutes, /const \{ email, password, fullName \} = req\.body/);
+  assert.match(authRoutes, /const \{ email, password, fullName, language_code \} = req\.body/);
+  assert.match(authRoutes, /admin\.signOut\(token, 'local'\)/);
 });
 
 test('organization create does not require Teudat Zehut; trial legal-identity does', () => {
@@ -61,7 +64,12 @@ test('organization create does not require Teudat Zehut; trial legal-identity do
   assert.match(trialRoutes, /normalizeAndHash/);
   assert.match(trialRoutes, /isTrialAlreadyUsed/);
   assert.match(trialRoutes, /TRIAL_DENIED/);
+  assert.match(trialRoutes, /LEGAL_IDENTITY_ALREADY_EXISTS/);
+  assert.match(trialRoutes, /LEGAL_IDENTITY_CHECKSUM_INVALID|e\.code/);
   assert.doesNotMatch(trialRoutes, /already registered|user exists|belongs to/i);
+  const legalService = readFileSync(join(dir, '../../src/domains/trial/legal-identity.service.ts'), 'utf8');
+  assert.match(legalService, /LEGAL_IDENTITY_CHECKSUM_INVALID/);
+  assert.match(legalService, /LEGAL_IDENTITY_DIGITS_INVALID/);
 });
 
 test('trial uniqueness is one active full-platform trial per hash, not a global person lock', () => {

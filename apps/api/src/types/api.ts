@@ -63,6 +63,7 @@ export interface LocalizationAggregate {
   };
   language: {
     current: string;
+    persisted: boolean;
     options: Array<{ locale: string; name: string; direction: 'ltr' | 'rtl' }>;
   };
   timezone: {

@@ -595,7 +595,10 @@
       "deactivateFailed": "הכיבוי נכשל",
       "selectPlanFailed": "בחירת המסלול נכשלה",
       "changePlanFailed": "שינוי המסלול נכשל",
-      "legalIdentityFailed": "הגדרת הזהות המשפטית נכשלה"
+      "legalIdentityFailed": "הגדרת הזהות המשפטית נכשלה",
+      "legalIdentityChecksumInvalid": "מספר תעודת הזהות אינו תקין – ספרת הביקורת שגויה.",
+      "legalIdentityAlreadyExists": "מספר תעודת הזהות כבר קיים במערכת.",
+      "legalIdentityDigitsInvalid": "יש להזין מספר תעודת זהות תקין בן 9 ספרות."
     }
   },
   "documents": {

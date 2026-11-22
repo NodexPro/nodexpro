@@ -15,6 +15,7 @@ import {
 } from '../lib/auth-identity-transition.pure';
 import { classifySessionFetchFailure } from '../lib/onboarding-session-route.pure';
 import { shouldApplyOfficeSwitchAggregate } from '../lib/org-switch-queue.pure';
+import { deviceSignOutOptions } from '../lib/device-session.pure';
 import { isStaleWorkspaceError } from '../lib/session-auth-failure.pure';
 import {
   clearTabWorkspace,
@@ -43,7 +44,11 @@ export interface MeData {
       pack_status: string | null;
       legal_jurisdiction_note: string;
     };
-    language: { current: string; options: Array<{ locale: string; name: string; direction?: 'ltr' | 'rtl' }> };
+    language: {
+      current: string;
+      persisted?: boolean;
+      options: Array<{ locale: string; name: string; direction?: 'ltr' | 'rtl' }>;
+    };
     timezone: { current: string; options: Array<{ value: string; label: string }>; historical_note: string };
     date_format: { current: string; options: Array<{ value: string; label: string }> };
     display_currency: {
@@ -107,7 +112,11 @@ function isMeEqual(a: MeData, b: MeData): boolean {
     a.mfa?.enrollment_state === b.mfa?.enrollment_state &&
     a.mfa?.challenge_required === b.mfa?.challenge_required &&
     sortedStringArrayKey(a.permissions) === sortedStringArrayKey(b.permissions) &&
-    sortedStringArrayKey(a.enabledModules) === sortedStringArrayKey(b.enabledModules)
+    sortedStringArrayKey(a.enabledModules) === sortedStringArrayKey(b.enabledModules) &&
+    a.localization?.language?.current === b.localization?.language?.current &&
+    a.localization?.language?.persisted === b.localization?.language?.persisted &&
+    a.sidebar_account_block?.language_selector?.current_value ===
+      b.sidebar_account_block?.language_selector?.current_value
   );
 }
 
@@ -127,9 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const bumpGeneration = useCallback(() => {
     generationRef.current = nextRequestGeneration(generationRef.current);
-    setIdentityEpoch(generationRef.current);
     inFlightMe.current = null;
-    lastWorkspaceRef.current = null;
   }, []);
 
   const applyAuthenticated = useCallback((me: MeData, authUserId: string | null) => {
@@ -165,6 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const dropAuthenticatedWorkspace = useCallback(() => {
     orgSwitchLatestRef.current = null;
+    lastWorkspaceRef.current = null;
     bumpGeneration();
     bumpWorkspaceGeneration();
     setBackendActiveOrganizationId(null);
@@ -274,7 +282,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           dropAuthenticatedWorkspace();
           setState({ status: 'unauthenticated' });
           try {
-            await supabase.auth.signOut();
+            await supabase.auth.signOut(deviceSignOutOptions());
           } catch {
             // best-effort local clear
           }
@@ -315,7 +323,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       authUserIdRef.current = null;
       dropAuthenticatedWorkspace();
-      await supabase.auth.signOut();
+      await supabase.auth.signOut(deviceSignOutOptions());
       setState({ status: 'unauthenticated' });
     }
   }, [dropAuthenticatedWorkspace]);

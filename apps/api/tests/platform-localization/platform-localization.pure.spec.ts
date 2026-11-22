@@ -5,12 +5,15 @@ import {
   defaultUiLanguageFromCountry,
   flattenMessageTree,
   isIso4217Code,
+  localizeCountryOptionLabel,
+  localizeTimezoneLabel,
   mergePublishedCatalog,
   moduleCompleteness,
   placeholdersMatch,
   publishedCurrencyOptions,
   publishedLanguageOptions,
   resolvePersistedUiLanguage,
+  timezoneOptions,
   translationCompleteness,
   translationEntryFilterStatus,
   uiLanguageDirection,
@@ -108,4 +111,20 @@ test('persisted explicit preference wins over country; unknown/null falls back t
   assert.equal(resolvePersistedUiLanguage('fr'), 'en');
   assert.equal(uiLanguageDirection('he'), 'rtl');
   assert.equal(uiLanguageDirection('en'), 'ltr');
+});
+
+test('onboarding country and timezone option labels follow UI language; ISO/IANA values stay', () => {
+  assert.equal(localizeCountryOptionLabel('IL', 'he', 'Israel'), 'ישראל');
+  assert.match(localizeCountryOptionLabel('US', 'he', 'United States'), /[\u0590-\u05FF]/);
+  assert.equal(localizeCountryOptionLabel('IL', 'en', 'Israel'), 'Israel');
+  assert.match(localizeCountryOptionLabel('US', 'en', 'United States'), /United States|US/);
+  const heZones = timezoneOptions(null, 'he');
+  const enZones = timezoneOptions(null, 'en');
+  const heJerusalem = heZones.find((row) => row.value === 'Asia/Jerusalem');
+  const enJerusalem = enZones.find((row) => row.value === 'Asia/Jerusalem');
+  assert.equal(heJerusalem?.value, 'Asia/Jerusalem');
+  assert.equal(enJerusalem?.value, 'Asia/Jerusalem');
+  assert.match(String(heJerusalem?.label), /[\u0590-\u05FF]/);
+  assert.doesNotMatch(String(enJerusalem?.label), /[\u0590-\u05FF]/);
+  assert.ok(localizeTimezoneLabel('UTC', 'en'));
 });

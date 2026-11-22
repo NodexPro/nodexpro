@@ -7,6 +7,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import * as trialService from './trial.service.js';
 import * as legalIdentityService from './legal-identity.service.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
+import { AppError } from '../../shared/errors.js';
 
 const router = Router();
 
@@ -87,9 +88,13 @@ router.post('/:id/legal-identity', authMiddleware, requireOrg, requireOfficeAdmi
         action: AUDIT_ACTIONS.TRIAL_DENIED_INVALID_IDENTITY,
         payload: { reason: e instanceof Error ? e.message : 'Invalid identity format' },
       });
+      const code =
+        e instanceof AppError && typeof e.code === 'string' && e.code.startsWith('LEGAL_IDENTITY_')
+          ? e.code
+          : 'BAD_REQUEST';
       return res.status(400).json({
-        code: 'BAD_REQUEST',
-        message: e instanceof Error ? e.message : 'Invalid legal identity format',
+        code,
+        message: code,
       });
     }
 
@@ -117,8 +122,8 @@ router.post('/:id/legal-identity', authMiddleware, requireOrg, requireOfficeAdmi
         payload: { reason: 'duplicate_legal_entity' },
       });
       return res.status(400).json({
-        code: 'TRIAL_DENIED',
-        message: 'A full-platform trial has already been used for this legal identity.',
+        code: 'LEGAL_IDENTITY_ALREADY_EXISTS',
+        message: 'LEGAL_IDENTITY_ALREADY_EXISTS',
       });
     }
 

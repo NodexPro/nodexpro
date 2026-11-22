@@ -595,7 +595,10 @@
       "deactivateFailed": "Deactivate failed",
       "selectPlanFailed": "Select plan failed",
       "changePlanFailed": "Change plan failed",
-      "legalIdentityFailed": "Failed to set legal identity"
+      "legalIdentityFailed": "Failed to set legal identity",
+      "legalIdentityChecksumInvalid": "The ID number is invalid – the check digit is incorrect.",
+      "legalIdentityAlreadyExists": "This ID number is already registered in the system.",
+      "legalIdentityDigitsInvalid": "Enter a valid 9-digit ID number."
     }
   },
   "documents": {

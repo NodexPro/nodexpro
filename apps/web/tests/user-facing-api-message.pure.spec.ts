@@ -98,6 +98,43 @@ test('common.errors keys exist in bundled EN and HE dictionaries', () => {
   }
 });
 
+test('Israeli ID checksum and duplicate codes map to locale copy, not English backend text', () => {
+  assert.equal(
+    userFacingApiMessageKey(api(400, 'LEGAL_IDENTITY_CHECKSUM_INVALID', 'Invalid teudat zehut checksum')),
+    USER_FACING_API_MESSAGE_KEYS.legalIdentityChecksumInvalid,
+  );
+  assert.equal(
+    userFacingApiMessageKey(api(400, 'LEGAL_IDENTITY_ALREADY_EXISTS', 'LEGAL_IDENTITY_ALREADY_EXISTS')),
+    USER_FACING_API_MESSAGE_KEYS.legalIdentityAlreadyExists,
+  );
+  const checksumHe = resolveUserFacingApiMessage(
+    api(400, 'LEGAL_IDENTITY_CHECKSUM_INVALID', 'Invalid teudat zehut checksum'),
+    'he',
+    lookup,
+  );
+  const duplicateHe = resolveUserFacingApiMessage(
+    api(400, 'LEGAL_IDENTITY_ALREADY_EXISTS', 'LEGAL_IDENTITY_ALREADY_EXISTS'),
+    'he',
+    lookup,
+  );
+  const checksumEn = resolveUserFacingApiMessage(
+    api(400, 'LEGAL_IDENTITY_CHECKSUM_INVALID', 'Invalid teudat zehut checksum'),
+    'en',
+    lookup,
+  );
+  const duplicateEn = resolveUserFacingApiMessage(
+    api(400, 'LEGAL_IDENTITY_ALREADY_EXISTS', 'LEGAL_IDENTITY_ALREADY_EXISTS'),
+    'en',
+    lookup,
+  );
+  assert.equal(checksumHe, 'מספר תעודת הזהות אינו תקין – ספרת הביקורת שגויה.');
+  assert.equal(duplicateHe, 'מספר תעודת הזהות כבר קיים במערכת.');
+  assert.equal(checksumEn, 'The ID number is invalid – the check digit is incorrect.');
+  assert.equal(duplicateEn, 'This ID number is already registered in the system.');
+  assert.doesNotMatch(checksumHe, /Invalid teudat|checksum/i);
+  assert.doesNotMatch(duplicateEn, /email|owner|belongs to/i);
+});
+
 test('office API helper uses existing i18n lookup and no longer hardcodes Hebrew 401 copy', () => {
   const client = readFileSync(join(root, 'src/api/client.ts'), 'utf8');
   assert.match(client, /resolveUserFacingApiMessage/);

@@ -407,6 +407,7 @@ export async function buildUserLocalizationAggregate(
     dateFormat: string | null;
     displayCurrencyCode: string | null;
     uiLanguage: string;
+    uiLanguagePersisted?: boolean;
     orgTimezone: string | null;
     orgCountryCode: string | null;
     countryOptions: Array<{ code: string; label: string }>;
@@ -433,11 +434,12 @@ export async function buildUserLocalizationAggregate(
     },
     language: {
       current: language,
+      persisted: extras.uiLanguagePersisted === true,
       options: published.languages,
     },
     timezone: {
       current: extras.timezone && extras.timezone.trim() ? extras.timezone : extras.orgTimezone ?? 'Asia/Jerusalem',
-      options: timezoneOptions(extras.orgTimezone),
+      options: timezoneOptions(extras.orgTimezone, language),
       historical_note: 'Does not rewrite stored timestamps.',
     },
     date_format: {

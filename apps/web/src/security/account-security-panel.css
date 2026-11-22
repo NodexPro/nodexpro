@@ -15,6 +15,12 @@
   background: rgba(4, 21, 47, 0.42);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.nx-mfa-prompt-overlay,
+.nx-mfa-prompt-overlay * {
+  font-family: Arial, Helvetica, sans-serif !important;
 }
 
 .nx-mfa-prompt-overlay__card {

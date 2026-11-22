@@ -61,7 +61,7 @@ export function AppShell() {
     permissions: me.permissions,
   });
 
-  const workspaceKey = `${me.user.id}:${me.activeOrganizationId ?? ''}:${auth.identityEpoch}`;
+  const workspaceKey = `${me.user.id}:${me.activeOrganizationId ?? ''}`;
 
   return (
     <Fragment key={workspaceKey}>

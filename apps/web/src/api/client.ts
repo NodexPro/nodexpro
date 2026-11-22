@@ -9,6 +9,7 @@ import en from '../i18n/en.json';
 import he from '../i18n/he.json';
 import { getBackendActiveOrganizationId, getWorkspaceGeneration } from './org-context';
 import { shouldAttachOrganizationHeader } from '../lib/login-mfa-challenge.pure';
+import { deviceSignOutOptions } from '../lib/device-session.pure';
 import {
   classifyUnauthorizedRetry,
   classifyWorkspaceApplyDecision,
@@ -202,7 +203,7 @@ export async function apiJson<T>(path: string, options?: RequestInit): Promise<T
       }
       try {
         const { supabase } = await import('../lib/supabase');
-        await supabase.auth.signOut();
+        await supabase.auth.signOut(deviceSignOutOptions());
       } catch {
         // confirmed unauth; local drop is best-effort
       }

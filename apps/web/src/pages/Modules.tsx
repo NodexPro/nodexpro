@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { apiJson } from '../api/client';
+import { apiJson, userFacingApiMessage } from '../api/client';
 import { orgModulesState, orgModuleActivate, orgModuleDeactivate, orgLegalIdentity } from '../api/endpoints';
 import { useNavigate } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nProvider';
@@ -163,7 +163,7 @@ export function Modules() {
       await auth.refetchMe();
       load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('modules.errors.legalIdentityFailed'));
+      setError(userFacingApiMessage(err) || t('modules.errors.legalIdentityFailed'));
     } finally {
       setLegalIdentityLoading(false);
     }

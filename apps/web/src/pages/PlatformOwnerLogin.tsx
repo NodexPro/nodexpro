@@ -117,7 +117,7 @@ export function PlatformOwnerLogin() {
         await apiJson(OWNER.session);
       } catch (se) {
         if (se instanceof ApiError && (se.status === 403 || se.status === 401)) {
-          await supabase.auth.signOut();
+          await supabase.auth.signOut({ scope: 'local' });
           setError('Access denied. Platform owner only.');
           setLoading(false);
           return;

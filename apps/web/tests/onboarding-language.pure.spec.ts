@@ -51,7 +51,14 @@ test('PublicAuthShell is HE RTL and EN LTR; register persists the chosen languag
   assert.match(sync, /decideSessionLanguageApply/);
   assert.doesNotMatch(sync, /geoCountry|nx-geo-country|navigator\.language/);
   assert.equal(decideSessionLanguageApply({ storedPublicLang: 'he', sessionLang: 'en' }), 'he');
-  assert.equal(decideSessionLanguageApply({ storedPublicLang: 'en', sessionLang: 'he' }), 'en');
+  assert.equal(
+    decideSessionLanguageApply({ storedPublicLang: 'en', sessionLang: 'he', sessionPersisted: false }),
+    'en',
+  );
+  assert.equal(
+    decideSessionLanguageApply({ storedPublicLang: 'en', sessionLang: 'he', sessionPersisted: true }),
+    'he',
+  );
   assert.match(i18n, /PUBLIC_LANG_STORAGE_KEY/);
   assert.match(i18n, /readInitialUiLang/);
   assert.equal(resolvePublicUiLang({ stored: 'he', geoCountry: 'US' }), 'he');

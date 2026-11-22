@@ -1,6 +1,9 @@
 /**
- * Public UI language must survive SIGNED_IN, TOKEN_REFRESHED and session bootstrap.
- * Session language is applied only when the user has no stored public preference.
+ * Authenticated UI language:
+ * - persisted users.ui_language wins (second device / TOKEN_REFRESHED)
+ * - otherwise stored public lang wins (do not flash EN over a HE first visit)
+ * - otherwise session resolved lang
+ * Never writes. TOKEN_REFRESHED uses the same function.
  */
 
 import { isStoredUiLang } from './public-ui-lang.pure';
@@ -10,7 +13,9 @@ export type BootstrapUiLang = 'en' | 'he' | 'ru';
 export function decideSessionLanguageApply(input: {
   storedPublicLang?: string | null;
   sessionLang?: string | null;
+  sessionPersisted?: boolean;
 }): BootstrapUiLang | null {
+  if (input.sessionPersisted && isStoredUiLang(input.sessionLang)) return input.sessionLang;
   if (isStoredUiLang(input.storedPublicLang)) return input.storedPublicLang;
   if (isStoredUiLang(input.sessionLang)) return input.sessionLang;
   return null;

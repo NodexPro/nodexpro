@@ -29,12 +29,18 @@ export function normalizeLegalIdentity(
   const result = normalizeOwnerLegalIdentity(countryCode, legalIdentityType, value);
   if (result.ok) return result.value;
   if (result.code === 'digits') {
-    throw badRequest(`Teudat zehut must be ${ISRAELI_TZ_DIGIT_LENGTH} digits`);
+    throw badRequest(
+      `Teudat zehut must be ${ISRAELI_TZ_DIGIT_LENGTH} digits`,
+      'LEGAL_IDENTITY_DIGITS_INVALID',
+    );
   }
   if (result.code === 'checksum') {
-    throw badRequest('Invalid teudat zehut');
+    throw badRequest('Invalid teudat zehut checksum', 'LEGAL_IDENTITY_CHECKSUM_INVALID');
   }
-  throw badRequest(`Unsupported legal identity type: ${legalIdentityType} for country ${countryCode}`);
+  throw badRequest(
+    `Unsupported legal identity type: ${legalIdentityType} for country ${countryCode}`,
+    'LEGAL_IDENTITY_UNSUPPORTED',
+  );
 }
 
 /**

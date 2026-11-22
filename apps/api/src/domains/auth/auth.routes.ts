@@ -540,7 +540,7 @@ router.post(
 router.post('/logout', authMiddleware, async (req, res, next) => {
   try {
     const token = req.headers.authorization?.slice(7);
-    if (token) await supabaseAuth.auth.admin.signOut(token).catch(() => {});
+    if (token) await supabaseAuth.auth.admin.signOut(token, 'local').catch(() => {});
     return res.status(204).send();
   } catch (e) {
     next(e);

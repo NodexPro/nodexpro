@@ -28,10 +28,11 @@ import {
   sessionUserMatchesLoginIdentifier,
 } from '../lib/login-session-outcome.pure';
 import { setBackendActiveOrganizationId } from '../api/org-context';
+import { isStoredUiLang } from '../lib/public-ui-lang.pure';
 import { clearTabWorkspace } from '../lib/tab-workspace.pure';
 
 export function Login() {
-  const { t, lang } = useI18n();
+  const { t, lang, setLang } = useI18n();
   const uiLang = loginUiLang(lang);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -48,6 +49,7 @@ export function Login() {
   const auth = useAuth();
   const { refetchMe } = auth;
   const acceptedLoginRef = useRef<{ identifier: string } | null>(null);
+  const didFinishLoginNavRef = useRef(false);
   const redirectParam = new URLSearchParams(location.search).get('redirect');
   const from = redirectParam ?? (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/dashboard';
   const inviteReturnPath = captureInviteReturnPath(
@@ -82,22 +84,25 @@ export function Login() {
     }
   }, [auth]);
 
+  const authenticatedMe = auth.status === 'authenticated' ? auth.me : null;
   useEffect(() => {
     const accepted = acceptedLoginRef.current;
-    if (!accepted || auth.status !== 'authenticated') return;
-    if (!sessionUserMatchesLoginIdentifier(auth.me, accepted.identifier)) return;
+    if (!accepted || !authenticatedMe) return;
+    if (didFinishLoginNavRef.current) return;
+    if (!sessionUserMatchesLoginIdentifier(authenticatedMe, accepted.identifier)) return;
     if (
       loginMfaFormVisible({
-        sessionState: auth.me.session_state,
-        sessionChallengeRequired: auth.me.mfa?.challenge_required,
+        sessionState: authenticatedMe.session_state,
+        sessionChallengeRequired: authenticatedMe.mfa?.challenge_required,
       })
     ) {
       setChallengeRequired(true);
       return;
     }
     setError('');
-    navigate(postLoginPath(auth.me.redirect_to), { replace: true });
-  }, [auth, from, navigate]);
+    didFinishLoginNavRef.current = true;
+    navigate(postLoginPath(authenticatedMe.redirect_to), { replace: true });
+  }, [authenticatedMe, from, navigate]);
 
   useEffect(() => {
     if (cooldownSeconds <= 0) return undefined;
@@ -140,7 +145,18 @@ export function Login() {
       return;
     }
     if (!me) return;
-    await persistPublicUiLanguage();
+    const persisted = me.localization?.language?.persisted === true;
+    const sessionLang =
+      me.sidebar_account_block?.language_selector?.current_value
+      ?? me.localization?.language?.current
+      ?? null;
+    if (persisted) {
+      if (isStoredUiLang(sessionLang)) setLang(sessionLang);
+    } else {
+      await persistPublicUiLanguage();
+    }
+    if (didFinishLoginNavRef.current) return;
+    didFinishLoginNavRef.current = true;
     navigate(postLoginPath(me.redirect_to), { replace: true });
   }
 

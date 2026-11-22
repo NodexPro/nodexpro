@@ -153,15 +153,24 @@ test('invalid credentials stay a localized error and do not authorize', () => {
 
 test('HE public language stays HE on onboarding; EN stays EN across bootstrap and token refresh', () => {
   assert.equal(decideSessionLanguageApply({ storedPublicLang: 'he', sessionLang: 'en' }), 'he');
-  assert.equal(decideSessionLanguageApply({ storedPublicLang: 'en', sessionLang: 'he' }), 'en');
+  assert.equal(
+    decideSessionLanguageApply({ storedPublicLang: 'en', sessionLang: 'he', sessionPersisted: false }),
+    'en',
+  );
+  assert.equal(
+    decideSessionLanguageApply({ storedPublicLang: 'en', sessionLang: 'he', sessionPersisted: true }),
+    'he',
+  );
   assert.equal(decideSessionLanguageApply({ storedPublicLang: null, sessionLang: 'he' }), 'he');
   assert.equal(shouldInvalidateInFlightSession('token_refresh_same'), false);
   assert.equal(shouldRefetchSessionAfterAuthEvent('token_refresh_same'), false);
   const sync = read('../src/components/auth/SessionLanguageSync.tsx');
   assert.match(sync, /decideSessionLanguageApply/);
   assert.match(sync, /PUBLIC_LANG_STORAGE_KEY/);
+  assert.match(sync, /sessionPersisted/);
   const login = read('../src/pages/Login.tsx');
   assert.match(login, /setUiLanguageCommand/);
+  assert.match(login, /localization\?\.language\?\.persisted/);
   const register = read('../src/pages/Register.tsx');
   assert.match(register, /language_code: lang/);
 });

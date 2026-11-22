@@ -20,6 +20,9 @@ export const USER_FACING_API_MESSAGE_KEYS = {
   aborted: 'common.errors.aborted',
   network: 'common.errors.network',
   generic: 'common.errors.generic',
+  legalIdentityChecksumInvalid: 'modules.errors.legalIdentityChecksumInvalid',
+  legalIdentityAlreadyExists: 'modules.errors.legalIdentityAlreadyExists',
+  legalIdentityDigitsInvalid: 'modules.errors.legalIdentityDigitsInvalid',
 } as const;
 
 type ApiErrorLike = {
@@ -76,6 +79,15 @@ export function userFacingApiMessageKey(e: unknown): string {
     if (c === 'PORTAL_ACCESS_REVOKED') return USER_FACING_API_MESSAGE_KEYS.portalAccessRevoked;
     if (c === 'PORTAL_USER_MISSING' || c === 'PORTAL_ACTIVATION_FAILED') {
       return USER_FACING_API_MESSAGE_KEYS.portalActivationFailed;
+    }
+    if (c === 'LEGAL_IDENTITY_CHECKSUM_INVALID') {
+      return USER_FACING_API_MESSAGE_KEYS.legalIdentityChecksumInvalid;
+    }
+    if (c === 'LEGAL_IDENTITY_ALREADY_EXISTS') {
+      return USER_FACING_API_MESSAGE_KEYS.legalIdentityAlreadyExists;
+    }
+    if (c === 'LEGAL_IDENTITY_DIGITS_INVALID') {
+      return USER_FACING_API_MESSAGE_KEYS.legalIdentityDigitsInvalid;
     }
     if (c === 'FORBIDDEN' || status === 403) return USER_FACING_API_MESSAGE_KEYS.forbidden;
     if (c === 'PORTAL_SESSION_EXPIRED') return USER_FACING_API_MESSAGE_KEYS.portalSessionExpired;
