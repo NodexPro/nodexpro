@@ -23,6 +23,9 @@ export const USER_FACING_API_MESSAGE_KEYS = {
   legalIdentityChecksumInvalid: 'modules.errors.legalIdentityChecksumInvalid',
   legalIdentityAlreadyExists: 'modules.errors.legalIdentityAlreadyExists',
   legalIdentityDigitsInvalid: 'modules.errors.legalIdentityDigitsInvalid',
+  moduleNotActive: 'clientOperations.errors.moduleNotActive',
+  moduleNotEntitled: 'clientOperations.errors.moduleNotEntitled',
+  organizationContextRequired: 'clientOperations.errors.organizationContextRequired',
 } as const;
 
 type ApiErrorLike = {
@@ -88,6 +91,11 @@ export function userFacingApiMessageKey(e: unknown): string {
     }
     if (c === 'LEGAL_IDENTITY_DIGITS_INVALID') {
       return USER_FACING_API_MESSAGE_KEYS.legalIdentityDigitsInvalid;
+    }
+    if (c === 'MODULE_NOT_ACTIVE') return USER_FACING_API_MESSAGE_KEYS.moduleNotActive;
+    if (c === 'MODULE_NOT_ENTITLED') return USER_FACING_API_MESSAGE_KEYS.moduleNotEntitled;
+    if (c === 'ORGANIZATION_CONTEXT_REQUIRED') {
+      return USER_FACING_API_MESSAGE_KEYS.organizationContextRequired;
     }
     if (c === 'FORBIDDEN' || status === 403) return USER_FACING_API_MESSAGE_KEYS.forbidden;
     if (c === 'PORTAL_SESSION_EXPIRED') return USER_FACING_API_MESSAGE_KEYS.portalSessionExpired;

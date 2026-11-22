@@ -30,6 +30,8 @@ import {
 import { setBackendActiveOrganizationId } from '../api/org-context';
 import { isStoredUiLang } from '../lib/public-ui-lang.pure';
 import { clearTabWorkspace } from '../lib/tab-workspace.pure';
+import { deviceSignOutOptions } from '../lib/device-session.pure';
+import { shouldClearLocalSessionBeforePasswordLogin } from '../lib/login-identity-switch.pure';
 
 export function Login() {
   const { t, lang, setLang } = useI18n();
@@ -171,6 +173,9 @@ export function Login() {
     try {
       setBackendActiveOrganizationId(null);
       clearTabWorkspace(typeof sessionStorage === 'undefined' ? null : sessionStorage);
+      if (shouldClearLocalSessionBeforePasswordLogin({ challengeRequired })) {
+        await supabase.auth.signOut(deviceSignOutOptions()).catch(() => undefined);
+      }
       if (challengeRequired) {
         const verified = await apiJson<{ access_token?: string; refresh_token?: string }>(AUTH.mfaCommand('verify_mfa'), {
           method: 'POST',

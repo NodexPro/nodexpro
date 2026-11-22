@@ -14,62 +14,13 @@ import {
   type PdfBrowserResolution,
 } from './income-document-pdf-browser.pure.js';
 import { resolvePdfBrowserForLaunch } from './income-document-pdf-browser.service.js';
+import { renderHtmlWithSharedPuppeteer } from './income-document-pdf-browser-pool.js';
 
 async function renderWithPuppeteer(
   fullHtml: string,
   executablePath: string,
 ): Promise<Buffer | null> {
-  try {
-    const puppeteer = await import('puppeteer');
-    const browser = await puppeteer.launch({
-      headless: true,
-      executablePath,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--font-render-hinting=none',
-      ],
-    });
-    try {
-      const page = await browser.newPage();
-      // Prefer local DOM ready; avoid waiting on external network (CDN fonts).
-      await page.setContent(fullHtml, { waitUntil: 'domcontentloaded' });
-      await page.evaluate(async () => {
-        try {
-          await Promise.race([
-            document.fonts.ready,
-            new Promise((resolve) => setTimeout(resolve, 2_000)),
-          ]);
-        } catch {
-          /* fonts optional for PDF */
-        }
-      });
-      // @page margin: 48px recreates viewer paper chrome. Puppeteer margins must stay 0.
-      const pdfBytes = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        preferCSSPageSize: true,
-        scale: 1,
-        margin: { top: '0', right: '0', bottom: '0', left: '0' },
-      });
-      return Buffer.from(pdfBytes);
-    } finally {
-      await browser.close();
-    }
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException)?.code;
-    const message = err instanceof Error ? err.message : String(err);
-    if (code === 'ERR_MODULE_NOT_FOUND' || message.includes("Cannot find package 'puppeteer'")) {
-      return null;
-    }
-    // Browser missing / launch failure on host → try Chromium CLI fallback.
-    console.error('[income-pdf] puppeteer render failed; trying CLI fallback', {
-      message,
-      executablePath,
-    });
-    return null;
-  }
+  return renderHtmlWithSharedPuppeteer(fullHtml, executablePath);
 }
 
 async function renderWithChromiumCli(fullHtml: string, executablePath: string): Promise<Buffer> {

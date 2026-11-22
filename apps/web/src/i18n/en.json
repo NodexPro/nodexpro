@@ -13,7 +13,7 @@
     "documents": "Documents",
     "modules": "Modules",
     "billing": "Billing",
-    "clientOperations": "Client Operations",
+    "clientOperations": "Client Management",
     "collapse": "Collapse navigation",
     "expand": "Expand navigation",
     "income": "Income",
@@ -540,8 +540,51 @@
       "max_clients": "clients",
       "max_companies": "companies",
       "max_employees_per_company": "employees per company",
+      "included_staff_seats": "included staff seats",
+      "grandfathered_staff_seats": "grandfathered staff seats",
+      "purchased_staff_seats": "purchased staff seats",
+      "entitled_staff_seats": "entitled staff seats",
       "unlimitedPrefix": "Unlimited",
       "upToPrefix": "Up to"
+    },
+    "catalogName": {
+      "client-operations": "Client Management",
+      "docflow": "DocFlow",
+      "invoice": "Income documents",
+      "income": "Income documents",
+      "clients": "Clients",
+      "accounting": "Accounting",
+      "payroll": "Payroll",
+      "reminder": "Reminders",
+      "work_engine": "Work Engine",
+      "work-engine": "Work Engine"
+    },
+    "planName": {
+      "standard": "Standard",
+      "unlimited": "Unlimited",
+      "100_clients": "Up to 100 clients",
+      "300_clients": "Up to 300 clients",
+      "500_clients": "Up to 500 clients",
+      "tier1": "2 companies / 1-5 employees each",
+      "tier2": "5 companies / up to 10 employees each",
+      "tier3": "7 companies / up to 10 employees each",
+      "tier4": "20 companies / up to 30 employees each",
+      "tier5": "50 companies / up to 30 employees each",
+      "tier6": "100 companies / up to 40 employees each"
+    },
+    "blockReason": {
+      "noSubscription": "No subscription or trial for this module",
+      "subscriptionEnded": "The subscription has ended",
+      "subscriptionInactive": "The subscription is not active",
+      "notEntitled": "This office is not entitled to use this module",
+      "missingDependencies": "Missing dependencies: {{deps}}"
+    },
+    "subscriptionStatus": {
+      "active": "Active",
+      "trialing": "Trialing",
+      "expired": "Expired",
+      "canceled": "Canceled",
+      "cancelled": "Canceled"
     },
     "showcase": {
       "clientOperations": {
@@ -598,7 +641,8 @@
       "legalIdentityFailed": "Failed to set legal identity",
       "legalIdentityChecksumInvalid": "The ID number is invalid – the check digit is incorrect.",
       "legalIdentityAlreadyExists": "This ID number is already registered in the system.",
-      "legalIdentityDigitsInvalid": "Enter a valid 9-digit ID number."
+      "legalIdentityDigitsInvalid": "Enter a valid 9-digit ID number.",
+      "loadFailed": "The module catalog could not be loaded."
     }
   },
   "documents": {
@@ -815,7 +859,7 @@
     },
     "catalog": {
       "client-operations": {
-        "name": "Client Operations",
+        "name": "Client Management",
         "tagline": "Run your whole client roster from one live monthly spreadsheet.",
         "summary": "Client Operations gives accounting offices a single working grid for every client and every reporting period.",
         "existing": {
@@ -861,8 +905,8 @@
     }
   },
   "clientOperations": {
-    "moduleTitle": "Client Operations",
-    "registryTitle": "Client Operations",
+    "moduleTitle": "Client Management",
+    "registryTitle": "Client Management",
     "search": "Search",
     "searchPlaceholder": "Search the table…",
     "searchClients": "Search clients",
@@ -1042,6 +1086,12 @@
     "noData": "No data.",
     "tabsAria": "Workspace tabs",
     "loadFailed": "Failed to load",
+    "openModuleCatalog": "Open module catalog",
+    "errors": {
+      "moduleNotActive": "This module is not active for this organization. Open the module catalog to review plans and activation.",
+      "moduleNotEntitled": "This organization has no subscription or trial for this module. Open the module catalog to review entitlement.",
+      "organizationContextRequired": "No organization is selected for this tab. Choose an office, then open Client Management again."
+    },
     "reminders": {
       "dismissAll": "Dismiss all",
       "active": "Active reminder",

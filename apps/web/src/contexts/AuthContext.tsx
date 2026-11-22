@@ -9,6 +9,7 @@ import {
   isStaleRequestGeneration,
   nextRequestGeneration,
   shouldApplyBootstrappedSession,
+  shouldApplySignedOutUi,
   shouldDropAuthenticatedUi,
   shouldInvalidateInFlightSession,
   shouldRefetchSessionAfterAuthEvent,
@@ -175,6 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     lastWorkspaceRef.current = null;
     bumpGeneration();
     bumpWorkspaceGeneration();
+    setIdentityEpoch((value) => value + 1);
     setBackendActiveOrganizationId(null);
     clearTabWorkspace(tabStorage());
   }, [bumpGeneration]);
@@ -353,6 +355,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT') {
+        const live = await supabase.auth.getSession();
+        if (!shouldApplySignedOutUi({
+          event,
+          liveAuthUserId: live.data.session?.user.id ?? null,
+        })) {
+          return;
+        }
+      }
       const nextAuthUserId = session?.user.id ?? null;
       const transition = classifyAuthIdentityTransition({
         event,

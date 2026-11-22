@@ -84,10 +84,30 @@ test('B: missing executable produces unavailable capability and clear engine err
 });
 
 test('C: Puppeteer launch receives executablePath when resolved', () => {
-  assert.match(rendererSource, /puppeteer\.launch\(\{/);
-  assert.match(rendererSource, /executablePath,/);
+  const poolSource = readFileSync(
+    join(dir, '../../src/domains/income/income-document-pdf-browser-pool.ts'),
+    'utf8',
+  );
+  assert.match(poolSource, /puppeteer\.launch\(\{/);
+  assert.match(poolSource, /executablePath,/);
+  assert.match(poolSource, /getSharedPdfBrowser/);
   assert.match(rendererSource, /renderWithPuppeteer\(fullHtml, executablePath\)/);
   assert.match(rendererSource, /resolvePdfBrowserForLaunch/);
+  assert.match(rendererSource, /renderHtmlWithSharedPuppeteer/);
+  assert.doesNotMatch(rendererSource, /await browser\.close\(\)/);
+});
+
+test('shared Chromium: one browser, per-PDF page closed in finally, recreate on disconnect', () => {
+  const poolSource = readFileSync(
+    join(dir, '../../src/domains/income/income-document-pdf-browser-pool.ts'),
+    'utf8',
+  );
+  assert.match(poolSource, /let pooled: PooledBrowser \| null = null/);
+  assert.match(poolSource, /browser\.newPage\(\)/);
+  assert.match(poolSource, /if \(page\) await page\.close\(\)/);
+  assert.match(poolSource, /event: 'disconnected'/);
+  assert.match(poolSource, /if \(pooled\?\.browser === browser\) pooled = null/);
+  assert.doesNotMatch(poolSource, /pooled = null;\s*console\.error/);
 });
 
 test('D: Issue does not await synchronous PDF render', () => {

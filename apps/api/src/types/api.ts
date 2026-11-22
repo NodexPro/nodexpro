@@ -152,6 +152,7 @@ export interface ModulePlanItemDto {
   id: string;
   code: string;
   name: string;
+  nameKey: string;
   billingPeriod: string;
   currency: string;
   priceAmount: number;
@@ -163,6 +164,8 @@ export interface ModuleSubscriptionItemDto {
   id: string;
   modulePlanId: string;
   planName: string;
+  planNameKey: string;
+  statusKey: string;
   currency: string;
   priceAmount: number;
   status: string;
@@ -174,6 +177,7 @@ export interface ModuleStateItem {
   moduleId: string;
   code: string;
   name: string;
+  nameKey: string;
   version: string;
   scopeType: string;
   category: string | null;
@@ -183,6 +187,7 @@ export interface ModuleStateItem {
   canActivate: boolean;
   canDeactivate: boolean;
   blockReason: string | null;
+  blockReasonKey: string | null;
   navPath: string | null;
   navLabel: string | null;
   navOrder: number;

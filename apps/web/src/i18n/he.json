@@ -540,8 +540,51 @@
       "max_clients": "לקוחות",
       "max_companies": "חברות",
       "max_employees_per_company": "עובדים לחברה",
+      "included_staff_seats": "מקומות עובדים כלולים",
+      "grandfathered_staff_seats": "מקומות עובדים מוקנים",
+      "purchased_staff_seats": "מקומות עובדים שנרכשו",
+      "entitled_staff_seats": "מקומות עובדים מותרים",
       "unlimitedPrefix": "ללא הגבלה",
       "upToPrefix": "עד"
+    },
+    "catalogName": {
+      "client-operations": "ניהול לקוחות",
+      "docflow": "דוקפלואו",
+      "invoice": "מסמכי הכנסה",
+      "income": "מסמכי הכנסה",
+      "clients": "לקוחות",
+      "accounting": "הנהלת חשבונות",
+      "payroll": "שכר",
+      "reminder": "תזכורות",
+      "work_engine": "מנוע עבודה",
+      "work-engine": "מנוע עבודה"
+    },
+    "planName": {
+      "standard": "סטנדרט",
+      "unlimited": "ללא הגבלה",
+      "100_clients": "עד 100 לקוחות",
+      "300_clients": "עד 300 לקוחות",
+      "500_clients": "עד 500 לקוחות",
+      "tier1": "2 חברות / 1–5 עובדים לכל אחת",
+      "tier2": "5 חברות / עד 10 עובדים לכל אחת",
+      "tier3": "7 חברות / עד 10 עובדים לכל אחת",
+      "tier4": "20 חברות / עד 30 עובדים לכל אחת",
+      "tier5": "50 חברות / עד 30 עובדים לכל אחת",
+      "tier6": "100 חברות / עד 40 עובדים לכל אחת"
+    },
+    "blockReason": {
+      "noSubscription": "אין מנוי או תקופת ניסיון למודול זה",
+      "subscriptionEnded": "המנוי הסתיים",
+      "subscriptionInactive": "המנוי אינו פעיל",
+      "notEntitled": "המשרד אינו זכאי להשתמש במודול זה",
+      "missingDependencies": "חסרות תלויות: {{deps}}"
+    },
+    "subscriptionStatus": {
+      "active": "פעיל",
+      "trialing": "בניסיון",
+      "expired": "פג",
+      "canceled": "בוטל",
+      "cancelled": "בוטל"
     },
     "showcase": {
       "clientOperations": {
@@ -598,7 +641,8 @@
       "legalIdentityFailed": "הגדרת הזהות המשפטית נכשלה",
       "legalIdentityChecksumInvalid": "מספר תעודת הזהות אינו תקין – ספרת הביקורת שגויה.",
       "legalIdentityAlreadyExists": "מספר תעודת הזהות כבר קיים במערכת.",
-      "legalIdentityDigitsInvalid": "יש להזין מספר תעודת זהות תקין בן 9 ספרות."
+      "legalIdentityDigitsInvalid": "יש להזין מספר תעודת זהות תקין בן 9 ספרות.",
+      "loadFailed": "לא ניתן לטעון את קטלוג המודולים."
     }
   },
   "documents": {
@@ -1042,6 +1086,12 @@
     "noData": "אין נתונים.",
     "tabsAria": "לשוניות תיק",
     "loadFailed": "הטעינה נכשלה",
+    "openModuleCatalog": "פתיחת קטלוג מודולים",
+    "errors": {
+      "moduleNotActive": "המודול אינו פעיל בארגון זה. פתחו את קטלוג המודולים כדי לבדוק מסלולים והפעלה.",
+      "moduleNotEntitled": "לארגון זה אין מנוי או תקופת ניסיון למודול זה. פתחו את קטלוג המודולים כדי לבדוק זכאות.",
+      "organizationContextRequired": "לא נבחר ארגון בלשונית זו. בחרו משרד ואז פתחו שוב את ניהול לקוחות."
+    },
     "reminders": {
       "dismissAll": "סגור הכל",
       "active": "תזכורת פעילה",

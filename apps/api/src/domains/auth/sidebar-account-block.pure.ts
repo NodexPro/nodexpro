@@ -61,7 +61,9 @@ export function buildSidebarAccountBlock(input: SidebarAccountBlockInput): Sideb
     user_display_name: displayName,
     user_email: user.email,
     organization_switcher: {
-      visible: organizations.length > 1,
+      // Dashboard right panel shows the current office as text only.
+      // Independent-tab office selection stays on SelectOrganization + select_active_organization.
+      visible: false,
       label: labels.org,
       organizations: organizations.map((o) => ({
         organization_id: o.id,

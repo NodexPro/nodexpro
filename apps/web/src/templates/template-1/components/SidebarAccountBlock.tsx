@@ -16,7 +16,7 @@ export function SidebarAccountBlock(props: {
   onLogout: () => void | Promise<void>;
   busy?: boolean;
 }) {
-  const { block, expanded, onSelectOrganization, onSetLanguage, onLogout, busy = false } = props;
+  const { block, expanded, onSetLanguage, onLogout, busy = false } = props;
   const languageSelectorVisible = block.language_selector?.visible !== false;
   const [languageOpen, setLanguageOpen] = useState(false);
   const languageFieldRef = useRef<HTMLDivElement | null>(null);
@@ -60,33 +60,12 @@ export function SidebarAccountBlock(props: {
       <div className="t1-sidebar-account__divider" role="presentation" />
 
       {block.organization_name && !showOfficeContext ? (
-        <div className="t1-sidebar-account__org-name" title={block.organization_name}>
+        <div
+          className="t1-sidebar-account__org-name"
+          data-testid="sidebar-organization-name"
+          title={block.organization_name}
+        >
           {block.organization_name}
-        </div>
-      ) : null}
-
-      {block.organization_switcher.visible ? (
-        <div className="t1-sidebar-account__field">
-          <label className="t1-sidebar-account__label" htmlFor="t1-sidebar-org-select">
-            {block.organization_switcher.label}
-          </label>
-          <select
-            id="t1-sidebar-org-select"
-            className="t1-sidebar-account__select"
-            disabled={busy}
-            value={block.organization_switcher.organizations.find((o) => o.selected)?.organization_id ?? ''}
-            onChange={(e) => {
-              const id = e.target.value;
-              if (!id) return;
-              void onSelectOrganization(id);
-            }}
-          >
-            {block.organization_switcher.organizations.map((o) => (
-              <option key={o.organization_id} value={o.organization_id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
         </div>
       ) : null}
 

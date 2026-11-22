@@ -80,6 +80,18 @@ export function shouldApplyBootstrappedSession(input: {
   return true;
 }
 
+/**
+ * Local account-switch signOut emits SIGNED_OUT. If setSession(B) already won,
+ * that late event must not paint logged-out over B.
+ */
+export function shouldApplySignedOutUi(input: {
+  event?: string | null;
+  liveAuthUserId?: string | null;
+}): boolean {
+  if (String(input.event ?? '').trim() !== 'SIGNED_OUT') return true;
+  return !String(input.liveAuthUserId ?? '').trim();
+}
+
 export function nextAuthGeneration(current: number): number {
   return current + 1;
 }

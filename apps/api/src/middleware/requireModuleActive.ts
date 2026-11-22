@@ -38,7 +38,7 @@ export function requireModuleActive(moduleCode: string) {
         user_email: email || null,
         user_id: ctx?.user?.id ?? null,
       });
-      next(forbidden('Organization context required'));
+      next(forbidden('Organization context required', 'ORGANIZATION_CONTEXT_REQUIRED'));
       return;
     }
 
@@ -55,7 +55,7 @@ export function requireModuleActive(moduleCode: string) {
         user_id: ctx.user.id,
         org_id: ctx.organizationId,
       });
-      next(forbidden('Module not found'));
+      next(forbidden('Module not found', 'MODULE_NOT_FOUND'));
       return;
     }
 
@@ -74,7 +74,7 @@ export function requireModuleActive(moduleCode: string) {
         action: AUDIT_ACTIONS.MODULE_ACCESS_DENIED,
         payload: { reason: 'Module is globally disabled (modules.is_active=false)' },
       });
-      next(forbidden('Module is globally disabled'));
+      next(forbidden('Module is globally disabled', 'MODULE_GLOBALLY_DISABLED'));
       return;
     }
 
@@ -116,7 +116,7 @@ export function requireModuleActive(moduleCode: string) {
         action: AUDIT_ACTIONS.MODULE_ACCESS_DENIED,
         payload: { reason: 'Module not active for organization' },
       });
-      next(forbidden('Module not active for this organization'));
+      next(forbidden('Module not active for this organization', 'MODULE_NOT_ACTIVE'));
       return;
     }
 
@@ -138,7 +138,7 @@ export function requireModuleActive(moduleCode: string) {
         action: AUDIT_ACTIONS.MODULE_ACCESS_DENIED,
         payload: { reason: entitlement.reason ?? 'Not entitled to use this module' },
       });
-      next(forbidden(entitlement.reason ?? 'Not entitled to use this module'));
+      next(forbidden(entitlement.reason ?? 'Not entitled to use this module', 'MODULE_NOT_ENTITLED'));
       return;
     }
 

@@ -7,8 +7,16 @@ import { sidebarNavLabel } from '../src/lib/sidebar-nav-label.pure.ts';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(join(dir, rel), 'utf8');
-const en = JSON.parse(read('../src/i18n/en.json')) as { nav: Record<string, string>; billing: { title: string } };
-const he = JSON.parse(read('../src/i18n/he.json')) as { nav: Record<string, string>; billing: { title: string } };
+const en = JSON.parse(read('../src/i18n/en.json')) as {
+  nav: Record<string, string>;
+  billing: { title: string };
+  clientOperations: { moduleTitle: string };
+};
+const he = JSON.parse(read('../src/i18n/he.json')) as {
+  nav: Record<string, string>;
+  billing: { title: string };
+  clientOperations: { moduleTitle: string };
+};
 
 const tFor = (dict: { nav: Record<string, string> }) => (key: string) => {
   const leaf = key.split('.').pop() ?? '';
@@ -35,19 +43,21 @@ test('EN and HE keep the same backend-owned Modules nesting; labels follow I18nP
   assert.match(shell, /children: moduleChildren/);
   assert.doesNotMatch(shell, /label === ['"]Modules['"]/);
   assert.doesNotMatch(shell, /label === ['"]מודולים['"]/);
-  assert.equal(en.nav.clientOperations, 'Client Operations');
+  assert.equal(en.nav.clientOperations, 'Client Management');
   assert.equal(he.nav.clientOperations, 'ניהול לקוחות');
-  assert.equal(sidebarNavLabel('/m/client-operations', 'Nodex לקוחות', tFor(en)), 'Client Operations');
+  assert.equal(sidebarNavLabel('/m/client-operations', 'Nodex לקוחות', tFor(en)), 'Client Management');
   assert.equal(sidebarNavLabel('/m/client-operations', 'Nodex לקוחות', tFor(he)), 'ניהול לקוחות');
   assert.equal(sidebarNavLabel('/modules', 'Modules', tFor(en)), 'Modules');
   assert.equal(sidebarNavLabel('/modules', 'Modules', tFor(he)), 'מודולים');
 });
 
-test('ניהול לקוחות is the Client Operations header and sidebar item; EN stays Client Operations', () => {
+test('ניהול לקוחות is the Client Operations header and sidebar item; EN stays Client Management', () => {
   const header = read('../src/templates/template-1/components/ClientOperationsAppHeader.tsx');
-  assert.match(header, /CLIENT_OPERATIONS_HEADER_TITLE_HE = 'ניהול לקוחות'/);
+  assert.match(header, /CLIENT_OPERATIONS_HEADER_TITLE_KEY = 'clientOperations.moduleTitle'/);
   assert.equal(he.nav.clientOperations, 'ניהול לקוחות');
-  assert.equal(en.nav.clientOperations, 'Client Operations');
+  assert.equal(en.nav.clientOperations, 'Client Management');
+  assert.equal(he.clientOperations.moduleTitle, 'ניהול לקוחות');
+  assert.equal(en.clientOperations.moduleTitle, 'Client Management');
   assert.equal(he.nav.clients, 'לקוחות');
 });
 

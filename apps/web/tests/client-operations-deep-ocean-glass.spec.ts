@@ -64,9 +64,9 @@ test('restyle is scoped to the CO sheet; sidebar and other modules are untouched
   assert.match(sidebarBlock, /linear-gradient\(180deg, #082447 0%, #0a2d55 55%, #061a33 100%\)/);
 });
 
-test('Hebrew module label is ניהול לקוחות; English stays Client Operations', () => {
+test('Hebrew module label is ניהול לקוחות; English stays Client Management', () => {
   assert.equal(he.nav.clientOperations, 'ניהול לקוחות');
-  assert.equal(en.nav.clientOperations, 'Client Operations');
+  assert.equal(en.nav.clientOperations, 'Client Management');
   const view = read('../src/components/client-operations/ClientOperationsRegistryView.tsx');
   assert.match(view, /ניהול לקוחות — \$\{periodHeading\}/);
   assert.doesNotMatch(view, /תפעול לקוחות/);

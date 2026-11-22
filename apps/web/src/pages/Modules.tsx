@@ -19,6 +19,12 @@ import {
   moduleShowcaseHeadlineKey,
   moduleShowcaseLeadKey,
 } from '../modules/module-showcase-copy.pure';
+import {
+  localizeModuleBlockReason,
+  localizeModuleCatalogName,
+  localizeModulePlanName,
+  localizeModuleSubscriptionStatus,
+} from '../modules/module-catalog-copy.pure';
 import '../styles/nx-glass-surface.css';
 import '../styles/nx-modules-showcase.css';
 
@@ -52,6 +58,10 @@ function formatLimit(
     max_clients: t('modules.limits.max_clients'),
     max_companies: t('modules.limits.max_companies'),
     max_employees_per_company: t('modules.limits.max_employees_per_company'),
+    included_staff_seats: t('modules.limits.included_staff_seats'),
+    grandfathered_staff_seats: t('modules.limits.grandfathered_staff_seats'),
+    purchased_staff_seats: t('modules.limits.purchased_staff_seats'),
+    entitled_staff_seats: t('modules.limits.entitled_staff_seats'),
   };
   const label = known[limit.limitCode] ?? limit.limitCode.replace(/_/g, ' ');
   if (limit.isUnlimited) return `${t('modules.limits.unlimitedPrefix')} ${label}`;
@@ -86,6 +96,7 @@ export function Modules() {
   const [legalIdentityValue, setLegalIdentityValue] = useState('');
 
   const orgId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
+  const identityEpoch = auth.identityEpoch;
   const canAdministerModules =
     auth.status === 'authenticated' &&
     Array.isArray(auth.me.available_actions) &&
@@ -103,7 +114,7 @@ export function Modules() {
       })
       .catch((e) => {
         if (signal?.aborted || (e as Error)?.name === 'AbortError') return;
-        setError(e.message);
+        setError(userFacingApiMessage(e) || t('modules.errors.loadFailed'));
       })
       .finally(() => {
         if (!signal?.aborted) setLoading(false);
@@ -115,7 +126,7 @@ export function Modules() {
     const ac = new AbortController();
     load(ac.signal);
     return () => ac.abort();
-  }, [orgId]);
+  }, [orgId, identityEpoch]);
 
   const handleActivate = async (moduleId: string) => {
     if (!orgId) return;
@@ -125,7 +136,7 @@ export function Modules() {
       await auth.refetchMe();
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('modules.errors.activateFailed'));
+      setError(userFacingApiMessage(e) || t('modules.errors.activateFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -139,7 +150,7 @@ export function Modules() {
       await auth.refetchMe();
       load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('modules.errors.deactivateFailed'));
+      setError(userFacingApiMessage(e) || t('modules.errors.deactivateFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -173,6 +184,10 @@ export function Modules() {
   if (!orgId) return <p className="nx-glass-page">{t('topBar.selectOrg')}</p>;
 
   const catalog = commercialModules(state);
+  const moduleDisplayName = (module: OfficeModuleStateItem) =>
+    localizeModuleCatalogName(module.code, module.name, t);
+  const planDisplayName = (plan: OfficeModulePlan) =>
+    localizeModulePlanName(plan.code, plan.name, t);
   const selected = catalog.find((module) => module.moduleId === selectedModuleId) ?? null;
   const selectedPlan: OfficeModulePlan | null = selected
     ? matchingPlan(selected) ?? selected.availablePlans[0] ?? null
@@ -256,7 +271,7 @@ export function Modules() {
                 data-module-code={m.code}
               >
                 <div className="nx-modules-card__commerce">
-                  <h3 className="nx-modules-card__name">{m.name}</h3>
+                  <h3 className="nx-modules-card__name">{moduleDisplayName(m)}</h3>
                   <p className="nx-modules-card__lead">{t(moduleShowcaseLeadKey(m.code))}</p>
 
                   <div className="nx-glass-status-row">
@@ -282,7 +297,9 @@ export function Modules() {
                       <div className="nx-glass-status-item">
                         <span>{t('modules.subscription')}</span>
                         <span className="nx-glass-status--muted">
-                          {m.currentSubscription.planName} · {m.currentSubscription.status}
+                          {localizeModulePlanName(matchingPlan(m)?.code, m.currentSubscription.planName, t)}
+                          {' · '}
+                          {localizeModuleSubscriptionStatus(m.currentSubscription.status, t)}
                         </span>
                       </div>
                     )}
@@ -292,7 +309,12 @@ export function Modules() {
                     <div className="nx-modules-current">
                       <div className="nx-glass-muted">{t('modules.currentPlan')}</div>
                       <div className="nx-glass-plan__price">
-                        {m.currentSubscription.planName} — {m.currentSubscription.currency} {m.currentSubscription.priceAmount}
+                        {localizeModulePlanName(
+                          matchingPlan(m)?.code,
+                          m.currentSubscription.planName,
+                          t,
+                        )}{' '}
+                        — {m.currentSubscription.currency} {m.currentSubscription.priceAmount}
                         {matchingPlan(m)?.billingPeriod
                           ? ` ${formatBillingPeriod(matchingPlan(m)!.billingPeriod, t)}`
                           : ''}
@@ -300,7 +322,11 @@ export function Modules() {
                     </div>
                   )}
 
-                  {m.blockReason && <div className="nx-modules-banner">{m.blockReason}</div>}
+                  {m.blockReason || m.blockReasonKey ? (
+                    <div className="nx-modules-banner">
+                      {localizeModuleBlockReason(m.blockReasonKey || m.blockReason, t) ?? m.blockReason}
+                    </div>
+                  ) : null}
 
                   {m.availablePlans.length > 0 && (
                     <>
@@ -310,7 +336,7 @@ export function Modules() {
                       <div className="nx-glass-plans">
                         {m.availablePlans.map((p) => (
                           <div key={p.id} className="nx-glass-plan">
-                            <div className="nx-glass-plan__name">{p.name}</div>
+                            <div className="nx-glass-plan__name">{planDisplayName(p)}</div>
                             <div className="nx-glass-plan__price">
                               {p.currency} {p.priceAmount}
                             </div>
@@ -393,7 +419,7 @@ export function Modules() {
 
       <GlassModal
         open={selected != null}
-        title={selected?.name ?? t('modules.select')}
+        title={selected ? moduleDisplayName(selected) : t('modules.select')}
         onClose={() => setSelectedModuleId(null)}
         testId="nx-modules-select-modal"
         appearance="account-deep-ocean"
@@ -455,7 +481,11 @@ export function Modules() {
                 {selected.dependencies.length > 0 ? selected.dependencies.join(', ') : t('modules.noPrerequisites')}
               </dd>
             </dl>
-            {selected.blockReason ? <div className="nx-glass-alert nx-glass-alert--warn">{selected.blockReason}</div> : null}
+            {selected.blockReason || selected.blockReasonKey ? (
+              <div className="nx-glass-alert nx-glass-alert--warn">
+                {localizeModuleBlockReason(selected.blockReasonKey || selected.blockReason, t) ?? selected.blockReason}
+              </div>
+            ) : null}
             <p className="nx-glass-alert nx-glass-alert--warn">{t('modules.checkoutUnavailable')}</p>
             <p className="nx-glass-muted">{t('modules.checkoutTerms')}</p>
           </>

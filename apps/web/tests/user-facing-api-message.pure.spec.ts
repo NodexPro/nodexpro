@@ -25,6 +25,7 @@ function api(status: number, code?: string, message = ''): { status: number; cod
 test('401/403/5xx/network use common.errors keys, not DocFlow Hebrew in English', () => {
   assert.equal(userFacingApiMessageKey(api(401, 'UNAUTHORIZED')), USER_FACING_API_MESSAGE_KEYS.unauthorized);
   assert.equal(userFacingApiMessageKey(api(403, 'FORBIDDEN')), USER_FACING_API_MESSAGE_KEYS.forbidden);
+  assert.equal(userFacingApiMessageKey(api(403, 'MODULE_NOT_ACTIVE')), USER_FACING_API_MESSAGE_KEYS.moduleNotActive);
   assert.equal(userFacingApiMessageKey(api(500, 'SUPABASE_ERROR')), USER_FACING_API_MESSAGE_KEYS.serverError);
   assert.equal(userFacingApiMessageKey(new Error('Failed to fetch')), USER_FACING_API_MESSAGE_KEYS.network);
 

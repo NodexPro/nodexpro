@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { parseCreatedClientOpenLocationState } from './client-create-navigation.pure';
 import { useAuth } from '../contexts/AuthContext';
-import { apiJson } from '../api/client';
+import { ApiError, apiJson, userFacingApiMessage } from '../api/client';
+import {
+  isModuleEntitlementDenied,
+  moduleEntitlementErrorKey,
+} from '../modules/module-catalog-copy.pure';
 import { useI18n } from '../i18n/I18nProvider';
 import { moduleClientOperationsRegistry, moduleClientOperationsRegistryCommands } from '../api/endpoints';
 import {
@@ -185,6 +189,7 @@ export function ClientOperationsRegistry() {
    */
   const [queryRefreshPending, setQueryRefreshPending] = useState(false);
   const [error, setError] = useState('');
+  const [moduleCatalogHint, setModuleCatalogHint] = useState(false);
   const [noteTypes, setNoteTypes] = useState<ClientOperationsNoteTypeRow[]>([]);
   const [columns, setColumns] = useState<ClientOperationsRegistryColumn[]>([]);
   const [toolbarCapabilities, setToolbarCapabilities] = useState<ClientOperationsToolbarCapability[]>(
@@ -278,6 +283,12 @@ export function ClientOperationsRegistry() {
     backendAvailablePeriodsRef.current = [];
     viewedPeriodKeyRef.current = null;
     setRenderedAggregatePeriodKey(null);
+    setRows([]);
+    setManualRows([]);
+    setWorkspace(null);
+    setError('');
+    setModuleCatalogHint(false);
+    setLoading(true);
     loadAbortRef.current?.abort();
     loadSeqRef.current += 1;
   }, [activeOrganizationId, identityEpoch]);
@@ -617,6 +628,7 @@ export function ClientOperationsRegistry() {
       // Period switches / search must not dim; only true cold mount uses loading.
       if (!options?.quiet) setLoading(true);
       setError('');
+      setModuleCatalogHint(false);
       return apiJson<RegistryAggregate>(
         registryUrl({
           ...nextQuery,
@@ -669,7 +681,17 @@ export function ClientOperationsRegistry() {
         .catch((e) => {
           if (e instanceof Error && e.name === 'AbortError') return;
           if (seq !== loadSeqRef.current) return;
-          setError(e instanceof Error ? e.message : t('clientOperations.loadFailed'));
+          const apiLike = e instanceof ApiError
+            ? { code: e.code, status: e.status, message: e.message }
+            : e instanceof Error
+              ? { message: e.message }
+              : {};
+          if (isModuleEntitlementDenied(apiLike)) {
+            setModuleCatalogHint(true);
+            setError(t(moduleEntitlementErrorKey(apiLike)));
+          } else {
+            setError(userFacingApiMessage(e) || t('clientOperations.loadFailed'));
+          }
           // Drop optimistic first-touch tab if backend never confirmed it.
           if (periodKey && !getPeriodAggregateCache(periodCacheRef.current, periodKey, cacheQuery)) {
             const backendPeriods = backendAvailablePeriodsRef.current;
@@ -914,6 +936,19 @@ export function ClientOperationsRegistry() {
   });
 
   return (
+    <>
+      {moduleCatalogHint ? (
+        <div className="nx-glass-alert nx-glass-alert--error" role="alert" data-testid="co-module-not-active">
+          <p>{error}</p>
+          <button
+            type="button"
+            className="nx-btn nx-btn-taxes-compact"
+            onClick={() => navigate('/modules')}
+          >
+            {t('clientOperations.openModuleCatalog')}
+          </button>
+        </div>
+      ) : null}
     <ClientOperationsRegistryView
       rows={rows}
       onRowsChange={setRows}
@@ -923,7 +958,7 @@ export function ClientOperationsRegistry() {
       searchPending={queryRefreshPending}
       periodContentPending={periodContentPending}
       renderedAggregatePeriodKey={renderedAggregatePeriodKey}
-      error={error}
+      error={moduleCatalogHint ? '' : error}
       canEdit={canEdit}
       canCreateCoreClient={allowedActions.includes('create_core_client')}
       pendingOpenClientId={pendingOpenClientId}
@@ -968,5 +1003,6 @@ export function ClientOperationsRegistry() {
         organizationId: auth.me.activeOrganizationId ?? '',
       }}
     />
+    </>
   );
 }

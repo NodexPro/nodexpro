@@ -30,7 +30,7 @@ test('1. sidebar no longer renders a language selector', () => {
   assert.doesNotMatch(sidebar, /UiLanguageSwitch/);
   assert.doesNotMatch(sidebar, /t1-sidebar-lang/);
   assert.doesNotMatch(sidebar, /showLanguage/);
-  assert.match(sidebar, /organization_switcher/);
+  assert.match(sidebar, /organization_name/);
   assert.match(sidebar, /logout_action/);
 });
 

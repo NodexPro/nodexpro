@@ -51,7 +51,7 @@ test('Client Operations dictionaries exist in both EN and HE with the same keys'
 test('English Client Operations chrome is English and Hebrew chrome stays Hebrew', () => {
   const enCo = en.clientOperations as { moduleTitle: string; search: string; tabs: { client: string } };
   const heCo = he.clientOperations as { moduleTitle: string; search: string; tabs: { client: string } };
-  assert.equal(enCo.moduleTitle, 'Client Operations');
+  assert.equal(enCo.moduleTitle, 'Client Management');
   assert.equal(enCo.search, 'Search');
   assert.equal(enCo.tabs.client, 'Client details');
   assert.match(heCo.moduleTitle, /ניהול לקוחות/);

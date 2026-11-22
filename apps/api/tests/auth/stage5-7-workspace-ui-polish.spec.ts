@@ -52,6 +52,7 @@ test('3. owner / admin keep the existing office identity behaviour (sign-out, no
   assert.equal(block.office_context.visible, false);
   assert.equal(block.workspace_greeting, null);
   assert.equal(block.organization_name, 'משרד רואה חשבון לוי');
+  assert.equal(block.organization_switcher.visible, false);
 });
 
 test('4. persisted English greeting is kept even when the organization country is IL', () => {
@@ -107,7 +108,7 @@ test('9. employee greeting is the CO header top line; header + shell typography 
     header,
     /\{greetingText \? \(\s*<div className="nx-co-app-header__title-stack">\s*<h1 className="nx-co-app-header__title" data-testid="client-operations-greeting">\s*\{greetingText\}/,
   );
-  assert.match(header, /<h1 className="nx-co-app-header__title">\{CLIENT_OPERATIONS_HEADER_TITLE_HE\}<\/h1>/);
+  assert.match(header, /CLIENT_OPERATIONS_HEADER_TITLE_KEY/);
   const layout = web('templates/template-1/TemplateLayout.tsx');
   assert.match(layout, /greetingText=\{sidebarAccountBlock\.workspace_greeting\?\.text \?\? null\}/);
   const shell = web('styles/nx-client-operations-shell.css');

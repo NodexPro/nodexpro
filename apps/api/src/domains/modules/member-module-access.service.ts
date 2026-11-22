@@ -388,7 +388,7 @@ export async function assertStaffViewerMayUseEntitledModuleCode(
   moduleCode: string,
 ): Promise<void> {
   if (roleHasOfficeClientAccess(ctx.membership?.roleCode)) return;
-  if (!ctx.organizationId) throw forbidden('Organization context required');
+  if (!ctx.organizationId) throw forbidden('Organization context required', 'ORGANIZATION_CONTEXT_REQUIRED');
   const entitlementCode = resolveModuleEntitlementCode(moduleCode);
   const { data: mod, error } = await supabaseAdmin
     .from('modules')
@@ -396,10 +396,12 @@ export async function assertStaffViewerMayUseEntitledModuleCode(
     .eq('code', entitlementCode)
     .maybeSingle();
   if (error) throw error;
-  if (!mod?.id || mod.is_active === false) throw forbidden('Module not active for this organization');
+  if (!mod?.id || mod.is_active === false) {
+    throw forbidden('Module not active for this organization', 'MODULE_NOT_ACTIVE');
+  }
   const entitlement = await resolveEntitlement(ctx.organizationId, String(mod.id));
   if (entitlement.status !== 'entitled' && entitlement.status !== 'trial') {
-    throw forbidden(entitlement.reason ?? 'Not entitled to use this module');
+    throw forbidden(entitlement.reason ?? 'Not entitled to use this module', 'MODULE_NOT_ENTITLED');
   }
   await assertStaffViewerMayUseModule(ctx, String(mod.id));
 }

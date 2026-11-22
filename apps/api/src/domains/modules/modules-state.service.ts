@@ -7,6 +7,12 @@ import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import { roleHasOfficeClientAccess } from '../client-operations/organization-client-access.pure.js';
 import { loadEnabledMemberModuleIdSet } from './member-module-access.service.js';
 import { buildModulesBillingSlice } from './modules-billing-slice.pure.js';
+import {
+  moduleBlockReasonKeyFromEntitlement,
+  moduleCatalogNameKey,
+  modulePlanNameKey,
+  moduleSubscriptionStatusKey,
+} from './module-catalog-copy.pure.js';
 
 const LOG_MODULES_STATE_TIMING = process.env.LOG_MODULES_STATE_TIMING === 'true';
 
@@ -37,7 +43,7 @@ export async function getModulesState(ctx: RequestContext, organizationId: strin
     getTrialState(organizationId),
     supabaseAdmin
       .from('organization_module_subscriptions')
-      .select('id, module_id, module_plan_id, status, started_at, ends_at, module_plans(name, currency, price_amount)')
+      .select('id, module_id, module_plan_id, status, started_at, ends_at, module_plans(code, name, currency, price_amount)')
       .eq('organization_id', organizationId),
     supabaseAdmin
       .from('module_dependencies')
@@ -100,7 +106,7 @@ export async function getModulesState(ctx: RequestContext, organizationId: strin
   );
   const validTrial = !!validTrialRow.data;
 
-  const subsByModule = new Map<string, { id: string; modulePlanId: string; planName: string; currency: string; priceAmount: number; status: string; startedAt: string; endsAt: string | null }>();
+  const subsByModule = new Map<string, { id: string; modulePlanId: string; planName: string; planCode: string; currency: string; priceAmount: number; status: string; startedAt: string; endsAt: string | null }>();
   for (const row of subsRes.data ?? []) {
     const r = row as unknown as {
       module_id: string;
@@ -109,7 +115,7 @@ export async function getModulesState(ctx: RequestContext, organizationId: strin
       status: string;
       started_at: string;
       ends_at: string | null;
-      module_plans: { name: string; currency: string; price_amount: number } | null;
+      module_plans: { code?: string; name: string; currency: string; price_amount: number } | null;
     };
     const plan = supabaseEmbedOne(r.module_plans);
     if (!plan) continue;
@@ -117,6 +123,7 @@ export async function getModulesState(ctx: RequestContext, organizationId: strin
       id: r.id,
       modulePlanId: r.module_plan_id,
       planName: plan.name,
+      planCode: String(plan.code ?? ''),
       currency: plan.currency,
       priceAmount: Number(plan.price_amount),
       status: r.status,
@@ -220,11 +227,18 @@ export async function getModulesState(ctx: RequestContext, organizationId: strin
       if (entitlementStatus !== 'entitled' && entitlementStatus !== 'trial') blockReason = entitlementReason ?? 'Not entitled';
       else if (missingDeps.length > 0) blockReason = `Missing dependencies: ${missingDeps.join(', ')}`;
     }
+    const blockReasonKey = blockReason
+      ? moduleBlockReasonKeyFromEntitlement(
+          blockReason,
+          blockReason.startsWith('Missing dependencies:') ? missingDeps : [],
+        )
+      : null;
 
     const availablePlans = isSystem ? [] : (plansByModule.get(m.id) ?? []).map((p) => ({
       id: p.id,
       code: p.code,
       name: p.name,
+      nameKey: modulePlanNameKey(p.code),
       billingPeriod: p.billingPeriod,
       currency: p.currency,
       priceAmount: p.priceAmount,
@@ -240,6 +254,7 @@ export async function getModulesState(ctx: RequestContext, organizationId: strin
       moduleId: m.id,
       code: m.code,
       name: m.name,
+      nameKey: moduleCatalogNameKey(m.code),
       version: m.version ?? '1.0.0',
       scopeType: m.scope_type,
       category: m.category ?? null,
@@ -249,6 +264,7 @@ export async function getModulesState(ctx: RequestContext, organizationId: strin
       canActivate,
       canDeactivate,
       blockReason,
+      blockReasonKey,
       navPath: m.nav_path ?? null,
       navLabel: m.nav_label ?? null,
       navOrder: m.nav_order ?? 0,
@@ -259,6 +275,8 @@ export async function getModulesState(ctx: RequestContext, organizationId: strin
             id: currentSubscription.id,
             modulePlanId: currentSubscription.modulePlanId,
             planName: currentSubscription.planName,
+            planNameKey: modulePlanNameKey(currentSubscription.planCode),
+            statusKey: moduleSubscriptionStatusKey(currentSubscription.status),
             currency: currentSubscription.currency,
             priceAmount: currentSubscription.priceAmount,
             status: currentSubscription.status,

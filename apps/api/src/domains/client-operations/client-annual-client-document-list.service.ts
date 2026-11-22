@@ -336,8 +336,13 @@ export async function generateAnnualClientDocumentListPdf(input: {
     items,
   });
   if (!snapshot.items.length) throw badRequest('no client documents selected');
+  const htmlStarted = Date.now();
   const html = buildClientDocumentListPdfHtml(snapshot);
+  const htmlMs = Date.now() - htmlStarted;
+  const pdfStarted = Date.now();
   const pdf = await renderIncomeDocumentPdfBufferFromHtml(html);
+  const pdfMs = Date.now() - pdfStarted;
+  console.info('[client-document-list-pdf] stages', { htmlMs, pdfMs, items: snapshot.items.length });
   const fileAssetId = await uploadGeneratedListPdf({
     ctx: input.ctx,
     orgId: input.orgId,
