@@ -132,5 +132,8 @@ test('AuthContext and apiJson drop stale workspace payloads after identity or of
   assert.match(client, /StaleWorkspaceError/);
   assert.match(client, /getWorkspaceGeneration/);
   assert.match(orgContext, /workspaceGeneration \+= 1/);
+  assert.match(orgContext, /bumpWorkspaceGeneration/);
   assert.match(login, /clearTabWorkspace/);
+  assert.match(auth, /shouldInvalidateInFlightSession/);
+  assert.match(login, /loginUiErrorAfterRefetch/);
 });

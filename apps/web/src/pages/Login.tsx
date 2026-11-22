@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { signInWithIdentifier } from '../lib/sign-in-with-identifier';
@@ -22,6 +22,11 @@ import {
   resolvePostLoginDestination,
 } from '../lib/invite-return-path.pure';
 import { loginMfaFormVisible } from '../lib/login-mfa-challenge.pure';
+import {
+  classifyLoginSubmitFailure,
+  loginUiErrorAfterRefetch,
+  sessionUserMatchesLoginIdentifier,
+} from '../lib/login-session-outcome.pure';
 import { setBackendActiveOrganizationId } from '../api/org-context';
 import { clearTabWorkspace } from '../lib/tab-workspace.pure';
 
@@ -42,6 +47,7 @@ export function Login() {
   const location = useLocation();
   const auth = useAuth();
   const { refetchMe } = auth;
+  const acceptedLoginRef = useRef<{ identifier: string } | null>(null);
   const redirectParam = new URLSearchParams(location.search).get('redirect');
   const from = redirectParam ?? (location.state as { from?: { pathname: string } })?.from?.pathname ?? '/dashboard';
   const inviteReturnPath = captureInviteReturnPath(
@@ -52,6 +58,17 @@ export function Login() {
     ? `/register?redirect=${encodeURIComponent(inviteReturnPath)}`
     : '/register';
   const passwordResetOk = Boolean((location.state as { passwordResetOk?: boolean } | null)?.passwordResetOk);
+
+  function postLoginPath(sessionRedirect: string | null | undefined): string {
+    const inviteAfterAuth = readStoredInviteReturnPath(
+      typeof sessionStorage !== 'undefined' ? sessionStorage : null,
+    );
+    return resolvePostLoginDestination({
+      inviteReturnPath: inviteAfterAuth,
+      sessionRedirect,
+      fallback: from,
+    });
+  }
 
   useEffect(() => {
     if (
@@ -64,6 +81,23 @@ export function Login() {
       setChallengeRequired(true);
     }
   }, [auth]);
+
+  useEffect(() => {
+    const accepted = acceptedLoginRef.current;
+    if (!accepted || auth.status !== 'authenticated') return;
+    if (!sessionUserMatchesLoginIdentifier(auth.me, accepted.identifier)) return;
+    if (
+      loginMfaFormVisible({
+        sessionState: auth.me.session_state,
+        sessionChallengeRequired: auth.me.mfa?.challenge_required,
+      })
+    ) {
+      setChallengeRequired(true);
+      return;
+    }
+    setError('');
+    navigate(postLoginPath(auth.me.redirect_to), { replace: true });
+  }, [auth, from, navigate]);
 
   useEffect(() => {
     if (cooldownSeconds <= 0) return undefined;
@@ -80,8 +114,17 @@ export function Login() {
     if (error) throw error;
   }
 
+  async function persistPublicUiLanguage() {
+    if (lang !== 'en' && lang !== 'he' && lang !== 'ru') return;
+    await apiJson(AUTH.setUiLanguageCommand, {
+      method: 'POST',
+      body: JSON.stringify({ language_code: lang }),
+    }).catch(() => undefined);
+  }
+
   async function finishAuthenticatedNavigation() {
-    const me = await refetchMe();
+    let me = await refetchMe();
+    if (!me) me = await refetchMe();
     if (
       loginMfaFormVisible({
         sessionState: me?.session_state,
@@ -92,19 +135,13 @@ export function Login() {
       setError(loginSecurityText(uiLang, 'mfaChallenge'));
       return;
     }
-    if (!me) {
-      setError(loginSecurityText(uiLang, 'invalidCredentials'));
+    if (loginUiErrorAfterRefetch({ loginSucceeded: true, me }) === 'load_account') {
+      setError(loginSecurityText(uiLang, 'loadAccountFailed'));
       return;
     }
-    const inviteAfterAuth = readStoredInviteReturnPath(
-      typeof sessionStorage !== 'undefined' ? sessionStorage : null,
-    );
-    const redirectTo = resolvePostLoginDestination({
-      inviteReturnPath: inviteAfterAuth,
-      sessionRedirect: me.redirect_to,
-      fallback: from,
-    });
-    navigate(redirectTo, { replace: true });
+    if (!me) return;
+    await persistPublicUiLanguage();
+    navigate(postLoginPath(me.redirect_to), { replace: true });
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -129,6 +166,7 @@ export function Login() {
         return;
       }
       const emailNorm = email.trim().toLowerCase();
+      acceptedLoginRef.current = { identifier: emailNorm };
       const signedIn = await signInWithIdentifier(supabase, emailNorm, password);
       if (loginMfaFormVisible({ loginChallengeRequired: signedIn.challengeRequired })) {
         setChallengeRequired(true);
@@ -145,16 +183,20 @@ export function Login() {
         ? offerRecoveryFromFailure({ offerRecovery: err.details?.offer_recovery })
         : false;
       setOfferRecovery(recovery);
-      if (code === 'TOO_MANY_REQUESTS' || retryAfter > 0) {
+      const kind = classifyLoginSubmitFailure(err);
+      if (kind === 'rate_limit' || retryAfter > 0) {
         const seconds = retryAfter || 180;
         setCooldownUntil(Date.now() + seconds * 1000);
         setNowMs(Date.now());
         setError(loginCooldownMessage(seconds, uiLang));
-      } else if (code === 'LOGIN_CHALLENGE_REQUIRED') {
+      } else if (kind === 'mfa' || code === 'LOGIN_CHALLENGE_REQUIRED') {
         setChallengeRequired(true);
         setError(loginSecurityText(uiLang, 'mfaChallenge'));
-      } else {
+      } else if (kind === 'invalid_credentials') {
+        acceptedLoginRef.current = null;
         setError(loginSecurityText(uiLang, 'invalidCredentials'));
+      } else {
+        setError(loginSecurityText(uiLang, 'loadAccountFailed'));
       }
     } finally {
       setLoading(false);
@@ -227,9 +269,11 @@ export function Login() {
         >
           {cooldownSeconds > 0
             ? loginCooldownMessage(cooldownSeconds, uiLang)
-            : challengeRequired
-              ? t('auth.verifyCode')
-              : t('auth.signIn')}
+            : loading
+              ? t('auth.signingIn')
+              : challengeRequired
+                ? t('auth.verifyCode')
+                : t('auth.signIn')}
         </button>
       </form>
       <div className={`nx-glass-auth__links${offerRecovery ? ' nx-glass-alert nx-glass-alert--ok' : ''}`}>

@@ -192,6 +192,14 @@ export async function apiJson<T>(path: string, options?: RequestInit): Promise<T
       throw err;
     }
     if (decision === 'clear_auth') {
+      if (classifyWorkspaceApplyDecision({
+        startedGeneration,
+        currentGeneration: getWorkspaceGeneration(),
+      }) === 'discard_stale') {
+        const stale = new Error('Workspace changed');
+        stale.name = 'StaleWorkspaceError';
+        throw stale;
+      }
       try {
         const { supabase } = await import('../lib/supabase');
         await supabase.auth.signOut();

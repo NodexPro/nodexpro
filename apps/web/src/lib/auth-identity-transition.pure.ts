@@ -41,6 +41,45 @@ export function shouldRefetchSessionAfterAuthEvent(transition: AuthIdentityTrans
   return transition === 'user_switched' || transition === 'signed_in' || transition === 'token_refresh_mismatch';
 }
 
+/**
+ * SIGNED_IN / user switch must not join an in-flight GET started under a previous identity.
+ * TOKEN_REFRESHED for the same user keeps the in-flight session.
+ */
+export function shouldInvalidateInFlightSession(transition: AuthIdentityTransition): boolean {
+  return (
+    transition === 'signed_in'
+    || transition === 'user_switched'
+    || transition === 'signed_out'
+    || transition === 'token_refresh_mismatch'
+  );
+}
+
+export function canReuseInFlightSession(input: {
+  inFlightGeneration?: number | null;
+  currentGeneration?: number | null;
+  inFlightAuthUserId?: string | null;
+  currentAuthUserId?: string | null;
+}): boolean {
+  if (input.inFlightGeneration == null || input.currentGeneration == null) return false;
+  if (input.inFlightGeneration !== input.currentGeneration) return false;
+  const inFlightUser = String(input.inFlightAuthUserId ?? '').trim();
+  const currentUser = String(input.currentAuthUserId ?? '').trim();
+  if (inFlightUser && currentUser && inFlightUser !== currentUser) return false;
+  return true;
+}
+
+/** A late getSession() must not overwrite a newer live identity with an empty or other user. */
+export function shouldApplyBootstrappedSession(input: {
+  bootAuthUserId?: string | null;
+  currentAuthUserId?: string | null;
+}): boolean {
+  const boot = String(input.bootAuthUserId ?? '').trim();
+  const current = String(input.currentAuthUserId ?? '').trim();
+  if (!boot && current) return false;
+  if (boot && current && boot !== current) return false;
+  return true;
+}
+
 export function nextAuthGeneration(current: number): number {
   return current + 1;
 }

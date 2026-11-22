@@ -6,11 +6,15 @@
 let backendActiveOrganizationId: string | null = null;
 let workspaceGeneration = 0;
 
+export function bumpWorkspaceGeneration(): void {
+  workspaceGeneration += 1;
+}
+
 export function setBackendActiveOrganizationId(id: string | null | undefined): void {
   const next = typeof id === 'string' && id.trim() ? id.trim() : null;
   if (next === backendActiveOrganizationId) return;
   backendActiveOrganizationId = next;
-  workspaceGeneration += 1;
+  bumpWorkspaceGeneration();
 }
 
 export function getBackendActiveOrganizationId(): string | null {

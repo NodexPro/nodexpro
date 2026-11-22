@@ -119,7 +119,12 @@ export function decideSessionWorkspaceApply(input: {
   sessionActiveOrganizationId: string | null | undefined;
   workingOrganizationId: string | null | undefined;
   membershipOrgIds?: readonly string[] | null;
+  sessionState?: string | null;
 }): SessionWorkspaceApplyKind {
+  const state = String(input.sessionState ?? '').trim();
+  if (state === 'needs_onboarding' || state === 'mfa_challenge' || state === 'blocked') {
+    return 'apply_session';
+  }
   const working = String(input.workingOrganizationId ?? '').trim();
   if (!working) return 'apply_session';
   if (String(input.sessionActiveOrganizationId ?? '').trim() === working) return 'apply_session';

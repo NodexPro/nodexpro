@@ -2,12 +2,15 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { supabase } from '../lib/supabase';
 import { apiJson } from '../api/client';
 import { AUTH } from '../api/endpoints';
-import { setBackendActiveOrganizationId } from '../api/org-context';
+import { setBackendActiveOrganizationId, bumpWorkspaceGeneration } from '../api/org-context';
 import {
+  canReuseInFlightSession,
   classifyAuthIdentityTransition,
   isStaleRequestGeneration,
   nextRequestGeneration,
+  shouldApplyBootstrappedSession,
   shouldDropAuthenticatedUi,
+  shouldInvalidateInFlightSession,
   shouldRefetchSessionAfterAuthEvent,
 } from '../lib/auth-identity-transition.pure';
 import { classifySessionFetchFailure } from '../lib/onboarding-session-route.pure';
@@ -118,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const generationRef = useRef(0);
   const authUserIdRef = useRef<string | null>(null);
   const lastWorkspaceRef = useRef<{ userId: string; orgId: string | null } | null>(null);
-  const inFlightMe = useRef<{ generation: number; promise: Promise<MeData | null> } | null>(null);
+  const inFlightMe = useRef<{ generation: number; userId: string | null; promise: Promise<MeData | null> } | null>(null);
   const orgSwitchLatestRef = useRef<string | null>(null);
   const orgSwitchInFlightRef = useRef<Promise<MeData | null> | null>(null);
 
@@ -136,7 +139,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (decideSessionWorkspaceApply({
       sessionActiveOrganizationId: me.activeOrganizationId,
       workingOrganizationId: claimed,
-      membershipOrgIds: me.organizations.map((org) => org.id),
+      membershipOrgIds: (me.organizations ?? []).map((org) => org.id),
+      sessionState: me.session_state,
     }) === 'mismatch') {
       setBackendActiveOrganizationId(claimed);
       return null;
@@ -162,6 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const dropAuthenticatedWorkspace = useCallback(() => {
     orgSwitchLatestRef.current = null;
     bumpGeneration();
+    bumpWorkspaceGeneration();
     setBackendActiveOrganizationId(null);
     clearTabWorkspace(tabStorage());
   }, [bumpGeneration]);
@@ -222,7 +227,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refetchMe = useCallback(async (signal?: AbortSignal): Promise<MeData | null> => {
     const started = generationRef.current;
-    if (!signal && inFlightMe.current?.generation === started) return inFlightMe.current.promise;
+    const startedUserId = authUserIdRef.current;
+    if (
+      !signal
+      && inFlightMe.current
+      && canReuseInFlightSession({
+        inFlightGeneration: inFlightMe.current.generation,
+        currentGeneration: started,
+        inFlightAuthUserId: inFlightMe.current.userId,
+        currentAuthUserId: startedUserId,
+      })
+    ) {
+      return inFlightMe.current.promise;
+    }
     setState((prev) => (prev.status === 'session_error' ? { status: 'loading' } : prev));
     const run = (async () => {
       try {
@@ -231,14 +248,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setBackendActiveOrganizationId(stored.organizationId);
         }
         const me = await apiJson<MeData>(AUTH.session, signal ? { signal } : undefined);
-        if (signal?.aborted || isStaleRequestGeneration(started, generationRef.current)) return null;
+        if (
+          signal?.aborted
+          || isStaleRequestGeneration(started, generationRef.current)
+          || startedUserId !== authUserIdRef.current
+        ) {
+          return null;
+        }
         const applied = applyAuthenticated(me, authUserIdRef.current);
         if (!applied) {
           setState((prev) => (prev.status === 'authenticated' ? prev : { status: 'session_error' }));
         }
         return applied;
       } catch (e) {
-        if (signal?.aborted || isStaleRequestGeneration(started, generationRef.current)) return null;
+        if (
+          signal?.aborted
+          || isStaleRequestGeneration(started, generationRef.current)
+          || startedUserId !== authUserIdRef.current
+        ) {
+          return null;
+        }
         const outcome = classifySessionFetchFailure(e);
         if (outcome === 'ignore') return null;
         if (outcome === 'clear_auth') {
@@ -255,7 +284,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null;
       }
     })();
-    if (!signal) inFlightMe.current = { generation: started, promise: run };
+    if (!signal) inFlightMe.current = { generation: started, userId: startedUserId, promise: run };
     const result = await run;
     if (!signal && inFlightMe.current?.promise === run) inFlightMe.current = null;
     return result;
@@ -295,9 +324,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const ac = new AbortController();
     const load = async () => {
       const { data } = await supabase.auth.getSession();
-      const authUserId = data.session?.user.id ?? null;
-      authUserIdRef.current = authUserId;
-      if (!authUserId) {
+      const bootAuthUserId = data.session?.user.id ?? null;
+      if (!shouldApplyBootstrappedSession({
+        bootAuthUserId,
+        currentAuthUserId: authUserIdRef.current,
+      })) {
+        return;
+      }
+      authUserIdRef.current = bootAuthUserId;
+      if (!bootAuthUserId) {
         dropAuthenticatedWorkspace();
         setState({ status: 'unauthenticated' });
         return;
@@ -326,6 +361,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setState({ status: 'loading' });
       } else {
         authUserIdRef.current = nextAuthUserId;
+        if (shouldInvalidateInFlightSession(transition)) {
+          bumpGeneration();
+          bumpWorkspaceGeneration();
+        }
       }
       // TOKEN_REFRESHED for the same user keeps UI; identity mismatch drops and refetches.
       if (shouldRefetchSessionAfterAuthEvent(transition) && nextAuthUserId) {
@@ -333,7 +372,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
     return () => subscription.unsubscribe();
-  }, [dropAuthenticatedWorkspace, refetchMe]);
+  }, [bumpGeneration, dropAuthenticatedWorkspace, refetchMe]);
 
   const value = useMemo(
     () =>

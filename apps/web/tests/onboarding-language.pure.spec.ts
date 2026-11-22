@@ -12,6 +12,7 @@ import {
   localizationValueAllowed,
 } from '../src/lib/onboarding-form.pure.ts';
 import { resolvePublicUiLang } from '../src/lib/public-ui-lang.pure.ts';
+import { decideSessionLanguageApply } from '../src/lib/session-language-bootstrap.pure.ts';
 
 const dir = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(join(dir, rel), 'utf8');
@@ -47,7 +48,10 @@ test('PublicAuthShell is HE RTL and EN LTR; register persists the chosen languag
   assert.match(register, /language_code: lang/);
   assert.match(register, /AUTH\.setUiLanguageCommand/);
   assert.match(sync, /sidebar_account_block\?\.language_selector\?\.current_value/);
+  assert.match(sync, /decideSessionLanguageApply/);
   assert.doesNotMatch(sync, /geoCountry|nx-geo-country|navigator\.language/);
+  assert.equal(decideSessionLanguageApply({ storedPublicLang: 'he', sessionLang: 'en' }), 'he');
+  assert.equal(decideSessionLanguageApply({ storedPublicLang: 'en', sessionLang: 'he' }), 'en');
   assert.match(i18n, /PUBLIC_LANG_STORAGE_KEY/);
   assert.match(i18n, /readInitialUiLang/);
   assert.equal(resolvePublicUiLang({ stored: 'he', geoCountry: 'US' }), 'he');

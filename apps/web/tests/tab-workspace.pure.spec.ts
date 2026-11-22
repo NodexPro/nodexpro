@@ -19,6 +19,7 @@ import {
   isStaleRequestGeneration,
   nextRequestGeneration,
   shouldDropAuthenticatedUi,
+  shouldInvalidateInFlightSession,
   shouldRefetchSessionAfterAuthEvent,
 } from '../src/lib/auth-identity-transition.pure.ts';
 import {
@@ -114,6 +115,15 @@ test('session overlay never transplants permissions from another office', () => 
     }),
     'apply_session',
   );
+  assert.equal(
+    decideSessionWorkspaceApply({
+      sessionActiveOrganizationId: null,
+      workingOrganizationId: 'org-a',
+      membershipOrgIds: ['org-a'],
+      sessionState: 'needs_onboarding',
+    }),
+    'apply_session',
+  );
 });
 
 test('account switch and sign-out drop UI; token refresh of the same user does not', () => {
@@ -141,7 +151,13 @@ test('account switch and sign-out drop UI; token refresh of the same user does n
   assert.equal(shouldDropAuthenticatedUi('token_refresh_same'), false);
   assert.equal(shouldRefetchSessionAfterAuthEvent('user_switched'), true);
   assert.equal(shouldRefetchSessionAfterAuthEvent('token_refresh_same'), false);
+  assert.equal(
+    classifyAuthIdentityTransition({ event: 'SIGNED_IN', previousAuthUserId: null, nextAuthUserId: 'b' }),
+    'signed_in',
+  );
   assert.equal(isStaleRequestGeneration(2, nextRequestGeneration(1)), false);
+  assert.equal(shouldInvalidateInFlightSession('signed_in'), true);
+  assert.equal(shouldInvalidateInFlightSession('token_refresh_same'), false);
 });
 
 test('load errors are not onboarding; primary onboarding requires backend state', () => {

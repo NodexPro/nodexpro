@@ -26,7 +26,9 @@ export async function signInWithIdentifier(
     body: JSON.stringify({ email: identifier.trim().toLowerCase(), password }),
   });
   if (!result.session?.access_token || !result.session.refresh_token) {
-    throw new Error('No session after sign in');
+    const err = new Error('No session after sign in');
+    err.name = 'LoginSessionContractError';
+    throw err;
   }
   const { error } = await supabase.auth.setSession({
     access_token: result.session.access_token,
