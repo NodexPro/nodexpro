@@ -31,7 +31,11 @@ import { setBackendActiveOrganizationId } from '../api/org-context';
 import { isStoredUiLang } from '../lib/public-ui-lang.pure';
 import { clearTabWorkspace } from '../lib/tab-workspace.pure';
 import { deviceSignOutOptions } from '../lib/device-session.pure';
-import { shouldClearLocalSessionBeforePasswordLogin } from '../lib/login-identity-switch.pure';
+import {
+  beginLocalPasswordSwitch,
+  endLocalPasswordSwitch,
+  shouldClearLocalSessionBeforePasswordLogin,
+} from '../lib/login-identity-switch.pure';
 
 export function Login() {
   const { t, lang, setLang } = useI18n();
@@ -170,10 +174,12 @@ export function Login() {
     }
     setError('');
     setLoading(true);
+    const startedLocalSwitch = shouldClearLocalSessionBeforePasswordLogin({ challengeRequired });
+    if (startedLocalSwitch) beginLocalPasswordSwitch();
     try {
       setBackendActiveOrganizationId(null);
       clearTabWorkspace(typeof sessionStorage === 'undefined' ? null : sessionStorage);
-      if (shouldClearLocalSessionBeforePasswordLogin({ challengeRequired })) {
+      if (startedLocalSwitch) {
         await supabase.auth.signOut(deviceSignOutOptions()).catch(() => undefined);
       }
       if (challengeRequired) {
@@ -220,6 +226,7 @@ export function Login() {
         setError(loginSecurityText(uiLang, 'loadAccountFailed'));
       }
     } finally {
+      if (!didFinishLoginNavRef.current) endLocalPasswordSwitch();
       setLoading(false);
     }
   }

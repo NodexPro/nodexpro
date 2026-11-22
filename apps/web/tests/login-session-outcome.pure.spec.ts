@@ -46,7 +46,7 @@ test('clean browser login B with needs_onboarding goes to onboarding, not a cred
     'signed_in',
   );
   assert.equal(shouldDropAuthenticatedUi('signed_in'), false);
-  assert.equal(shouldInvalidateInFlightSession('signed_in'), true);
+  assert.equal(shouldInvalidateInFlightSession('signed_in'), false);
   assert.equal(shouldApplyBootstrappedSession({ bootAuthUserId: null, currentAuthUserId: 'user-b' }), false);
   assert.equal(loginUiErrorAfterRefetch({ loginSucceeded: true, me: onboardingMe }), 'none');
   assert.equal(classifyPostLoginNavigation(onboardingMe), 'needs_onboarding');

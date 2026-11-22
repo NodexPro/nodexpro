@@ -42,13 +42,13 @@ export function shouldRefetchSessionAfterAuthEvent(transition: AuthIdentityTrans
 }
 
 /**
- * SIGNED_IN / user switch must not join an in-flight GET started under a previous identity.
+ * User switch / sign-out must not join an in-flight GET started under a previous identity.
+ * Fresh SIGNED_IN (no previous user) keeps the password-login session fetch.
  * TOKEN_REFRESHED for the same user keeps the in-flight session.
  */
 export function shouldInvalidateInFlightSession(transition: AuthIdentityTransition): boolean {
   return (
-    transition === 'signed_in'
-    || transition === 'user_switched'
+    transition === 'user_switched'
     || transition === 'signed_out'
     || transition === 'token_refresh_mismatch'
   );
@@ -83,13 +83,24 @@ export function shouldApplyBootstrappedSession(input: {
 /**
  * Local account-switch signOut emits SIGNED_OUT. If setSession(B) already won,
  * that late event must not paint logged-out over B.
+ * Do not call supabase.auth.getSession() from onAuthStateChange — that deadlocks GoTrue's lock.
  */
 export function shouldApplySignedOutUi(input: {
   event?: string | null;
   liveAuthUserId?: string | null;
+  currentAuthUserId?: string | null;
+  switchInstalledUserId?: string | null;
 }): boolean {
   if (String(input.event ?? '').trim() !== 'SIGNED_OUT') return true;
-  return !String(input.liveAuthUserId ?? '').trim();
+  if (String(input.liveAuthUserId ?? '').trim()) return false;
+  if (String(input.switchInstalledUserId ?? '').trim()) return false;
+  return true;
+}
+
+/** GoTrue deadlocks if onAuthStateChange awaits other auth APIs under its exclusive lock. */
+export function authStateChangeCallbackAwaitsAuthLock(source: string): boolean {
+  return /onAuthStateChange\(\s*async\s*\(/.test(source)
+    || /event === 'SIGNED_OUT'[\s\S]{0,400}auth\.getSession\(/.test(source);
 }
 
 export function nextAuthGeneration(current: number): number {

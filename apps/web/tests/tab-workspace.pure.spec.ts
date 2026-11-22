@@ -156,7 +156,7 @@ test('account switch and sign-out drop UI; token refresh of the same user does n
     'signed_in',
   );
   assert.equal(isStaleRequestGeneration(2, nextRequestGeneration(1)), false);
-  assert.equal(shouldInvalidateInFlightSession('signed_in'), true);
+  assert.equal(shouldInvalidateInFlightSession('signed_in'), false);
   assert.equal(shouldInvalidateInFlightSession('token_refresh_same'), false);
 });
 

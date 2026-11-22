@@ -17,6 +17,11 @@ import {
 import { classifySessionFetchFailure } from '../lib/onboarding-session-route.pure';
 import { shouldApplyOfficeSwitchAggregate } from '../lib/org-switch-queue.pure';
 import { deviceSignOutOptions } from '../lib/device-session.pure';
+import {
+  endLocalPasswordSwitch,
+  localPasswordSwitchInstalledUserId,
+  noteLocalPasswordSwitchIdentity,
+} from '../lib/login-identity-switch.pure';
 import { isStaleWorkspaceError } from '../lib/session-auth-failure.pure';
 import {
   clearTabWorkspace,
@@ -323,6 +328,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await apiJson(AUTH.logout, { method: 'POST' });
     } finally {
+      endLocalPasswordSwitch();
       authUserIdRef.current = null;
       dropAuthenticatedWorkspace();
       await supabase.auth.signOut(deviceSignOutOptions());
@@ -354,41 +360,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [dropAuthenticatedWorkspace, refetchMe]);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_OUT') {
-        const live = await supabase.auth.getSession();
-        if (!shouldApplySignedOutUi({
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      void (async () => {
+        if (event === 'SIGNED_OUT') {
+          if (!shouldApplySignedOutUi({
+            event,
+            liveAuthUserId: session?.user.id ?? null,
+            switchInstalledUserId: localPasswordSwitchInstalledUserId(),
+          })) {
+            return;
+          }
+        }
+        const nextAuthUserId = session?.user.id ?? null;
+        const transition = classifyAuthIdentityTransition({
           event,
-          liveAuthUserId: live.data.session?.user.id ?? null,
-        })) {
-          return;
+          previousAuthUserId: authUserIdRef.current,
+          nextAuthUserId,
+        });
+        if (nextAuthUserId) noteLocalPasswordSwitchIdentity(nextAuthUserId);
+        if (shouldDropAuthenticatedUi(transition)) {
+          authUserIdRef.current = nextAuthUserId;
+          dropAuthenticatedWorkspace();
+          if (transition === 'signed_out') {
+            setState({ status: 'unauthenticated' });
+            return;
+          }
+          setState({ status: 'loading' });
+        } else {
+          authUserIdRef.current = nextAuthUserId;
+          if (shouldInvalidateInFlightSession(transition)) {
+            bumpGeneration();
+            bumpWorkspaceGeneration();
+          }
         }
-      }
-      const nextAuthUserId = session?.user.id ?? null;
-      const transition = classifyAuthIdentityTransition({
-        event,
-        previousAuthUserId: authUserIdRef.current,
-        nextAuthUserId,
-      });
-      if (shouldDropAuthenticatedUi(transition)) {
-        authUserIdRef.current = nextAuthUserId;
-        dropAuthenticatedWorkspace();
-        if (transition === 'signed_out') {
-          setState({ status: 'unauthenticated' });
-          return;
+        // TOKEN_REFRESHED for the same user keeps UI; identity mismatch drops and refetches.
+        if (shouldRefetchSessionAfterAuthEvent(transition) && nextAuthUserId) {
+          await refetchMe();
         }
-        setState({ status: 'loading' });
-      } else {
-        authUserIdRef.current = nextAuthUserId;
-        if (shouldInvalidateInFlightSession(transition)) {
-          bumpGeneration();
-          bumpWorkspaceGeneration();
-        }
-      }
-      // TOKEN_REFRESHED for the same user keeps UI; identity mismatch drops and refetches.
-      if (shouldRefetchSessionAfterAuthEvent(transition) && nextAuthUserId) {
-        await refetchMe();
-      }
+      })();
     });
     return () => subscription.unsubscribe();
   }, [bumpGeneration, dropAuthenticatedWorkspace, refetchMe]);
