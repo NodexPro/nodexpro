@@ -37,6 +37,7 @@ test('login cooldown uses backend Retry-After and keeps a stable browser stamp',
   assert.equal(retryAfterSecondsFromFailure({ status: 400, retryAfter: 180 }), 0);
   assert.equal(retryAfterSecondsFromFailure({ status: 429, retryAfter: 180 }), 180);
   assert.equal(loginFailureCode({ code: 'INVALID_CREDENTIALS', status: 400 }), 'INVALID_CREDENTIALS');
+  assert.equal(loginFailureCode({ code: 'EMAIL_NOT_CONFIRMED', status: 400 }), 'EMAIL_NOT_CONFIRMED');
   assert.equal(loginFailureCode({ code: 'TOO_MANY_REQUESTS', status: 429 }), 'TOO_MANY_REQUESTS');
   assert.equal(remainingCooldownSeconds(Date.now() + 2500, Date.now()), 3);
   const storage = new Map<string, string>();

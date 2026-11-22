@@ -189,6 +189,7 @@ test('token refresh, MFA and stale responses do not look like a failed password'
   assert.equal(loginMfaFormVisible({ sessionState: 'needs_onboarding' }), false);
   assert.equal(classifyPostLoginNavigation({ sessionState: 'mfa_challenge' }), 'mfa');
   assert.equal(classifyLoginSubmitFailure({ code: 'LOGIN_CHALLENGE_REQUIRED', status: 401 }), 'mfa');
+  assert.equal(classifyLoginSubmitFailure({ code: 'EMAIL_NOT_CONFIRMED', status: 400 }), 'email_not_confirmed');
   const stale = new Error('Workspace changed');
   stale.name = 'StaleWorkspaceError';
   assert.equal(classifyLoginSubmitFailure(stale), 'session_error');

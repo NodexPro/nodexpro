@@ -28,6 +28,10 @@ import {
 import { resolvePersistedUiLanguage } from '../platform-localization/platform-localization.pure.js';
 import { listInvitesRbac, revokeUserAccessRbac } from './memberships-rbac.service.js';
 import { loadCloseAccessBlockers } from './member-close-access-blockers.service.js';
+import { resolveStaffSeatEntitlement } from '../modules/staff-seat-entitlement.service.js';
+import { buildStaffSeatWorkspaceBlock, type StaffSeatWorkspaceBlock } from '../modules/staff-seat-entitlement.pure.js';
+import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
+import { incomeDraftVatFallbackResolution } from '../income/income-draft-vat-fallback.pure.js';
 import {
   buildUsersRolesUi,
   cancelInvitationConfirmFor,
@@ -114,6 +118,7 @@ export type UsersRolesAggregate = {
   /** Employees only (admin / staff / viewer): active first, closed access last. */
   members: UsersRolesMemberRow[];
   invitations: UsersRolesInvitationRow[];
+  staff_seats: StaffSeatWorkspaceBlock;
 };
 
 function assertOfficeActor(ctx: RequestContext, orgId: string): void {
@@ -146,7 +151,8 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
   const { canWrite, canRevoke } = actorFlags(ctx);
   const actorRole = ctx.membership?.roleCode ?? '';
 
-  const [orgRes, membershipsRes, profilesRes, assignableModules] = await Promise.all([
+  const asOfDate = new Date().toISOString().slice(0, 10);
+  const [orgRes, membershipsRes, profilesRes, assignableModules, staffSeatTruth, vatResolution] = await Promise.all([
     supabaseAdmin.from('organizations').select('timezone, country_code').eq('id', orgId).maybeSingle(),
     supabaseAdmin
       .from('organization_memberships')
@@ -158,6 +164,9 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
       .select('membership_id, first_name, last_name, phone')
       .eq('organization_id', orgId),
     loadOrganizationAssignableModuleNames(orgId),
+    resolveStaffSeatEntitlement(orgId).catch(() => null),
+    // TEMPORARY_COUNTRY_PACK_PENDING: statutory VAT from Country Pack legal values (IL fallback inside resolver).
+    resolveIncomeDraftVatForOrg(orgId, 'IL', asOfDate).catch(() => incomeDraftVatFallbackResolution()),
   ]);
   if (membershipsRes.error) throw membershipsRes.error;
   if (profilesRes.error) throw profilesRes.error;
@@ -297,6 +306,23 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
     available_actions: { resend: canWrite, cancel: canWrite },
   }));
 
+  const vat = vatResolution ?? incomeDraftVatFallbackResolution();
+  const catalogPrice = Number(staffSeatTruth?.list_unit_price_amount ?? staffSeatTruth?.seat_unit_price_amount ?? 0);
+  const staff_seats = buildStaffSeatWorkspaceBlock({
+    included_staff_seats: staffSeatTruth?.included_staff_seats ?? 0,
+    occupied_staff_seats: staffSeatTruth?.active_consumed_staff_seats ?? 0,
+    available_staff_seats: staffSeatTruth?.available_staff_seats ?? 0,
+    entitled_staff_seats: staffSeatTruth?.entitled_staff_seats ?? 0,
+    unit_price_amount: catalogPrice,
+    currency: staffSeatTruth?.seat_currency ?? 'ILS',
+    billing_period: staffSeatTruth?.seat_billing_period ?? 'month',
+    vat_rate: vat.standard_rate,
+    vat_percent_label: vat.standard_rate_percent_label,
+    locale,
+    checkout_available: false,
+    checkout_unavailable_message: ui.text.staff_seats_checkout_unavailable,
+  });
+
   return {
     aggregate_key: 'users_roles_aggregate',
     organization_id: orgId,
@@ -308,6 +334,7 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
     owners,
     members: employees,
     invitations,
+    staff_seats,
   };
 }
 

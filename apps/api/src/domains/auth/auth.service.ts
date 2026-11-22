@@ -22,7 +22,6 @@ export async function register(params: {
     options: { data: { full_name: params.fullName ?? '' } },
   });
   if (error) {
-    if (error.message.includes('already registered')) throw badRequest(ENUMERATION_SAFE_REGISTER_MESSAGE);
     throw badRequest(ENUMERATION_SAFE_REGISTER_MESSAGE);
   }
   if (data.user) {
@@ -39,7 +38,13 @@ export async function register(params: {
       await writeAudit({ organizationId: null, actorUserId: appUserId, entityType: 'user', action: AUDIT_ACTIONS.USER_CREATED, payload: { email: params.email } });
     }
   }
-  return { session: data.session, user: data.user };
+  const email = String(params.email ?? '').trim().toLowerCase();
+  return {
+    session: data.session,
+    user: data.user,
+    email,
+    email_confirmation_required: data.session == null,
+  };
 }
 
 export async function login(params: { email: string; password: string }) {
@@ -49,7 +54,14 @@ export async function login(params: { email: string; password: string }) {
     email: canonicalEmail,
     password: params.password,
   });
-  if (error) throw badRequest('Invalid email or password');
+  if (error) {
+    const code = String((error as { code?: string }).code ?? '').toLowerCase();
+    const message = String(error.message ?? '').toLowerCase();
+    if (code === 'email_not_confirmed' || message.includes('email not confirmed')) {
+      throw badRequest('Email confirmation required', 'EMAIL_NOT_CONFIRMED');
+    }
+    throw badRequest('Invalid email or password');
+  }
   const appUser = await supabaseAdmin.from('users').select('id, status').eq('auth_user_id', data.user.id).single();
   if (appUser.data && !isAppUserStatusActive(appUser.data.status)) {
     const issued = data.session?.access_token;

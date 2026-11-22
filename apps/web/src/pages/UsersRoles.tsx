@@ -72,18 +72,23 @@ export function UsersRoles() {
       ? auth.me.localization?.language.current ?? auth.me.sidebar_account_block?.language_selector?.current_value
       : null;
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     if (!orgId) return;
     try {
-      setData(await fetchUsersRolesAggregate(orgId));
+      const next = await fetchUsersRolesAggregate(orgId, signal ? { signal } : undefined);
+      if (signal?.aborted) return;
+      setData(next);
       setError('');
     } catch (e) {
+      if (e instanceof Error && e.name === 'AbortError') return;
       setError(errorText(e, 'Something went wrong. Please try again.'));
     }
   }, [orgId]);
 
   useEffect(() => {
-    void load();
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
   }, [load, sessionLang]);
 
   /** A command returned refreshed backend truth: render it and close the modal. */
@@ -178,6 +183,45 @@ export function UsersRoles() {
       </div>
 
       {error ? <div className="nx-ur-error">{error}</div> : null}
+
+      {data?.staff_seats ? (
+        <section className="nx-ur-seats" aria-label={T('staff_seats_title')} data-testid="users-roles-staff-seats">
+          <div className="nx-ur-seats__head">
+            <h2 className="nx-ur-seats__title">{T('staff_seats_title')}</h2>
+            <p className="nx-ur-seats__owner">{T('staff_seats_owner_note')}</p>
+          </div>
+          <div className="nx-ur-seats__metrics">
+            <div className="nx-ur-seats__metric">
+              <span className="nx-ur-seats__label">{T('staff_seats_included')}</span>
+              <span className="nx-ur-seats__value">{data.staff_seats.included_staff_seats}</span>
+            </div>
+            <div className="nx-ur-seats__metric">
+              <span className="nx-ur-seats__label">{T('staff_seats_occupied')}</span>
+              <span className="nx-ur-seats__value">{data.staff_seats.occupied_staff_seats}</span>
+            </div>
+            <div className="nx-ur-seats__metric">
+              <span className="nx-ur-seats__label">{T('staff_seats_available')}</span>
+              <span className="nx-ur-seats__value">{data.staff_seats.available_staff_seats}</span>
+            </div>
+          </div>
+          <div className="nx-ur-seats__price">
+            <span>{data.staff_seats.price_label}</span>
+            <span className="nx-ur-seats__vat">{data.staff_seats.vat_note}</span>
+          </div>
+          <div className="nx-ur-seats__actions">
+            <button
+              type="button"
+              className="nx-btn nx-ur-btn nx-ur-btn--primary"
+              disabled={!data.staff_seats.add_seat.enabled}
+            >
+              {T('staff_seats_add')}
+            </button>
+            {!data.staff_seats.add_seat.enabled ? (
+              <p className="nx-ur-seats__checkout">{data.staff_seats.add_seat.message}</p>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       {showInvite && data ? (
         <form className="nx-ur-invite-form" onSubmit={sendInvite}>

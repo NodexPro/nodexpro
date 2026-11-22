@@ -108,22 +108,22 @@ export async function getDashboardOverviewAggregated(
   const providers: DashboardProvider[] = getDashboardProviders();
   const result = makeBaseOverview();
 
-  for (const provider of providers) {
-    const supported = provider.supports ? await provider.supports(ctx) : true;
-    if (!supported) continue;
+  const parts = await Promise.all(
+    providers.map(async (provider) => {
+      try {
+        const supported = provider.supports ? await provider.supports(ctx) : true;
+        if (!supported) return null;
+        return await provider.getOverviewPart(ctx, query);
+      } catch (e) {
+        if (provider.required) throw e;
+        if (provider.getUnavailablePart) return provider.getUnavailablePart(ctx, e);
+        return null;
+      }
+    }),
+  );
 
-    try {
-      const part = await provider.getOverviewPart(ctx, query);
-      mergeOverviewPartial(result, part);
-    } catch (e) {
-      if (provider.required) {
-        throw e;
-      }
-      if (provider.getUnavailablePart) {
-        const fallback = provider.getUnavailablePart(ctx, e);
-        mergeOverviewPartial(result, fallback);
-      }
-    }
+  for (const part of parts) {
+    if (part) mergeOverviewPartial(result, part);
   }
 
   return result;

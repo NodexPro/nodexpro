@@ -26,6 +26,7 @@ export const USER_FACING_API_MESSAGE_KEYS = {
   moduleNotActive: 'clientOperations.errors.moduleNotActive',
   moduleNotEntitled: 'clientOperations.errors.moduleNotEntitled',
   organizationContextRequired: 'clientOperations.errors.organizationContextRequired',
+  emailNotConfirmed: 'auth.emailNotConfirmed',
 } as const;
 
 type ApiErrorLike = {
@@ -97,6 +98,7 @@ export function userFacingApiMessageKey(e: unknown): string {
     if (c === 'ORGANIZATION_CONTEXT_REQUIRED') {
       return USER_FACING_API_MESSAGE_KEYS.organizationContextRequired;
     }
+    if (c === 'EMAIL_NOT_CONFIRMED') return USER_FACING_API_MESSAGE_KEYS.emailNotConfirmed;
     if (c === 'FORBIDDEN' || status === 403) return USER_FACING_API_MESSAGE_KEYS.forbidden;
     if (c === 'PORTAL_SESSION_EXPIRED') return USER_FACING_API_MESSAGE_KEYS.portalSessionExpired;
     if (c === 'PORTAL_SESSION_REVOKED' || c === 'PORTAL_SESSION_INVALID') {

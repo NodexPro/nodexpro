@@ -50,9 +50,10 @@ export function offerRecoveryFromFailure(input: { offerRecovery?: unknown }): bo
   return input.offerRecovery === true;
 }
 
-export function loginFailureCode(input: { code?: string; status?: number }): 'TOO_MANY_REQUESTS' | 'INVALID_CREDENTIALS' | 'LOGIN_CHALLENGE_REQUIRED' | null {
+export function loginFailureCode(input: { code?: string; status?: number }): 'TOO_MANY_REQUESTS' | 'INVALID_CREDENTIALS' | 'LOGIN_CHALLENGE_REQUIRED' | 'EMAIL_NOT_CONFIRMED' | null {
   if (input.code === 'TOO_MANY_REQUESTS' || input.status === 429) return 'TOO_MANY_REQUESTS';
   if (input.code === 'LOGIN_CHALLENGE_REQUIRED') return 'LOGIN_CHALLENGE_REQUIRED';
+  if (input.code === 'EMAIL_NOT_CONFIRMED') return 'EMAIL_NOT_CONFIRMED';
   if (input.code === 'INVALID_CREDENTIALS' || input.code === 'BAD_REQUEST') return 'INVALID_CREDENTIALS';
   return null;
 }

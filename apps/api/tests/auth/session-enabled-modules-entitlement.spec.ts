@@ -73,6 +73,12 @@ test('permissions list is built before enabledModules and not filtered by entitl
 test('filterSessionEnabledModuleCodes reuses resolveEntitlementsForOrganization batch helper', () => {
   assert.match(entitlementSource, /resolveEntitlementsForOrganization/);
   assert.match(entitlementSource, /isSessionEnabledModuleEntitlementStatus/);
+  assert.match(entitlementSource, /organization_module_subscriptions/);
+  assert.match(entitlementSource, /\.in\('module_id', ids\)/);
+  assert.doesNotMatch(
+    entitlementSource,
+    /moduleIds\.map\(async \(moduleId\) => \{\s*const result = await resolveEntitlement/,
+  );
 });
 
 test('AuthContext isMeEqual compares enabledModules and permissions for stale session protection', () => {

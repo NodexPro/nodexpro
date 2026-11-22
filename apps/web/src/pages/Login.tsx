@@ -219,6 +219,9 @@ export function Login() {
       } else if (kind === 'mfa' || code === 'LOGIN_CHALLENGE_REQUIRED') {
         setChallengeRequired(true);
         setError(loginSecurityText(uiLang, 'mfaChallenge'));
+      } else if (kind === 'email_not_confirmed' || code === 'EMAIL_NOT_CONFIRMED') {
+        acceptedLoginRef.current = null;
+        setError(loginSecurityText(uiLang, 'emailNotConfirmed'));
       } else if (kind === 'invalid_credentials') {
         acceptedLoginRef.current = null;
         setError(loginSecurityText(uiLang, 'invalidCredentials'));

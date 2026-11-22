@@ -60,6 +60,88 @@
   font-size: 13.5px;
 }
 
+.nx-ur-seats {
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--nx-ur-grid);
+  border-radius: 8px;
+  background: var(--nx-ur-header);
+}
+
+.nx-ur-seats__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 10px;
+}
+
+.nx-ur-seats__title {
+  margin: 0;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.nx-ur-seats__owner {
+  margin: 0;
+  color: var(--nx-ur-text-secondary);
+  font-size: 13px;
+}
+
+.nx-ur-seats__metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-bottom: 10px;
+}
+
+.nx-ur-seats__metric {
+  min-width: 88px;
+}
+
+.nx-ur-seats__label {
+  display: block;
+  color: var(--nx-ur-text-muted);
+  font-size: 12px;
+}
+
+.nx-ur-seats__value {
+  display: block;
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.nx-ur-seats__price {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  color: #eef6ff;
+  font-size: 13.5px;
+  margin-bottom: 10px;
+}
+
+.nx-ur-seats__vat {
+  color: var(--nx-ur-text-secondary);
+}
+
+.nx-ur-seats__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+
+.nx-ur-seats__checkout {
+  margin: 0;
+  color: var(--nx-ur-text-secondary);
+  font-size: 13px;
+}
+
 .nx-ur-section-title {
   margin: 22px 0 8px;
   color: #ffffff;

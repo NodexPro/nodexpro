@@ -52,6 +52,27 @@ export type UsersRolesMemberRow = {
   display_number: number | null;
 };
 
+export type UsersRolesStaffSeats = {
+  included_staff_seats: number;
+  occupied_staff_seats: number;
+  available_staff_seats: number;
+  entitled_staff_seats: number;
+  owner_included_in_base: boolean;
+  unit_price_amount: number;
+  unit_price_with_vat_amount: number;
+  currency: string;
+  billing_period: string;
+  vat_percent_label: string;
+  price_label: string;
+  vat_note: string;
+  add_seat: {
+    action_key: string | null;
+    enabled: boolean;
+    checkout_status: 'available' | 'unavailable';
+    message: string;
+  };
+};
+
 export type UsersRolesInvitationRow = {
   invitation_id: string;
   email: string;
@@ -73,6 +94,7 @@ export type UsersRolesAggregate = {
   owners: UsersRolesMemberRow[];
   members: UsersRolesMemberRow[];
   invitations: UsersRolesInvitationRow[];
+  staff_seats: UsersRolesStaffSeats;
 };
 
 export type MemberClientAccessEditorAggregate = {
@@ -110,8 +132,8 @@ export type MemberProfilePayload = {
   phone: string;
 };
 
-export const fetchUsersRolesAggregate = (orgId: string) =>
-  apiJson<UsersRolesAggregate>(`${base(orgId)}/aggregates/users-roles`);
+export const fetchUsersRolesAggregate = (orgId: string, init?: RequestInit) =>
+  apiJson<UsersRolesAggregate>(`${base(orgId)}/aggregates/users-roles`, init);
 
 export const setMemberProfileCommand = (orgId: string, memberId: string, payload: MemberProfilePayload) =>
   apiJson<UsersRolesAggregate>(`${base(orgId)}/members/${memberId}/commands/set_member_profile`, {

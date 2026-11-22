@@ -268,6 +268,7 @@ export async function resolveStaffSeatEntitlement(
     trial_staff_seat_policy: 'finite_trial_allowance',
     on_full_platform_trial: onTrial,
     seat_charge_label: projection.seat_charge_label,
+    list_unit_price_amount: pricing.unit_price_amount,
   };
 }
 

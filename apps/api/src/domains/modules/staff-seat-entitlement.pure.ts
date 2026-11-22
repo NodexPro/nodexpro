@@ -29,6 +29,7 @@ export type StaffSeatEntitlementTruth = {
   trial_staff_seat_policy: 'finite_trial_allowance';
   on_full_platform_trial: boolean;
   seat_charge_label?: string;
+  list_unit_price_amount?: number;
 };
 
 /** One-time migration compatibility amount — never auto-grown at runtime. */
@@ -335,5 +336,107 @@ export function projectStaffSeatOrganization(params: {
           terms: blocked,
         }
       : null,
+  };
+}
+
+export type StaffSeatWorkspaceBlock = {
+  included_staff_seats: number;
+  occupied_staff_seats: number;
+  available_staff_seats: number;
+  entitled_staff_seats: number;
+  owner_included_in_base: true;
+  unit_price_amount: number;
+  unit_price_with_vat_amount: number;
+  currency: string;
+  billing_period: string;
+  vat_percent_label: string;
+  price_label: string;
+  vat_note: string;
+  add_seat: {
+    action_key: 'add_staff_seat' | null;
+    enabled: boolean;
+    checkout_status: 'available' | 'unavailable';
+    message: string;
+  };
+};
+
+export function moneyWithVat(net: number, vatRate: number): number {
+  const amount = Number(net);
+  const rate = Number(vatRate);
+  if (!Number.isFinite(amount) || !Number.isFinite(rate)) return 0;
+  return Math.round(amount * (1 + rate) * 100) / 100;
+}
+
+export function formatStaffSeatPriceLabel(input: {
+  amountWithVat: number;
+  currency: string;
+  billingPeriod: string;
+  vatPercentLabel: string;
+  locale: 'he' | 'en';
+}): string {
+  const amount = input.amountWithVat.toFixed(2);
+  const period =
+    input.billingPeriod === 'year'
+      ? input.locale === 'he'
+        ? 'לשנה'
+        : '/ year'
+      : input.locale === 'he'
+        ? 'לחודש'
+        : '/ month';
+  if (input.locale === 'he') {
+    return `${amount} ${input.currency} ${period} כולל מע״מ ${input.vatPercentLabel}`;
+  }
+  return `${amount} ${input.currency} ${period} incl. VAT ${input.vatPercentLabel}`;
+}
+
+export function buildStaffSeatWorkspaceBlock(input: {
+  included_staff_seats: number;
+  occupied_staff_seats: number;
+  available_staff_seats: number;
+  entitled_staff_seats: number;
+  unit_price_amount: number;
+  currency: string;
+  billing_period: string;
+  vat_rate: number;
+  vat_percent_label: string;
+  locale: 'he' | 'en';
+  checkout_available: boolean;
+  checkout_unavailable_message: string;
+}): StaffSeatWorkspaceBlock {
+  const net = Math.max(0, Number(input.unit_price_amount) || 0);
+  const withVat = moneyWithVat(net, input.vat_rate);
+  const checkoutAvailable = input.checkout_available === true;
+  return {
+    included_staff_seats: Math.max(0, Math.floor(input.included_staff_seats)),
+    occupied_staff_seats: Math.max(0, Math.floor(input.occupied_staff_seats)),
+    available_staff_seats: Math.max(0, Math.floor(input.available_staff_seats)),
+    entitled_staff_seats: Math.max(0, Math.floor(input.entitled_staff_seats)),
+    owner_included_in_base: true,
+    unit_price_amount: net,
+    unit_price_with_vat_amount: withVat,
+    currency: input.currency,
+    billing_period: input.billing_period,
+    vat_percent_label: input.vat_percent_label,
+    price_label: formatStaffSeatPriceLabel({
+      amountWithVat: withVat,
+      currency: input.currency,
+      billingPeriod: input.billing_period,
+      vatPercentLabel: input.vat_percent_label,
+      locale: input.locale,
+    }),
+    vat_note: input.locale === 'he' ? `כולל מע״מ ${input.vat_percent_label}` : `Includes VAT ${input.vat_percent_label}`,
+    add_seat: checkoutAvailable
+      ? {
+          action_key: 'add_staff_seat',
+          enabled: true,
+          checkout_status: 'available',
+          message: '',
+        }
+      : {
+          action_key: null,
+          enabled: false,
+          checkout_status: 'unavailable',
+          message: input.checkout_unavailable_message,
+        },
   };
 }

@@ -7,9 +7,11 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  buildStaffSeatWorkspaceBlock,
   computeCommercialRecurringTotals,
   computeGrandfatheredStaffSeats,
   computeStaffSeatAvailability,
+  moneyWithVat,
   roleConsumesStaffSeat,
 } from '../../src/domains/modules/staff-seat-entitlement.pure.js';
 
@@ -23,6 +25,30 @@ function readSrc(...parts: string[]): string {
 
 test('D — owner does not consume', () => {
   assert.equal(roleConsumesStaffSeat('owner'), false);
+});
+
+test('workspace block is ready-to-render and never enables checkout without payment', () => {
+  assert.equal(moneyWithVat(49, 0.18), 57.82);
+  const block = buildStaffSeatWorkspaceBlock({
+    included_staff_seats: 0,
+    occupied_staff_seats: 1,
+    available_staff_seats: 0,
+    entitled_staff_seats: 1,
+    unit_price_amount: 49,
+    currency: 'ILS',
+    billing_period: 'month',
+    vat_rate: 0.18,
+    vat_percent_label: '18%',
+    locale: 'he',
+    checkout_available: false,
+    checkout_unavailable_message: 'התשלום עדיין אינו זמין',
+  });
+  assert.equal(block.owner_included_in_base, true);
+  assert.equal(block.unit_price_with_vat_amount, 57.82);
+  assert.match(block.price_label, /מע״מ/);
+  assert.equal(block.add_seat.enabled, false);
+  assert.equal(block.add_seat.action_key, null);
+  assert.equal(block.add_seat.checkout_status, 'unavailable');
 });
 
 test('A/E — admin+staff consume; viewer does not', () => {

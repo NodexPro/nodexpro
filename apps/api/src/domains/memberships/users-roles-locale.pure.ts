@@ -88,6 +88,13 @@ const EN: UsersRolesText = {
   close_access_intro:
     'This employee will no longer be able to sign in to the office. Their history, documents and past work stay exactly as they are.',
   closing: 'Closing…',
+  staff_seats_title: 'Employee licenses',
+  staff_seats_included: 'Included',
+  staff_seats_occupied: 'In use',
+  staff_seats_available: 'Available',
+  staff_seats_owner_note: 'The office owner is included in the base subscription.',
+  staff_seats_add: 'Add seat',
+  staff_seats_checkout_unavailable: 'Payment is not available yet. A paid license is not created without confirmed payment.',
 };
 
 const HE: UsersRolesText = {
@@ -142,6 +149,13 @@ const HE: UsersRolesText = {
   close_access_intro:
     'העובד לא יוכל יותר להיכנס למשרד. ההיסטוריה, המסמכים והעבודה הקודמת נשארים בדיוק כפי שהם.',
   closing: 'סוגר…',
+  staff_seats_title: 'רישיונות עובדים',
+  staff_seats_included: 'כלולים',
+  staff_seats_occupied: 'תפוסים',
+  staff_seats_available: 'פנויים',
+  staff_seats_owner_note: 'בעל המשרד כלול במנוי הבסיסי.',
+  staff_seats_add: 'הוספת מקום',
+  staff_seats_checkout_unavailable: 'התשלום עדיין אינו זמין. רישיון בתשלום לא נוצר בלי תשלום מאושר.',
 };
 
 export const USERS_ROLES_TEXT: Readonly<Record<UsersRolesLocale, UsersRolesText>> = { en: EN, he: HE };

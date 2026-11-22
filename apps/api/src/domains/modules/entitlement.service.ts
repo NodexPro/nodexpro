@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../../db/client.js';
 import type { EntitlementStatus } from '../../types/api.js';
 import { hasValidTrial } from '../trial/trial.service.js';
+import { evaluateModuleEntitlement } from './evaluate-module-entitlement.pure.js';
 
 /**
  * Per-module entitlement. System: always entitled. Commercial: (1) paid module subscription => entitled,
@@ -22,14 +23,8 @@ export async function resolveEntitlement(
       ? { data: { id: knownModule.id, is_system: knownModule.is_system === true } }
       : await supabaseAdmin.from('modules').select('id, is_system').eq('id', moduleId).single();
   if (!mod.data) return { status: 'not_entitled', reason: 'Module not found' };
+  if (mod.data.is_system) return { status: 'entitled' };
 
-  if (mod.data.is_system) {
-    return { status: 'entitled' };
-  }
-
-  // Request-gate path only (`knownModule` given): the trial read does not depend on the subscription read, so
-  // start it together with it — trial organizations (no subscription row) save one sequential round trip.
-  // Callers that resolve many modules in a loop keep the original lazy, subscription-first behavior.
   const trialRead = knownModule ? hasValidTrial(organizationId) : null;
   trialRead?.catch(() => undefined);
 
@@ -40,27 +35,29 @@ export async function resolveEntitlement(
     .eq('module_id', moduleId)
     .single();
 
-  if (sub.data) {
-    const s = sub.data;
-    if (s.status === 'active' || s.status === 'trialing') {
-      if (s.ends_at && new Date(s.ends_at) < new Date()) {
-        return { status: 'expired', reason: 'Subscription ended' };
+  const subscription = sub.data
+    ? {
+        status: String(sub.data.status),
+        ends_at: sub.data.ends_at ?? null,
+        trial_ends_at: sub.data.trial_ends_at ?? null,
       }
-      if (s.status === 'trialing' && s.trial_ends_at && new Date(s.trial_ends_at) < new Date()) {
-        return { status: 'expired', reason: 'Trial ended' };
-      }
-      if (s.status === 'trialing') return { status: 'trial' };
-      return { status: 'entitled' };
-    }
-    return { status: 'expired', reason: `Subscription status: ${s.status}` };
+    : null;
+  if (subscription) {
+    return evaluateModuleEntitlement({
+      moduleFound: true,
+      isSystem: mod.data.is_system === true,
+      subscription,
+      trialValid: false,
+    });
   }
 
   const validTrial = await (trialRead ?? hasValidTrial(organizationId));
-  if (validTrial) {
-    return { status: 'trial' };
-  }
-
-  return { status: 'not_entitled', reason: 'No subscription or trial for this module' };
+  return evaluateModuleEntitlement({
+    moduleFound: true,
+    isSystem: mod.data.is_system === true,
+    subscription: null,
+    trialValid: validTrial,
+  });
 }
 
 /** Matches requireModuleActive — modules exposed in session must pass this gate. */
@@ -77,7 +74,7 @@ export async function filterSessionEnabledModuleCodes(params: {
 
   const { data: catalogRows, error: catalogErr } = await supabaseAdmin
     .from('modules')
-    .select('id, is_active')
+    .select('id, is_active, is_system')
     .in('id', moduleIds);
   if (catalogErr) throw catalogErr;
   const globallyActiveIds = new Set(
@@ -86,7 +83,9 @@ export async function filterSessionEnabledModuleCodes(params: {
       .map((r) => String((r as { id: string }).id))
   );
 
-  const entitlements = await resolveEntitlementsForOrganization(params.organizationId, moduleIds);
+  const entitlements = await resolveEntitlementsForOrganization(params.organizationId, moduleIds, {
+    modules: (catalogRows ?? []) as Array<{ id: string; is_system?: boolean | null }>,
+  });
   const allowed = new Set<string>();
   for (const mod of params.modules) {
     if (!globallyActiveIds.has(mod.moduleId)) continue;
@@ -100,14 +99,57 @@ export async function filterSessionEnabledModuleCodes(params: {
 
 export async function resolveEntitlementsForOrganization(
   organizationId: string,
-  moduleIds: string[]
+  moduleIds: string[],
+  preloaded?: {
+    modules?: Array<{ id: string; is_system?: boolean | null }>;
+  },
 ): Promise<Map<string, { status: EntitlementStatus; reason?: string }>> {
   const map = new Map<string, { status: EntitlementStatus; reason?: string }>();
-  await Promise.all(
-    moduleIds.map(async (moduleId) => {
-      const result = await resolveEntitlement(organizationId, moduleId);
-      map.set(moduleId, result);
-    })
+  const ids = [...new Set(moduleIds.map((id) => String(id ?? '').trim()).filter(Boolean))];
+  if (ids.length === 0) return map;
+
+  const modulesQuery = preloaded?.modules
+    ? Promise.resolve({ data: preloaded.modules })
+    : supabaseAdmin.from('modules').select('id, is_system').in('id', ids);
+  const [modulesRes, subsRes, trialValid] = await Promise.all([
+    modulesQuery,
+    supabaseAdmin
+      .from('organization_module_subscriptions')
+      .select('module_id, status, ends_at, trial_ends_at')
+      .eq('organization_id', organizationId)
+      .in('module_id', ids),
+    hasValidTrial(organizationId),
+  ]);
+
+  const moduleById = new Map(
+    (modulesRes.data ?? []).map((row) => [
+      String((row as { id: string }).id),
+      row as { id: string; is_system?: boolean | null },
+    ]),
   );
+  const subByModule = new Map<string, { status: string; ends_at: string | null; trial_ends_at: string | null }>();
+  for (const row of subsRes.data ?? []) {
+    const rec = row as {
+      module_id: string;
+      status: string;
+      ends_at: string | null;
+      trial_ends_at: string | null;
+    };
+    if (!subByModule.has(rec.module_id)) subByModule.set(rec.module_id, rec);
+  }
+
+  for (const id of ids) {
+    const mod = moduleById.get(id);
+    const sub = subByModule.get(id) ?? null;
+    map.set(
+      id,
+      evaluateModuleEntitlement({
+        moduleFound: Boolean(mod),
+        isSystem: mod?.is_system === true,
+        subscription: sub,
+        trialValid,
+      }),
+    );
+  }
   return map;
 }

@@ -7,7 +7,7 @@ import { loginFailureCode } from './login-cooldown.pure';
 import { isPrimaryOnboardingState } from './onboarding-session-route.pure';
 import { isStaleWorkspaceError } from './session-auth-failure.pure';
 
-export type LoginSubmitFailureKind = 'invalid_credentials' | 'rate_limit' | 'mfa' | 'session_error';
+export type LoginSubmitFailureKind = 'invalid_credentials' | 'rate_limit' | 'mfa' | 'email_not_confirmed' | 'session_error';
 export type LoginUiErrorKind = 'invalid_credentials' | 'load_account' | 'none';
 export type PostLoginNavigationKind =
   | 'mfa'
@@ -36,6 +36,7 @@ export function classifyLoginSubmitFailure(error: unknown): LoginSubmitFailureKi
   const code = loginFailureCode({ code: shape.code, status: shape.status });
   if (code === 'TOO_MANY_REQUESTS') return 'rate_limit';
   if (code === 'LOGIN_CHALLENGE_REQUIRED') return 'mfa';
+  if (code === 'EMAIL_NOT_CONFIRMED') return 'email_not_confirmed';
   if (code === 'INVALID_CREDENTIALS') return 'invalid_credentials';
   return 'session_error';
 }

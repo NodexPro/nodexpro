@@ -540,3 +540,21 @@ test('30. Row actions are compact icon actions (reused glyphs, locale tooltips, 
   assert.doesNotMatch(css, /position: sticky/);
   assert.match(css, /font-family: Arial, sans-serif/);
 });
+
+test('30. Employee seats come from the users-roles aggregate, not a second GET or a fake purchase', () => {
+  const agg = api('domains/memberships/users-roles-aggregate.service.ts');
+  const page = web('pages/UsersRoles.tsx');
+  assert.match(agg, /resolveStaffSeatEntitlement\(orgId\)/);
+  assert.match(agg, /buildStaffSeatWorkspaceBlock/);
+  assert.match(agg, /checkout_available: false/);
+  assert.match(agg, /staff_seats,/);
+  assert.doesNotMatch(agg, /purchased_additional_staff_seats\s*\+/);
+  assert.match(page, /data-testid="users-roles-staff-seats"/);
+  assert.match(page, /data\.staff_seats\.price_label/);
+  assert.match(page, /disabled=\{!data\.staff_seats\.add_seat\.enabled\}/);
+  assert.match(page, /AbortController/);
+  assert.doesNotMatch(page, /staff-seat-entitlement/);
+  assert.doesNotMatch(page, /selectPlan|createCheckout|purchaseStaffSeat/);
+  assert.equal(USERS_ROLES_TEXT.he.staff_seats_title, 'רישיונות עובדים');
+  assert.equal(USERS_ROLES_TEXT.he.staff_seats_add, 'הוספת מקום');
+});

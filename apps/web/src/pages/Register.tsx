@@ -2,14 +2,27 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { AUTH } from '../api/endpoints';
-import { apiJson } from '../api/client';
+import { ApiError, apiJson } from '../api/client';
 import {
   captureInviteReturnPath,
   readStoredInviteReturnPath,
   resolvePostRegisterDestination,
 } from '../lib/invite-return-path.pure';
+import {
+  confirmationEmailAddress,
+  fillRegisteredEmail,
+  isEmailNotConfirmedCode,
+  signupNeedsEmailConfirmation,
+} from '../lib/register-email-confirmation.pure';
 import { useI18n } from '../i18n/I18nProvider';
 import { PublicAuthShell } from '../components/auth/PublicAuthShell';
+import { GlassModal } from '../components/glass/GlassModal';
+
+type RegisterResult = {
+  session?: unknown | null;
+  email?: string | null;
+  email_confirmation_required?: boolean;
+};
 
 export function Register() {
   const [email, setEmail] = useState('');
@@ -17,18 +30,21 @@ export function Register() {
   const [fullName, setFullName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [confirmEmail, setConfirmEmail] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const { t, lang } = useI18n();
   const redirectParam = new URLSearchParams(location.search).get('redirect');
   captureInviteReturnPath(typeof sessionStorage !== 'undefined' ? sessionStorage : null, redirectParam);
+  const loginTo = redirectParam ? `/login?redirect=${encodeURIComponent(redirectParam)}` : '/login';
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    setConfirmEmail(null);
     setLoading(true);
     try {
-      await apiJson(AUTH.register, {
+      const result = await apiJson<RegisterResult>(AUTH.register, {
         method: 'POST',
         body: JSON.stringify({
           email,
@@ -37,8 +53,22 @@ export function Register() {
           language_code: lang,
         }),
       });
+      const shownEmail = confirmationEmailAddress(email, result.email);
+      if (
+        result.email_confirmation_required === true ||
+        signupNeedsEmailConfirmation({ registerSucceeded: true, session: result.session })
+      ) {
+        setConfirmEmail(shownEmail);
+        return;
+      }
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInError) throw new Error(signInError.message);
+      if (signInError) {
+        if (isEmailNotConfirmedCode(signInError.code) || /email not confirmed/i.test(signInError.message ?? '')) {
+          setConfirmEmail(shownEmail);
+          return;
+        }
+        throw signInError;
+      }
       if (lang === 'en' || lang === 'he' || lang === 'ru') {
         await apiJson(AUTH.setUiLanguageCommand, {
           method: 'POST',
@@ -50,7 +80,12 @@ export function Register() {
       );
       navigate(resolvePostRegisterDestination(inviteReturnPath), { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('auth.registerFailed'));
+      setConfirmEmail(null);
+      if (err instanceof ApiError && isEmailNotConfirmedCode(err.code)) {
+        setError(t('auth.emailNotConfirmed'));
+      } else {
+        setError(t('auth.registerFailed'));
+      }
     } finally {
       setLoading(false);
     }
@@ -121,11 +156,31 @@ export function Register() {
       </form>
       <div className="nx-glass-auth__links">
         <p>
-          <Link className="nx-glass-link" to="/login">
+          <Link className="nx-glass-link" to={loginTo}>
             {t('auth.signIn')}
           </Link>
         </p>
       </div>
+      <GlassModal
+        open={Boolean(confirmEmail)}
+        title={t('auth.confirmEmailTitle')}
+        testId="nx-register-confirm-email"
+        onClose={() => navigate(loginTo)}
+        footer={
+          <Link className="nx-glass-btn nx-glass-btn--purple" to={loginTo}>
+            {t('auth.goToSignIn')}
+          </Link>
+        }
+      >
+        <p className="nx-glass-copy">
+          {fillRegisteredEmail(t('auth.confirmEmailBody'), confirmEmail ?? '')}
+        </p>
+        {confirmEmail ? (
+          <p className="nx-glass-copy" dir="ltr">
+            {confirmEmail}
+          </p>
+        ) : null}
+      </GlassModal>
     </PublicAuthShell>
   );
 }

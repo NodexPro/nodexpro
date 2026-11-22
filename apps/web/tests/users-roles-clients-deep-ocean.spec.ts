@@ -22,6 +22,9 @@ test('Users & Roles keeps the existing invite command and aggregate', () => {
   assert.match(usersRolesSrc, /role_code: inviteRole \|\| data\?\.invite_roles\[0\]\?\.code/);
   assert.match(usersRolesSrc, /fetchUsersRolesAggregate/);
   assert.match(usersRolesSrc, /available_actions\.invite_member/);
+  assert.match(usersRolesSrc, /AbortController/);
+  assert.match(usersRolesSrc, /staff_seats/);
+  assert.doesNotMatch(usersRolesSrc, /staff-seat-entitlement/);
   assert.match(usersRolesSrc, /orgInviteResend/);
   assert.match(usersRolesSrc, /orgInviteRevoke/);
   assert.doesNotMatch(usersRolesSrc, /method: 'PATCH'/);
