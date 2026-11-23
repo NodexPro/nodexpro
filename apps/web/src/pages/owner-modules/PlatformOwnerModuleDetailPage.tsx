@@ -63,6 +63,8 @@ export function PlatformOwnerModuleDetailPage() {
   const [extendError, setExtendError] = useState('');
   const [calendarYear, setCalendarYear] = useState(new Date().getFullYear());
   const [calendarEdits, setCalendarEdits] = useState<Record<string, Record<string, string>>>({});
+  const [catalogSeatAmount, setCatalogSeatAmount] = useState('');
+  const [catalogSeatError, setCatalogSeatError] = useState('');
 
   const tabs = asRows(aggregate?.available_detail_tabs);
   const requested = (searchParams.get('tab') as TabKey | null) ?? 'pricing';
@@ -87,6 +89,11 @@ export function PlatformOwnerModuleDetailPage() {
       qs.set('calendar_year', String(calendarYear));
       const agg = await apiJson<UnknownRecord>(`${OWNER.moduleDetail(moduleCode)}?${qs.toString()}`);
       setAggregate(agg);
+      const catalog = agg.staff_seat_catalog_pricing as UnknownRecord | null | undefined;
+      if (catalog && catalog.unit_price_amount != null) {
+        setCatalogSeatAmount(String(catalog.unit_price_amount));
+        setCatalogSeatError('');
+      }
     } catch (e) {
       setError(userFacingApiMessage(e));
     } finally {
@@ -157,6 +164,47 @@ export function PlatformOwnerModuleDetailPage() {
     } catch (e) {
       setError(userFacingApiMessage(e));
       return null;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveCatalogStaffSeatPrice(): Promise<void> {
+    const catalog = (aggregate?.staff_seat_catalog_pricing as UnknownRecord | null) ?? null;
+    if (!catalog) return;
+    const unit_price_amount = Number(catalogSeatAmount);
+    if (!Number.isFinite(unit_price_amount) || unit_price_amount < 0) {
+      setCatalogSeatError('Enter a list price of 0 or more.');
+      return;
+    }
+    setBusy(true);
+    setCatalogSeatError('');
+    setError('');
+    try {
+      const out = await apiJson<{
+        refreshed?: { aggregate_key?: string; aggregate?: UnknownRecord };
+      }>(OWNER.command, {
+        method: 'POST',
+        body: JSON.stringify({
+          command: 'set_platform_staff_seat_pricing',
+          payload: {
+            unit_price_amount,
+            currency: text(catalog.currency) || undefined,
+            billing_period: text(catalog.billing_period) || undefined,
+            owner_module_detail_code: moduleCode,
+            commercial_controls_context: commercialContext(),
+          },
+        }),
+      });
+      if (out?.refreshed?.aggregate_key === 'owner_module_detail_aggregate' && out.refreshed.aggregate) {
+        setAggregate(out.refreshed.aggregate);
+        const next = out.refreshed.aggregate.staff_seat_catalog_pricing as UnknownRecord | undefined;
+        if (next?.unit_price_amount != null) setCatalogSeatAmount(String(next.unit_price_amount));
+        return;
+      }
+      setCatalogSeatError('Command succeeded but refreshed module aggregate was not returned.');
+    } catch (e) {
+      setCatalogSeatError(userFacingApiMessage(e));
     } finally {
       setBusy(false);
     }
@@ -269,6 +317,7 @@ export function PlatformOwnerModuleDetailPage() {
   const module = (aggregate?.module as UnknownRecord | undefined) ?? null;
   const pricing = (aggregate?.platform_pricing as UnknownRecord | undefined) ?? null;
   const pricingRows = asRows((pricing?.table as UnknownRecord | undefined)?.rows);
+  const staffSeatCatalog = (aggregate?.staff_seat_catalog_pricing as UnknownRecord | null) ?? null;
   const commercial = (aggregate?.commercial_controls as UnknownRecord | undefined) ?? null;
   const orgRows = asRows(commercial?.org_rows);
   const pagination = (commercial?.pagination as UnknownRecord | undefined) ?? null;
@@ -371,6 +420,42 @@ export function PlatformOwnerModuleDetailPage() {
 
       {activeTab === 'pricing' ? (
         <div>
+          {staffSeatCatalog ? (
+            <section className="nx-owner-catalog-price" data-testid="owner-staff-seat-catalog-pricing">
+              <h2 className="nx-owner-catalog-price__title">{text(staffSeatCatalog.title) || 'Additional staff seat list price'}</h2>
+              <p className="nx-owner-catalog-price__note">{text(staffSeatCatalog.note)}</p>
+              {catalogSeatError ? <p className="nx-owner-catalog-price__error">{catalogSeatError}</p> : null}
+              <form
+                className="nx-owner-catalog-price__form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void saveCatalogStaffSeatPrice();
+                }}
+              >
+                <label className="nx-owner-catalog-price__field">
+                  Unit price
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={catalogSeatAmount}
+                    onChange={(e) => setCatalogSeatAmount(e.target.value)}
+                    disabled={busy}
+                  />
+                </label>
+                <div className="nx-owner-catalog-price__meta">
+                  {text(staffSeatCatalog.currency) || 'ILS'} / {text(staffSeatCatalog.billing_period) || 'month'}
+                </div>
+                <button
+                  type="submit"
+                  className="nx-owner-btn nx-owner-btn--primary"
+                  disabled={busy || !staffSeatCatalog.save}
+                >
+                  Save list price
+                </button>
+              </form>
+            </section>
+          ) : null}
           <div style={{ marginBottom: 10 }}>
             <button
               type="button"

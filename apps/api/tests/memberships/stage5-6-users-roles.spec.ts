@@ -482,7 +482,7 @@ test('28. Users & Roles uses the canonical working shell: same collapsible rail,
   assert.match(layout, /usesCanonicalWorkingShell \|\| isIncomeModule \|\| isWorkEngineSection \? 'collapsedHover'/);
   assert.match(layout, /appearance=\{usesCanonicalWorkingShell \? 'co-navy-glass' : 'default'\}/);
   assert.match(layout, /usesCanonicalWorkingShell \? ' t1-appShell--client-operations'/);
-  assert.match(layout, /header = isUsersRolesWorkspace \? null :/);
+  assert.match(layout, /header = isUsersRolesWorkspace \|\| isDashboard \|\| isSettings \|\| isOfficeGlassSurface \? null :/);
   // No second sidebar implementation: the page never renders its own rail.
   const page = web('pages/UsersRoles.tsx');
   assert.doesNotMatch(page, /<AppSidebar|t1-sidebar/);
@@ -493,7 +493,7 @@ test('28. Users & Roles uses the canonical working shell: same collapsible rail,
   assert.doesNotMatch(page, /nx-ur-grid|nx-ur-row\b/);
   // Primary action stays above the table, as the canonical blue/cyan action.
   assert.ok(page.indexOf('nx-ur-btn--primary') < page.indexOf('<table'));
-  assert.match(web('components/users-roles/UsersRoles.css'), /linear-gradient\(135deg, #1477e8, #00cfef\)/);
+  assert.match(web('components/users-roles/UsersRoles.css'), /linear-gradient\(180deg, rgba\(54, 169, 198, 0\.62\)/);
 });
 
 test('29. Owner is separate from the employee table; numbering is display-order only (backend ordered)', () => {
@@ -550,11 +550,13 @@ test('30. Employee seats come from the users-roles aggregate, not a second GET o
   assert.match(agg, /staff_seats,/);
   assert.doesNotMatch(agg, /purchased_additional_staff_seats\s*\+/);
   assert.match(page, /data-testid="users-roles-staff-seats"/);
-  assert.match(page, /data\.staff_seats\.price_label/);
+  assert.match(page, /data\.staff_seats\.current_rate_label/);
+  assert.match(page, /data\.staff_seats\.next_seat_price_label/);
   assert.match(page, /disabled=\{!data\.staff_seats\.add_seat\.enabled\}/);
   assert.match(page, /AbortController/);
   assert.doesNotMatch(page, /staff-seat-entitlement/);
   assert.doesNotMatch(page, /selectPlan|createCheckout|purchaseStaffSeat/);
   assert.equal(USERS_ROLES_TEXT.he.staff_seats_title, 'רישיונות עובדים');
   assert.equal(USERS_ROLES_TEXT.he.staff_seats_add, 'הוספת מקום');
+  assert.match(agg, /loadOrganizationAssignableModuleNames\(orgId, locale\)/);
 });

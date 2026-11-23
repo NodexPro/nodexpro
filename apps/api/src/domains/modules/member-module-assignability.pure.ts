@@ -10,6 +10,8 @@
  *                    (Income or Client Operations). It never widens access on its own.
  */
 
+import { userFacingModuleDisplayName } from './user-facing-module-label.pure.js';
+
 export type ModuleCatalogRow = {
   id: string;
   code: string;
@@ -47,15 +49,17 @@ export function projectModuleAssignability(params: {
   organizationEntitled: boolean;
   /** Effective access of the member (explicit grant, or derived for infrastructure). */
   memberEnabled: boolean;
+  locale?: 'en' | 'he' | string | null;
 }): ModuleAssignabilityProjection {
   const kind = classifyModule(params.row);
   const entitled = params.organizationEntitled && params.row.is_active;
   const assignable = kind === 'user_facing' && entitled;
   const enabled = entitled && params.memberEnabled;
+  const fallback = String(params.row.name ?? '').trim() || params.row.code;
   return {
     module_id: params.row.id,
     code: params.row.code,
-    display_name: String(params.row.name ?? '').trim() || params.row.code,
+    display_name: userFacingModuleDisplayName(params.row.code, params.locale, fallback),
     kind,
     organization_entitled: entitled,
     member_assignable: assignable,

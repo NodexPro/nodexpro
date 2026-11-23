@@ -80,7 +80,7 @@ export function UsersRoles() {
       setData(next);
       setError('');
     } catch (e) {
-      if (e instanceof Error && e.name === 'AbortError') return;
+      if (e instanceof Error && (e.name === 'AbortError' || signal?.aborted)) return;
       setError(errorText(e, 'Something went wrong. Please try again.'));
     }
   }, [orgId]);
@@ -196,6 +196,10 @@ export function UsersRoles() {
               <span className="nx-ur-seats__value">{data.staff_seats.included_staff_seats}</span>
             </div>
             <div className="nx-ur-seats__metric">
+              <span className="nx-ur-seats__label">{T('staff_seats_additional')}</span>
+              <span className="nx-ur-seats__value">{data.staff_seats.purchased_additional_staff_seats}</span>
+            </div>
+            <div className="nx-ur-seats__metric">
               <span className="nx-ur-seats__label">{T('staff_seats_occupied')}</span>
               <span className="nx-ur-seats__value">{data.staff_seats.occupied_staff_seats}</span>
             </div>
@@ -204,9 +208,17 @@ export function UsersRoles() {
               <span className="nx-ur-seats__value">{data.staff_seats.available_staff_seats}</span>
             </div>
           </div>
-          <div className="nx-ur-seats__price">
-            <span>{data.staff_seats.price_label}</span>
-            <span className="nx-ur-seats__vat">{data.staff_seats.vat_note}</span>
+          <div className="nx-ur-seats__price-block">
+            <div className="nx-ur-seats__price">
+              <span className="nx-ur-seats__label">{T('staff_seats_current_rate')}</span>
+              <span>{data.staff_seats.current_rate_label}</span>
+            </div>
+            <p className="nx-ur-seats__note">{data.staff_seats.current_rate_note}</p>
+            <div className="nx-ur-seats__price">
+              <span className="nx-ur-seats__label">{T('staff_seats_next_seat')}</span>
+              <span>{data.staff_seats.next_seat_price_label}</span>
+            </div>
+            <p className="nx-ur-seats__note">{data.staff_seats.next_seat_note}</p>
           </div>
           <div className="nx-ur-seats__actions">
             <button

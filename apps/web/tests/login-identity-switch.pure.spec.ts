@@ -47,6 +47,9 @@ test('password login clears the previous local session; MFA verify does not', ()
   assert.match(auth, /shouldApplySignedOutUi/);
   assert.match(auth, /noteLocalPasswordSwitchIdentity/);
   assert.match(auth, /const signOut = useCallback[\s\S]*AUTH\.logout/);
+  assert.match(auth, /signOut\(deviceSignOutOptions\(\)\)\.catch/);
+  assert.doesNotMatch(auth, /signOut\(\{\s*scope:\s*'global'/);
+  assert.doesNotMatch(auth, /signOut\(\s*\)/);
   assert.equal(authStateChangeCallbackAwaitsAuthLock(auth), false);
   const registry = read('../src/pages/ClientOperationsRegistry.tsx');
   assert.match(registry, /setRows\(\[\]\)/);

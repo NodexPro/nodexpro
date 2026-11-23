@@ -7,6 +7,7 @@ import { AppShell } from './components/layout/AppShell';
 import { Login } from './pages/Login';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
+import { AuthConfirm } from './pages/AuthConfirm';
 import { Register } from './pages/Register';
 import { CreateOrganization } from './pages/CreateOrganization';
 import { SelectOrganization } from './pages/SelectOrganization';
@@ -148,6 +149,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/auth/confirm" element={<AuthConfirm />} />
+      <Route path="/auth/callback" element={<AuthConfirm />} />
       <Route path="/verify-additional-email" element={<VerifyAdditionalEmail />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />

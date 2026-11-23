@@ -1351,6 +1351,9 @@ function moduleLabel(key: string): string {
       return 'Work Engine';
     case 'income':
       return 'הכנסות';
+    case 'client-operations':
+    case 'client_operations':
+      return 'Client Management';
     default:
       return humanizeKey(key);
   }

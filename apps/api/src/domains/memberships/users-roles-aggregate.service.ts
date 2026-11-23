@@ -152,6 +152,8 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
   const actorRole = ctx.membership?.roleCode ?? '';
 
   const asOfDate = new Date().toISOString().slice(0, 10);
+  const ui = buildUsersRolesUi(resolvePersistedUiLanguage(ctx.user.uiLanguage));
+  const locale = ui.locale;
   const [orgRes, membershipsRes, profilesRes, assignableModules, staffSeatTruth, vatResolution] = await Promise.all([
     supabaseAdmin.from('organizations').select('timezone, country_code').eq('id', orgId).maybeSingle(),
     supabaseAdmin
@@ -163,7 +165,7 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
       .from('organization_member_profiles')
       .select('membership_id, first_name, last_name, phone')
       .eq('organization_id', orgId),
-    loadOrganizationAssignableModuleNames(orgId),
+    loadOrganizationAssignableModuleNames(orgId, locale),
     resolveStaffSeatEntitlement(orgId).catch(() => null),
     // TEMPORARY_COUNTRY_PACK_PENDING: statutory VAT from Country Pack legal values (IL fallback inside resolver).
     resolveIncomeDraftVatForOrg(orgId, 'IL', asOfDate).catch(() => incomeDraftVatFallbackResolution()),
@@ -172,8 +174,6 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
   if (profilesRes.error) throw profilesRes.error;
   const orgRow = orgRes.data as { timezone?: string | null; country_code?: string | null } | null;
   const timeZone = orgRow?.timezone ?? 'UTC';
-  const ui = buildUsersRolesUi(resolvePersistedUiLanguage(ctx.user.uiLanguage));
-  const locale = ui.locale;
 
   const profileByMembership = new Map(
     (profilesRes.data ?? []).map((row) => [
@@ -307,18 +307,24 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
   }));
 
   const vat = vatResolution ?? incomeDraftVatFallbackResolution();
-  const catalogPrice = Number(staffSeatTruth?.list_unit_price_amount ?? staffSeatTruth?.seat_unit_price_amount ?? 0);
+  const catalogPrice = Number(staffSeatTruth?.list_unit_price_amount ?? 0);
   const staff_seats = buildStaffSeatWorkspaceBlock({
     included_staff_seats: staffSeatTruth?.included_staff_seats ?? 0,
+    grandfathered_staff_seats: staffSeatTruth?.grandfathered_staff_seats ?? 0,
+    purchased_additional_staff_seats: staffSeatTruth?.purchased_staff_seats ?? 0,
     occupied_staff_seats: staffSeatTruth?.active_consumed_staff_seats ?? 0,
     available_staff_seats: staffSeatTruth?.available_staff_seats ?? 0,
     entitled_staff_seats: staffSeatTruth?.entitled_staff_seats ?? 0,
+    current_unit_price_amount: staffSeatTruth?.current_terms_unit_price_amount ?? null,
+    list_unit_price_amount: catalogPrice,
     unit_price_amount: catalogPrice,
     currency: staffSeatTruth?.seat_currency ?? 'ILS',
     billing_period: staffSeatTruth?.seat_billing_period ?? 'month',
     vat_rate: vat.standard_rate,
     vat_percent_label: vat.standard_rate_percent_label,
     locale,
+    current_rate_note: ui.text.staff_seats_current_rate_note,
+    next_seat_note: ui.text.staff_seats_next_seat_note,
     checkout_available: false,
     checkout_unavailable_message: ui.text.staff_seats_checkout_unavailable,
   });

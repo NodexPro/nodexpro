@@ -30,6 +30,8 @@ export type StaffSeatEntitlementTruth = {
   on_full_platform_trial: boolean;
   seat_charge_label?: string;
   list_unit_price_amount?: number;
+  current_terms_effective_from?: string | null;
+  current_terms_unit_price_amount?: number | null;
 };
 
 /** One-time migration compatibility amount — never auto-grown at runtime. */
@@ -341,10 +343,20 @@ export function projectStaffSeatOrganization(params: {
 
 export type StaffSeatWorkspaceBlock = {
   included_staff_seats: number;
+  grandfathered_staff_seats: number;
+  purchased_additional_staff_seats: number;
   occupied_staff_seats: number;
   available_staff_seats: number;
   entitled_staff_seats: number;
   owner_included_in_base: true;
+  current_unit_price_amount: number | null;
+  current_unit_price_with_vat_amount: number | null;
+  current_rate_label: string;
+  current_rate_note: string;
+  next_seat_unit_price_amount: number;
+  next_seat_unit_price_with_vat_amount: number;
+  next_seat_price_label: string;
+  next_seat_note: string;
   unit_price_amount: number;
   unit_price_with_vat_amount: number;
   currency: string;
@@ -391,39 +403,70 @@ export function formatStaffSeatPriceLabel(input: {
 
 export function buildStaffSeatWorkspaceBlock(input: {
   included_staff_seats: number;
+  grandfathered_staff_seats?: number;
+  purchased_additional_staff_seats?: number;
   occupied_staff_seats: number;
   available_staff_seats: number;
   entitled_staff_seats: number;
+  current_unit_price_amount?: number | null;
+  list_unit_price_amount?: number;
   unit_price_amount: number;
   currency: string;
   billing_period: string;
   vat_rate: number;
   vat_percent_label: string;
   locale: 'he' | 'en';
+  current_rate_note: string;
+  next_seat_note: string;
   checkout_available: boolean;
   checkout_unavailable_message: string;
 }): StaffSeatWorkspaceBlock {
-  const net = Math.max(0, Number(input.unit_price_amount) || 0);
-  const withVat = moneyWithVat(net, input.vat_rate);
+  const catalogNet = Math.max(0, Number(input.list_unit_price_amount ?? input.unit_price_amount) || 0);
+  const catalogWithVat = moneyWithVat(catalogNet, input.vat_rate);
+  const currentRaw = input.current_unit_price_amount;
+  const hasCurrent = currentRaw != null && Number.isFinite(Number(currentRaw));
+  const currentNet = hasCurrent ? Math.max(0, Number(currentRaw)) : null;
+  const currentWithVat = currentNet == null ? null : moneyWithVat(currentNet, input.vat_rate);
   const checkoutAvailable = input.checkout_available === true;
+  const nextLabel = formatStaffSeatPriceLabel({
+    amountWithVat: catalogWithVat,
+    currency: input.currency,
+    billingPeriod: input.billing_period,
+    vatPercentLabel: input.vat_percent_label,
+    locale: input.locale,
+  });
+  const currentLabel =
+    currentWithVat == null
+      ? '—'
+      : formatStaffSeatPriceLabel({
+          amountWithVat: currentWithVat,
+          currency: input.currency,
+          billingPeriod: input.billing_period,
+          vatPercentLabel: input.vat_percent_label,
+          locale: input.locale,
+        });
   return {
     included_staff_seats: Math.max(0, Math.floor(input.included_staff_seats)),
+    grandfathered_staff_seats: Math.max(0, Math.floor(input.grandfathered_staff_seats ?? 0)),
+    purchased_additional_staff_seats: Math.max(0, Math.floor(input.purchased_additional_staff_seats ?? 0)),
     occupied_staff_seats: Math.max(0, Math.floor(input.occupied_staff_seats)),
     available_staff_seats: Math.max(0, Math.floor(input.available_staff_seats)),
     entitled_staff_seats: Math.max(0, Math.floor(input.entitled_staff_seats)),
     owner_included_in_base: true,
-    unit_price_amount: net,
-    unit_price_with_vat_amount: withVat,
+    current_unit_price_amount: currentNet,
+    current_unit_price_with_vat_amount: currentWithVat,
+    current_rate_label: currentLabel,
+    current_rate_note: input.current_rate_note,
+    next_seat_unit_price_amount: catalogNet,
+    next_seat_unit_price_with_vat_amount: catalogWithVat,
+    next_seat_price_label: nextLabel,
+    next_seat_note: input.next_seat_note,
+    unit_price_amount: catalogNet,
+    unit_price_with_vat_amount: catalogWithVat,
     currency: input.currency,
     billing_period: input.billing_period,
     vat_percent_label: input.vat_percent_label,
-    price_label: formatStaffSeatPriceLabel({
-      amountWithVat: withVat,
-      currency: input.currency,
-      billingPeriod: input.billing_period,
-      vatPercentLabel: input.vat_percent_label,
-      locale: input.locale,
-    }),
+    price_label: nextLabel,
     vat_note: input.locale === 'he' ? `כולל מע״מ ${input.vat_percent_label}` : `Includes VAT ${input.vat_percent_label}`,
     add_seat: checkoutAvailable
       ? {
@@ -438,5 +481,39 @@ export function buildStaffSeatWorkspaceBlock(input: {
           checkout_status: 'unavailable',
           message: input.checkout_unavailable_message,
         },
+  };
+}
+
+export type StaffSeatCatalogPricingBlock = {
+  code: 'default';
+  unit_price_amount: number;
+  currency: string;
+  billing_period: string;
+  applies_to: 'new_additional_staff_seats';
+  does_not_rewrite_existing_office_terms: true;
+  title: string;
+  note: string;
+  save: { action_key: 'set_platform_staff_seat_pricing'; enabled: true };
+};
+
+/** Platform Owner catalog list price for a new additional seat. Never rewrites office commercial terms. */
+export function buildStaffSeatCatalogPricingBlock(input: {
+  unit_price_amount: number;
+  currency: string;
+  billing_period: string;
+}): StaffSeatCatalogPricingBlock {
+  const amount = Math.max(0, Number(input.unit_price_amount) || 0);
+  const currency = String(input.currency ?? 'ILS').trim().toUpperCase() || 'ILS';
+  const billing_period = input.billing_period === 'year' ? 'year' : 'month';
+  return {
+    code: 'default',
+    unit_price_amount: amount,
+    currency,
+    billing_period,
+    applies_to: 'new_additional_staff_seats',
+    does_not_rewrite_existing_office_terms: true,
+    title: 'Additional staff seat list price',
+    note: 'This catalog price applies to new additional seats. Existing office commercial terms, including individually agreed rates, stay unchanged.',
+    save: { action_key: 'set_platform_staff_seat_pricing', enabled: true },
   };
 }

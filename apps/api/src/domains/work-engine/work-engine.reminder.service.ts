@@ -96,6 +96,9 @@ function moduleLabel(key: string): string {
       return 'DocFlow';
     case 'work_engine':
       return 'Work Engine';
+    case 'client-operations':
+    case 'client_operations':
+      return 'Client Management';
     default:
       return humanizeKey(key);
   }

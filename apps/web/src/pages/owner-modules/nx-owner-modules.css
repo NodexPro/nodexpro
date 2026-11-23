@@ -191,6 +191,63 @@
   background: #fafafa;
 }
 
+.nx-owner-catalog-price {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.nx-owner-catalog-price__title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.nx-owner-catalog-price__note {
+  margin: 0 0 10px;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.nx-owner-catalog-price__error {
+  margin: 0 0 8px;
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+.nx-owner-catalog-price__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+}
+
+.nx-owner-catalog-price__field {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.nx-owner-catalog-price__field input {
+  height: 34px;
+  min-width: 120px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 14px;
+}
+
+.nx-owner-catalog-price__meta {
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 600;
+  padding-bottom: 8px;
+}
+
 .nx-owner-tabs {
   display: flex;
   gap: 6px;

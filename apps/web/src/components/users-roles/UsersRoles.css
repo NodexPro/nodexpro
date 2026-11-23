@@ -116,13 +116,25 @@
   line-height: 1.2;
 }
 
+.nx-ur-seats__price-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
 .nx-ur-seats__price {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 12px;
   color: #eef6ff;
   font-size: 13.5px;
-  margin-bottom: 10px;
+}
+
+.nx-ur-seats__note {
+  margin: 0;
+  color: var(--nx-ur-text-secondary);
+  font-size: 12.5px;
 }
 
 .nx-ur-seats__vat {

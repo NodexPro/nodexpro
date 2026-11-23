@@ -73,7 +73,7 @@ const MODULE_LABELS: Record<string, string> = {
   income: 'Income',
   work_engine: 'Work Engine',
   'work-engine': 'Work Engine',
-  'client-operations': 'Client Operations',
+  'client-operations': 'Client Management',
   docflow: 'DocFlow',
   delivery: 'Delivery',
 };

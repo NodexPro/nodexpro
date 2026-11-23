@@ -32,10 +32,13 @@ test('Register does not show a sent-mail modal on API failure and does not leak 
   assert.match(register, /nx-register-confirm-email/);
   assert.match(register, /to=\{loginTo\}/);
   assert.match(register, /t\('auth.registerFailed'\)/);
+  assert.match(register, /language_code: lang/);
+  assert.match(register, /fillRegisteredEmail/);
   assert.doesNotMatch(register, /setError\((err|signInError)\.message/);
   assert.match(register, /t\('auth.registerFailed'\)/);
   assert.match(he.auth.confirmEmailBody, /שלחנו מייל לכתובת \{email\}/);
   assert.match(he.auth.confirmEmailBody, /כניסה/);
   assert.match(en.auth.confirmEmailBody, /We sent an email to \{email\}/);
   assert.match(en.auth.goToSignIn, /sign in/i);
+  assert.match(he.auth.confirmEmailTitle, /אישור/);
 });

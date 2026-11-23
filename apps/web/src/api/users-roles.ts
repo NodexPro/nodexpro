@@ -54,10 +54,16 @@ export type UsersRolesMemberRow = {
 
 export type UsersRolesStaffSeats = {
   included_staff_seats: number;
+  grandfathered_staff_seats: number;
+  purchased_additional_staff_seats: number;
   occupied_staff_seats: number;
   available_staff_seats: number;
   entitled_staff_seats: number;
   owner_included_in_base: boolean;
+  current_rate_label: string;
+  current_rate_note: string;
+  next_seat_price_label: string;
+  next_seat_note: string;
   unit_price_amount: number;
   unit_price_with_vat_amount: number;
   currency: string;

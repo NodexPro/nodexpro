@@ -110,7 +110,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       signal: controller.signal,
       cache: 'no-store',
     })
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => (res.ok ? res.text().then((text) => (text.trim() ? JSON.parse(text) : null)) : null))
       .then((data: { messages?: unknown } | null) => {
         if (cancelled || !data || typeof data.messages !== 'object' || !data.messages) return;
         const next: Record<string, string> = {};

@@ -192,6 +192,7 @@ test('24-28 quantity command writes today and preserves price; terms command is 
   assert.match(service, /p_preserve_commercial_price: false/);
   assert.match(service, /assertPlatformOwner\(ctx\)/);
   assert.match(commands, /set_organization_staff_seat_terms/);
+  assert.match(commands, /set_platform_staff_seat_pricing/);
   assert.match(commands, /owner_module_detail_aggregate/);
   assert.doesNotMatch(commands, /case 'set_organization_staff_seat_terms'[\s\S]{0,500}stripe|payment_intent|invoice/i);
 });

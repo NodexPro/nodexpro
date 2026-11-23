@@ -15,6 +15,7 @@ import {
   classifyWorkspaceApplyDecision,
   sessionAccessTokenNeedsRefresh,
 } from '../lib/session-auth-failure.pure';
+import { abortError, parseHttpJsonText } from '../lib/parse-http-json.pure';
 
 const API_URL = resolvePublicApiBaseUrl(import.meta.env.VITE_API_URL, import.meta.env.PROD);
 
@@ -113,7 +114,8 @@ export async function apiDocflowPortalJson<T>(
     throw e;
   }
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const body = ((await readResponseJson<Record<string, unknown>>(res, options.signal).catch(() => ({}))) ??
+      {}) as Record<string, unknown>;
     const code = typeof body.code === 'string' ? body.code : undefined;
     const message = typeof body.message === 'string' ? body.message : undefined;
     const { code: _c, message: _m, ...rest } = body;
@@ -122,7 +124,7 @@ export async function apiDocflowPortalJson<T>(
     const details = Object.keys(rest).length ? rest : undefined;
     throw new ApiError(message || res.statusText, code, res.status, details);
   }
-  return res.json();
+  return (await readResponseJson<T>(res, options.signal)) as T;
 }
 
 function throwIfWorkspaceChanged(startedGeneration: number): void {
@@ -133,6 +135,24 @@ function throwIfWorkspaceChanged(startedGeneration: number): void {
   const err = new Error('Workspace changed');
   err.name = 'StaleWorkspaceError';
   throw err;
+}
+
+async function readResponseJson<T>(res: Response, signal?: AbortSignal | null): Promise<T | undefined> {
+  const text = await res.text();
+  const parsed = parseHttpJsonText<T>({
+    ok: res.ok,
+    status: res.status,
+    text,
+    aborted: signal?.aborted === true,
+  });
+  if (parsed.kind === 'abort') throw abortError();
+  if (parsed.kind === 'empty_success') return undefined;
+  if (parsed.kind === 'json') return parsed.value;
+  throw new ApiError(
+    parsed.kind === 'empty_error' ? res.statusText || 'Request failed' : 'Invalid JSON response',
+    parsed.kind === 'empty_error' ? undefined : 'INVALID_JSON',
+    res.status,
+  );
 }
 
 function apiErrorFromBody(res: Response, body: Record<string, unknown>): ApiError {
@@ -167,11 +187,12 @@ export async function apiJson<T>(path: string, options?: RequestInit): Promise<T
     }
     throwIfWorkspaceChanged(startedGeneration);
     if (res.ok) {
-      const payload = (await res.json()) as T;
+      const payload = (await readResponseJson<T>(res, options?.signal)) as T;
       throwIfWorkspaceChanged(startedGeneration);
       return payload;
     }
-    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const body = ((await readResponseJson<Record<string, unknown>>(res, options?.signal).catch(() => ({}))) ??
+      {}) as Record<string, unknown>;
     const code = typeof body.code === 'string' ? body.code : undefined;
     const refreshOutcome = !alreadyRetried && res.status === 401
       ? await refreshAccessToken()
@@ -203,7 +224,7 @@ export async function apiJson<T>(path: string, options?: RequestInit): Promise<T
       }
       try {
         const { supabase } = await import('../lib/supabase');
-        await supabase.auth.signOut(deviceSignOutOptions());
+        await supabase.auth.signOut(deviceSignOutOptions()).catch(() => undefined);
       } catch {
         // confirmed unauth; local drop is best-effort
       }
@@ -228,7 +249,8 @@ export async function apiJsonPublic<T>(path: string, options: RequestInit = {}):
     throw e;
   }
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const body = ((await readResponseJson<Record<string, unknown>>(res, options.signal).catch(() => ({}))) ??
+      {}) as Record<string, unknown>;
     const code = typeof body.code === 'string' ? body.code : undefined;
     const message = typeof body.message === 'string' ? body.message : undefined;
     const { code: _c, message: _m, ...rest } = body;
@@ -237,7 +259,7 @@ export async function apiJsonPublic<T>(path: string, options: RequestInit = {}):
     const details = Object.keys(rest).length ? rest : undefined;
     throw new ApiError(message || res.statusText, code, res.status, details);
   }
-  return res.json();
+  return (await readResponseJson<T>(res, options.signal)) as T;
 }
 
 /** POST that returns a file (e.g. history export). Parses JSON errors like `apiJson`. */
@@ -247,7 +269,8 @@ export async function apiPostDownload(path: string, body: unknown, defaultFilena
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const errBody = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const errBody = ((await readResponseJson<Record<string, unknown>>(res).catch(() => ({}))) ??
+      {}) as Record<string, unknown>;
     const ec = typeof errBody.code === 'string' ? errBody.code : undefined;
     const em = typeof errBody.message === 'string' ? errBody.message : undefined;
     const { code: _c2, message: _m2, ...rest2 } = errBody;

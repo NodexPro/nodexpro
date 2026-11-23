@@ -4,7 +4,7 @@
  */
 
 import { supabaseAdmin } from '../../db/client.js';
-import { AppError, badRequest, conflict, forbidden } from '../../shared/errors.js';
+import { AppError, badRequest, conflict, forbidden, notFound } from '../../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import type { RequestContext } from '../../shared/context.js';
 import { assertPlatformOwner } from '../../shared/platform-owner.js';
@@ -89,6 +89,16 @@ async function loadActiveSeatPricing(): Promise<{
     default_included_staff_seats: Number(row.default_included_staff_seats) || 0,
     trial_included_staff_seats: Number(row.trial_included_staff_seats) || 0,
   };
+}
+
+export async function loadPlatformStaffSeatCatalogPricing(): Promise<{
+  currency: string;
+  unit_price_amount: number;
+  billing_period: string;
+  default_included_staff_seats: number;
+  trial_included_staff_seats: number;
+}> {
+  return loadActiveSeatPricing();
 }
 
 function staffSeatAsOfDate(): string {
@@ -269,6 +279,8 @@ export async function resolveStaffSeatEntitlement(
     on_full_platform_trial: onTrial,
     seat_charge_label: projection.seat_charge_label,
     list_unit_price_amount: pricing.unit_price_amount,
+    current_terms_effective_from: projection.current_terms?.effective_from ?? null,
+    current_terms_unit_price_amount: projection.current_terms?.effective_unit_price ?? null,
   };
 }
 
@@ -647,6 +659,68 @@ export async function setOrganizationStaffSeatTermsCommand(
   });
 
   return { ok: true, command: 'set_organization_staff_seat_terms', organization_id: organizationId };
+}
+
+/**
+ * Platform Owner catalog list price for additional staff seats.
+ * Updates platform_staff_seat_pricing only. Does not rewrite organization_staff_seat_commercial_terms.
+ */
+export async function setPlatformStaffSeatPricingCommand(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<{ ok: true; command: 'set_platform_staff_seat_pricing' }> {
+  assertPlatformOwner(ctx);
+  const unitPrice = readOptionalMoney(payload.unit_price_amount);
+  if (unitPrice == null) {
+    throw badRequest('unit_price_amount is required', 'INVALID_SEAT_PRICE');
+  }
+  const before = await loadActiveSeatPricing();
+  const currencyRaw =
+    payload.currency == null || payload.currency === '' ? before.currency : String(payload.currency).trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currencyRaw)) {
+    throw badRequest('currency must be a 3-letter code', 'INVALID_SEAT_CURRENCY');
+  }
+  const periodRaw =
+    payload.billing_period == null || payload.billing_period === ''
+      ? before.billing_period
+      : String(payload.billing_period).trim().toLowerCase();
+  if (periodRaw !== 'month' && periodRaw !== 'year') {
+    throw badRequest('billing_period must be month or year', 'INVALID_SEAT_BILLING_PERIOD');
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('platform_staff_seat_pricing')
+    .update({
+      unit_price_amount: unitPrice,
+      currency: currencyRaw,
+      billing_period: periodRaw,
+    })
+    .eq('code', 'default')
+    .eq('is_active', true)
+    .select('code, unit_price_amount, currency, billing_period')
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw notFound('Active platform staff seat pricing not found');
+
+  await writeAudit({
+    organizationId: null,
+    actorUserId: ctx.user.id,
+    entityType: 'platform_staff_seat_pricing',
+    entityId: 'default',
+    action: AUDIT_ACTIONS.STAFF_SEAT_CATALOG_PRICE_SET,
+    payload: {
+      previous_unit_price_amount: before.unit_price_amount,
+      unit_price_amount: Number((data as { unit_price_amount: number }).unit_price_amount),
+      previous_currency: before.currency,
+      currency: String((data as { currency: string }).currency),
+      previous_billing_period: before.billing_period,
+      billing_period: String((data as { billing_period: string }).billing_period),
+      applies_to: 'new_additional_staff_seats',
+      existing_office_terms_rewritten: false,
+    },
+  });
+
+  return { ok: true, command: 'set_platform_staff_seat_pricing' };
 }
 
 export function buildOwnerCommercialSeatsSection(truth: StaffSeatEntitlementTruth): Record<string, string | number | null> {

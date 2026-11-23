@@ -31,21 +31,34 @@ test('workspace block is ready-to-render and never enables checkout without paym
   assert.equal(moneyWithVat(49, 0.18), 57.82);
   const block = buildStaffSeatWorkspaceBlock({
     included_staff_seats: 0,
+    grandfathered_staff_seats: 0,
+    purchased_additional_staff_seats: 1,
     occupied_staff_seats: 1,
     available_staff_seats: 0,
     entitled_staff_seats: 1,
+    current_unit_price_amount: 2,
+    list_unit_price_amount: 49,
     unit_price_amount: 49,
     currency: 'ILS',
     billing_period: 'month',
     vat_rate: 0.18,
     vat_percent_label: '18%',
     locale: 'he',
+    current_rate_note: 'תעריף נוכחי',
+    next_seat_note: 'מחירון',
     checkout_available: false,
     checkout_unavailable_message: 'התשלום עדיין אינו זמין',
   });
   assert.equal(block.owner_included_in_base, true);
-  assert.equal(block.unit_price_with_vat_amount, 57.82);
-  assert.match(block.price_label, /מע״מ/);
+  assert.equal(block.purchased_additional_staff_seats, 1);
+  assert.equal(block.included_staff_seats, 0);
+  assert.equal(block.current_unit_price_amount, 2);
+  assert.equal(block.current_unit_price_with_vat_amount, 2.36);
+  assert.equal(block.next_seat_unit_price_amount, 49);
+  assert.equal(block.next_seat_unit_price_with_vat_amount, 57.82);
+  assert.match(block.current_rate_label, /2\.36/);
+  assert.match(block.next_seat_price_label, /57\.82/);
+  assert.notEqual(block.current_rate_label, block.next_seat_price_label);
   assert.equal(block.add_seat.enabled, false);
   assert.equal(block.add_seat.action_key, null);
   assert.equal(block.add_seat.checkout_status, 'unavailable');

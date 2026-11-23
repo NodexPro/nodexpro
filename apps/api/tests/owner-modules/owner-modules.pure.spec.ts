@@ -7,6 +7,9 @@ import {
   isOwnerModulesCatalogRow,
   summarizeCatalogPlans,
 } from '../../src/domains/owner-modules/owner-modules.pure.js';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 test('Owner Modules catalog filter hides system, income alias, and inactive non-sellable rows', () => {
   assert.equal(
@@ -65,6 +68,16 @@ test('Pricing filter scopes rows to selected module_code only', () => {
   assert.equal(rows.length, 1);
   assert.equal(rows[0]?.module_code, 'client-operations');
   assert.equal(rows[0]?.price_amount, 20);
+});
+
+test('Client Operations detail aggregate exposes staff seat catalog pricing from platform_staff_seat_pricing', () => {
+  const service = readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '../../src/domains/owner-modules/owner-modules.service.ts'),
+    'utf8',
+  );
+  assert.match(service, /CLIENT_OPERATIONS_MODULE_CODE \? loadPlatformStaffSeatCatalogPricing/);
+  assert.match(service, /staff_seat_catalog_pricing/);
+  assert.match(service, /set_platform_staff_seat_pricing/);
 });
 
 test('Catalog plan summary prefers first active plan by sort_order', () => {

@@ -73,7 +73,9 @@ test('Export CSV downloads org-scoped UTF-8 with escaped fields and no extra sec
   assert.match(exportAll, /assertClientsWrite/);
   assert.match(exportAll, /resolveOrganizationClientAccessScopeFromContext/);
   assert.match(exportAll, /filterAuthorizedClientIds/);
+  assert.match(exportAll, /resolveOrganizationClientAccessScopeFromContext/);
   assert.match(exportAll, /\.eq\('organization_id', orgId\)/);
+  assert.match(exportAll, /authorized_client_ids/);
   assert.match(exportAll, /name,email,phone,company_name,tax_id,address,city,country,notes/);
   assert.match(exportAll, /replace\(\/"\/g/);
   assert.doesNotMatch(exportAll, /password|service_role|access_token|secret/i);

@@ -289,7 +289,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           dropAuthenticatedWorkspace();
           setState({ status: 'unauthenticated' });
           try {
-            await supabase.auth.signOut(deviceSignOutOptions());
+            await supabase.auth.signOut(deviceSignOutOptions()).catch(() => undefined);
           } catch {
             // best-effort local clear
           }
@@ -327,11 +327,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     try {
       await apiJson(AUTH.logout, { method: 'POST' });
+    } catch {
+      // 204 empty body is success; other Core failures still clear this device only.
     } finally {
       endLocalPasswordSwitch();
       authUserIdRef.current = null;
       dropAuthenticatedWorkspace();
-      await supabase.auth.signOut(deviceSignOutOptions());
+      await supabase.auth.signOut(deviceSignOutOptions()).catch(() => undefined);
       setState({ status: 'unauthenticated' });
     }
   }, [dropAuthenticatedWorkspace]);

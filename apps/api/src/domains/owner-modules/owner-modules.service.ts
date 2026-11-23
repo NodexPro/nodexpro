@@ -23,6 +23,8 @@ import {
   summarizeCatalogPlans,
 } from './owner-modules.pure.js';
 import { buildCountryReportingCalendarAggregate } from '../country-pack/reporting-calendar.service.js';
+import { loadPlatformStaffSeatCatalogPricing } from '../modules/staff-seat-entitlement.service.js';
+import { buildStaffSeatCatalogPricingBlock } from '../modules/staff-seat-entitlement.pure.js';
 
 export type OwnerModulesCommercialQuery = Partial<CommercialControlsQuery>;
 export type OwnerModulesReportingCalendarQuery = {
@@ -182,7 +184,7 @@ export async function buildOwnerModuleDetailAggregate(
   const mod = modules.find((m) => m.code === moduleCode);
   if (!mod) throw notFound(`Module not found: ${moduleCode}`);
 
-  const [plansByModule, orgCounts, platformPricing, commercialControls] = await Promise.all([
+  const [plansByModule, orgCounts, platformPricing, commercialControls, catalogSeatPricing] = await Promise.all([
     loadPlansByModuleId([mod.id]),
     countActiveOrganizationsByModuleId([mod.id]),
     buildOwnerPlatformPricingAggregate(ctx),
@@ -190,6 +192,7 @@ export async function buildOwnerModuleDetailAggregate(
       ...commercialQuery,
       module_key: moduleCode,
     }),
+    moduleCode === CLIENT_OPERATIONS_MODULE_CODE ? loadPlatformStaffSeatCatalogPricing() : Promise.resolve(null),
   ]);
 
   const listRow = buildModuleListRow(mod, plansByModule.get(mod.id) ?? [], orgCounts.get(mod.id) ?? 0);
@@ -207,6 +210,13 @@ export async function buildOwnerModuleDetailAggregate(
     module: listRow,
     available_detail_tabs: detailTabs,
     platform_pricing: filterPricingRowsForModule(platformPricing, moduleCode),
+    staff_seat_catalog_pricing: catalogSeatPricing
+      ? buildStaffSeatCatalogPricingBlock({
+          unit_price_amount: catalogSeatPricing.unit_price_amount,
+          currency: catalogSeatPricing.currency,
+          billing_period: catalogSeatPricing.billing_period,
+        })
+      : null,
     commercial_controls: commercialControls,
     reporting_calendar: reportingCalendar,
     actions: [
@@ -215,6 +225,20 @@ export async function buildOwnerModuleDetailAggregate(
         enabled: true,
         payload: { module_code: moduleCode, is_active: 'boolean' },
       },
+      ...(catalogSeatPricing
+        ? [
+            {
+              action_key: 'set_platform_staff_seat_pricing',
+              enabled: true,
+              payload: {
+                unit_price_amount: 'number — catalog list price for a new additional staff seat',
+                currency: 'optional 3-letter code; defaults to the current catalog currency',
+                billing_period: 'optional month|year; defaults to the current catalog period',
+              },
+              note: 'Updates platform_staff_seat_pricing only. Does not rewrite office commercial terms.',
+            },
+          ]
+        : []),
     ],
   };
 }

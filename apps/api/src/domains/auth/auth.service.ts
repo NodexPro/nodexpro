@@ -6,6 +6,7 @@ import { ENUMERATION_SAFE_REGISTER_MESSAGE } from '../../shared/api-security.pur
 import { APP_USER_NOT_ACTIVE_CODE, APP_USER_NOT_ACTIVE_MESSAGE, isAppUserStatusActive } from './user-authorization.pure.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
 import { allowedPasswordResetRedirect, normalizePasswordResetEmail, publicPasswordResetResponse } from './password-reset.pure.js';
+import { nodexproSignupEmailRedirectTo } from './nodexpro-verification-email.pure.js';
 import { maskAttemptedIdentifier } from '../../shared/failed-login-policy.pure.js';
 
 const supabaseAuth = createClient(config.supabaseUrl, config.supabaseAnonKey);
@@ -19,7 +20,13 @@ export async function register(params: {
   const { data, error } = await supabaseAuth.auth.signUp({
     email: params.email,
     password: params.password,
-    options: { data: { full_name: params.fullName ?? '' } },
+    options: {
+      data: { full_name: params.fullName ?? '' },
+      emailRedirectTo: nodexproSignupEmailRedirectTo({
+        appUrl: process.env.APP_URL,
+        frontendUrl: process.env.FRONTEND_URL,
+      }),
+    },
   });
   if (error) {
     throw badRequest(ENUMERATION_SAFE_REGISTER_MESSAGE);

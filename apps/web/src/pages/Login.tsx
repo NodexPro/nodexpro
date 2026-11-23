@@ -36,6 +36,7 @@ import {
   endLocalPasswordSwitch,
   shouldClearLocalSessionBeforePasswordLogin,
 } from '../lib/login-identity-switch.pure';
+import { loginShowsEmailConfirmed } from '../lib/auth-confirm.pure';
 
 export function Login() {
   const { t, lang, setLang } = useI18n();
@@ -66,6 +67,7 @@ export function Login() {
     ? `/register?redirect=${encodeURIComponent(inviteReturnPath)}`
     : '/register';
   const passwordResetOk = Boolean((location.state as { passwordResetOk?: boolean } | null)?.passwordResetOk);
+  const emailConfirmed = loginShowsEmailConfirmed(location.search);
 
   function postLoginPath(sessionRedirect: string | null | undefined): string {
     const inviteAfterAuth = readStoredInviteReturnPath(
@@ -238,6 +240,9 @@ export function Login() {
     <PublicAuthShell title={t('auth.signIn')} testId="nx-login">
       {passwordResetOk && (
         <p className="nx-glass-alert nx-glass-alert--ok">{t('auth.passwordResetOk')}</p>
+      )}
+      {emailConfirmed && (
+        <p className="nx-glass-alert nx-glass-alert--ok">{t('auth.emailConfirmed')}</p>
       )}
       <form onSubmit={handleSubmit} aria-busy={loading}>
         <div className="nx-glass-field">

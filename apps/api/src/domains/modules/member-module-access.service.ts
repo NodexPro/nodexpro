@@ -8,6 +8,8 @@ import type { RequestContext } from '../../shared/context.js';
 import { AppError, badRequest, forbidden } from '../../shared/errors.js';
 import { roleHasOfficeClientAccess } from '../client-operations/organization-client-access.pure.js';
 import { resolveMemberDisplayName } from '../memberships/users-roles.pure.js';
+import { resolvePersistedUiLanguage } from '../platform-localization/platform-localization.pure.js';
+import { userFacingModuleDisplayName } from './user-facing-module-label.pure.js';
 import { filterSessionEnabledModuleCodes, resolveEntitlement } from './entitlement.service.js';
 import { resolveModuleEntitlementCode } from '../../shared/module-entitlement.pure.js';
 import {
@@ -244,6 +246,7 @@ export async function buildMemberModuleAssignabilityAggregate(
         row,
         organizationEntitled: activeIds.has(row.id) && entitledCodes.has(row.code),
         memberEnabled: effective.has(row.id),
+        locale: resolvePersistedUiLanguage(ctx.user.uiLanguage),
       }),
     ),
   };
@@ -253,7 +256,10 @@ export async function buildMemberModuleAssignabilityAggregate(
  * Employee-assignable modules of the organization (active, user-facing, entitled) with display
  * names. Used by the Users & Roles aggregate to summarise a member's enabled modules.
  */
-export async function loadOrganizationAssignableModuleNames(orgId: string): Promise<Map<string, string>> {
+export async function loadOrganizationAssignableModuleNames(
+  orgId: string,
+  locale: 'en' | 'he' | string | null = 'en',
+): Promise<Map<string, string>> {
   const catalog = (await loadModuleCatalog()).filter((row) => row.is_active && classifyModule(row) === 'user_facing');
   const { data: orgModules, error } = await supabaseAdmin
     .from('organization_modules')
@@ -269,7 +275,9 @@ export async function loadOrganizationAssignableModuleNames(orgId: string): Prom
   });
   const out = new Map<string, string>();
   for (const row of candidates) {
-    if (entitledCodes.has(row.code)) out.set(row.id, String(row.name ?? '').trim() || row.code);
+    if (entitledCodes.has(row.code)) {
+      out.set(row.id, userFacingModuleDisplayName(row.code, locale, String(row.name ?? '').trim() || row.code));
+    }
   }
   return out;
 }

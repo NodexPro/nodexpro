@@ -79,6 +79,7 @@ type CountryPackCommandType =
   | 'set_module_global_activation'
   | 'set_organization_staff_seat_quantity'
   | 'set_organization_staff_seat_terms'
+  | 'set_platform_staff_seat_pricing'
   | 'save_operational_reminder_workflow'
   | 'edit_operational_reminder_workflow'
   | 'disable_operational_reminder_workflow'
@@ -1823,6 +1824,23 @@ export async function executeCountryPackCommand(
       return {
         ok: true,
         command: 'set_organization_staff_seat_terms',
+        refreshed,
+      };
+    }
+    case 'set_platform_staff_seat_pricing': {
+      const detailCode = String(command.payload.owner_module_detail_code ?? '').trim();
+      if (!detailCode) throw badRequest('owner_module_detail_code is required');
+      const { setPlatformStaffSeatPricingCommand } = await import(
+        '../modules/staff-seat-entitlement.service.js'
+      );
+      await setPlatformStaffSeatPricingCommand(ctx, command.payload);
+      const refreshed = await refreshedOwnerCommercialSurface(ctx, command.payload);
+      if (refreshed.aggregate_key !== 'owner_module_detail_aggregate') {
+        throw badRequest('owner_module_detail_code is required');
+      }
+      return {
+        ok: true,
+        command: 'set_platform_staff_seat_pricing',
         refreshed,
       };
     }
