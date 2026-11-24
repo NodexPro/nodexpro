@@ -30,6 +30,8 @@ import { PlatformOwnerShell } from './pages/PlatformOwnerShell';
 import { PlatformOwnerCurrenciesPage } from './pages/PlatformOwnerCurrenciesPage';
 import { PlatformOwnerLanguagesPage } from './pages/PlatformOwnerLanguagesPage';
 import { PlatformOwnerSecurityPage } from './pages/PlatformOwnerSecurityPage';
+import { PlatformOwnerPaymentsPage } from './pages/PlatformOwnerPaymentsPage';
+import { OfficePaymentsPage } from './pages/OfficePaymentsPage';
 import { VerifyAdditionalEmail } from './pages/VerifyAdditionalEmail';
 import { PlatformOwnerModulesPage } from './pages/owner-modules/PlatformOwnerModulesPage';
 import { PlatformOwnerModuleDetailPage } from './pages/owner-modules/PlatformOwnerModuleDetailPage';
@@ -163,6 +165,7 @@ function AppRoutes() {
         <Route path="currencies" element={<PlatformOwnerCurrenciesPage />} />
         <Route path="languages" element={<PlatformOwnerLanguagesPage />} />
         <Route path="security" element={<PlatformOwnerSecurityPage />} />
+        <Route path="payments" element={<PlatformOwnerPaymentsPage />} />
       </Route>
       <Route path="/register" element={<Register />} />
       <Route path="/invite/accept" element={<InviteAccept />} />
@@ -174,6 +177,7 @@ function AppRoutes() {
       <Route element={<RequireAuth><RequireOrg><AppShell /></RequireOrg></RequireAuth>}>
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="settings/payments" element={<OfficePaymentsPage />} />
         <Route path="users-roles" element={<UsersRoles />} />
         <Route path="clients" element={<Clients />} />
         <Route path="clients/:clientId" element={<ClientCard />} />

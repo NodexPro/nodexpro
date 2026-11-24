@@ -68,6 +68,18 @@ export const orgLegalIdentity = (id: string) => `/organizations/${id}/legal-iden
 export const orgOwnerIdentity = (id: string) => `/organizations/${id}/owner-identity`;
 export const orgCompanyLegalIdentity = (id: string) => `/organizations/${id}/settings/company/legal-identity`;
 export const orgSettings = (id: string) => `/organizations/${id}/settings`;
+export const orgOfficePaymentsAggregate = (id: string) => `/organizations/${id}/aggregates/office-payments`;
+export const orgOfficePaymentCommand = (id: string, command: string) =>
+  `/organizations/${id}/commands/${encodeURIComponent(command)}`;
+export const orgStaffSeatPurchaseCommand = (id: string, command: string) =>
+  `/organizations/${id}/commands/${encodeURIComponent(command)}`;
+export const orgBillingWorkspace = (id: string) => `/organizations/${id}/aggregates/billing-workspace`;
+export const orgBillingModules = (id: string) => `/organizations/${id}/aggregates/billing-modules`;
+export const orgBillingStaffLicenses = (id: string) => `/organizations/${id}/aggregates/billing-staff-licenses`;
+export const orgBillingPlatformPayments = (id: string) => `/organizations/${id}/aggregates/billing-platform-payments`;
+export const orgBillingClientProcessing = (id: string) => `/organizations/${id}/aggregates/billing-client-processing`;
+export const orgBillingCommand = (id: string, command: string) =>
+  `/organizations/${id}/commands/${encodeURIComponent(command)}`;
 export const orgSettingsUpdateCommand = (id: string) => `/organizations/${id}/settings/commands/update_organization_settings`;
 export const orgCountrySettings = (id: string) => `/organizations/${id}/country-settings`;
 export const orgSettingsFileOpen = (orgId: string, fileAssetId: string) =>
@@ -451,6 +463,7 @@ export const OWNER = {
   emailProviderConfig: () => '/owner/email-provider-config',
   currencies: '/owner/currencies',
   languages: '/owner/languages',
+  payments: '/owner/payments',
   command: '/owner/command',
   countrySettings: (organizationId: string) => `/owner/country-settings/${organizationId}`,
   countryDiagnostics: (organizationId: string) => `/owner/country-diagnostics/${organizationId}`,

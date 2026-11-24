@@ -370,6 +370,29 @@ export type StaffSeatWorkspaceBlock = {
     checkout_status: 'available' | 'unavailable';
     message: string;
   };
+  purchase_quote?: {
+    quantity: number;
+    currency: string;
+    billing_period: string;
+    unit_price_net: number;
+    net_amount: number;
+    vat_rate: number;
+    vat_percent_label: string;
+    vat_amount: number;
+    total_amount: number;
+    price_source: 'office_commercial_terms' | 'platform_catalog';
+    catalog_unit_price_net: number;
+    checkout_available: false;
+    pay_enabled: false;
+    labels: { unit: string; net: string; vat: string; total: string };
+  };
+  open_intent?: { id: string; status: string; quantity: number } | null;
+  available_commands?: {
+    quote: { action_key: 'quote_staff_seat_purchase'; enabled: boolean };
+    create_intent: { action_key: 'create_staff_seat_purchase_intent'; enabled: boolean };
+    cancel_intent: { action_key: 'cancel_staff_seat_purchase_intent'; enabled: boolean };
+    pay: { enabled: false };
+  };
 };
 
 export function moneyWithVat(net: number, vatRate: number): number {

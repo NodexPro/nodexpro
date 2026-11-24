@@ -552,7 +552,8 @@ test('30. Employee seats come from the users-roles aggregate, not a second GET o
   assert.match(page, /data-testid="users-roles-staff-seats"/);
   assert.match(page, /data\.staff_seats\.current_rate_label/);
   assert.match(page, /data\.staff_seats\.next_seat_price_label/);
-  assert.match(page, /disabled=\{!data\.staff_seats\.add_seat\.enabled\}/);
+  assert.match(page, /\/billing\?tab=staff_licenses/);
+  assert.doesNotMatch(page, /quoteStaffSeatPurchaseCommand/);
   assert.match(page, /AbortController/);
   assert.doesNotMatch(page, /staff-seat-entitlement/);
   assert.doesNotMatch(page, /selectPlan|createCheckout|purchaseStaffSeat/);

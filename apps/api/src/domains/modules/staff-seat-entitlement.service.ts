@@ -305,7 +305,7 @@ export async function assertStaffSeatCapacity(
   return truth;
 }
 
-function mapSeatRpcError(error: { message?: string; details?: string; code?: string } | null): never {
+export function mapSeatRpcError(error: { message?: string; details?: string; code?: string } | null): never {
   const msg = String(error?.message ?? error?.details ?? '');
   if (msg.includes('STAFF_SEAT_CAPACITY_EXCEEDED')) {
     throw conflict('No available staff seats for this organization', SEAT_CAPACITY_CODE, {

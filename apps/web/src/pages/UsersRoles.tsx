@@ -1,8 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiFetch, apiJson } from '../api/client';
 import { orgInviteResend, orgInviteRevoke, orgMembersInvite } from '../api/endpoints';
-import { fetchUsersRolesAggregate, type UsersRolesAggregate, type UsersRolesMemberRow } from '../api/users-roles';
+import {
+  fetchUsersRolesAggregate,
+  type UsersRolesAggregate,
+  type UsersRolesMemberRow,
+} from '../api/users-roles';
 import {
   CloseAccessModal,
   MemberClientsModal,
@@ -221,16 +226,14 @@ export function UsersRoles() {
             <p className="nx-ur-seats__note">{data.staff_seats.next_seat_note}</p>
           </div>
           <div className="nx-ur-seats__actions">
-            <button
-              type="button"
+            <Link
+              to="/billing?tab=staff_licenses"
               className="nx-btn nx-ur-btn nx-ur-btn--primary"
-              disabled={!data.staff_seats.add_seat.enabled}
+              data-testid="users-roles-add-seat-billing"
             >
               {T('staff_seats_add')}
-            </button>
-            {!data.staff_seats.add_seat.enabled ? (
-              <p className="nx-ur-seats__checkout">{data.staff_seats.add_seat.message}</p>
-            ) : null}
+            </Link>
+            <p className="nx-ur-seats__checkout">{T('staff_seats_buy_in_billing')}</p>
           </div>
         </section>
       ) : null}

@@ -99,7 +99,16 @@ const EN: UsersRolesText = {
   staff_seats_next_seat: 'New seat list price',
   staff_seats_next_seat_note: 'Platform Owner catalog price for buying another seat. A paid license is not created without confirmed payment.',
   staff_seats_add: 'Add seat',
+  staff_seats_buy_in_billing: 'Buy extra seats in Billing → Staff Licenses',
   staff_seats_checkout_unavailable: 'Payment is not available yet. A paid license is not created without confirmed payment.',
+  staff_seats_qty: 'Quantity',
+  staff_seats_unit: 'Unit (net)',
+  staff_seats_net: 'Net',
+  staff_seats_vat: 'VAT',
+  staff_seats_total: 'Total',
+  staff_seats_create_intent: 'Save unpaid request',
+  staff_seats_cancel_intent: 'Cancel unpaid request',
+  staff_seats_pay: 'Pay',
 };
 
 const HE: UsersRolesText = {
@@ -165,7 +174,16 @@ const HE: UsersRolesText = {
   staff_seats_next_seat: 'מחיר מחירון למקום חדש',
   staff_seats_next_seat_note: 'מחיר המחירון של Platform Owner לרכישת מקום נוסף. רישיון בתשלום לא נוצר בלי תשלום מאושר.',
   staff_seats_add: 'הוספת מקום',
+  staff_seats_buy_in_billing: 'רכישת מקומות נוספים בחיובים → רישיונות עובדים',
   staff_seats_checkout_unavailable: 'התשלום עדיין אינו זמין. רישיון בתשלום לא נוצר בלי תשלום מאושר.',
+  staff_seats_qty: 'כמות',
+  staff_seats_unit: 'מחיר יחידה (נטו)',
+  staff_seats_net: 'נטו',
+  staff_seats_vat: 'מע״מ',
+  staff_seats_total: 'סה״כ',
+  staff_seats_create_intent: 'שמירת בקשה ללא תשלום',
+  staff_seats_cancel_intent: 'ביטול בקשה ללא תשלום',
+  staff_seats_pay: 'תשלום',
 };
 
 export const USERS_ROLES_TEXT: Readonly<Record<UsersRolesLocale, UsersRolesText>> = { en: EN, he: HE };

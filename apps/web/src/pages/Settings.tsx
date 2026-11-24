@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { apiJson } from '../api/client';
 import { AUTH, orgSettings } from '../api/endpoints';
@@ -360,6 +361,11 @@ export function Settings() {
     <div className="nx-glass-page nx-glass-page--wide nx-settings nx-settings-deep-ocean nx-office-ocean" data-testid="nx-settings">
       <h1 className="nx-glass-title">{t('settings.title')}</h1>
       <p className="nx-glass-subtitle">{t('settings.subtitle')}</p>
+      <p>
+        <Link to="/billing?tab=client_processing" className="nx-glass-link" data-testid="settings-payments-link">
+          {t('settings.payments')}
+        </Link>
+      </p>
 
       {error && (
         <div className="nx-glass-alert nx-glass-alert--error" role="alert">

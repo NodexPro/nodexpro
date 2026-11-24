@@ -254,6 +254,7 @@
   "settings": {
     "title": "Organization Settings",
     "subtitle": "Manage your organization profile and business identity.",
+    "payments": "Payments & Processing",
     "readOnly": "Only the organization owner can edit these settings.",
     "ownerIdentity": {
       "section": "Company Identity",

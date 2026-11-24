@@ -17,18 +17,23 @@ const modalSrc = readFileSync(join(dir, '../src/components/glass/GlassModal.tsx'
 const enI18n = readFileSync(join(dir, '../src/i18n/en.json'), 'utf8');
 const heI18n = readFileSync(join(dir, '../src/i18n/he.json'), 'utf8');
 
-test('Billing reads one modules aggregate and never fabricates money or cards', () => {
-  assert.match(billingSrc, /orgModulesState\(orgId\)/);
-  assert.match(billingSrc, /subscribed_commercial_modules/);
-  assert.doesNotMatch(billingSrc, /subscribedCommercialModules|matchingPlan/);
+test('Billing is a six-tab workspace from backend aggregates and never fabricates money', () => {
+  assert.match(billingSrc, /orgBillingWorkspace\(orgId\)/);
+  assert.match(billingSrc, /orgBillingModules\(orgId\)/);
+  assert.match(billingSrc, /orgBillingStaffLicenses\(orgId\)/);
+  assert.match(billingSrc, /orgBillingPlatformPayments\(orgId\)/);
+  assert.match(billingSrc, /orgBillingClientProcessing\(orgId\)/);
+  assert.match(billingSrc, /staff_licenses/);
+  assert.match(billingSrc, /client_processing/);
+  assert.match(billingSrc, /billing_details/);
+  assert.doesNotMatch(billingSrc, /orgModulesState\(orgId\)/);
+  assert.doesNotMatch(billingSrc, /subscribedCommercialModules|matchingPlan|selectPlan/);
   assert.doesNotMatch(billingSrc, /orgSubscription\(/);
   assert.doesNotMatch(billingSrc, /staff-seat-entitlement/);
-  assert.doesNotMatch(billingSrc, /priceAmount\s*\+|reduce\(|total\s*=/);
+  assert.doesNotMatch(billingSrc, /priceAmount\s*\+|reduce\(|vat_rate \*|1\.18/);
   assert.doesNotMatch(billingSrc, /stripe|paypal|cardNumber|cvv|cvc/i);
-  assert.match(billingSrc, /billing\.totalUnavailable/);
-  assert.match(billingSrc, /billing\.paymentMethod\.unavailable/);
-  assert.match(billingSrc, /billing\.history\.unavailable/);
   assert.match(billingSrc, /disabled/);
+  assert.match(billingSrc, /checkout_unavailable/);
 });
 
 test('Modules Select opens a glass modal and does not mock-pay via select-plan', () => {

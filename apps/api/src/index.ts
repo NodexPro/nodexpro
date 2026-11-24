@@ -42,6 +42,8 @@ import { workEngineRoutes } from './domains/work-engine/work-engine.routes.js';
 import { incomeRoutes } from './domains/income/income.routes.js';
 import { accountingBaseRoutes } from './domains/accounting-base/accounting-base.routes.js';
 import { publicCatalogRoutes } from './domains/public-catalog/public-catalog.routes.js';
+import { paymentOfficeRoutes, paymentWebhookRoutes } from './domains/payments/payment.routes.js';
+import { billingRoutes } from './domains/billing/billing.routes.js';
 import {
   logNodexproApiBoot,
   resolveApiDeployMarker,
@@ -173,6 +175,7 @@ const corsOptions: cors.CorsOptions = {
 
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
+app.use('/api/v1/payments/webhooks', express.raw({ type: '*/*', limit: '256kb' }), paymentWebhookRoutes);
 app.use(express.json({ limit: UPLOAD_JSON_MAX_BYTES }));
 
 app.get('/api/v1/health', async (_req, res) => {
@@ -210,6 +213,8 @@ app.use('/api/v1/organizations', subscriptionsRoutes);
 app.use('/api/v1/organizations', auditRoutes);
 app.use('/api/v1/organizations', trialRoutes);
 app.use('/api/v1/organizations', organizationSettingsRoutes);
+app.use('/api/v1/organizations', billingRoutes);
+app.use('/api/v1/organizations', paymentOfficeRoutes);
 app.use('/api/v1/organizations', clientsRoutes);
 app.use('/api/v1/organizations', documentsRoutes);
 app.use('/api/v1/dashboard', dashboardRoutes);

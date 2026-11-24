@@ -1,0 +1,109 @@
+.nx-billing {
+  padding-bottom: 24px;
+}
+
+.nx-billing__head {
+  margin: 0 0 10px;
+}
+
+.nx-billing__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #fff;
+}
+
+.nx-billing__lead {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--nx-ur-text-secondary, #c5d4e8);
+}
+
+.nx-billing__tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  margin: 0 0 12px;
+}
+
+.nx-billing__tab {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  height: auto;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.nx-billing .nx-btn-taxes-compact {
+  height: auto;
+  min-height: 0;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.nx-billing__tab.is-active {
+  background: #13bfd0;
+  color: #04222a;
+}
+
+.nx-billing__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px 12px;
+}
+
+.nx-billing__metric {
+  min-width: 0;
+}
+
+.nx-billing__label {
+  display: block;
+  font-size: 12px;
+  color: var(--nx-ur-text-muted, #9bb0c9);
+}
+
+.nx-billing__value {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.nx-billing section {
+  margin: 0 0 10px;
+  padding: 12px 14px;
+}
+
+.nx-billing h2 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.nx-billing table {
+  font-size: 13px;
+}
+
+.nx-billing__stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nx-billing__cards {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.nx-billing__timing {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #7f93ab;
+}

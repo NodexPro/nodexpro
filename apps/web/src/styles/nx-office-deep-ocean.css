@@ -229,3 +229,37 @@
     gap: 6px 0;
   }
 }
+
+.nx-office-payments h1 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.nx-office-payments__cards {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  margin-top: 16px;
+}
+
+.nx-office-payments__card {
+  border: 1px solid rgba(169, 201, 238, 0.28);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.nx-office-payments__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.nx-office-payments .nx-btn {
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  height: auto;
+  border-radius: 6px;
+}

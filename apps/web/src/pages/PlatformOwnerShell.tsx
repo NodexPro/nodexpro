@@ -14,6 +14,7 @@ export const PLATFORM_OWNER_NAV = [
   { to: '/platform-owner/currencies', label: 'Currencies', end: false },
   { to: '/platform-owner/languages', label: 'Languages & Translations', end: false },
   { to: '/platform-owner/security', label: 'Security', end: false },
+  { to: '/platform-owner/payments', label: 'Payments', end: false },
 ] as const;
 
 function navActive(pathname: string, search: string, item: (typeof PLATFORM_OWNER_NAV)[number]): boolean {
@@ -28,6 +29,9 @@ function navActive(pathname: string, search: string, item: (typeof PLATFORM_OWNE
   }
   if (item.to.startsWith('/platform-owner/security')) {
     return pathname.startsWith('/platform-owner/security');
+  }
+  if (item.to.startsWith('/platform-owner/payments')) {
+    return pathname.startsWith('/platform-owner/payments');
   }
   if (!pathname.startsWith('/platform-owner/legal-control')) return false;
   const section = new URLSearchParams(search).get('section');

@@ -148,6 +148,28 @@
   gap: 10px 16px;
 }
 
+.nx-ur-seats__quote {
+  margin: 0 0 12px;
+}
+
+.nx-ur-seats__qty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 10px;
+}
+
+.nx-ur-seats__stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nx-ur-seats__value--sm {
+  font-size: 15px;
+}
+
 .nx-ur-seats__checkout {
   margin: 0;
   color: var(--nx-ur-text-secondary);

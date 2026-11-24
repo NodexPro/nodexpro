@@ -30,6 +30,7 @@ import { listInvitesRbac, revokeUserAccessRbac } from './memberships-rbac.servic
 import { loadCloseAccessBlockers } from './member-close-access-blockers.service.js';
 import { resolveStaffSeatEntitlement } from '../modules/staff-seat-entitlement.service.js';
 import { buildStaffSeatWorkspaceBlock, type StaffSeatWorkspaceBlock } from '../modules/staff-seat-entitlement.pure.js';
+import { buildStaffSeatPurchaseQuote, formatSeatMoneyAmount } from '../payments/staff-seat-purchase-quote.pure.js';
 import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
 import { incomeDraftVatFallbackResolution } from '../income/income-draft-vat-fallback.pure.js';
 import {
@@ -145,7 +146,22 @@ type MembershipRecord = {
   users?: { email: string | null; full_name: string | null } | { email: string | null; full_name: string | null }[] | null;
 };
 
-export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: string): Promise<UsersRolesAggregate> {
+async function loadOpenStaffSeatPurchaseIntent(orgId: string) {
+  const { data, error } = await supabaseAdmin
+    .from('staff_seat_purchase_intents')
+    .select('id, status, quantity')
+    .eq('organization_id', orgId)
+    .in('status', ['quoted', 'pending_payment'])
+    .maybeSingle();
+  if (error) return null;
+  return data as { id: string; status: string; quantity: number } | null;
+}
+
+export async function buildUsersRolesAggregate(
+  ctx: RequestContext,
+  orgId: string,
+  options?: { quoteQuantity?: number },
+): Promise<UsersRolesAggregate> {
   assertOfficeActor(ctx, orgId);
   requireRbacPermission(ctx, orgId, RBAC_PERMISSIONS.view_users);
   const { canWrite, canRevoke } = actorFlags(ctx);
@@ -154,7 +170,7 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
   const asOfDate = new Date().toISOString().slice(0, 10);
   const ui = buildUsersRolesUi(resolvePersistedUiLanguage(ctx.user.uiLanguage));
   const locale = ui.locale;
-  const [orgRes, membershipsRes, profilesRes, assignableModules, staffSeatTruth, vatResolution] = await Promise.all([
+  const [orgRes, membershipsRes, profilesRes, assignableModules, staffSeatTruth, vatResolution, openIntent] = await Promise.all([
     supabaseAdmin.from('organizations').select('timezone, country_code').eq('id', orgId).maybeSingle(),
     supabaseAdmin
       .from('organization_memberships')
@@ -169,6 +185,7 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
     resolveStaffSeatEntitlement(orgId).catch(() => null),
     // TEMPORARY_COUNTRY_PACK_PENDING: statutory VAT from Country Pack legal values (IL fallback inside resolver).
     resolveIncomeDraftVatForOrg(orgId, 'IL', asOfDate).catch(() => incomeDraftVatFallbackResolution()),
+    loadOpenStaffSeatPurchaseIntent(orgId),
   ]);
   if (membershipsRes.error) throw membershipsRes.error;
   if (profilesRes.error) throw profilesRes.error;
@@ -328,6 +345,34 @@ export async function buildUsersRolesAggregate(ctx: RequestContext, orgId: strin
     checkout_available: false,
     checkout_unavailable_message: ui.text.staff_seats_checkout_unavailable,
   });
+  const quoteQuantity = options?.quoteQuantity ?? openIntent?.quantity ?? 1;
+  const quote = buildStaffSeatPurchaseQuote({
+    quantity: quoteQuantity,
+    catalogUnitPrice: catalogPrice,
+    officeCurrentUnitPrice: staffSeatTruth?.current_terms_unit_price_amount ?? null,
+    currency: staffSeatTruth?.seat_currency ?? 'ILS',
+    billingPeriod: staffSeatTruth?.seat_billing_period ?? 'month',
+    vatRate: vat.standard_rate,
+    vatPercentLabel: vat.standard_rate_percent_label,
+  });
+  staff_seats.purchase_quote = {
+    ...quote,
+    labels: {
+      unit: formatSeatMoneyAmount(quote.unit_price_net, quote.currency),
+      net: formatSeatMoneyAmount(quote.net_amount, quote.currency),
+      vat: formatSeatMoneyAmount(quote.vat_amount, quote.currency),
+      total: formatSeatMoneyAmount(quote.total_amount, quote.currency),
+    },
+  };
+  staff_seats.open_intent = openIntent
+    ? { id: openIntent.id, status: openIntent.status, quantity: Number(openIntent.quantity) || quote.quantity }
+    : null;
+  staff_seats.available_commands = {
+    quote: { action_key: 'quote_staff_seat_purchase', enabled: canWrite },
+    create_intent: { action_key: 'create_staff_seat_purchase_intent', enabled: canWrite },
+    cancel_intent: { action_key: 'cancel_staff_seat_purchase_intent', enabled: canWrite && Boolean(openIntent) },
+    pay: { enabled: false },
+  };
 
   return {
     aggregate_key: 'users_roles_aggregate',

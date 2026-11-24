@@ -22,6 +22,8 @@ export const RBAC_PERMISSIONS = {
   revoke_user_access: 'revoke_user_access',
   access_settings: 'access_settings',
   access_billing: 'access_billing',
+  payments_office_read: 'payments.office.read',
+  payments_office_connect: 'payments.office.connect',
   /** DocFlow: run communication rules, review drafts, office communication commands using legal-value templates */
   docflow_review: 'docflow.review',
 } as const;
@@ -40,6 +42,8 @@ const RBAC_TO_LEGACY: Record<string, string[]> = {
   revoke_user_access: ['members:revoke'],
   access_settings: ['settings:read', 'settings:write'],
   access_billing: ['subscriptions:read'],
+  'payments.office.read': ['settings:read', 'access_settings'],
+  'payments.office.connect': ['settings:write', 'access_settings'],
   'docflow.review': ['docflow:system_message_write'],
 };
 

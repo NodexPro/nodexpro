@@ -55,6 +55,11 @@ import {
   executePlatformLocalizationCommand,
   isPlatformLocalizationCommand,
 } from '../domains/platform-localization/platform-localization.service.js';
+import {
+  buildOwnerPaymentsAggregate,
+  executeOwnerPaymentCommand,
+  isOwnerPaymentCommand,
+} from '../domains/payments/payment-infrastructure.service.js';
 
 const router = Router();
 
@@ -454,6 +459,16 @@ router.get('/active-ruleset-context/:organizationId', async (req: Request, res: 
   }
 });
 
+router.get('/payments', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    await assertOwnerOrAuditFailure(ctx, req);
+    return res.json(await buildOwnerPaymentsAggregate(ctx));
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.get('/currencies', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ctx = req.context as RequestContext;
@@ -519,6 +534,11 @@ router.post('/command', async (req: Request, res: Response, next: NextFunction) 
 
     if (isPlatformLocalizationCommand(commandName)) {
       const out = await executePlatformLocalizationCommand(ctx, commandName, payload as Record<string, unknown>);
+      return res.json(out);
+    }
+
+    if (isOwnerPaymentCommand(commandName)) {
+      const out = await executeOwnerPaymentCommand(ctx, commandName, payload as Record<string, unknown>);
       return res.json(out);
     }
 

@@ -77,6 +77,29 @@ export type UsersRolesStaffSeats = {
     checkout_status: 'available' | 'unavailable';
     message: string;
   };
+  purchase_quote?: {
+    quantity: number;
+    currency: string;
+    billing_period: string;
+    unit_price_net: number;
+    net_amount: number;
+    vat_rate: number;
+    vat_percent_label: string;
+    vat_amount: number;
+    total_amount: number;
+    price_source: 'office_commercial_terms' | 'platform_catalog';
+    catalog_unit_price_net: number;
+    checkout_available: false;
+    pay_enabled: false;
+    labels: { unit: string; net: string; vat: string; total: string };
+  };
+  open_intent?: { id: string; status: string; quantity: number } | null;
+  available_commands?: {
+    quote: { action_key: 'quote_staff_seat_purchase'; enabled: boolean };
+    create_intent: { action_key: 'create_staff_seat_purchase_intent'; enabled: boolean };
+    cancel_intent: { action_key: 'cancel_staff_seat_purchase_intent'; enabled: boolean };
+    pay: { enabled: false };
+  };
 };
 
 export type UsersRolesInvitationRow = {
@@ -182,4 +205,22 @@ export const setMemberModuleAccessCommand = (orgId: string, memberId: string, mo
   }>(`${base(orgId)}/members/${memberId}/commands/set_member_module_access`, {
     method: 'POST',
     body: JSON.stringify({ enabled_modules: moduleIds }),
+  });
+
+export const quoteStaffSeatPurchaseCommand = (orgId: string, quantity: number) =>
+  apiJson<{ users_roles_aggregate: UsersRolesAggregate }>(`${base(orgId)}/commands/quote_staff_seat_purchase`, {
+    method: 'POST',
+    body: JSON.stringify({ quantity }),
+  });
+
+export const createStaffSeatPurchaseIntentCommand = (orgId: string, quantity: number) =>
+  apiJson<{ users_roles_aggregate: UsersRolesAggregate }>(`${base(orgId)}/commands/create_staff_seat_purchase_intent`, {
+    method: 'POST',
+    body: JSON.stringify({ quantity }),
+  });
+
+export const cancelStaffSeatPurchaseIntentCommand = (orgId: string, intentId: string) =>
+  apiJson<{ users_roles_aggregate: UsersRolesAggregate }>(`${base(orgId)}/commands/cancel_staff_seat_purchase_intent`, {
+    method: 'POST',
+    body: JSON.stringify({ intent_id: intentId }),
   });
