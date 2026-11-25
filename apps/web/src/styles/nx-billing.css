@@ -1,257 +1,102 @@
-.nx-billing {
-  display: flex;
-  flex-direction: column;
-  min-height: calc(100dvh - 52px);
-  padding: 8px 12px 0;
-  color: #e8f1fb;
-}
+/* Billing uses Organization Settings (nx-settings-deep-ocean + nx-glass-*) as the visual system.
+   This file only adds the six-tab chrome and density that Settings does not have. */
 
-.nx-billing__head {
-  margin: 0 0 6px;
-}
-
-.nx-billing__title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1.2;
-  color: #fff;
-}
-
-.nx-billing__lead {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: #9bb0c9;
+.nx-billing .nx-glass-subtitle {
+  margin-bottom: 16px;
 }
 
 .nx-billing__tabs {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
-  flex-wrap: nowrap;
-  gap: 0;
-  overflow-x: auto;
-  margin: 0;
-  padding: 0;
-  border-bottom: 1px solid rgba(169, 201, 238, 0.38);
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 4px 0 10px;
+  background: transparent;
 }
 
 .nx-billing__tab {
-  flex: 0 0 auto;
-  margin: 0;
-  margin-inline-end: -1px;
-  padding: 7px 14px;
+  appearance: none;
   height: auto;
-  min-height: 0;
-  border: 1px solid rgba(169, 201, 238, 0.28);
-  border-bottom: none;
+  min-height: 34px;
+  padding: 8px 16px;
   border-radius: 6px 6px 0 0;
-  background: #0b2a4a;
-  color: #c5d4e8;
-  font-size: 13px;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.2;
-  white-space: nowrap;
-  position: relative;
+  color: #8edfff;
+  cursor: pointer;
+  border: 1px solid rgba(210, 238, 255, 0.22);
+  background: linear-gradient(180deg, rgba(10, 42, 78, 0.55) 0%, rgba(5, 22, 46, 0.72) 100%);
+  box-shadow: none;
 }
 
 .nx-billing__tab.is-active {
-  background: #13bfd0;
-  color: #04222a;
-  border-color: #13bfd0;
-  z-index: 1;
+  color: #eef6ff;
+  border-color: rgba(125, 236, 247, 0.55);
+  background: linear-gradient(180deg, rgba(19, 191, 208, 0.34) 0%, rgba(8, 38, 82, 0.55) 100%);
+  box-shadow:
+    0 0 0 1px rgba(125, 236, 247, 0.22),
+    0 8px 22px rgba(19, 191, 208, 0.16);
 }
 
-.nx-billing__tab.is-active::after {
-  content: '';
-  position: absolute;
-  inset-inline: 0;
-  bottom: -1px;
-  height: 2px;
-  background: #0a2744;
+.nx-billing__tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(125, 236, 247, 0.45);
 }
 
-.nx-billing .nx-btn-taxes-compact {
-  height: auto;
-  min-height: 0;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 13px;
+.nx-billing .nx-glass-table-wrap {
+  overflow-x: auto;
 }
 
-.nx-billing__sheet {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: #0a2744;
-  border: 1px solid rgba(169, 201, 238, 0.28);
-  border-top: none;
-  padding: 8px 10px;
-  overflow: hidden;
-}
-
-.nx-billing__table-scroll {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-}
-
-.nx-billing table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.nx-billing th,
-.nx-billing td {
-  padding: 5px 8px;
-  border-bottom: 1px solid rgba(169, 201, 238, 0.16);
-  text-align: start;
-  white-space: nowrap;
-}
-
-.nx-billing thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: #0d3254;
-  font-weight: 600;
-  color: #c5d4e8;
-}
-
-.nx-billing td.is-num,
-.nx-billing th.is-num {
+.nx-billing .nx-glass-table th.is-num,
+.nx-billing .nx-glass-table td.is-num {
   text-align: end;
   font-variant-numeric: tabular-nums;
-}
-
-.nx-billing__kpis {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 6px 12px;
-}
-
-.nx-billing__label {
-  display: block;
-  font-size: 11px;
-  color: #9bb0c9;
-}
-
-.nx-billing__value {
-  display: block;
-  font-size: 14px;
-  font-weight: 700;
-  color: #fff;
-}
-
-.nx-billing__stepper {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.nx-billing__note {
-  margin: 0 0 8px;
-  font-size: 12px;
-  color: #9bb0c9;
 }
 
 .nx-billing__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.nx-billing__wizard {
-  display: grid;
   gap: 10px;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  min-height: 0;
-  overflow: auto;
+  align-items: center;
+  margin-top: 16px;
 }
 
-.nx-billing__wizard article {
-  border: 1px solid rgba(169, 201, 238, 0.2);
-  border-radius: 6px;
-  padding: 8px 10px;
+.nx-billing__stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.nx-billing__wizard h2 {
-  margin: 0 0 4px;
+.nx-billing__stepper .nx-glass-btn {
+  min-width: 36px;
+  padding: 8px 12px;
+}
+
+.nx-billing__qty {
+  min-width: 28px;
+  text-align: center;
   font-size: 14px;
+  font-weight: 700;
+  color: #eef6ff;
 }
 
-.nx-billing__wizard ol,
-.nx-billing__wizard ul {
-  margin: 6px 0;
-  padding-inline-start: 18px;
-  font-size: 12px;
+.nx-billing .nx-settings-pair {
+  margin-top: 0;
 }
 
-.nx-billing dl {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 4px 12px;
-  margin: 0;
-  font-size: 13px;
+.nx-billing .nx-glass-table th,
+.nx-billing .nx-glass-table td {
+  color: #ffffff;
+  font-size: 14px;
+  border-bottom-color: rgba(210, 238, 255, 0.22);
 }
 
-.nx-billing dt {
-  color: #9bb0c9;
-}
-
-.nx-billing dd {
-  margin: 0;
-}
-
-.nx-billing__muted {
-  margin: 8px 0 0;
-  font-size: 12px;
-  color: #9bb0c9;
-}
-
-.nx-owner-shell:has(.nx-owner-payments) {
-  background:
-    radial-gradient(ellipse at 12% 0%, rgba(54, 169, 198, 0.22), transparent 42%),
-    linear-gradient(180deg, #102d49 0%, #0a2744 100%);
-  color: #e8f1fb;
-}
-
-.nx-owner-shell:has(.nx-owner-payments) .nx-owner-shell__main {
-  padding: 16px 20px;
-  min-width: 0;
-}
-
-.nx-owner-payments {
-  width: 100%;
-  max-width: none;
-}
-
-.nx-billing__editor,
-.nx-billing__preview {
-  margin-top: 12px;
-  padding: 10px;
-  border: 1px solid rgba(210, 238, 255, 0.28);
-  border-radius: 8px;
-}
-
-.nx-billing__checks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  margin: 8px 0;
-  border: 0;
-  padding: 0;
-}
-
-.nx-billing .nx-ur-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin: 6px 0;
-  font-size: 12px;
-}
-
-.nx-billing .nx-ur-sheet {
-  flex: 1 1 auto;
+.nx-billing .nx-glass-table td .nx-glass-btn {
+  margin-inline-end: 8px;
+  margin-bottom: 6px;
 }

@@ -129,7 +129,7 @@ export function TemplateLayout({
               ? 't1-pageMain t1-pageMain--work-engine-queue'
               : isDashboard
                 ? 't1-pageMain t1-pageMain--dashboard'
-                : isSettings
+                : isSettings || isOfficeBilling
                   ? 't1-pageMain t1-pageMain--settings'
                   : 't1-pageMain'
           }
