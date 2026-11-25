@@ -121,16 +121,22 @@ export async function buildOfficePaymentsAggregate(ctx: RequestContext, orgId: s
     const connection = byScenario.get(scenario);
     const scenarioProviders = providers.filter((row) => row.supported_scenarios.includes(scenario));
     const hasReadyAdapter = scenarioProviders.some((row) => row.adapter_status === 'ready');
+    const connectedName = scenarioProviders.find((row) => row.code === connection?.provider_code)?.display_name ?? null;
+    const steps =
+      scenario === 'OFFICE_EXTERNAL'
+        ? [copy.ext_step_1, copy.ext_step_2, copy.ext_step_3, copy.ext_step_4]
+        : [copy.emb_step_1, copy.emb_step_2, copy.emb_step_3, copy.emb_step_4];
     return {
       scenario,
+      path: scenario === 'OFFICE_EXTERNAL' ? 'A' : 'B',
       title: scenario === 'OFFICE_EXTERNAL' ? copy.external_title : copy.embedded_title,
       body: scenario === 'OFFICE_EXTERNAL' ? copy.external_body : copy.embedded_body,
-      status: connection?.status ?? 'unavailable',
-      status_label: copy.unavailable,
-      kyc_status: connection?.kyc_status ?? 'unavailable',
-      provider_code: connection?.provider_code ?? null,
-      steps: [copy.unavailable_steps],
-      providers: scenarioProviders,
+      status_label: connectedName ? connectedName : copy.unavailable,
+      merchant_note: copy.office_merchant_note,
+      blocked_reason: hasReadyAdapter ? null : copy.wizard_not_ready,
+      provider_choices_label: copy.supported_providers,
+      provider_choices: scenarioProviders.map((row) => ({ code: row.code, display_name: row.display_name })),
+      steps,
       available_actions: {
         start: {
           action_key: scenario === 'OFFICE_EXTERNAL' ? 'start_office_external_onboarding' : 'start_office_embedded_onboarding',

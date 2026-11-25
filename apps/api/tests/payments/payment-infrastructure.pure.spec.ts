@@ -110,9 +110,9 @@ test('webhooks mutate only after signature and against replay', () => {
 });
 
 test('office and owner copy is HE/EN and honest about availability', () => {
-  assert.match(paymentCopy('he').office_title, /תשלומים וסליקה/);
-  assert.match(paymentCopy('en').office_title, /Payments & Processing/);
-  assert.match(paymentCopy('he').unavailable, /עדיין לא זמין/);
+  assert.match(paymentCopy('he').office_title, /סליקה מלקוחות/);
+  assert.match(paymentCopy('en').office_title, /Client Payment Processing/);
+  assert.match(paymentCopy('he').unavailable, /עדיין לא מחובר/);
   assert.match(paymentCopy('en').no_ready_adapter, /No signed payment adapter/);
 });
 

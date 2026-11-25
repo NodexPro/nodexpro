@@ -24,8 +24,11 @@ test('Billing workspace lazy-loads tabs, keeps pay disabled, and does not stitch
   assert.doesNotMatch(page, /vat_rate \*|1\.18|priceAmount\s*\+/);
   assert.match(page, /checkout_unavailable/);
   assert.match(page, /disabled/);
+  assert.match(page, /provider_choices/);
+  assert.doesNotMatch(page, /adapter_status|catalog_only|load_ms/);
   assert.match(css, /overflow-x: auto/);
-  assert.match(css, /border-radius: 6px/);
+  assert.match(css, /border-radius: 6px 6px 0 0/);
+  assert.match(css, /position: sticky/);
 });
 
 test('Settings and Users & Roles route extra-seat and office payments into Billing', () => {

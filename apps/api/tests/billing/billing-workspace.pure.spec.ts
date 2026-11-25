@@ -22,8 +22,9 @@ test('six billing tabs exist in HE/EN and unknown tab falls back to overview', (
   assert.equal(en.tab_overview, 'Overview');
   assert.equal(he.tab_staff, 'רישיונות עובדים');
   assert.equal(en.not_configured, 'Not configured');
-  assert.match(he.vat_not_configured, /Country Pack/);
-  assert.match(en.next_payment_unconfigured, /No payment provider is connected/);
+  assert.match(he.vat_not_configured, /מע״מ אינו מאושר/);
+  assert.match(en.next_payment_unconfigured, /Next payment date is not set/);
+  assert.doesNotMatch(en.vat_not_configured, /Country Pack|Accounting Base|catalog_only/);
 });
 
 test('module quote never treats fallback VAT as a legal total and never enables pay', () => {

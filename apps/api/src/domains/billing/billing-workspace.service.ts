@@ -4,7 +4,6 @@ import { forbidden } from '../../shared/errors.js';
 import { RBAC_PERMISSIONS, requireRbacPermission } from '../rbac/rbac.service.js';
 import { resolvePersistedUiLanguage } from '../platform-localization/platform-localization.pure.js';
 import { resolveStaffSeatEntitlement } from '../modules/staff-seat-entitlement.service.js';
-import { moneyWithVat } from '../modules/staff-seat-entitlement.pure.js';
 import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
 import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
 import { incomeDraftVatFallbackResolution } from '../income/income-draft-vat-fallback.pure.js';
@@ -41,14 +40,19 @@ async function loadVat(orgId: string) {
   return resolveIncomeDraftVatForOrg(orgId, 'IL', asOfDate).catch(() => incomeDraftVatFallbackResolution());
 }
 
+function dateLabel(raw: string | null | undefined): string {
+  const value = String(raw ?? '').slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : '';
+}
+
+
 export async function buildBillingWorkspaceAggregate(ctx: RequestContext, orgId: string) {
   const started = Date.now();
   assertBillingReader(ctx, orgId);
   const lang = billingUiLang(resolvePersistedUiLanguage(ctx.user.uiLanguage));
   const copy = billingCopy(lang);
-  const [seats, vat, orgRes, settingsRes, subsRes] = await Promise.all([
+  const [seats, orgRes, settingsRes, subsRes] = await Promise.all([
     resolveStaffSeatEntitlement(orgId),
-    loadVat(orgId),
     supabaseAdmin.from('organizations').select('name, legal_name, country_code').eq('id', orgId).maybeSingle(),
     supabaseAdmin
       .from('organization_settings')
@@ -57,31 +61,19 @@ export async function buildBillingWorkspaceAggregate(ctx: RequestContext, orgId:
       .maybeSingle(),
     supabaseAdmin
       .from('organization_module_subscriptions')
-      .select('status, started_at, module_plans(name, currency, price_amount, billing_period), modules(name, is_system)')
+      .select('status, modules(name, is_system)')
       .eq('organization_id', orgId)
       .in('status', ['active', 'trialing']),
   ]);
-  const vatAuthoritative = vat.source === 'country_pack';
   const currency = seats.commercial_currency || seats.seat_currency || 'ILS';
   const net = Number(seats.commercial_recurring_total_amount) || 0;
-  const vatAmount = vatAuthoritative ? Math.round((moneyWithVat(net, vat.standard_rate) - net) * 100) / 100 : null;
-  const total = vatAuthoritative ? moneyWithVat(net, vat.standard_rate) : null;
   const moduleRows = (subsRes.data ?? [])
     .map((row) => {
       const module = supabaseEmbedOne((row as { modules?: unknown }).modules) as { name?: string; is_system?: boolean } | null;
-      const plan = supabaseEmbedOne((row as { module_plans?: unknown }).module_plans) as {
-        name?: string;
-        currency?: string;
-        price_amount?: number;
-        billing_period?: string;
-      } | null;
       if (module?.is_system) return null;
-      return {
-        name: module?.name ?? plan?.name ?? '',
-        price_label: formatSeatMoneyAmount(Number(plan?.price_amount) || 0, plan?.currency || currency),
-      };
+      return { name: module?.name ?? '' };
     })
-    .filter((row): row is { name: string; price_label: string } => Boolean(row && row.name));
+    .filter((row): row is { name: string } => Boolean(row && row.name));
   const settings = (settingsRes.data ?? {}) as Record<string, string | null>;
   const org = orgRes.data as { name?: string; legal_name?: string | null; country_code?: string } | null;
 
@@ -98,20 +90,11 @@ export async function buildBillingWorkspaceAggregate(ctx: RequestContext, orgId:
     checkout_available: false,
     overview: {
       active_modules: moduleRows,
-      module_subscription_net_label: formatSeatMoneyAmount(seats.modules_recurring_total_amount, currency),
-      included_staff_seats: seats.included_staff_seats,
-      purchased_additional_staff_seats: seats.purchased_staff_seats,
       occupied_staff_seats: seats.active_consumed_staff_seats,
       available_staff_seats: seats.available_staff_seats,
-      extra_seats_net_label: formatSeatMoneyAmount(seats.seats_recurring_total_amount, currency),
       subscription_net_label: formatSeatMoneyAmount(net, currency),
-      vat_authoritative: vatAuthoritative,
-      vat_label: vatAuthoritative ? formatSeatMoneyAmount(vatAmount ?? 0, currency) : copy.vat_not_configured,
-      total_label: vatAuthoritative && total != null ? formatSeatMoneyAmount(total, currency) : copy.vat_not_configured,
       next_payment_label: copy.next_payment_unconfigured,
       payment_status_label: copy.payment_status_unconfigured,
-      next_payment_date: null,
-      payment_status: 'not_configured' as const,
     },
     billing_details: {
       legal_name: org?.legal_name || settings.organization_name || org?.name || null,
@@ -200,9 +183,13 @@ export async function buildBillingModulesAggregate(
         plan_name: plan?.name ?? '',
         price_label: formatSeatMoneyAmount(Number(plan?.price_amount) || 0, plan?.currency || 'ILS'),
         period_label: plan?.billing_period === 'year' ? copy.period_year : copy.period_month,
-        started_at: (row as { started_at?: string }).started_at ?? null,
-        status: (row as { status?: string }).status ?? '',
-        entitlement_kind: (row as { status?: string }).status === 'trialing' ? 'trial' : 'subscription',
+        started_at: dateLabel((row as { started_at?: string }).started_at) || '—',
+        status_label:
+          (row as { status?: string }).status === 'trialing'
+            ? copy.status_trial
+            : (row as { status?: string }).status === 'active'
+              ? copy.status_active
+              : copy.status,
       };
     })
     .filter(Boolean);
@@ -220,7 +207,7 @@ export async function buildBillingModulesAggregate(
         pay_enabled: false,
       })),
       open_intent: intentByModule.get(module.id)
-        ? { id: (intentByModule.get(module.id) as { id: string }).id, status: (intentByModule.get(module.id) as { status: string }).status }
+        ? { id: (intentByModule.get(module.id) as { id: string }).id, label: copy.unpaid_request }
         : null,
     }));
   return {
@@ -294,8 +281,17 @@ export async function buildBillingStaffLicensesAggregate(
       purchased_additional_staff_seats: seats.purchased_staff_seats,
       occupied_staff_seats: seats.active_consumed_staff_seats,
       available_staff_seats: seats.available_staff_seats,
-      extra_unit_label: formatSeatMoneyAmount(quote.unit_price_net, quote.currency),
-      extra_monthly_net_label: formatSeatMoneyAmount(seats.seats_recurring_total_amount, seats.seat_currency),
+    },
+    pricing: {
+      current_contract_label:
+        seats.current_terms_unit_price_amount != null
+          ? formatSeatMoneyAmount(Number(seats.current_terms_unit_price_amount), seats.seat_currency)
+          : copy.no_contract_rate,
+      current_contract_note: copy.staff_contract_note,
+      catalog_list_label: formatSeatMoneyAmount(Number(seats.list_unit_price_amount ?? 0), seats.seat_currency),
+      catalog_list_note: copy.staff_catalog_note,
+      quote_source_note:
+        quote.price_source === 'office_commercial_terms' ? copy.quote_uses_contract : copy.quote_uses_catalog,
     },
     purchase_quote: {
       ...quote,
@@ -346,8 +342,12 @@ export async function buildBillingPlatformPaymentsAggregate(ctx: RequestContext,
     seller_context: 'nodexpro_platform' as const,
     note: copy.platform_seller_note,
     checkout_available: false,
-    transactions: transactions ?? [],
-    subscriptions: subscriptions ?? [],
+    rows: (transactions ?? []).map((row) => ({
+      id: row.id,
+      date_label: dateLabel(row.created_at as string) || '—',
+      amount_label: formatSeatMoneyAmount(Number(row.amount) || 0, String(row.currency || 'ILS')),
+      status_label: String(row.status) === 'verified' ? copy.paid : copy.recorded,
+    })),
     empty: !(transactions?.length || subscriptions?.length),
     empty_label: copy.platform_payments_empty,
     timing: { load_ms: Date.now() - started, source: 'billing_platform_payments' },
