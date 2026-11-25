@@ -209,3 +209,49 @@
   font-size: 12px;
   color: #9bb0c9;
 }
+
+.nx-owner-shell:has(.nx-owner-payments) {
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(54, 169, 198, 0.22), transparent 42%),
+    linear-gradient(180deg, #102d49 0%, #0a2744 100%);
+  color: #e8f1fb;
+}
+
+.nx-owner-shell:has(.nx-owner-payments) .nx-owner-shell__main {
+  padding: 16px 20px;
+  min-width: 0;
+}
+
+.nx-owner-payments {
+  width: 100%;
+  max-width: none;
+}
+
+.nx-billing__editor,
+.nx-billing__preview {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid rgba(210, 238, 255, 0.28);
+  border-radius: 8px;
+}
+
+.nx-billing__checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 8px 0;
+  border: 0;
+  padding: 0;
+}
+
+.nx-billing .nx-ur-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0;
+  font-size: 12px;
+}
+
+.nx-billing .nx-ur-sheet {
+  flex: 1 1 auto;
+}

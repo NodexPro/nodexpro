@@ -301,8 +301,8 @@ export async function buildBillingStaffLicensesAggregate(
       labels: {
         unit: formatSeatMoneyAmount(quote.unit_price_net, quote.currency),
         net: formatSeatMoneyAmount(quote.net_amount, quote.currency),
-        vat: vatAuthoritative ? formatSeatMoneyAmount(quote.vat_amount, quote.currency) : copy.vat_not_configured,
-        total: vatAuthoritative ? formatSeatMoneyAmount(quote.total_amount, quote.currency) : copy.vat_not_configured,
+        vat: vatAuthoritative ? formatSeatMoneyAmount(quote.vat_amount, quote.currency) : copy.not_configured,
+        total: vatAuthoritative ? formatSeatMoneyAmount(quote.total_amount, quote.currency) : copy.total_unavailable,
         recurring_after: formatSeatMoneyAmount(recurringAfter, quote.currency),
       },
     },

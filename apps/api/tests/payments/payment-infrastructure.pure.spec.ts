@@ -6,6 +6,11 @@ import { fileURLToPath } from 'node:url';
 import {
   STATIC_PAYMENT_PROVIDER_CATALOG,
   checkoutAvailableForScenario,
+  hidingProviderKeepsExistingConnection,
+  officeCanCollectSecrets,
+  officeCanStartNewConnection,
+  officeSeesProvider,
+  parseUpsertPaymentProviderPayload,
   publicProviderView,
 } from '../../src/domains/payments/payment-provider-catalog.pure.js';
 import {
@@ -27,7 +32,9 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
 
 test('catalog providers stay catalog-only with secrets never exposed', () => {
-  assert.equal(STATIC_PAYMENT_PROVIDER_CATALOG.length, 5);
+  assert.equal(STATIC_PAYMENT_PROVIDER_CATALOG.length, 7);
+  assert.ok(STATIC_PAYMENT_PROVIDER_CATALOG.some((row) => row.code === 'hyp'));
+  assert.ok(STATIC_PAYMENT_PROVIDER_CATALOG.some((row) => row.code === 'max'));
   for (const row of STATIC_PAYMENT_PROVIDER_CATALOG) {
     assert.equal(row.adapter_status, 'catalog_only');
     assert.equal(row.capabilities.hosted_checkout, false);
@@ -109,6 +116,29 @@ test('webhooks mutate only after signature and against replay', () => {
   assert.equal(redactPaymentLog({ api_key: 'secret', provider_code: 'tranzila' }).api_key, '[redacted]');
 });
 
+test('visibility and commercial upsert stay separate from adapter readiness', () => {
+  const hidden = STATIC_PAYMENT_PROVIDER_CATALOG[0];
+  const row = { ...hidden, show_in_billing: false, allow_new_connections: true, adapter_status: 'catalog_only' as const };
+  assert.equal(officeSeesProvider(row, null), false);
+  assert.equal(officeSeesProvider(row, row.code), true);
+  assert.equal(officeCanStartNewConnection(row), false);
+  assert.equal(officeCanCollectSecrets(row), false);
+  assert.equal(hidingProviderKeepsExistingConnection(), true);
+  const parsed = parseUpsertPaymentProviderPayload({
+    code: 'hyp',
+    display_name: 'HYP',
+    supported_scenarios: ['OFFICE_EMBEDDED'],
+    show_in_billing: true,
+    allow_new_connections: true,
+    commission_percent: 1.2,
+  });
+  assert.equal('error' in parsed, false);
+  if (!('error' in parsed)) {
+    assert.equal(parsed.allow_new_connections, true);
+    assert.equal(parsed.commission_percent, 1.2);
+  }
+});
+
 test('office and owner copy is HE/EN and honest about availability', () => {
   assert.match(paymentCopy('he').office_title, /סליקה מלקוחות/);
   assert.match(paymentCopy('en').office_title, /Client Payment Processing/);
@@ -118,6 +148,7 @@ test('office and owner copy is HE/EN and honest about availability', () => {
 
 test('migration and services keep checkout off and reuse existing seat entitlement RPC', () => {
   const migration = read('supabase/migrations/223_payment_infrastructure.sql');
+  const commercial = read('supabase/migrations/225_payment_provider_catalog_commercial.sql');
   const purchase = read('apps/api/src/domains/payments/staff-seat-purchase.service.ts');
   const infra = read('apps/api/src/domains/payments/payment-infrastructure.service.ts');
   const agg = read('apps/api/src/domains/memberships/users-roles-aggregate.service.ts');
@@ -130,8 +161,14 @@ test('migration and services keep checkout off and reuse existing seat entitleme
   assert.match(purchase, /PAYMENT_CLIENT_REDIRECT_REJECTED/);
   assert.match(purchase, /checkout_available: false/);
   assert.doesNotMatch(purchase, /checkout_available:\s*true/);
+  assert.match(commercial, /show_in_billing/);
+  assert.match(commercial, /allow_new_connections/);
+  assert.match(commercial, /'hyp'/);
+  assert.match(commercial, /'max'/);
   assert.match(infra, /PAYMENT_ADAPTER_NOT_READY/);
   assert.match(infra, /API keys are not accepted until an adapter is ready/);
+  assert.match(infra, /upsert_payment_provider_catalog/);
+  assert.doesNotMatch(infra, /adapter_status: payload/);
   assert.match(agg, /checkout_available: false/);
   assert.match(agg, /pay: \{ enabled: false \}/);
 });

@@ -12,6 +12,7 @@ import {
 } from '../api/endpoints';
 import '../styles/nx-glass-surface.css';
 import '../styles/nx-office-deep-ocean.css';
+import '../components/users-roles/UsersRoles.css';
 import '../styles/nx-billing.css';
 
 type BillingTab = { id: string; label: string };
@@ -106,13 +107,27 @@ type ClientAggregate = {
     title: string;
     body: string;
     status_label: string;
+    application_status?: string;
     merchant_note: string;
+    merchant_reference?: string | null;
     blocked_reason: string | null;
     provider_choices_label: string;
-    provider_choices: Array<{ code: string; display_name: string }>;
+    provider_choices: Array<{
+      code: string;
+      display_name: string;
+      description?: string;
+      logo_url?: string;
+      commercial?: { commission_label?: string; connection_fee_label?: string; monthly_fee_label?: string; payout_terms?: string; terms_url?: string };
+      collect_secrets?: boolean;
+      can_start?: boolean;
+      credential_fields?: Array<{ key: string; secret: boolean; label: string }>;
+    }>;
     steps: string[];
     available_actions: {
       start: { action_key: string; enabled: boolean; label: string };
+      save_credentials?: { action_key: string; enabled: boolean; label: string };
+      verify?: { action_key: string; enabled: boolean; label: string };
+      activate?: { action_key: string; enabled: boolean; label: string };
       disconnect: { action_key: string; enabled: boolean; label: string };
       enter_api_keys: { enabled: boolean };
     };
@@ -139,6 +154,7 @@ export function Billing() {
   const [tabError, setTabError] = useState('');
   const [tabLoading, setTabLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [clientForm, setClientForm] = useState<Record<string, { provider: string; merchant_id: string; api_key: string }>>({});
 
   const text = workspace?.ui.text ?? {};
 
@@ -235,10 +251,12 @@ export function Billing() {
   if (auth.status !== 'authenticated') return null;
 
   return (
-    <div className="nx-glass-page nx-glass-page--wide nx-office-ocean nx-billing" data-testid="nx-billing" dir={workspace?.ui.direction ?? 'ltr'}>
-      <div className="nx-billing__head">
-        <h1 className="nx-billing__title">{text.title || 'Billing'}</h1>
-        <p className="nx-billing__lead">{text.lead}</p>
+    <div className="nx-ur-page nx-glass-page nx-glass-page--wide nx-office-ocean nx-billing" data-testid="nx-billing" dir={workspace?.ui.direction ?? 'ltr'}>
+      <div className="nx-ur-page__head">
+        <div>
+          <h1 className="nx-ur-page__title">{text.title || 'Billing'}</h1>
+          <p className="nx-ur-page__lead">{text.lead}</p>
+        </div>
       </div>
       {error ? (
         <div className="nx-glass-alert nx-glass-alert--error" role="alert">
@@ -262,7 +280,7 @@ export function Billing() {
           </button>
         ))}
       </div>
-      <div className="nx-billing__sheet">
+      <div className="nx-ur-sheet nx-billing__sheet">
         {loading ? <p className="nx-billing__muted">{text.loading}</p> : null}
 
         {tab === 'overview' && workspace ? (
@@ -280,8 +298,8 @@ export function Billing() {
           <>
             {tabLoading ? <p className="nx-billing__muted">{text.loading}</p> : null}
             {tabError ? <p role="alert">{tabError}</p> : null}
-            <div className="nx-billing__table-scroll">
-              <table>
+            <div className="nx-ur-table-scroll nx-billing__table-scroll">
+              <table className="nx-ur-table">
                 <thead>
                   <tr>
                     <th>{modules?.ui.text.module ?? text.module}</th>
@@ -339,52 +357,59 @@ export function Billing() {
         ) : null}
 
         {tab === 'staff_licenses' ? (
-          <section data-testid="nx-billing-staff">
+          <section data-testid="nx-billing-staff" className="nx-ur-seats">
             {tabLoading ? <p className="nx-billing__muted">{text.loading}</p> : null}
             {tabError ? <p role="alert">{tabError}</p> : null}
             {staff ? (
               <>
-                <div className="nx-billing__kpis">
-                  <div><span className="nx-billing__label">{staff.ui.text.staff_included}</span><span className="nx-billing__value">{staff.seats.included_staff_seats}</span></div>
-                  <div><span className="nx-billing__label">{staff.ui.text.staff_grandfathered}</span><span className="nx-billing__value">{staff.seats.grandfathered_staff_seats}</span></div>
-                  <div><span className="nx-billing__label">{staff.ui.text.staff_purchased}</span><span className="nx-billing__value">{staff.seats.purchased_additional_staff_seats}</span></div>
-                  <div><span className="nx-billing__label">{staff.ui.text.staff_occupied}</span><span className="nx-billing__value">{staff.seats.occupied_staff_seats}</span></div>
-                  <div><span className="nx-billing__label">{staff.ui.text.staff_available}</span><span className="nx-billing__value">{staff.seats.available_staff_seats}</span></div>
+                <div className="nx-ur-seats__metrics">
+                  <div className="nx-ur-seats__metric"><span className="nx-ur-seats__label">{staff.ui.text.staff_included}</span><span className="nx-ur-seats__value">{staff.seats.included_staff_seats}</span></div>
+                  <div className="nx-ur-seats__metric"><span className="nx-ur-seats__label">{staff.ui.text.staff_grandfathered}</span><span className="nx-ur-seats__value">{staff.seats.grandfathered_staff_seats}</span></div>
+                  <div className="nx-ur-seats__metric"><span className="nx-ur-seats__label">{staff.ui.text.staff_purchased}</span><span className="nx-ur-seats__value">{staff.seats.purchased_additional_staff_seats}</span></div>
+                  <div className="nx-ur-seats__metric"><span className="nx-ur-seats__label">{staff.ui.text.staff_occupied}</span><span className="nx-ur-seats__value">{staff.seats.occupied_staff_seats}</span></div>
+                  <div className="nx-ur-seats__metric"><span className="nx-ur-seats__label">{staff.ui.text.staff_available}</span><span className="nx-ur-seats__value">{staff.seats.available_staff_seats}</span></div>
                 </div>
-                <div className="nx-billing__kpis">
-                  <div>
-                    <span className="nx-billing__label">{staff.ui.text.staff_contract}</span>
-                    <span className="nx-billing__value">{staff.pricing.current_contract_label}</span>
-                    <p className="nx-billing__note">{staff.pricing.current_contract_note}</p>
-                  </div>
-                  <div>
-                    <span className="nx-billing__label">{staff.ui.text.staff_catalog}</span>
-                    <span className="nx-billing__value">{staff.pricing.catalog_list_label}</span>
-                    <p className="nx-billing__note">{staff.pricing.catalog_list_note}</p>
+                <div className="nx-ur-seats__qty">
+                  <span className="nx-ur-seats__label">{staff.ui.text.qty}</span>
+                  <div className="nx-ur-seats__stepper">
+                    <button type="button" className="nx-ur-btn nx-ur-btn--sm nx-ur-btn--secondary" disabled={busy || !staff.available_commands.quote_staff_seat_purchase.enabled || staff.purchase_quote.quantity <= 1} onClick={() => void run('quote_staff_seat_purchase', { quantity: staff.purchase_quote.quantity - 1 }, 'staff')}>−</button>
+                    <span className="nx-ur-seats__value nx-ur-seats__value--sm">{staff.purchase_quote.quantity}</span>
+                    <button type="button" className="nx-ur-btn nx-ur-btn--sm nx-ur-btn--secondary" disabled={busy || !staff.available_commands.quote_staff_seat_purchase.enabled || staff.purchase_quote.quantity >= 99} onClick={() => void run('quote_staff_seat_purchase', { quantity: staff.purchase_quote.quantity + 1 }, 'staff')}>+</button>
                   </div>
                 </div>
-                <p className="nx-billing__note">{staff.pricing.quote_source_note}</p>
-                <div className="nx-billing__stepper">
-                  <span className="nx-billing__label">{staff.ui.text.qty}</span>
-                  <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy || !staff.available_commands.quote_staff_seat_purchase.enabled || staff.purchase_quote.quantity <= 1} onClick={() => void run('quote_staff_seat_purchase', { quantity: staff.purchase_quote.quantity - 1 }, 'staff')}>−</button>
-                  <span className="nx-billing__value">{staff.purchase_quote.quantity}</span>
-                  <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy || !staff.available_commands.quote_staff_seat_purchase.enabled || staff.purchase_quote.quantity >= 99} onClick={() => void run('quote_staff_seat_purchase', { quantity: staff.purchase_quote.quantity + 1 }, 'staff')}>+</button>
+                <div className="nx-ur-table-scroll">
+                  <table className="nx-ur-table">
+                    <thead>
+                      <tr>
+                        <th>{staff.ui.text.staff_contract}</th>
+                        <th>{staff.ui.text.staff_catalog}</th>
+                        <th className="is-num">{staff.ui.text.unit}</th>
+                        <th className="is-num">{staff.ui.text.net}</th>
+                        <th className="is-num">{staff.ui.text.vat_amount}</th>
+                        <th className="is-num">{staff.ui.text.total}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>{staff.pricing.current_contract_label}</td>
+                        <td>{staff.pricing.catalog_list_label}</td>
+                        <td className="is-num">{staff.purchase_quote.labels.unit}</td>
+                        <td className="is-num">{staff.purchase_quote.labels.net}</td>
+                        <td className="is-num">{staff.purchase_quote.labels.vat}</td>
+                        <td className="is-num">{staff.purchase_quote.labels.total}</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-                <div className="nx-billing__kpis">
-                  <div><span className="nx-billing__label">{staff.ui.text.unit}</span><span className="nx-billing__value">{staff.purchase_quote.labels.unit}</span></div>
-                  <div><span className="nx-billing__label">{staff.ui.text.net}</span><span className="nx-billing__value">{staff.purchase_quote.labels.net}</span></div>
-                  <div><span className="nx-billing__label">{staff.ui.text.vat_amount}</span><span className="nx-billing__value">{staff.purchase_quote.labels.vat}</span></div>
-                  <div><span className="nx-billing__label">{staff.ui.text.total}</span><span className="nx-billing__value">{staff.purchase_quote.labels.total}</span></div>
-                  <div><span className="nx-billing__label">{staff.ui.text.recurring_after}</span><span className="nx-billing__value">{staff.purchase_quote.labels.recurring_after}</span></div>
-                </div>
-                <div className="nx-billing__actions">
-                  <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy || !staff.available_commands.create_staff_seat_purchase_intent.enabled} onClick={() => void run('create_staff_seat_purchase_intent', { quantity: staff.purchase_quote.quantity }, 'staff')}>{staff.ui.text.save_unpaid}</button>
+                <p className="nx-ur-seats__note">{staff.pricing.quote_source_note}</p>
+                {staff.purchase_quote.vat_authoritative ? null : <p className="nx-ur-seats__vat">{staff.ui.text.vat_not_configured}</p>}
+                <div className="nx-ur-seats__actions">
+                  <button type="button" className="nx-ur-btn nx-ur-btn--primary" disabled={busy || !staff.available_commands.create_staff_seat_purchase_intent.enabled} onClick={() => void run('create_staff_seat_purchase_intent', { quantity: staff.purchase_quote.quantity }, 'staff')}>{staff.ui.text.save_unpaid}</button>
                   {staff.open_intent ? (
-                    <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy || !staff.available_commands.cancel_staff_seat_purchase_intent.enabled} onClick={() => void run('cancel_staff_seat_purchase_intent', { intent_id: staff.open_intent!.id }, 'staff')}>{staff.ui.text.cancel_unpaid}</button>
+                    <button type="button" className="nx-ur-btn nx-ur-btn--secondary" disabled={busy || !staff.available_commands.cancel_staff_seat_purchase_intent.enabled} onClick={() => void run('cancel_staff_seat_purchase_intent', { intent_id: staff.open_intent!.id }, 'staff')}>{staff.ui.text.cancel_unpaid}</button>
                   ) : null}
-                  <button type="button" className="nx-btn nx-btn-taxes-compact" disabled>{staff.ui.text.pay}</button>
+                  <button type="button" className="nx-ur-btn nx-ur-btn--secondary" disabled>{staff.ui.text.pay}</button>
                 </div>
-                <p className="nx-billing__muted">{text.checkout_unavailable}</p>
               </>
             ) : null}
           </section>
@@ -396,8 +421,8 @@ export function Billing() {
             {tabError ? <p role="alert">{tabError}</p> : null}
             <p className="nx-billing__note">{payments?.note}</p>
             {payments?.empty ? <p className="nx-billing__muted">{payments.empty_label}</p> : (
-              <div className="nx-billing__table-scroll">
-                <table>
+              <div className="nx-ur-table-scroll nx-billing__table-scroll">
+                <table className="nx-ur-table">
                   <thead>
                     <tr>
                       <th>{text.date}</th>
@@ -442,26 +467,67 @@ export function Billing() {
             {tabLoading ? <p className="nx-billing__muted">{text.loading}</p> : null}
             {tabError ? <p role="alert">{tabError}</p> : null}
             <div className="nx-billing__wizard">
-              {(client?.cards ?? []).map((card) => (
-                <article key={card.scenario}>
-                  <h2>{card.title}</h2>
-                  <p>{card.body}</p>
-                  <p className="nx-billing__note">{card.status_label}</p>
-                  <p className="nx-billing__note">{card.merchant_note}</p>
-                  <ol>{card.steps.map((step) => <li key={step}>{step}</li>)}</ol>
-                  <p className="nx-billing__label">{card.provider_choices_label}</p>
-                  <ul>
-                    {card.provider_choices.map((provider) => (
-                      <li key={provider.code}>{provider.display_name}</li>
+              {(client?.cards ?? []).map((card) => {
+                const form = clientForm[card.scenario] ?? {
+                  provider: card.provider_choices[0]?.code ?? '',
+                  merchant_id: card.merchant_reference ?? '',
+                  api_key: '',
+                };
+                const selected = card.provider_choices.find((row) => row.code === form.provider) ?? card.provider_choices[0];
+                const setForm = (next: Partial<typeof form>) =>
+                  setClientForm((prev) => ({ ...prev, [card.scenario]: { ...form, ...next } }));
+                return (
+                  <article key={card.scenario}>
+                    <h2>{card.title}</h2>
+                    <p>{card.body}</p>
+                    <p className="nx-billing__note">{card.status_label}</p>
+                    {card.application_status ? <p className="nx-billing__note">{card.application_status}</p> : null}
+                    <label className="nx-ur-field">
+                      <span>{card.provider_choices_label}</span>
+                      <select className="nx-glass-input" value={form.provider} onChange={(e) => setForm({ provider: e.target.value })}>
+                        {card.provider_choices.map((provider) => (
+                          <option key={provider.code} value={provider.code}>{provider.display_name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    {selected?.description ? <p className="nx-billing__note">{selected.description}</p> : null}
+                    {selected?.commercial ? (
+                      <p className="nx-billing__note">
+                        {selected.commercial.commission_label} · {selected.commercial.connection_fee_label} · {selected.commercial.monthly_fee_label}
+                      </p>
+                    ) : null}
+                    {selected?.commercial?.payout_terms ? <p className="nx-billing__note">{selected.commercial.payout_terms}</p> : null}
+                    {selected?.commercial?.terms_url ? <a className="nx-glass-link" href={selected.commercial.terms_url} target="_blank" rel="noreferrer">{selected.commercial.terms_url}</a> : null}
+                    {(selected?.credential_fields ?? []).map((field) => (
+                      <label className="nx-ur-field" key={field.key}>
+                        <span>{field.label}</span>
+                        <input
+                          className="nx-glass-input"
+                          type={field.secret ? 'password' : 'text'}
+                          autoComplete="off"
+                          value={field.key === 'api_key' ? form.api_key : form.merchant_id}
+                          onChange={(e) => setForm(field.key === 'api_key' ? { api_key: e.target.value } : { merchant_id: e.target.value })}
+                          disabled={!card.available_actions.enter_api_keys.enabled}
+                        />
+                      </label>
                     ))}
-                  </ul>
-                  {card.blocked_reason ? <p className="nx-billing__note">{card.blocked_reason}</p> : null}
-                  <div className="nx-billing__actions">
-                    <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy || !card.available_actions.start.enabled} onClick={() => void run(card.available_actions.start.action_key, {}, 'client')}>{card.available_actions.start.label}</button>
-                    <button type="button" className="nx-btn nx-btn-taxes-compact" disabled={busy || !card.available_actions.disconnect.enabled} onClick={() => void run(card.available_actions.disconnect.action_key, { scenario: card.scenario }, 'client')}>{card.available_actions.disconnect.label}</button>
-                  </div>
-                </article>
-              ))}
+                    {card.blocked_reason ? <p className="nx-billing__note">{card.blocked_reason}</p> : null}
+                    <div className="nx-billing__actions">
+                      <button type="button" className="nx-ur-btn nx-ur-btn--sm nx-ur-btn--primary" disabled={busy || !card.available_actions.start.enabled} onClick={() => void run(card.available_actions.start.action_key, { provider_code: form.provider }, 'client')}>{card.available_actions.start.label}</button>
+                      {card.available_actions.save_credentials ? (
+                        <button type="button" className="nx-ur-btn nx-ur-btn--sm nx-ur-btn--secondary" disabled={busy || !card.available_actions.save_credentials.enabled} onClick={() => void run(card.available_actions.save_credentials!.action_key, { provider_code: form.provider, merchant_id: form.merchant_id, api_key: form.api_key }, 'client')}>{card.available_actions.save_credentials.label}</button>
+                      ) : null}
+                      {card.available_actions.verify ? (
+                        <button type="button" className="nx-ur-btn nx-ur-btn--sm nx-ur-btn--secondary" disabled={busy || !card.available_actions.verify.enabled} onClick={() => void run(card.available_actions.verify!.action_key, { scenario: card.scenario }, 'client')}>{card.available_actions.verify.label}</button>
+                      ) : null}
+                      {card.available_actions.activate ? (
+                        <button type="button" className="nx-ur-btn nx-ur-btn--sm nx-ur-btn--secondary" disabled={busy || !card.available_actions.activate.enabled} onClick={() => void run(card.available_actions.activate!.action_key, { scenario: card.scenario }, 'client')}>{card.available_actions.activate.label}</button>
+                      ) : null}
+                      <button type="button" className="nx-ur-btn nx-ur-btn--sm nx-ur-btn--secondary" disabled={busy || !card.available_actions.disconnect.enabled} onClick={() => void run(card.available_actions.disconnect.action_key, { scenario: card.scenario }, 'client')}>{card.available_actions.disconnect.label}</button>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </section>
         ) : null}

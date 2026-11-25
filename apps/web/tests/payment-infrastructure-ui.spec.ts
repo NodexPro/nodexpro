@@ -28,11 +28,13 @@ test('Platform Owner Payments and office Payments & Processing are dedicated agg
   const he = read('../src/i18n/he.json');
   assert.match(owner, /OWNER\.payments/);
   assert.match(owner, /save_platform_payment_provider_credentials/);
-  assert.doesNotMatch(owner, /api_key|secret/);
+  assert.match(owner, /upsert_payment_provider_catalog/);
+  assert.doesNotMatch(owner, /type="password"/);
   assert.match(office, /Navigate to="\/billing\?tab=client_processing"/);
   assert.match(billing, /orgBillingClientProcessing/);
   assert.match(billing, /enter_api_keys/);
-  assert.doesNotMatch(billing, /<input[^>]+type="password"/);
+  assert.match(billing, /credential_fields/);
+  assert.match(billing, /field.secret \? 'password'/);
   assert.match(app, /path="payments" element=\{<PlatformOwnerPaymentsPage \/>\}/);
   assert.match(app, /path="settings\/payments" element=\{<OfficePaymentsPage \/>\}/);
   assert.match(shell, /\/platform-owner\/payments/);

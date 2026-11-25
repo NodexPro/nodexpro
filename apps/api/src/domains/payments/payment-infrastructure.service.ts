@@ -7,8 +7,18 @@ import { assertPlatformOwner } from '../../shared/platform-owner.js';
 import { encryptOptionalSecret } from '../../shared/owner-email-provider-config.service.js';
 import { RBAC_PERMISSIONS, requireRbacPermission } from '../rbac/rbac.service.js';
 import { resolvePersistedUiLanguage } from '../platform-localization/platform-localization.pure.js';
+import { formatSeatMoneyAmount } from './staff-seat-purchase-quote.pure.js';
 import {
+  hidingProviderKeepsExistingConnection,
+  localizedPayoutTerms,
+  localizedProviderDescription,
+  localizedProviderName,
   mapCatalogRow,
+  officeCanCollectSecrets,
+  officeCanStartNewConnection,
+  officeCredentialFields,
+  officeSeesProvider,
+  parseUpsertPaymentProviderPayload,
   publicProviderView,
   STATIC_PAYMENT_PROVIDER_CATALOG,
   type PaymentProviderCatalogRow,
@@ -30,21 +40,62 @@ const OWNER_TABS = [
   'diagnostics',
 ] as const;
 
+const CATALOG_SELECT =
+  'code, display_name, display_name_he, adapter_status, supported_scenarios, supported_countries, environment_modes, capability_hosted_checkout, capability_payment_links, capability_recurring_billing, capability_refunds, capability_webhook_verification, capability_merchant_onboarding, capability_connected_accounts, capability_split_payments, capability_international_cards, capability_three_d_secure, capability_platform_fee, notes, logo_url, description_en, description_he, show_in_billing, allow_new_connections, commission_percent, connection_fee_amount, monthly_fee_amount, fee_currency, payout_terms_en, payout_terms_he, terms_url';
+
 export async function loadPaymentProviderCatalog(): Promise<PaymentProviderCatalogRow[]> {
   const { data, error } = await supabaseAdmin
     .from('payment_provider_catalog')
-    .select(
-      'code, display_name, adapter_status, supported_scenarios, supported_countries, environment_modes, capability_hosted_checkout, capability_payment_links, capability_recurring_billing, capability_refunds, capability_webhook_verification, capability_merchant_onboarding, capability_connected_accounts, capability_split_payments, capability_international_cards, capability_three_d_secure, capability_platform_fee, notes',
-    )
+    .select(CATALOG_SELECT)
     .order('display_name');
   if (error || !data?.length) return STATIC_PAYMENT_PROVIDER_CATALOG;
   return data.map((row) => mapCatalogRow(row as Parameters<typeof mapCatalogRow>[0]));
 }
 
+function commercialLabels(row: PaymentProviderCatalogRow, lang: 'en' | 'he', copy: Record<string, string>) {
+  const currency = row.fee_currency || 'ILS';
+  return {
+    commission_label:
+      row.commission_percent != null ? `${row.commission_percent}%` : copy.no_fee_published,
+    connection_fee_label:
+      row.connection_fee_amount != null ? formatSeatMoneyAmount(row.connection_fee_amount, currency) : copy.no_fee_published,
+    monthly_fee_label:
+      row.monthly_fee_amount != null ? formatSeatMoneyAmount(row.monthly_fee_amount, currency) : copy.no_fee_published,
+    payout_terms: localizedPayoutTerms(row, lang),
+    terms_url: row.terms_url,
+  };
+}
+
 export async function buildOwnerPaymentsAggregate(ctx: RequestContext) {
   assertPlatformOwner(ctx);
-  const copy = paymentCopy('en');
-  const providers = (await loadPaymentProviderCatalog()).map(publicProviderView);
+  const lang = paymentUiLang(resolvePersistedUiLanguage(ctx.user.uiLanguage));
+  const copy = paymentCopy(lang);
+  const catalog = await loadPaymentProviderCatalog();
+  const providers = catalog.map((row) => {
+    const view = publicProviderView(row);
+    const commercial = commercialLabels(row, lang, copy);
+    return {
+      ...view,
+      display_name: row.display_name,
+      label: localizedProviderName(row, lang),
+      description: localizedProviderDescription(row, lang),
+      adapter_label: row.adapter_status === 'ready' ? copy.adapter_ready : copy.adapter_catalog,
+      commercial,
+      office_preview: {
+        display_name: localizedProviderName(row, lang),
+        description: localizedProviderDescription(row, lang),
+        shown_in_billing: row.show_in_billing,
+        new_connections_allowed: row.allow_new_connections && row.show_in_billing,
+        connect_enabled: officeCanStartNewConnection(row),
+        commercial,
+        hide_keeps_existing: hidingProviderKeepsExistingConnection(),
+      },
+      available_commands: {
+        upsert_payment_provider_catalog: { enabled: true },
+        save_platform_payment_provider_credentials: { enabled: row.adapter_status === 'ready' },
+      },
+    };
+  });
   const { data: credentialRows } = await supabaseAdmin
     .from('platform_payment_provider_credentials')
     .select('provider_code, environment_mode, credentials_configured, updated_at');
@@ -68,12 +119,13 @@ export async function buildOwnerPaymentsAggregate(ctx: RequestContext) {
   return {
     aggregate_key: OWNER_PAYMENTS_AGGREGATE_KEY,
     ui: {
-      locale: 'en',
-      direction: 'ltr',
+      locale: lang,
+      direction: lang === 'he' ? 'rtl' : 'ltr',
       text: copy,
       tabs: OWNER_TABS.map((id) => ({ id, label: copy[`tab_${id}`] })),
     },
     providers,
+    candidates: ['hyp', 'max'],
     platform_credentials: (credentialRows ?? []).map((row) => ({
       provider_code: row.provider_code,
       environment_mode: row.environment_mode,
@@ -89,9 +141,12 @@ export async function buildOwnerPaymentsAggregate(ctx: RequestContext) {
       client_redirect_is_payment_proof: false,
       money_contexts_separated: true,
       note: copy.diagnostics_note,
+      adapter_toggle_blocked: copy.adapter_toggle_blocked,
+      hidden_keeps_connection: copy.hidden_keeps_connection,
     },
     available_actions: {
-      save_platform_payment_provider_credentials: false,
+      upsert_payment_provider_catalog: true,
+      save_platform_payment_provider_credentials: providers.some((row) => row.adapter_status === 'ready'),
       reason: copy.no_ready_adapter,
     },
   };
@@ -102,10 +157,10 @@ export async function buildOfficePaymentsAggregate(ctx: RequestContext, orgId: s
   requireRbacPermission(ctx, orgId, RBAC_PERMISSIONS.payments_office_read);
   const lang = paymentUiLang(resolvePersistedUiLanguage(ctx.user.uiLanguage));
   const copy = paymentCopy(lang);
-  const providers = (await loadPaymentProviderCatalog()).map(publicProviderView);
+  const catalog = await loadPaymentProviderCatalog();
   const { data: connections } = await supabaseAdmin
     .from('organization_payment_connections')
-    .select('scenario, provider_code, status, kyc_status, credentials_configured, last_error_code')
+    .select('scenario, provider_code, status, kyc_status, credentials_configured, last_error_code, merchant_reference, last_verify_ok')
     .eq('organization_id', orgId);
   const byScenario = new Map((connections ?? []).map((row) => [row.scenario, row]));
   const canConnect = ctx.membership?.roleCode === 'owner' || ctx.membership?.roleCode === 'admin';
@@ -117,34 +172,83 @@ export async function buildOfficePaymentsAggregate(ctx: RequestContext, orgId: s
     .order('created_at', { ascending: false })
     .limit(20);
 
+  function kycLabel(status: string | null | undefined) {
+    if (status === 'pending') return copy.kyc_pending;
+    if (status === 'approved') return copy.adapter_ready;
+    return copy.kyc_not_started;
+  }
+
   function card(scenario: 'OFFICE_EXTERNAL' | 'OFFICE_EMBEDDED') {
     const connection = byScenario.get(scenario);
-    const scenarioProviders = providers.filter((row) => row.supported_scenarios.includes(scenario));
-    const hasReadyAdapter = scenarioProviders.some((row) => row.adapter_status === 'ready');
-    const connectedName = scenarioProviders.find((row) => row.code === connection?.provider_code)?.display_name ?? null;
+    const scenarioProviders = catalog.filter(
+      (row) =>
+        row.supported_scenarios.includes(scenario) && officeSeesProvider(row, connection?.provider_code ?? null),
+    );
+    const selected = scenarioProviders.find((row) => row.code === connection?.provider_code) ?? null;
+    const collectSecrets = selected ? officeCanCollectSecrets(selected) : false;
+    const canStartNew = scenarioProviders.some((row) => officeCanStartNewConnection(row));
     const steps =
       scenario === 'OFFICE_EXTERNAL'
         ? [copy.ext_step_1, copy.ext_step_2, copy.ext_step_3, copy.ext_step_4]
         : [copy.emb_step_1, copy.emb_step_2, copy.emb_step_3, copy.emb_step_4];
+    const blocked =
+      scenario === 'OFFICE_EXTERNAL'
+        ? collectSecrets
+          ? null
+          : copy.keys_not_collected
+        : canStartNew
+          ? null
+          : copy.partner_not_ready;
     return {
       scenario,
       path: scenario === 'OFFICE_EXTERNAL' ? 'A' : 'B',
       title: scenario === 'OFFICE_EXTERNAL' ? copy.external_title : copy.embedded_title,
       body: scenario === 'OFFICE_EXTERNAL' ? copy.external_body : copy.embedded_body,
-      status_label: connectedName ? connectedName : copy.unavailable,
+      status_label: selected ? localizedProviderName(selected, lang) : copy.unavailable,
+      application_status: kycLabel(connection?.kyc_status),
       merchant_note: copy.office_merchant_note,
-      blocked_reason: hasReadyAdapter ? null : copy.wizard_not_ready,
+      merchant_reference: connection?.merchant_reference ?? null,
+      credentials_configured: connection?.credentials_configured === true,
+      last_verify_ok: connection?.last_verify_ok === true,
+      blocked_reason: blocked,
       provider_choices_label: copy.supported_providers,
-      provider_choices: scenarioProviders.map((row) => ({ code: row.code, display_name: row.display_name })),
+      provider_choices: scenarioProviders.map((row) => ({
+        code: row.code,
+        display_name: localizedProviderName(row, lang),
+        description: localizedProviderDescription(row, lang),
+        logo_url: row.logo_url,
+        commercial: commercialLabels(row, lang, copy),
+        collect_secrets: officeCanCollectSecrets(row),
+        can_start: officeCanStartNewConnection(row) || (connection?.provider_code === row.code && officeCanCollectSecrets(row)),
+        credential_fields: officeCredentialFields(row, scenario).map((field) => ({
+          ...field,
+          label: copy[field.key] ?? field.key,
+        })),
+      })),
       steps,
       available_actions: {
         start: {
           action_key: scenario === 'OFFICE_EXTERNAL' ? 'start_office_external_onboarding' : 'start_office_embedded_onboarding',
-          enabled: canConnect && hasReadyAdapter,
+          enabled: canConnect && (scenario === 'OFFICE_EMBEDDED' ? canStartNew : collectSecrets),
           label: scenario === 'OFFICE_EXTERNAL' ? copy.start_external : copy.start_embedded,
         },
+        save_credentials: {
+          action_key: 'save_office_external_credentials',
+          enabled: canConnect && scenario === 'OFFICE_EXTERNAL' && collectSecrets,
+          label: copy.save_provider,
+        },
+        verify: {
+          action_key: 'verify_office_payment_connection',
+          enabled: canConnect && collectSecrets && connection?.credentials_configured === true,
+          label: copy.verify_connection,
+        },
+        activate: {
+          action_key: 'activate_office_payment_connection',
+          enabled: canConnect && collectSecrets && connection?.last_verify_ok === true,
+          label: copy.activate_connection,
+        },
         disconnect: { action_key: 'disconnect_office_payment_provider', enabled: Boolean(connection) && canConnect, label: copy.disconnect },
-        enter_api_keys: { enabled: false },
+        enter_api_keys: { enabled: collectSecrets },
       },
     };
   }
@@ -173,6 +277,54 @@ export async function executeOwnerPaymentCommand(
   payload: Record<string, unknown>,
 ) {
   assertPlatformOwner(ctx);
+  if (command === 'upsert_payment_provider_catalog') {
+    const parsed = parseUpsertPaymentProviderPayload(payload);
+    if ('error' in parsed) throw badRequest(parsed.error, parsed.error);
+    if (payload.adapter_status) {
+      throw badRequest('A visibility switch does not activate a payment adapter', 'PAYMENT_ADAPTER_TOGGLE_BLOCKED');
+    }
+    const existing = (await loadPaymentProviderCatalog()).find((row) => row.code === parsed.code);
+    const { error } = await supabaseAdmin.from('payment_provider_catalog').upsert(
+      {
+        code: parsed.code,
+        display_name: parsed.display_name,
+        display_name_he: parsed.display_name_he,
+        adapter_status: existing?.adapter_status ?? 'catalog_only',
+        supported_scenarios: parsed.supported_scenarios,
+        logo_url: parsed.logo_url,
+        description_en: parsed.description_en,
+        description_he: parsed.description_he,
+        show_in_billing: parsed.show_in_billing,
+        allow_new_connections: parsed.allow_new_connections,
+        commission_percent: parsed.commission_percent,
+        connection_fee_amount: parsed.connection_fee_amount,
+        monthly_fee_amount: parsed.monthly_fee_amount,
+        fee_currency: parsed.fee_currency,
+        payout_terms_en: parsed.payout_terms_en,
+        payout_terms_he: parsed.payout_terms_he,
+        terms_url: parsed.terms_url,
+        notes: existing?.notes ?? 'Listed only. No signed adapter.',
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'code' },
+    );
+    if (error) throw error;
+    await writeAudit({
+      organizationId: null,
+      actorUserId: ctx.user.id,
+      entityType: 'payment_provider_catalog',
+      entityId: parsed.code,
+      action: AUDIT_ACTIONS.PAYMENT_PROVIDER_CATALOG_UPSERTED,
+      payload: {
+        code: parsed.code,
+        show_in_billing: parsed.show_in_billing,
+        allow_new_connections: parsed.allow_new_connections,
+        adapter_status: existing?.adapter_status ?? 'catalog_only',
+        hide_keeps_existing: hidingProviderKeepsExistingConnection(),
+      },
+    });
+    return { ok: true as const, command, owner_payments_aggregate: await buildOwnerPaymentsAggregate(ctx) };
+  }
   if (command === 'save_platform_payment_provider_credentials') {
     const catalog = await loadPaymentProviderCatalog();
     const code = String(payload.provider_code ?? '').trim();
@@ -226,13 +378,20 @@ export async function executeOfficePaymentCommand(
         : command === 'disconnect_office_payment_provider'
           ? String(payload.scenario ?? '')
           : '';
+  const catalog = await loadPaymentProviderCatalog();
   if (command === 'start_office_external_onboarding' || command === 'start_office_embedded_onboarding') {
     if (payload.api_key || payload.secret || payload.credentials) {
-      throw badRequest('API keys are not accepted until an adapter is ready', 'PAYMENT_ADAPTER_NOT_READY');
+      const providerCode = String(payload.provider_code ?? '').trim();
+      const provider = catalog.find((row) => row.code === providerCode);
+      if (!provider || !officeCanCollectSecrets(provider)) {
+        throw badRequest('API keys are not accepted until an adapter is ready', 'PAYMENT_ADAPTER_NOT_READY');
+      }
     }
-    const catalog = await loadPaymentProviderCatalog();
-    const ready = catalog.find((row) => row.adapter_status === 'ready' && row.supported_scenarios.includes(scenario as PaymentScenario));
-    if (!ready) {
+    const providerCode = String(payload.provider_code ?? '').trim();
+    const provider = catalog.find(
+      (row) => row.code === providerCode && row.supported_scenarios.includes(scenario as PaymentScenario),
+    );
+    if (!provider || !officeCanStartNewConnection(provider)) {
       await writeAudit({
         organizationId: orgId,
         actorUserId: ctx.user.id,
@@ -242,6 +401,88 @@ export async function executeOfficePaymentCommand(
       });
       throw badRequest('Provider adapter is not ready', 'PAYMENT_ADAPTER_NOT_READY');
     }
+    const status = scenario === 'OFFICE_EMBEDDED' ? 'pending_kyc' : 'draft';
+    const kyc = scenario === 'OFFICE_EMBEDDED' ? 'pending' : 'not_started';
+    const { error } = await supabaseAdmin.from('organization_payment_connections').upsert(
+      {
+        organization_id: orgId,
+        scenario,
+        provider_code: provider.code,
+        status,
+        kyc_status: kyc,
+        credentials_configured: false,
+        last_verify_ok: false,
+        last_verified_at: null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'organization_id,scenario' },
+    );
+    if (error) throw error;
+    return { ok: true as const, command, office_payments_aggregate: await buildOfficePaymentsAggregate(ctx, orgId) };
+  }
+  if (command === 'save_office_external_credentials') {
+    const providerCode = String(payload.provider_code ?? '').trim();
+    const provider = catalog.find((row) => row.code === providerCode && row.supported_scenarios.includes('OFFICE_EXTERNAL'));
+    if (!provider || !officeCanCollectSecrets(provider)) {
+      throw badRequest('API keys are not accepted until an adapter is ready', 'PAYMENT_ADAPTER_NOT_READY');
+    }
+    const merchantId = String(payload.merchant_id ?? '').trim();
+    const apiKey = String(payload.api_key ?? payload.secret ?? '').trim();
+    if (!merchantId || !apiKey) throw badRequest('merchant_id and api_key required', 'PAYMENT_SECRET_REQUIRED');
+    const encrypted = encryptOptionalSecret(JSON.stringify({ merchant_id: merchantId, api_key: apiKey }));
+    if (!encrypted) throw badRequest('Unable to store credentials', 'PAYMENT_SECRET_REQUIRED');
+    const { error } = await supabaseAdmin.from('organization_payment_connections').upsert(
+      {
+        organization_id: orgId,
+        scenario: 'OFFICE_EXTERNAL',
+        provider_code: provider.code,
+        status: 'draft',
+        environment_mode: 'test',
+        merchant_reference: merchantId,
+        credentials_encrypted: encrypted,
+        credentials_configured: true,
+        last_verify_ok: false,
+        last_verified_at: null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'organization_id,scenario' },
+    );
+    if (error) throw error;
+    await writeAudit({
+      organizationId: orgId,
+      actorUserId: ctx.user.id,
+      entityType: 'organization_payment_connections',
+      action: AUDIT_ACTIONS.PAYMENT_OFFICE_CREDENTIALS_SAVED,
+      payload: redactPaymentLog({ provider_code: provider.code, scenario: 'OFFICE_EXTERNAL', merchant_id: merchantId }),
+    });
+    return { ok: true as const, command, office_payments_aggregate: await buildOfficePaymentsAggregate(ctx, orgId) };
+  }
+  if (command === 'verify_office_payment_connection' || command === 'activate_office_payment_connection') {
+    const connScenario = String(payload.scenario ?? scenario ?? '') as PaymentScenario;
+    const { data: connection } = await supabaseAdmin
+      .from('organization_payment_connections')
+      .select('provider_code, credentials_configured, last_verify_ok, kyc_status, status')
+      .eq('organization_id', orgId)
+      .eq('scenario', connScenario)
+      .maybeSingle();
+    const provider = catalog.find((row) => row.code === connection?.provider_code);
+    if (!provider || !officeCanCollectSecrets(provider)) {
+      await writeAudit({
+        organizationId: orgId,
+        actorUserId: ctx.user.id,
+        entityType: 'organization_payment_connections',
+        action:
+          command === 'verify_office_payment_connection'
+            ? AUDIT_ACTIONS.PAYMENT_OFFICE_VERIFY_BLOCKED
+            : AUDIT_ACTIONS.PAYMENT_OFFICE_ACTIVATE_BLOCKED,
+        payload: { scenario: connScenario, reason: 'adapter_not_ready' },
+      });
+      throw badRequest('Provider adapter is not ready', 'PAYMENT_ADAPTER_NOT_READY');
+    }
+    if (command === 'activate_office_payment_connection' && connection?.last_verify_ok !== true) {
+      throw badRequest('Connection is not verified', 'PAYMENT_CONNECTION_NOT_VERIFIED');
+    }
+    throw badRequest('Provider adapter is not ready', 'PAYMENT_ADAPTER_NOT_READY');
   }
   if (command === 'create_invoice_payment_request') {
     const incomeDocumentId = String(payload.income_document_id ?? '').trim();
@@ -352,13 +593,16 @@ export async function ingestPaymentWebhook(input: {
 }
 
 export function isOwnerPaymentCommand(command: string): boolean {
-  return command === 'save_platform_payment_provider_credentials';
+  return command === 'save_platform_payment_provider_credentials' || command === 'upsert_payment_provider_catalog';
 }
 
 export function isOfficePaymentCommand(command: string): boolean {
   return (
     command === 'start_office_external_onboarding' ||
     command === 'start_office_embedded_onboarding' ||
+    command === 'save_office_external_credentials' ||
+    command === 'verify_office_payment_connection' ||
+    command === 'activate_office_payment_connection' ||
     command === 'disconnect_office_payment_provider' ||
     command === 'create_invoice_payment_request'
   );
