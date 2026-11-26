@@ -73,6 +73,7 @@ const HIDDEN_FIELDS = new Set([
   'owner_surface',
   'status',
   'legal_value_version_id',
+  'country_pack_ruleset_id',
   'value_type',
   'owner_note',
   'name_he',
@@ -81,6 +82,11 @@ const HIDDEN_FIELDS = new Set([
   'description_en',
   'conditions',
 ]);
+
+function chromeLabel(text: Record<string, string>, key: string, lang: 'he' | 'en', he: string, en: string): string {
+  const value = String(text[key] ?? '').trim();
+  return value || (lang === 'he' ? he : en);
+}
 
 const VISIBLE_FIELDS: Record<string, string[]> = {
   create_legal_value: ['country_code', 'label', 'category', 'module_scope', 'value_key', 'usage_hint'],
@@ -214,7 +220,11 @@ function TaxesCommandModal({
         aria-modal="true"
         data-testid={command === 'schedule_tax_rate_change' ? 'nx-owner-taxes-rate-modal' : 'nx-owner-taxes-modal'}
       >
-        <h3>{actionMeta.button_label?.trim() ? actionMeta.button_label : text.settings}</h3>
+        <h3>
+          {actionMeta.button_label?.trim()
+            ? actionMeta.button_label
+            : chromeLabel(text, 'settings', locale === 'he' ? 'he' : 'en', 'הגדרות', 'Settings')}
+        </h3>
         {actionMeta.note ? <p className="nx-settings-muted">{actionMeta.note}</p> : null}
         {localError ? (
           <div className="nx-glass-alert nx-glass-alert--error" role="alert">
@@ -241,12 +251,14 @@ function TaxesCommandModal({
           })}
           {command === 'schedule_tax_rate_change' ? <p className="nx-settings-muted">{text.rate_hint}</p> : null}
         </div>
-        <div className="nx-owner-taxes__modal-footer nx-modal-footer nx-tax-nested-modal-footer">
+        <div className="nx-owner-taxes__modal-footer">
           <button type="button" className="nx-glass-btn nx-glass-btn--secondary" disabled={busy} onClick={onClose}>
-            {text.close}
+            {chromeLabel(text, 'close', locale === 'he' ? 'he' : 'en', 'סגירה', 'Close')}
           </button>
           <button type="button" className="nx-glass-btn nx-glass-btn--purple" disabled={busy} onClick={() => void handleSubmit()}>
-            {busy ? text.loading : text.save}
+            {busy
+              ? chromeLabel(text, 'loading', locale === 'he' ? 'he' : 'en', 'טוען…', 'Loading…')
+              : chromeLabel(text, 'save', locale === 'he' ? 'he' : 'en', 'שמירה', 'Save')}
           </button>
         </div>
       </div>
@@ -398,7 +410,7 @@ export function PlatformOwnerTaxesPage() {
               )
             }
           >
-            {addAction.button_label || text.add_tax_type}
+            {addAction.button_label || chromeLabel(text, 'add_tax_type', lang, 'הוספת מס', 'Add tax')}
           </button>
         ) : null}
       </div>
@@ -452,7 +464,7 @@ export function PlatformOwnerTaxesPage() {
                   disabled={busy}
                   onClick={() => setOpenRule((cur) => (cur === id ? null : id))}
                 >
-                  {text.settings}
+                  {chromeLabel(text, 'settings', lang, 'הגדרות', 'Settings')}
                 </button>
               </div>
               {expanded ? (
@@ -514,7 +526,8 @@ export function PlatformOwnerTaxesPage() {
                         disabled={busy}
                         onClick={() => openRateChange(row, schedule)}
                       >
-                        {text.change_rate || schedule.button_label}
+                        {chromeLabel(text, 'change_rate', lang, 'שינוי שיעור', 'Change rate') ||
+                          schedule.button_label}
                       </button>
                     ) : null}
                     {future && future.enabled !== false ? (
@@ -535,7 +548,8 @@ export function PlatformOwnerTaxesPage() {
                           )
                         }
                       >
-                        {future.button_label}
+                        {future.button_label ||
+                          chromeLabel(text, 'new_future_version', lang, 'גרסה עתידית', 'Future version')}
                       </button>
                     ) : null}
                     {activate ? (
@@ -551,7 +565,8 @@ export function PlatformOwnerTaxesPage() {
                           );
                         }}
                       >
-                        {activate.button_label}
+                        {activate.button_label ||
+                          chromeLabel(text, 'activate_version', lang, 'הפעלת גרסה', 'Activate version')}
                       </button>
                     ) : null}
                     {editMeta && editMeta.enabled !== false ? (
@@ -561,7 +576,8 @@ export function PlatformOwnerTaxesPage() {
                         disabled={busy}
                         onClick={() => openAction(editMeta, {}, 'wide')}
                       >
-                        {editMeta.button_label}
+                        {editMeta.button_label ||
+                          chromeLabel(text, 'edit_metadata', lang, 'עריכת תוויות', 'Edit labels')}
                       </button>
                     ) : null}
                   </div>
@@ -569,7 +585,7 @@ export function PlatformOwnerTaxesPage() {
                     <p className="nx-settings-muted">{activate.disabled_reason}</p>
                   ) : null}
                   <div className="nx-owner-taxes__history">
-                    <h3>{text.version_history}</h3>
+                    <h3>{chromeLabel(text, 'version_history', lang, 'היסטוריית גרסאות', 'Version history')}</h3>
                     <ul className="nx-owner-taxes__history-list">
                       {(row.history ?? []).map((ver) => (
                         <li key={ver.version_id}>
@@ -591,7 +607,7 @@ export function PlatformOwnerTaxesPage() {
       {aggregate?.empty || !visibleRules.length ? <p className="nx-settings-muted">{text.empty}</p> : null}
 
       <details className="nx-glass-card nx-owner-taxes__audit" data-testid="nx-owner-taxes-audit">
-        <summary>{text.change_history || text.audit}</summary>
+        <summary>{chromeLabel(text, 'change_history', lang, 'היסטוריית שינויים', 'Change history')}</summary>
         <ul className="nx-owner-taxes__audit-list">
           {(aggregate?.audit ?? []).map((row, index) => (
             <li key={row.id ?? String(index)}>

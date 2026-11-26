@@ -74,3 +74,42 @@ test('tax rule rows expose versioned history and schedule command, not a second 
   assert.equal(copy.title, 'Taxes');
   assert.equal(ownerTaxesCopy('he').title, 'מיסים');
 });
+
+test('schedule tax rate reuses Legal Control active ruleset id instead of creating another pack', () => {
+  const copy = ownerTaxesCopy('en');
+  const rows = buildOwnerTaxRuleRows({
+    asOfDate: '2026-11-26',
+    lang: 'en',
+    copy,
+    countryCatalog: {
+      countries: [{ code: 'IL', name: 'Israel' }],
+      country_packs: [{ id: 'pack-il', country_code: 'IL', name: 'Israel Base Pack', status: 'active' }],
+      rulesets: [
+        {
+          id: 'ruleset-2026-01',
+          country_pack_id: 'pack-il',
+          ruleset_code: '2026.01',
+          ruleset_version: '2026.01',
+          status: 'active',
+          effective_from: '2026-01-01',
+          effective_to: null,
+        },
+      ],
+    },
+    legalRows: [
+      {
+        id: 'lv1',
+        country_code: 'IL',
+        value_key: 'il_standard_vat_rate',
+        label: 'Israel standard VAT rate',
+        category: 'VAT',
+        module_scope: 'nodexpro_platform_sales',
+        value_type: 'percentage',
+        status: 'active',
+        versions: [],
+      },
+    ],
+  });
+  const schedule = rows[0]?.actions.find((a) => a.action_key === 'schedule_tax_rate_change');
+  assert.equal(schedule?.prefill.country_pack_ruleset_id, 'ruleset-2026-01');
+});

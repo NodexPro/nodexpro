@@ -202,6 +202,60 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 16px;
+  background: transparent;
+  border-top: 1px solid rgba(210, 238, 255, 0.22);
+  padding-top: 16px;
+}
+
+.nx-owner-taxes.nx-settings-deep-ocean .nx-glass-btn,
+.nx-owner-taxes.nx-settings-deep-ocean .nx-glass-btn--purple,
+.nx-owner-taxes.nx-settings-deep-ocean .nx-glass-btn--secondary,
+.nx-owner-taxes.nx-office-ocean .nx-glass-btn,
+.nx-owner-taxes.nx-office-ocean .nx-glass-btn--purple,
+.nx-owner-taxes.nx-office-ocean .nx-glass-btn--secondary,
+.nx-owner-taxes__modal .nx-glass-btn,
+.nx-owner-taxes__modal-footer .nx-glass-btn {
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
+  opacity: 1;
+  visibility: visible;
+}
+
+.nx-owner-taxes.nx-settings-deep-ocean .nx-glass-btn:hover,
+.nx-owner-taxes.nx-settings-deep-ocean .nx-glass-btn:focus,
+.nx-owner-taxes.nx-settings-deep-ocean .nx-glass-btn:focus-visible,
+.nx-owner-taxes.nx-office-ocean .nx-glass-btn:hover,
+.nx-owner-taxes.nx-office-ocean .nx-glass-btn:focus,
+.nx-owner-taxes.nx-office-ocean .nx-glass-btn:focus-visible,
+.nx-owner-taxes__modal .nx-glass-btn:hover,
+.nx-owner-taxes__modal .nx-glass-btn:focus,
+.nx-owner-taxes__modal .nx-glass-btn:focus-visible,
+.nx-owner-taxes__modal-footer .nx-glass-btn:hover,
+.nx-owner-taxes__modal-footer .nx-glass-btn:focus,
+.nx-owner-taxes__modal-footer .nx-glass-btn:focus-visible {
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
+}
+
+.nx-owner-taxes.nx-settings-deep-ocean .nx-glass-btn:disabled,
+.nx-owner-taxes.nx-office-ocean .nx-glass-btn:disabled,
+.nx-owner-taxes__modal .nx-glass-btn:disabled,
+.nx-owner-taxes__modal-footer .nx-glass-btn:disabled {
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
+  opacity: 0.62;
+}
+
+.nx-owner-taxes.nx-settings-deep-ocean .nx-glass-btn--secondary,
+.nx-owner-taxes.nx-office-ocean .nx-glass-btn--secondary,
+.nx-owner-taxes__modal .nx-glass-btn--secondary {
+  background: linear-gradient(180deg, rgba(23, 84, 122, 0.92) 0%, rgba(16, 45, 73, 0.92) 100%);
+}
+
+.nx-owner-taxes.nx-settings-deep-ocean .nx-glass-btn--purple,
+.nx-owner-taxes.nx-office-ocean .nx-glass-btn--purple,
+.nx-owner-taxes__modal .nx-glass-btn--purple {
+  background: linear-gradient(180deg, rgba(54, 169, 198, 0.92) 0%, rgba(19, 191, 208, 0.82) 100%);
 }
 
 .nx-owner-taxes__modal-footer .nx-glass-btn {

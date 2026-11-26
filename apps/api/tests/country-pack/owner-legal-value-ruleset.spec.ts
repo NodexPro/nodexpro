@@ -46,6 +46,45 @@ test('resolveOwnerLegalValueRulesetContextFromTables finds active ruleset for co
   assert.match(context?.ruleset_label ?? '', /Israel Default Pack/);
 });
 
+test('Legal Control Active pack status still resolves the same IL ruleset', () => {
+  const context = resolveOwnerLegalValueRulesetContextFromTables({
+    countryCode: 'IL',
+    effectiveDate: '2026-11-26',
+    countries: IL_CATALOG.countries,
+    countryPacks: [{ ...IL_CATALOG.countryPacks[0], name: 'Israel Base Pack', status: 'active' }],
+    rulesets: [
+      {
+        ...IL_CATALOG.rulesets[0],
+        ruleset_code: '2026.01',
+        ruleset_version: '2026.01',
+        effective_from: '2026-01-01',
+      },
+    ],
+  });
+  assert.ok(context);
+  assert.equal(context?.active_ruleset_id, 'ruleset-1');
+  assert.equal(context?.country_pack_name, 'Israel Base Pack');
+});
+
+test('Taxes write path uses Legal Control live pack statuses, not enabled-only SQL', () => {
+  const service = readFileSync(join(dir, '../../src/domains/country-pack/legal-value.service.ts'), 'utf8');
+  assert.match(service, /isLiveCountryPackStatus/);
+  assert.match(service, /resolveOwnerLegalValueRulesetContextFromTables/);
+  assert.doesNotMatch(service, /pack\.status === 'enabled'/);
+  assert.doesNotMatch(service, /resolveActiveRulesetByDate/);
+});
+
+test('disabled Country Pack is not used as tax ruleset truth', () => {
+  const context = resolveOwnerLegalValueRulesetContextFromTables({
+    countryCode: 'IL',
+    effectiveDate: '2026-11-26',
+    countries: IL_CATALOG.countries,
+    countryPacks: [{ ...IL_CATALOG.countryPacks[0], status: 'disabled' }],
+    rulesets: IL_CATALOG.rulesets,
+  });
+  assert.equal(context, null);
+});
+
 test('issue month window editor no longer exposes ruleset UUID field', () => {
   const editor = buildOwnerLegalValueEditorDescriptor({
     value_key: IL_INCOME_ISSUE_MONTH_WINDOW_VALUE_KEY,

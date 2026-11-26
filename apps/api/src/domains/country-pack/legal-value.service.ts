@@ -2,10 +2,10 @@ import { supabaseAdmin } from '../../db/client.js';
 import { badRequest, conflict, notFound } from '../../shared/errors.js';
 import type { LegalValue, LegalValueVersion } from './country-pack.types.js';
 import { listCountryPacksByCountry } from './country-pack.service.js';
-import { resolveActiveRulesetByDate } from './ruleset.service.js';
 import {
-  buildOwnerLegalValueRulesetLabel,
+  isLiveCountryPackStatus,
   ownerLegalValueRulesetMissingMessage,
+  resolveOwnerLegalValueRulesetContextFromTables,
   type OwnerLegalValueRulesetContext,
 } from './owner-legal-value-ruleset.pure.js';
 
@@ -103,27 +103,24 @@ export async function resolveOwnerLegalValueRulesetContextForCountry(params: {
     listCountryPacksByCountry(countryCode),
   ]);
 
-  const enabledPacks = packs.filter((pack) => pack.status === 'enabled');
-  for (const pack of enabledPacks) {
-    const ruleset = await resolveActiveRulesetByDate(pack.id, date);
-    if (!ruleset) continue;
-    return {
-      country_code: countryCode,
-      country_name: String(countryRow?.name ?? countryCode),
-      country_pack_id: pack.id,
-      country_pack_name: pack.name,
-      active_ruleset_id: ruleset.id,
-      ruleset_code: ruleset.ruleset_code,
-      ruleset_version: ruleset.ruleset_version,
-      ruleset_label: buildOwnerLegalValueRulesetLabel({
-        countryName: String(countryRow?.name ?? countryCode),
-        packName: pack.name,
-        rulesetCode: ruleset.ruleset_code,
-        rulesetVersion: ruleset.ruleset_version,
-      }),
-    };
-  }
+  const livePacks = packs.filter((pack) => isLiveCountryPackStatus(pack.status));
+  const packIds = livePacks.map((pack) => pack.id).filter(Boolean);
+  const { data: rulesets, error } = packIds.length
+    ? await supabaseAdmin
+        .from('country_pack_rulesets')
+        .select('id, country_pack_id, ruleset_code, ruleset_version, status, effective_from, effective_to')
+        .in('country_pack_id', packIds)
+    : { data: [], error: null };
+  if (error) throw error;
 
-  throw badRequest(ownerLegalValueRulesetMissingMessage(countryCode));
+  const context = resolveOwnerLegalValueRulesetContextFromTables({
+    countryCode,
+    effectiveDate: date,
+    countries: countryRow ? [countryRow] : [],
+    countryPacks: packs,
+    rulesets: rulesets ?? [],
+  });
+  if (!context) throw badRequest(ownerLegalValueRulesetMissingMessage(countryCode));
+  return context;
 }
 

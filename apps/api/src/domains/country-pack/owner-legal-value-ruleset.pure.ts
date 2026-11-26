@@ -26,12 +26,18 @@ type RulesetRow = {
   effective_to?: string | null;
 };
 
+/** Legal Control badges both `enabled` and `active` as Active. */
+export function isLiveCountryPackStatus(status: unknown): boolean {
+  const value = String(status ?? '').trim().toLowerCase();
+  return value === 'enabled' || value === 'active';
+}
+
 function isRulesetEffectiveOnDate(ruleset: RulesetRow, date: string): boolean {
-  if (String(ruleset.status ?? '') !== 'active') return false;
-  const from = String(ruleset.effective_from ?? '');
+  if (String(ruleset.status ?? '').trim().toLowerCase() !== 'active') return false;
+  const from = String(ruleset.effective_from ?? '').slice(0, 10);
   if (!from || from > date) return false;
-  const to = ruleset.effective_to == null ? null : String(ruleset.effective_to);
-  return to == null || to >= date;
+  const to = ruleset.effective_to == null ? null : String(ruleset.effective_to).slice(0, 10);
+  return to == null || to === '' || to >= date;
 }
 
 function buildRulesetLabel(params: {
@@ -56,18 +62,19 @@ export function resolveOwnerLegalValueRulesetContextFromTables(params: {
   rulesets?: RulesetRow[];
 }): OwnerLegalValueRulesetContext | null {
   const countryCode = params.countryCode.trim().toUpperCase();
-  const date = params.effectiveDate.trim() || new Date().toISOString().slice(0, 10);
+  const date = (params.effectiveDate.trim() || new Date().toISOString().slice(0, 10)).slice(0, 10);
   if (!countryCode) return null;
 
   const country =
     (params.countries ?? []).find((row) => String(row.code ?? '').toUpperCase() === countryCode) ?? null;
   const countryName = String(country?.name ?? countryCode);
 
-  const enabledPacks = (params.countryPacks ?? []).filter(
-    (pack) => String(pack.country_code ?? '').toUpperCase() === countryCode && String(pack.status ?? '') === 'enabled',
+  const livePacks = (params.countryPacks ?? []).filter(
+    (pack) =>
+      String(pack.country_code ?? '').trim().toUpperCase() === countryCode && isLiveCountryPackStatus(pack.status),
   );
 
-  for (const pack of enabledPacks) {
+  for (const pack of livePacks) {
     const packId = String(pack.id ?? '');
     if (!packId) continue;
     const candidates = (params.rulesets ?? [])

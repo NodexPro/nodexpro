@@ -36,8 +36,12 @@ test('Platform Owner Taxes is a dedicated aggregate screen on Country Pack legal
   assert.match(page, /nx-owner-taxes-country/);
   assert.match(page, /nx-owner-taxes-audit/);
   assert.match(page, /platform_seller_vat/);
-  assert.match(page, /text\.change_history/);
-  assert.match(page, /text\.version_history/);
+  assert.match(page, /chromeLabel\(text, 'change_history'/);
+  assert.match(page, /chromeLabel\(text, 'version_history'/);
+  assert.match(page, /הגדרות/);
+  assert.match(page, /שמירה/);
+  assert.match(page, /סגירה/);
+  assert.doesNotMatch(page, /nx-tax-nested-modal-footer/);
   assert.doesNotMatch(page, /nx-owner-taxes-table/);
   assert.doesNotMatch(page, /nx-owner-sheet/);
   assert.doesNotMatch(page, /Payload \(JSON object\)/);
@@ -76,6 +80,9 @@ test('Platform Owner Taxes UI follows Settings glass and RTL from aggregate', ()
   assert.match(css, /padding: 8px 20px/);
   assert.match(css, /border-radius: 6px/);
   assert.match(css, /min-width: 96px/);
+  assert.match(css, /-webkit-text-fill-color: #ffffff/);
+  assert.match(css, /\.nx-glass-btn:disabled/);
   assert.doesNotMatch(page, /overflow-x:\s*auto/);
   assert.doesNotMatch(css, /overflow-x:\s*auto/);
+  assert.doesNotMatch(css, /background: #fafafa/);
 });

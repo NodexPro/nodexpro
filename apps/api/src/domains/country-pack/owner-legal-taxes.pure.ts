@@ -3,6 +3,8 @@
  * Not a second tax database: VAT / Income Tax / National Insurance rows only.
  */
 
+import { resolveOwnerLegalValueRulesetContextFromTables } from './owner-legal-value-ruleset.pure.js';
+
 export const OWNER_TAX_CATEGORIES = ['VAT', 'Income Tax', 'National Insurance'] as const;
 export type OwnerTaxCategory = (typeof OWNER_TAX_CATEGORIES)[number];
 
@@ -226,10 +228,37 @@ export function buildOwnerTaxRuleRows(input: {
   asOfDate: string;
   lang: 'he' | 'en';
   copy: Record<string, string>;
+  countryCatalog?: {
+    countries?: Array<{ code?: string; name?: string }>;
+    country_packs?: Array<{ id?: string; country_code?: string; name?: string; status?: string }>;
+    rulesets?: Array<{
+      id?: string;
+      country_pack_id?: string;
+      ruleset_code?: string;
+      ruleset_version?: string;
+      status?: string;
+      effective_from?: string;
+      effective_to?: string | null;
+    }>;
+  };
 }): OwnerTaxRuleRow[] {
   const today = input.asOfDate;
   const empty = input.copy.none ?? '—';
   const out: OwnerTaxRuleRow[] = [];
+  const rulesetIdByCountry = new Map<string, string>();
+  const rulesetIdFor = (country: string): string => {
+    if (rulesetIdByCountry.has(country)) return rulesetIdByCountry.get(country) ?? '';
+    const resolved = resolveOwnerLegalValueRulesetContextFromTables({
+      countryCode: country,
+      effectiveDate: today,
+      countries: input.countryCatalog?.countries,
+      countryPacks: input.countryCatalog?.country_packs,
+      rulesets: input.countryCatalog?.rulesets,
+    });
+    const id = resolved?.active_ruleset_id ?? '';
+    rulesetIdByCountry.set(country, id);
+    return id;
+  };
   for (const row of input.legalRows) {
     if (!isOwnerTaxLegalValueRow(row)) continue;
     const versions = Array.isArray(row.versions) ? (row.versions as Array<Record<string, unknown>>) : [];
@@ -301,6 +330,7 @@ export function buildOwnerTaxRuleRows(input: {
             value_key: 'string',
             effective_from: 'YYYY-MM-DD',
             rate: 'enter 18 for 18 percent (stored as 0.18); values over 100 are rejected',
+            country_pack_ruleset_id: 'optional uuid from Legal Control active ruleset',
             name_he: 'optional',
             name_en: 'optional',
             description_he: 'optional',
@@ -314,6 +344,7 @@ export function buildOwnerTaxRuleRows(input: {
             owner_surface: 'taxes',
             effective_from: today,
             status: 'active',
+            country_pack_ruleset_id: rulesetIdFor(countryCode),
           },
         },
         {
@@ -327,6 +358,7 @@ export function buildOwnerTaxRuleRows(input: {
             effective_from: 'YYYY-MM-DD',
             effective_to: 'optional YYYY-MM-DD',
             rate: 'enter 18 for 18 percent (stored as 0.18); values over 100 are rejected',
+            country_pack_ruleset_id: 'optional uuid from Legal Control active ruleset',
             name_he: 'optional',
             name_en: 'optional',
             status: 'draft',
@@ -337,6 +369,7 @@ export function buildOwnerTaxRuleRows(input: {
             value_key: valueKey,
             owner_surface: 'taxes',
             status: 'draft',
+            country_pack_ruleset_id: rulesetIdFor(countryCode),
           },
         },
         {

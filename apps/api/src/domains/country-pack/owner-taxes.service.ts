@@ -36,7 +36,20 @@ export async function buildOwnerTaxesAggregate(ctx: RequestContext): Promise<Rec
       .limit(40),
   ]);
   const legalRows = Array.isArray(legalValues.table) ? (legalValues.table as Array<Record<string, unknown>>) : [];
-  const rules = buildOwnerTaxRuleRows({ legalRows, asOfDate, lang, copy });
+  const countryCatalog = (legalValues.country_catalog ?? {}) as {
+    countries?: Array<{ code?: string; name?: string }>;
+    country_packs?: Array<{ id?: string; country_code?: string; name?: string; status?: string }>;
+    rulesets?: Array<{
+      id?: string;
+      country_pack_id?: string;
+      ruleset_code?: string;
+      ruleset_version?: string;
+      status?: string;
+      effective_from?: string;
+      effective_to?: string | null;
+    }>;
+  };
+  const rules = buildOwnerTaxRuleRows({ legalRows, asOfDate, lang, copy, countryCatalog });
   return {
     aggregate_key: OWNER_TAXES_AGGREGATE_KEY,
     ui: { locale: lang, direction: lang === 'he' ? 'rtl' : 'ltr', text: copy },
