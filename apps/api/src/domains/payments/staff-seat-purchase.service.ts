@@ -5,8 +5,7 @@ import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, conflict, forbidden } from '../../shared/errors.js';
 import { RBAC_PERMISSIONS, requireRbacPermission } from '../rbac/rbac.service.js';
 import { mapSeatRpcError, resolveStaffSeatEntitlement } from '../modules/staff-seat-entitlement.service.js';
-import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
-import { incomeDraftVatFallbackResolution } from '../income/income-draft-vat-fallback.pure.js';
+import { applyAuthoritativeSellerVat, resolvePlatformSellerVat } from '../billing/platform-seller-vat.service.js';
 import { buildUsersRolesAggregate } from '../memberships/users-roles-aggregate.service.js';
 import {
   buildStaffSeatPurchaseQuote,
@@ -24,8 +23,9 @@ async function quoteForOrg(orgId: string, quantity: number) {
   const asOfDate = new Date().toISOString().slice(0, 10);
   const [truth, vat] = await Promise.all([
     resolveStaffSeatEntitlement(orgId),
-    resolveIncomeDraftVatForOrg(orgId, 'IL', asOfDate).catch(() => incomeDraftVatFallbackResolution()),
+    resolvePlatformSellerVat(asOfDate),
   ]);
+  const appliedVat = applyAuthoritativeSellerVat(vat);
   return {
     truth,
     quote: buildStaffSeatPurchaseQuote({
@@ -34,8 +34,8 @@ async function quoteForOrg(orgId: string, quantity: number) {
       officeCurrentUnitPrice: truth.current_terms_unit_price_amount ?? null,
       currency: truth.seat_currency,
       billingPeriod: truth.seat_billing_period,
-      vatRate: vat.standard_rate,
-      vatPercentLabel: vat.standard_rate_percent_label,
+      vatRate: appliedVat.vatRate,
+      vatPercentLabel: appliedVat.vatPercentLabel,
     }),
   };
 }

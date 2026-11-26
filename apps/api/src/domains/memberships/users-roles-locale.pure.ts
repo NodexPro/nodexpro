@@ -106,7 +106,7 @@ const EN: UsersRolesText = {
   staff_seats_net: 'Net',
   staff_seats_vat: 'VAT',
   staff_seats_total: 'Total',
-  staff_seats_create_intent: 'Save unpaid request',
+  staff_seats_create_intent: 'Create Request',
   staff_seats_cancel_intent: 'Cancel unpaid request',
   staff_seats_pay: 'Pay',
 };
@@ -181,7 +181,7 @@ const HE: UsersRolesText = {
   staff_seats_net: 'נטו',
   staff_seats_vat: 'מע״מ',
   staff_seats_total: 'סה״כ',
-  staff_seats_create_intent: 'שמירת בקשה ללא תשלום',
+  staff_seats_create_intent: 'יצירת בקשה',
   staff_seats_cancel_intent: 'ביטול בקשה ללא תשלום',
   staff_seats_pay: 'תשלום',
 };

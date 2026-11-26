@@ -5,8 +5,7 @@ import { RBAC_PERMISSIONS, requireRbacPermission } from '../rbac/rbac.service.js
 import { resolvePersistedUiLanguage } from '../platform-localization/platform-localization.pure.js';
 import { resolveStaffSeatEntitlement } from '../modules/staff-seat-entitlement.service.js';
 import { supabaseEmbedOne } from '../../shared/supabase-embed.js';
-import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
-import { incomeDraftVatFallbackResolution } from '../income/income-draft-vat-fallback.pure.js';
+import { applyAuthoritativeSellerVat, resolvePlatformSellerVat } from './platform-seller-vat.service.js';
 import {
   buildStaffSeatPurchaseQuote,
   formatSeatMoneyAmount,
@@ -35,9 +34,9 @@ function formatAddress(s: {
   return parts.length ? parts.join(', ') : null;
 }
 
-async function loadVat(orgId: string) {
+async function loadPlatformSellerVat() {
   const asOfDate = new Date().toISOString().slice(0, 10);
-  return resolveIncomeDraftVatForOrg(orgId, 'IL', asOfDate).catch(() => incomeDraftVatFallbackResolution());
+  return resolvePlatformSellerVat(asOfDate);
 }
 
 function dateLabel(raw: string | null | undefined): string {
@@ -248,7 +247,7 @@ export async function buildBillingStaffLicensesAggregate(
   const copy = billingCopy(lang);
   const [seats, vat, openIntent] = await Promise.all([
     resolveStaffSeatEntitlement(orgId),
-    loadVat(orgId),
+    loadPlatformSellerVat(),
     supabaseAdmin
       .from('staff_seat_purchase_intents')
       .select('id, status, quantity')
@@ -257,7 +256,8 @@ export async function buildBillingStaffLicensesAggregate(
       .maybeSingle()
       .then((res) => (res.error ? null : res.data)),
   ]);
-  const vatAuthoritative = vat.source === 'country_pack';
+  const vatAuthoritative = vat.authoritative && vat.source === 'country_pack';
+  const appliedVat = applyAuthoritativeSellerVat(vat);
   const quantity = options?.quoteQuantity ?? (Number(openIntent?.quantity) || 1);
   const quote = buildStaffSeatPurchaseQuote({
     quantity,
@@ -265,8 +265,8 @@ export async function buildBillingStaffLicensesAggregate(
     officeCurrentUnitPrice: seats.current_terms_unit_price_amount ?? null,
     currency: seats.seat_currency,
     billingPeriod: seats.seat_billing_period,
-    vatRate: vatAuthoritative ? vat.standard_rate : 0,
-    vatPercentLabel: vatAuthoritative ? vat.standard_rate_percent_label : '',
+    vatRate: appliedVat.vatRate,
+    vatPercentLabel: appliedVat.vatPercentLabel,
   });
   const recurringAfter = nextPurchasedSeatQuantity(seats.purchased_staff_seats, quote.quantity) * quote.unit_price_net;
   const canWrite = ctx.membership?.roleCode === 'owner' || ctx.membership?.roleCode === 'admin';

@@ -161,6 +161,11 @@ test('migration and services keep checkout off and reuse existing seat entitleme
   assert.match(purchase, /PAYMENT_CLIENT_REDIRECT_REJECTED/);
   assert.match(purchase, /checkout_available: false/);
   assert.doesNotMatch(purchase, /checkout_available:\s*true/);
+  assert.match(purchase, /resolvePlatformSellerVat/);
+  assert.match(purchase, /applyAuthoritativeSellerVat/);
+  assert.doesNotMatch(purchase, /resolveIncomeDraftVatForOrg/);
+  assert.match(purchase, /entitlement_changed: false/);
+  assert.match(purchase, /status: 'quoted'/);
   assert.match(commercial, /show_in_billing/);
   assert.match(commercial, /allow_new_connections/);
   assert.match(commercial, /'hyp'/);

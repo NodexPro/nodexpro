@@ -23,8 +23,12 @@ test('six billing tabs exist in HE/EN and unknown tab falls back to overview', (
   assert.equal(he.tab_staff, 'רישיונות עובדים');
   assert.equal(en.not_configured, 'Not configured');
   assert.match(he.vat_not_configured, /מע״מ אינו מאושר/);
+  assert.match(he.vat_not_configured, /NodexPro/);
+  assert.doesNotMatch(he.vat_not_configured, /למשרד זה/);
+  assert.equal(he.save_unpaid, 'יצירת בקשה');
+  assert.equal(en.save_unpaid, 'Create Request');
   assert.match(en.next_payment_unconfigured, /Next payment date is not set/);
-  assert.doesNotMatch(en.vat_not_configured, /Country Pack|Accounting Base|catalog_only/);
+  assert.doesNotMatch(en.vat_not_configured, /Country Pack|Accounting Base|catalog_only|this office/);
 });
 
 test('module quote never treats fallback VAT as a legal total and never enables pay', () => {
@@ -84,7 +88,9 @@ test('workspace stays light, tenant-scoped, and honest about unconfigured PSP', 
   const index = read('apps/api/src/index.ts');
   assert.match(workspace, /resolveStaffSeatEntitlement\(orgId\)/);
   assert.doesNotMatch(workspace, /getModulesState/);
-  assert.match(workspace, /vat\.source === 'country_pack'/);
+  assert.match(workspace, /resolvePlatformSellerVat/);
+  assert.doesNotMatch(workspace, /resolveIncomeDraftVatForOrg/);
+  assert.match(workspace, /vat\.authoritative && vat\.source === 'country_pack'/);
   assert.match(workspace, /seller_context: 'nodexpro_platform'/);
   assert.match(workspace, /checkout_available: false/);
   assert.match(workspace, /next_payment_unconfigured/);
