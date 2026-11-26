@@ -6,7 +6,10 @@ export type OwnerCommandResponse = {
   ok: true;
   command: string;
   refreshed: {
-    aggregate_key: 'owner_legal_control_panel_aggregate' | 'organization_country_settings_aggregate';
+    aggregate_key:
+      | 'owner_legal_control_panel_aggregate'
+      | 'owner_taxes_aggregate'
+      | 'organization_country_settings_aggregate';
     aggregate: UnknownRecord;
   };
 };

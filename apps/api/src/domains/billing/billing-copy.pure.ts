@@ -58,6 +58,7 @@ const EN: Copy = {
   unit: 'Unit (net)',
   net: 'Net',
   vat_amount: 'VAT',
+  vat_rate: 'VAT rate',
   total: 'Total',
   recurring_after: 'Extra-seat net after this order',
   platform_payments_empty: 'No NodexPro charges or invoices yet.',
@@ -136,6 +137,7 @@ const HE: Copy = {
   unit: 'יחידה (נטו)',
   net: 'נטו',
   vat_amount: 'מע״מ',
+  vat_rate: 'שיעור מע״מ',
   total: 'סה״כ',
   recurring_after: 'נטו למקומות נוספים אחרי ההזמנה',
   platform_payments_empty: 'אין עדיין חיובים או חשבוניות של NodexPro.',
@@ -179,5 +181,6 @@ export type BillingTabId = (typeof BILLING_TABS)[number]['id'];
 
 export function resolveBillingTab(raw: string | null | undefined): BillingTabId {
   const value = String(raw ?? '').trim();
+  if (value === 'staff-licenses') return 'staff_licenses';
   return (BILLING_TABS.find((tab) => tab.id === value)?.id ?? 'overview') as BillingTabId;
 }

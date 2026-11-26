@@ -9,7 +9,7 @@ const read = (rel: string) => readFileSync(join(dir, rel), 'utf8');
 
 test('Users & Roles sends extra-seat purchase to Billing Staff Licenses', () => {
   const page = read('../src/pages/UsersRoles.tsx');
-  assert.match(page, /\/billing\?tab=staff_licenses/);
+  assert.match(page, /\/billing\?tab=staff-licenses/);
   assert.match(page, /staff_seats_add/);
   assert.doesNotMatch(page, /quoteStaffSeatPurchaseCommand/);
   assert.doesNotMatch(page, /users-roles-staff-seat-quote/);

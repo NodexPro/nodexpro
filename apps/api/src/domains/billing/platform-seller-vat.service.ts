@@ -5,6 +5,7 @@
  */
 
 import {
+  getLegalValueByKey,
   resolveLegalValue,
   resolveOwnerLegalValueRulesetContextForCountry,
 } from '../country-pack/legal-value.service.js';
@@ -22,23 +23,31 @@ export { applyAuthoritativeSellerVat };
 
 export async function resolvePlatformSellerVat(asOfDate: string): Promise<PlatformSellerVatResolution> {
   const date = asOfDate.trim() || new Date().toISOString().slice(0, 10);
+  let rulesetId: string | null = null;
   try {
     const ruleset = await resolveOwnerLegalValueRulesetContextForCountry({
       countryCode: PLATFORM_SELLER_COUNTRY,
       effectiveDate: date,
     });
+    rulesetId = ruleset.active_ruleset_id;
+  } catch {
+    return unresolvedPlatformSellerVat('country_pack_ruleset_missing');
+  }
+  try {
     const version = await resolveLegalValue(
       PLATFORM_SELLER_COUNTRY,
       PLATFORM_SELLER_VAT_LEGAL_VALUE_KEY,
       date,
-      ruleset.active_ruleset_id,
+      rulesetId,
     );
     const rate = parseLegalVatRate(version?.value_payload_json);
-    if (rate != null && rate >= 0 && rate <= 1) {
-      return platformSellerVatFromCountryPackRate(rate);
+    if (version && rate != null && rate >= 0 && rate <= 1) {
+      return platformSellerVatFromCountryPackRate(rate, version.id);
     }
+    if (version) return unresolvedPlatformSellerVat('rate_unparseable');
+    const legal = await getLegalValueByKey(PLATFORM_SELLER_COUNTRY, PLATFORM_SELLER_VAT_LEGAL_VALUE_KEY);
+    return unresolvedPlatformSellerVat(legal ? 'active_version_missing' : 'legal_value_missing');
   } catch {
-    /* Country Pack / owner legal value not confirmed — never invent a statutory rate. */
+    return unresolvedPlatformSellerVat('active_version_missing');
   }
-  return unresolvedPlatformSellerVat();
 }

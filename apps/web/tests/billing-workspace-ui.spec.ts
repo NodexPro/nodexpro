@@ -29,6 +29,10 @@ test('Billing workspace lazy-loads tabs, keeps pay disabled, and does not stitch
   assert.match(css, /overflow-x: auto/);
   assert.match(css, /border-radius: 6px 6px 0 0/);
   assert.match(css, /position: sticky/);
+  assert.match(page, /nx-billing-staff-kpis/);
+  assert.match(page, /nx-billing-staff-pay/);
+  assert.match(page, /staff-licenses/);
+  assert.doesNotMatch(page, /create_staff_seat_purchase_intent|cancel_staff_seat_purchase_intent/);
 });
 
 test('Settings and Users & Roles route extra-seat and office payments into Billing', () => {
@@ -36,7 +40,7 @@ test('Settings and Users & Roles route extra-seat and office payments into Billi
   const settings = read('../src/pages/Settings.tsx');
   const office = read('../src/pages/OfficePaymentsPage.tsx');
   const app = read('../src/App.tsx');
-  assert.match(users, /\/billing\?tab=staff_licenses/);
+  assert.match(users, /\/billing\?tab=staff-licenses/);
   assert.match(settings, /\/billing\?tab=client_processing/);
   assert.match(office, /Navigate to="\/billing\?tab=client_processing"/);
   assert.match(app, /path="billing" element=\{<Billing \/>\}/);

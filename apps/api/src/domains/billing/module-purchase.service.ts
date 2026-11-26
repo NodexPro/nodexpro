@@ -4,8 +4,7 @@ import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { badRequest, conflict, forbidden } from '../../shared/errors.js';
 import { RBAC_PERMISSIONS, requireRbacPermission } from '../rbac/rbac.service.js';
-import { resolveIncomeDraftVatForOrg } from '../income/income-draft-vat-resolver.js';
-import { incomeDraftVatFallbackResolution } from '../income/income-draft-vat-fallback.pure.js';
+import { applyAuthoritativeSellerVat, resolvePlatformSellerVat } from './platform-seller-vat.service.js';
 import { buildModulePurchaseQuote, canActivateModulePurchase } from './module-purchase.pure.js';
 
 function assertModuleWriter(ctx: RequestContext, orgId: string) {
@@ -22,20 +21,22 @@ async function quoteForPlan(orgId: string, moduleId: string, modulePlanId: strin
       .eq('id', modulePlanId)
       .eq('module_id', moduleId)
       .maybeSingle(),
-    resolveIncomeDraftVatForOrg(orgId, 'IL', asOfDate).catch(() => incomeDraftVatFallbackResolution()),
+    resolvePlatformSellerVat(asOfDate),
   ]);
   if (error) throw error;
   if (!plan || plan.is_active === false) throw badRequest('Plan not found', 'MODULE_PLAN_NOT_FOUND');
-  const vatAuthoritative = vat.source === 'country_pack';
+  const vatAuthoritative = vat.authoritative && vat.source === 'country_pack';
+  const applied = applyAuthoritativeSellerVat(vat);
   return buildModulePurchaseQuote({
     moduleId,
     modulePlanId,
     unitPriceNet: Number(plan.price_amount) || 0,
     currency: String(plan.currency ?? 'ILS'),
     billingPeriod: String(plan.billing_period ?? 'month'),
-    vatRate: vat.standard_rate,
-    vatPercentLabel: vat.standard_rate_percent_label,
+    vatRate: applied.vatRate,
+    vatPercentLabel: applied.vatPercentLabel,
     vatAuthoritative,
+    legalRuleVersionId: vat.legal_value_version_id,
   });
 }
 

@@ -298,9 +298,12 @@ export async function buildBillingStaffLicensesAggregate(
       vat_authoritative: vatAuthoritative,
       checkout_available: false as const,
       pay_enabled: false as const,
+      legal_rule_version_id: vat.legal_value_version_id,
+      unresolved_reason: vat.unresolved_reason,
       labels: {
         unit: formatSeatMoneyAmount(quote.unit_price_net, quote.currency),
         net: formatSeatMoneyAmount(quote.net_amount, quote.currency),
+        vat_rate: vatAuthoritative ? vat.standard_rate_percent_label : copy.not_configured,
         vat: vatAuthoritative ? formatSeatMoneyAmount(quote.vat_amount, quote.currency) : copy.not_configured,
         total: vatAuthoritative ? formatSeatMoneyAmount(quote.total_amount, quote.currency) : copy.total_unavailable,
         recurring_after: formatSeatMoneyAmount(recurringAfter, quote.currency),
@@ -309,9 +312,9 @@ export async function buildBillingStaffLicensesAggregate(
     open_intent: openIntent ? { id: openIntent.id, status: openIntent.status, quantity: Number(openIntent.quantity) || quantity } : null,
     available_commands: {
       quote_staff_seat_purchase: { enabled: canWrite },
-      create_staff_seat_purchase_intent: { enabled: canWrite },
-      cancel_staff_seat_purchase_intent: { enabled: canWrite && Boolean(openIntent) },
-      pay: { enabled: false },
+      create_staff_seat_purchase_intent: { enabled: false },
+      cancel_staff_seat_purchase_intent: { enabled: false },
+      pay: { enabled: false, disabled_reason: copy.checkout_unavailable },
     },
     timing: { load_ms: Date.now() - started, source: 'billing_staff_licenses' },
   };

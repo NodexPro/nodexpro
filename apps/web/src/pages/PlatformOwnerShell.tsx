@@ -3,6 +3,7 @@ import './owner-modules/nx-owner-modules.css';
 
 export const PLATFORM_OWNER_NAV = [
   { to: '/platform-owner/legal-control', label: 'Legal Control', end: true },
+  { to: '/platform-owner/taxes', label: 'Taxes / מיסים', end: true },
   { to: '/platform-owner/modules', label: 'Modules', end: false },
   { to: '/platform-owner/legal-control?section=system', label: 'System', end: true },
   { to: '/platform-owner/legal-control?section=clients', label: 'Clients', end: true },
@@ -18,6 +19,9 @@ export const PLATFORM_OWNER_NAV = [
 ] as const;
 
 function navActive(pathname: string, search: string, item: (typeof PLATFORM_OWNER_NAV)[number]): boolean {
+  if (item.to.startsWith('/platform-owner/taxes')) {
+    return pathname.startsWith('/platform-owner/taxes');
+  }
   if (item.to.startsWith('/platform-owner/modules')) {
     return pathname.startsWith('/platform-owner/modules');
   }

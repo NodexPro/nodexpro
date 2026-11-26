@@ -60,14 +60,11 @@ type StaffAggregate = {
   purchase_quote: {
     quantity: number;
     vat_authoritative?: boolean;
-    labels: { unit: string; net: string; vat: string; total: string; recurring_after: string };
+    labels: { unit: string; net: string; vat: string; vat_rate?: string; total: string; recurring_after: string };
   };
-  open_intent: { id: string } | null;
   available_commands: {
     quote_staff_seat_purchase: { enabled: boolean };
-    create_staff_seat_purchase_intent: { enabled: boolean };
-    cancel_staff_seat_purchase_intent: { enabled: boolean };
-    pay: { enabled: boolean };
+    pay: { enabled: boolean; disabled_reason?: string };
   };
 };
 
@@ -140,9 +137,13 @@ export function Billing() {
   const auth = useAuth();
   const [params, setParams] = useSearchParams();
   const orgId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
-  const tab = TAB_IDS.includes(params.get('tab') as (typeof TAB_IDS)[number])
-    ? String(params.get('tab'))
-    : 'overview';
+  const tabRaw = params.get('tab');
+  const tab =
+    tabRaw === 'staff-licenses' || tabRaw === 'staff_licenses'
+      ? 'staff_licenses'
+      : TAB_IDS.includes(tabRaw as (typeof TAB_IDS)[number])
+        ? String(tabRaw)
+        : 'overview';
 
   const [workspace, setWorkspace] = useState<BillingWorkspace | null>(null);
   const [error, setError] = useState('');
@@ -274,7 +275,13 @@ export function Billing() {
             role="tab"
             className={`nx-billing__tab${tab === item.id ? ' is-active' : ''}`}
             aria-selected={tab === item.id}
-            onClick={() => setParams(item.id === 'overview' ? {} : { tab: item.id })}
+            onClick={() =>
+              setParams(
+                item.id === 'overview'
+                  ? {}
+                  : { tab: item.id === 'staff_licenses' ? 'staff-licenses' : item.id },
+              )
+            }
           >
             {item.label}
           </button>
@@ -364,29 +371,25 @@ export function Billing() {
           {tabError ? <p className="nx-settings-warning" role="alert">{tabError}</p> : null}
           {staff ? (
             <>
-              <dl className="nx-settings-identity-table">
-                <div className="nx-settings-identity-table__row">
-                  <dt>{staff.ui.text.staff_included}</dt>
-                  <dd className="nx-settings-readonly">{staff.seats.included_staff_seats}</dd>
+              <div className="nx-billing-staff-kpis">
+                <div className="nx-billing-staff-kpi">
+                  <span className="nx-billing-staff-kpi__label">{staff.ui.text.staff_included}</span>
+                  <span className="nx-billing-staff-kpi__value">{staff.seats.included_staff_seats}</span>
                 </div>
-                <div className="nx-settings-identity-table__row">
-                  <dt>{staff.ui.text.staff_grandfathered}</dt>
-                  <dd className="nx-settings-readonly">{staff.seats.grandfathered_staff_seats}</dd>
+                <div className="nx-billing-staff-kpi">
+                  <span className="nx-billing-staff-kpi__label">{staff.ui.text.staff_purchased}</span>
+                  <span className="nx-billing-staff-kpi__value">{staff.seats.purchased_additional_staff_seats}</span>
                 </div>
-                <div className="nx-settings-identity-table__row">
-                  <dt>{staff.ui.text.staff_purchased}</dt>
-                  <dd className="nx-settings-readonly">{staff.seats.purchased_additional_staff_seats}</dd>
+                <div className="nx-billing-staff-kpi">
+                  <span className="nx-billing-staff-kpi__label">{staff.ui.text.staff_occupied}</span>
+                  <span className="nx-billing-staff-kpi__value">{staff.seats.occupied_staff_seats}</span>
                 </div>
-                <div className="nx-settings-identity-table__row">
-                  <dt>{staff.ui.text.staff_occupied}</dt>
-                  <dd className="nx-settings-readonly">{staff.seats.occupied_staff_seats}</dd>
+                <div className="nx-billing-staff-kpi">
+                  <span className="nx-billing-staff-kpi__label">{staff.ui.text.staff_available}</span>
+                  <span className="nx-billing-staff-kpi__value">{staff.seats.available_staff_seats}</span>
                 </div>
-                <div className="nx-settings-identity-table__row">
-                  <dt>{staff.ui.text.staff_available}</dt>
-                  <dd className="nx-settings-readonly">{staff.seats.available_staff_seats}</dd>
-                </div>
-              </dl>
-              <div className="nx-billing__actions">
+              </div>
+              <div className="nx-billing__actions nx-billing__actions--tight">
                 <span className="nx-glass-label">{staff.ui.text.qty}</span>
                 <div className="nx-billing__stepper">
                   <button type="button" className="nx-glass-btn nx-glass-btn--secondary" disabled={busy || !staff.available_commands.quote_staff_seat_purchase.enabled || staff.purchase_quote.quantity <= 1} onClick={() => void run('quote_staff_seat_purchase', { quantity: staff.purchase_quote.quantity - 1 }, 'staff')}>−</button>
@@ -399,9 +402,9 @@ export function Billing() {
                   <thead>
                     <tr>
                       <th>{staff.ui.text.staff_contract}</th>
-                      <th>{staff.ui.text.staff_catalog}</th>
                       <th className="is-num">{staff.ui.text.unit}</th>
                       <th className="is-num">{staff.ui.text.net}</th>
+                      <th className="is-num">{staff.ui.text.vat_rate}</th>
                       <th className="is-num">{staff.ui.text.vat_amount}</th>
                       <th className="is-num">{staff.ui.text.total}</th>
                     </tr>
@@ -409,23 +412,19 @@ export function Billing() {
                   <tbody>
                     <tr>
                       <td>{staff.pricing.current_contract_label}</td>
-                      <td>{staff.pricing.catalog_list_label}</td>
                       <td className="is-num">{staff.purchase_quote.labels.unit}</td>
                       <td className="is-num">{staff.purchase_quote.labels.net}</td>
+                      <td className="is-num">{staff.purchase_quote.labels.vat_rate ?? staff.ui.text.not_configured}</td>
                       <td className="is-num">{staff.purchase_quote.labels.vat}</td>
                       <td className="is-num">{staff.purchase_quote.labels.total}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
-              <p className="nx-settings-muted">{staff.pricing.quote_source_note}</p>
               {staff.purchase_quote.vat_authoritative ? null : <p className="nx-settings-warning">{staff.ui.text.vat_not_configured}</p>}
-              <div className="nx-billing__actions">
-                <button type="button" className="nx-glass-btn nx-glass-btn--purple" disabled={busy || !staff.available_commands.create_staff_seat_purchase_intent.enabled} onClick={() => void run('create_staff_seat_purchase_intent', { quantity: staff.purchase_quote.quantity }, 'staff')}>{staff.ui.text.save_unpaid}</button>
-                {staff.open_intent ? (
-                  <button type="button" className="nx-glass-btn nx-glass-btn--secondary" disabled={busy || !staff.available_commands.cancel_staff_seat_purchase_intent.enabled} onClick={() => void run('cancel_staff_seat_purchase_intent', { intent_id: staff.open_intent!.id }, 'staff')}>{staff.ui.text.cancel_unpaid}</button>
-                ) : null}
-                <button type="button" className="nx-glass-btn nx-glass-btn--secondary" disabled>{staff.ui.text.pay}</button>
+              <div className="nx-billing__actions nx-billing__actions--tight">
+                <button type="button" className="nx-glass-btn nx-glass-btn--purple" disabled={busy || !staff.available_commands.pay.enabled} data-testid="nx-billing-staff-pay">{staff.ui.text.pay}</button>
+                <span className="nx-settings-muted">{staff.available_commands.pay.disabled_reason ?? text.checkout_unavailable}</span>
               </div>
             </>
           ) : null}

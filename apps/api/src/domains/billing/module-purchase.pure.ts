@@ -15,6 +15,7 @@ export type ModulePurchaseQuote = {
   vat_authoritative: boolean;
   checkout_available: false;
   pay_enabled: false;
+  legal_rule_version_id: string | null;
   labels: { unit: string; net: string; vat: string; total: string };
 };
 
@@ -27,6 +28,7 @@ export function buildModulePurchaseQuote(input: {
   vatRate: number;
   vatPercentLabel: string;
   vatAuthoritative: boolean;
+  legalRuleVersionId?: string | null;
 }): ModulePurchaseQuote {
   const net = Math.max(0, Number(input.unitPriceNet) || 0);
   const vatRate = input.vatAuthoritative ? Number(input.vatRate) || 0 : 0;
@@ -47,6 +49,7 @@ export function buildModulePurchaseQuote(input: {
     vat_authoritative: input.vatAuthoritative,
     checkout_available: false,
     pay_enabled: false,
+    legal_rule_version_id: input.legalRuleVersionId ?? null,
     labels: {
       unit: formatSeatMoneyAmount(net, currency),
       net: formatSeatMoneyAmount(net, currency),

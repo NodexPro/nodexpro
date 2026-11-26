@@ -66,6 +66,49 @@
   margin-top: 16px;
 }
 
+.nx-billing__actions--tight {
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.nx-billing-staff-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 10px;
+}
+
+.nx-billing-staff-kpi {
+  padding: 8px 10px;
+  border: 1px solid rgba(210, 238, 255, 0.22);
+  border-radius: 6px;
+  background: rgba(5, 22, 46, 0.45);
+  min-width: 0;
+}
+
+.nx-billing-staff-kpi__label {
+  display: block;
+  font-size: 11px;
+  line-height: 1.2;
+  color: #a9c9ee;
+}
+
+.nx-billing-staff-kpi__value {
+  display: block;
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #eef6ff;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  .nx-billing-staff-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .nx-billing__stepper {
   display: inline-flex;
   align-items: center;

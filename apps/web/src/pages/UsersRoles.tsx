@@ -173,70 +173,30 @@ export function UsersRoles() {
           <h1 className="nx-ur-page__title">{T('title')}</h1>
           <p className="nx-ur-page__lead">{T('lead')}</p>
         </div>
-        {data?.available_actions.invite_member ? (
-          <button
-            type="button"
+        <div className="nx-ur-page__actions">
+          {data?.available_actions.invite_member ? (
+            <button
+              type="button"
+              className="nx-btn nx-ur-btn nx-ur-btn--primary"
+              onClick={() => {
+                setInviteRole(data.invite_roles[0]?.code ?? '');
+                setShowInvite(true);
+              }}
+            >
+              {T('invite_member')}
+            </button>
+          ) : null}
+          <Link
+            to="/billing?tab=staff-licenses"
             className="nx-btn nx-ur-btn nx-ur-btn--primary"
-            onClick={() => {
-              setInviteRole(data.invite_roles[0]?.code ?? '');
-              setShowInvite(true);
-            }}
+            data-testid="users-roles-add-seat-billing"
           >
-            {T('invite_member')}
-          </button>
-        ) : null}
+            {T('staff_seats_add')}
+          </Link>
+        </div>
       </div>
 
       {error ? <div className="nx-ur-error">{error}</div> : null}
-
-      {data?.staff_seats ? (
-        <section className="nx-ur-seats" aria-label={T('staff_seats_title')} data-testid="users-roles-staff-seats">
-          <div className="nx-ur-seats__head">
-            <h2 className="nx-ur-seats__title">{T('staff_seats_title')}</h2>
-            <p className="nx-ur-seats__owner">{T('staff_seats_owner_note')}</p>
-          </div>
-          <div className="nx-ur-seats__metrics">
-            <div className="nx-ur-seats__metric">
-              <span className="nx-ur-seats__label">{T('staff_seats_included')}</span>
-              <span className="nx-ur-seats__value">{data.staff_seats.included_staff_seats}</span>
-            </div>
-            <div className="nx-ur-seats__metric">
-              <span className="nx-ur-seats__label">{T('staff_seats_additional')}</span>
-              <span className="nx-ur-seats__value">{data.staff_seats.purchased_additional_staff_seats}</span>
-            </div>
-            <div className="nx-ur-seats__metric">
-              <span className="nx-ur-seats__label">{T('staff_seats_occupied')}</span>
-              <span className="nx-ur-seats__value">{data.staff_seats.occupied_staff_seats}</span>
-            </div>
-            <div className="nx-ur-seats__metric">
-              <span className="nx-ur-seats__label">{T('staff_seats_available')}</span>
-              <span className="nx-ur-seats__value">{data.staff_seats.available_staff_seats}</span>
-            </div>
-          </div>
-          <div className="nx-ur-seats__price-block">
-            <div className="nx-ur-seats__price">
-              <span className="nx-ur-seats__label">{T('staff_seats_current_rate')}</span>
-              <span>{data.staff_seats.current_rate_label}</span>
-            </div>
-            <p className="nx-ur-seats__note">{data.staff_seats.current_rate_note}</p>
-            <div className="nx-ur-seats__price">
-              <span className="nx-ur-seats__label">{T('staff_seats_next_seat')}</span>
-              <span>{data.staff_seats.next_seat_price_label}</span>
-            </div>
-            <p className="nx-ur-seats__note">{data.staff_seats.next_seat_note}</p>
-          </div>
-          <div className="nx-ur-seats__actions">
-            <Link
-              to="/billing?tab=staff_licenses"
-              className="nx-btn nx-ur-btn nx-ur-btn--primary"
-              data-testid="users-roles-add-seat-billing"
-            >
-              {T('staff_seats_add')}
-            </Link>
-            <p className="nx-ur-seats__checkout">{T('staff_seats_buy_in_billing')}</p>
-          </div>
-        </section>
-      ) : null}
 
       {showInvite && data ? (
         <form className="nx-ur-invite-form" onSubmit={sendInvite}>

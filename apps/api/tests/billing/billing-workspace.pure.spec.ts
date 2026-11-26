@@ -15,6 +15,7 @@ test('six billing tabs exist in HE/EN and unknown tab falls back to overview', (
     ['overview', 'modules', 'staff_licenses', 'billing_payments', 'billing_details', 'client_processing'],
   );
   assert.equal(resolveBillingTab('staff_licenses'), 'staff_licenses');
+  assert.equal(resolveBillingTab('staff-licenses'), 'staff_licenses');
   assert.equal(resolveBillingTab('nope'), 'overview');
   const he = billingCopy('he');
   const en = billingCopy('en');
@@ -93,6 +94,8 @@ test('workspace stays light, tenant-scoped, and honest about unconfigured PSP', 
   assert.match(workspace, /vat\.authoritative && vat\.source === 'country_pack'/);
   assert.match(workspace, /seller_context: 'nodexpro_platform'/);
   assert.match(workspace, /checkout_available: false/);
+  assert.match(workspace, /pay: \{ enabled: false, disabled_reason:/);
+  assert.match(workspace, /create_staff_seat_purchase_intent: \{ enabled: false \}/);
   assert.match(workspace, /next_payment_unconfigured/);
   assert.match(workspace, /\.eq\('organization_id', orgId\)/);
   assert.match(workspace, /\.eq\('seller_context', 'nodexpro_platform'\)/);
@@ -110,6 +113,6 @@ test('workspace stays light, tenant-scoped, and honest about unconfigured PSP', 
 
 test('Users & Roles purchase UI is not a second checkout', () => {
   const page = read('apps/web/src/pages/UsersRoles.tsx');
-  assert.match(page, /\/billing\?tab=staff_licenses/);
+  assert.match(page, /\/billing\?tab=staff-licenses/);
   assert.doesNotMatch(page, /quoteStaffSeatPurchaseCommand/);
 });

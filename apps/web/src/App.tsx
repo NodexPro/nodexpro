@@ -26,6 +26,7 @@ import { ClientPortalInvite } from './pages/ClientPortalInvite';
 import { ClientPortalDocflow } from './pages/ClientPortalDocflow';
 import { PlatformOwnerLogin } from './pages/PlatformOwnerLogin';
 import { PlatformOwnerLegalControl } from './pages/PlatformOwnerLegalControl';
+import { PlatformOwnerTaxesPage } from './pages/PlatformOwnerTaxesPage';
 import { PlatformOwnerShell } from './pages/PlatformOwnerShell';
 import { PlatformOwnerCurrenciesPage } from './pages/PlatformOwnerCurrenciesPage';
 import { PlatformOwnerLanguagesPage } from './pages/PlatformOwnerLanguagesPage';
@@ -160,6 +161,7 @@ function AppRoutes() {
       <Route path="/platform-owner" element={<PlatformOwnerShell />}>
         <Route index element={<Navigate to="legal-control" replace />} />
         <Route path="legal-control" element={<PlatformOwnerLegalControl />} />
+        <Route path="taxes" element={<PlatformOwnerTaxesPage />} />
         <Route path="modules" element={<PlatformOwnerModulesPage />} />
         <Route path="modules/:moduleCode" element={<PlatformOwnerModuleDetailPage />} />
         <Route path="currencies" element={<PlatformOwnerCurrenciesPage />} />

@@ -20,6 +20,7 @@ import {
   buildOwnerLegalValuesAggregate,
   buildOwnerPlatformPricingAggregate,
 } from '../domains/country-pack/country-pack-read-models.service.js';
+import { buildOwnerTaxesAggregate } from '../domains/country-pack/owner-taxes.service.js';
 import { buildOwnerEmailProviderConfigAggregate } from '../shared/owner-email-provider-config.service.js';
 import { buildOwnerSystemHealthAggregate } from '../domains/owner-system-health/owner-system-health.service.js';
 import {
@@ -191,6 +192,16 @@ router.get('/country-packs', async (req: Request, res: Response, next: NextFunct
     await assertOwnerOrAuditFailure(ctx, req);
     const aggregate = await buildOwnerCountryPackAdminAggregate(ctx);
     return res.json(aggregate);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/taxes', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const ctx = req.context as RequestContext;
+    await assertOwnerOrAuditFailure(ctx, req);
+    return res.json(await buildOwnerTaxesAggregate(ctx));
   } catch (e) {
     next(e);
   }

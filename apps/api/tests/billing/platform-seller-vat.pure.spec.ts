@@ -33,23 +33,32 @@ test('legal VAT payload parser accepts percent or fraction and rejects junk', ()
   assert.equal(parseLegalVatRate(18), 0.18);
   assert.equal(parseLegalVatRate(0.18), 0.18);
   assert.equal(parseLegalVatRate({ rate: 18 }), 0.18);
+  assert.equal(parseLegalVatRate({ rate: 0.18 }), 0.18);
   assert.equal(parseLegalVatRate({ percent: '18%' }), 0.18);
   assert.equal(parseLegalVatRate(null), null);
   assert.equal(parseLegalVatRate({}), null);
+  const applied = applyAuthoritativeSellerVat(platformSellerVatFromCountryPackRate(0.18, 'ver-1'));
+  assert.equal(applied.vatRate, 0.18);
+  assert.equal(applied.vatPercentLabel, '18%');
 });
 
 test('staff license VAT uses NodexPro seller Country Pack, not office income VAT', () => {
   const workspace = read('apps/api/src/domains/billing/billing-workspace.service.ts');
   const purchase = read('apps/api/src/domains/payments/staff-seat-purchase.service.ts');
+  const modules = read('apps/api/src/domains/billing/module-purchase.service.ts');
   const seller = read('apps/api/src/domains/billing/platform-seller-vat.service.ts');
   assert.match(seller, /resolveOwnerLegalValueRulesetContextForCountry/);
   assert.match(seller, /PLATFORM_SELLER_VAT_LEGAL_VALUE_KEY/);
+  assert.match(seller, /legal_value_missing|active_version_missing/);
   assert.doesNotMatch(seller, /resolveIncomeDraftVatForOrg|IL_DRAFT_VAT_FALLBACK_RATE/);
   assert.match(workspace, /resolvePlatformSellerVat/);
   assert.doesNotMatch(workspace, /resolveIncomeDraftVatForOrg/);
+  assert.match(workspace, /pay: \{ enabled: false, disabled_reason:/);
   assert.match(purchase, /resolvePlatformSellerVat/);
   assert.doesNotMatch(purchase, /resolveIncomeDraftVatForOrg/);
   assert.match(purchase, /status: 'quoted'/);
   assert.match(purchase, /entitlement_changed: false/);
   assert.doesNotMatch(purchase, /activateStaffSeatPurchaseFromVerifiedPayment\(ctx/);
+  assert.match(modules, /resolvePlatformSellerVat/);
+  assert.doesNotMatch(modules, /resolveIncomeDraftVatForOrg/);
 });

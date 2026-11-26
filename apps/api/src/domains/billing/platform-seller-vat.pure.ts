@@ -6,6 +6,12 @@
 export const PLATFORM_SELLER_COUNTRY = 'IL';
 export const PLATFORM_SELLER_VAT_LEGAL_VALUE_KEY = 'il_standard_vat_rate';
 
+export type PlatformSellerVatUnresolvedReason =
+  | 'country_pack_ruleset_missing'
+  | 'legal_value_missing'
+  | 'active_version_missing'
+  | 'rate_unparseable';
+
 export type PlatformSellerVatResolution = {
   seller_country: string;
   seller_context: 'nodexpro_platform';
@@ -14,9 +20,13 @@ export type PlatformSellerVatResolution = {
   source: 'country_pack' | 'unresolved';
   authoritative: boolean;
   legal_value_key: string | null;
+  legal_value_version_id: string | null;
+  unresolved_reason: PlatformSellerVatUnresolvedReason | null;
 };
 
-export function unresolvedPlatformSellerVat(): PlatformSellerVatResolution {
+export function unresolvedPlatformSellerVat(
+  reason: PlatformSellerVatUnresolvedReason = 'active_version_missing',
+): PlatformSellerVatResolution {
   return {
     seller_country: PLATFORM_SELLER_COUNTRY,
     seller_context: 'nodexpro_platform',
@@ -24,7 +34,9 @@ export function unresolvedPlatformSellerVat(): PlatformSellerVatResolution {
     standard_rate_percent_label: '',
     source: 'unresolved',
     authoritative: false,
-    legal_value_key: null,
+    legal_value_key: PLATFORM_SELLER_VAT_LEGAL_VALUE_KEY,
+    legal_value_version_id: null,
+    unresolved_reason: reason,
   };
 }
 
@@ -47,7 +59,10 @@ export function parseLegalVatRate(payload: unknown): number | null {
   return null;
 }
 
-export function platformSellerVatFromCountryPackRate(rate: number): PlatformSellerVatResolution {
+export function platformSellerVatFromCountryPackRate(
+  rate: number,
+  versionId?: string | null,
+): PlatformSellerVatResolution {
   const pct = Math.round(rate * 100);
   return {
     seller_country: PLATFORM_SELLER_COUNTRY,
@@ -57,6 +72,8 @@ export function platformSellerVatFromCountryPackRate(rate: number): PlatformSell
     source: 'country_pack',
     authoritative: true,
     legal_value_key: PLATFORM_SELLER_VAT_LEGAL_VALUE_KEY,
+    legal_value_version_id: versionId ?? null,
+    unresolved_reason: null,
   };
 }
 

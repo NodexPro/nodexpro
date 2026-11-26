@@ -449,6 +449,7 @@ export const OWNER = {
   passwordRecoveryComplete: '/owner/password-recovery/complete',
   /** Single aggregate for Platform Owner Legal Control screen */
   legalControl: '/owner/legal-control',
+  taxes: '/owner/taxes',
   securityEvents: '/owner/aggregates/security-events',
   deliverSecurityTestAlert: '/owner/commands/deliver_security_test_alert',
   releaseSecurityContainment: '/owner/commands/release_security_containment',

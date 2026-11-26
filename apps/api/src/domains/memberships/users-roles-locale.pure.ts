@@ -98,7 +98,7 @@ const EN: UsersRolesText = {
   staff_seats_current_rate_note: 'Rate already agreed for additional seats granted to this office. It is not the price of a new purchase.',
   staff_seats_next_seat: 'New seat list price',
   staff_seats_next_seat_note: 'Platform Owner catalog price for buying another seat. A paid license is not created without confirmed payment.',
-  staff_seats_add: 'Add seat',
+  staff_seats_add: 'Add Seat',
   staff_seats_buy_in_billing: 'Buy extra seats in Billing → Staff Licenses',
   staff_seats_checkout_unavailable: 'Payment is not available yet. A paid license is not created without confirmed payment.',
   staff_seats_qty: 'Quantity',

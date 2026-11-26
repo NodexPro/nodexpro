@@ -12,6 +12,13 @@ import {
   ownerEditorInputPresent,
 } from './owner-legal-value-editor.pure.js';
 import {
+  OWNER_TAX_VALUE_TYPES,
+  OWNER_TAXES_AGGREGATE_KEY,
+  assembleTaxRatePayload,
+  dayBeforeYmd,
+  isOwnerTaxCategory,
+} from './owner-legal-taxes.pure.js';
+import {
   assertOperationalCommunicationLegalValueMetadata,
   validateLegalValueVersionPayload,
 } from './operational-communication-owner-payload.js';
@@ -59,6 +66,7 @@ type CountryPackCommandType =
   | 'create_legal_value'
   | 'update_legal_value_metadata'
   | 'create_legal_value_version'
+  | 'schedule_tax_rate_change'
   | 'update_legal_value_version'
   | 'activate_legal_value_version'
   | 'deactivate_legal_value_version'
@@ -101,6 +109,7 @@ type CountryPackCommandResponse = {
   refreshed: {
     aggregate_key:
       | 'owner_legal_control_panel_aggregate'
+      | 'owner_taxes_aggregate'
       | 'organization_country_settings_aggregate'
       | 'owner_modules_list_aggregate'
       | 'owner_module_detail_aggregate'
@@ -136,6 +145,20 @@ async function refreshedOwnerLegalControlPanel(ctx: RequestContext, payload?: Re
     aggregate_key: 'owner_legal_control_panel_aggregate',
     aggregate: await buildOwnerLegalControlPanelAggregate(ctx, commercial ? { commercial_controls: commercial } : undefined),
   };
+}
+
+async function refreshedAfterLegalWrite(
+  ctx: RequestContext,
+  payload?: Record<string, unknown>,
+): Promise<CountryPackCommandResponse['refreshed']> {
+  if (String(payload?.owner_surface ?? '').trim() === 'taxes') {
+    const { buildOwnerTaxesAggregate } = await import('./owner-taxes.service.js');
+    return {
+      aggregate_key: OWNER_TAXES_AGGREGATE_KEY,
+      aggregate: await buildOwnerTaxesAggregate(ctx),
+    };
+  }
+  return refreshedOwnerLegalControlPanel(ctx, payload);
 }
 
 /** Modules detail surface may request owner_module_detail_aggregate via owner_module_detail_code. */
@@ -822,6 +845,14 @@ async function handleCreateLegalValue(ctx: RequestContext, payload: Record<strin
   const moduleScope = asString(payload.module_scope, 'module_scope');
   const valueType = asString(payload.value_type, 'value_type');
   const valueKey = asString(payload.value_key, 'value_key');
+  if (String(payload.owner_surface ?? '').trim() === 'taxes' || isOwnerTaxCategory(category)) {
+    if (!isOwnerTaxCategory(category)) {
+      throw badRequest('Unsupported tax type');
+    }
+    if (!OWNER_TAX_VALUE_TYPES.includes(valueType as (typeof OWNER_TAX_VALUE_TYPES)[number])) {
+      throw badRequest('Unsupported tax calculation type');
+    }
+  }
   assertOperationalCommunicationLegalValueMetadata({
     category,
     module_scope: moduleScope,
@@ -851,7 +882,7 @@ async function handleCreateLegalValue(ctx: RequestContext, payload: Record<strin
   return {
     ok: true,
     command: 'create_legal_value',
-    refreshed: await refreshedOwnerLegalControlPanel(ctx),
+    refreshed: await refreshedAfterLegalWrite(ctx, payload),
   };
 }
 
@@ -876,7 +907,7 @@ async function handleUpdateLegalValueMetadata(
   return {
     ok: true,
     command: 'update_legal_value_metadata',
-    refreshed: await refreshedOwnerLegalControlPanel(ctx),
+    refreshed: await refreshedAfterLegalWrite(ctx, payload),
   };
 }
 
@@ -953,11 +984,18 @@ async function handleCreateLegalValueVersion(ctx: RequestContext, payload: Recor
     value_key: legalValue.value_key,
     value_payload_json: payload.value_payload_json,
   });
-  const valuePayloadJson = await resolveLegalValueVersionPayloadForCommand(
-    legalValue.value_key,
-    legalValue.value_type,
-    payload,
-  );
+  let valuePayloadJson: unknown;
+  if (isOwnerTaxCategory(legalValue.category) && (payload.rate != null || String(payload.owner_surface ?? '') === 'taxes')) {
+    const assembled = assembleTaxRatePayload(payload);
+    if (!assembled) throw badRequest('Invalid tax rate or unsupported conditions');
+    valuePayloadJson = assembled;
+  } else {
+    valuePayloadJson = await resolveLegalValueVersionPayloadForCommand(
+      legalValue.value_key,
+      legalValue.value_type,
+      payload,
+    );
+  }
   const { data, error } = await supabaseAdmin
     .from('country_legal_value_versions')
     .insert({
@@ -978,7 +1016,93 @@ async function handleCreateLegalValueVersion(ctx: RequestContext, payload: Recor
   return {
     ok: true,
     command: 'create_legal_value_version',
-    refreshed: await refreshedOwnerLegalControlPanel(ctx),
+    refreshed: await refreshedAfterLegalWrite(ctx, payload),
+  };
+}
+
+async function closeOverlappingActiveTaxVersions(input: {
+  legalValueId: string;
+  effectiveFrom: string;
+  excludeVersionId?: string;
+}): Promise<string[]> {
+  const { data: previousRows, error: previousError } = await supabaseAdmin
+    .from('country_legal_value_versions')
+    .select('id, effective_from, effective_to, status')
+    .eq('legal_value_id', input.legalValueId)
+    .eq('status', 'active');
+  if (previousError) throw previousError;
+  const closed: string[] = [];
+  const overlapping = (previousRows ?? []).filter((row) => {
+    if (input.excludeVersionId && row.id === input.excludeVersionId) return false;
+    const start = String(row.effective_from);
+    const end = row.effective_to ? String(row.effective_to) : '9999-12-31';
+    return input.effectiveFrom <= end && start <= '9999-12-31';
+  });
+  for (const prev of overlapping) {
+    if (String(prev.effective_from) >= input.effectiveFrom) {
+      throw conflict('Cannot change a tax rate before an existing version start date. Historical rates are immutable.');
+    }
+    const closeTo = dayBeforeYmd(input.effectiveFrom);
+    if (!closeTo || closeTo < String(prev.effective_from)) {
+      throw conflict('Legal value version effective dates overlap an existing active version');
+    }
+    const { error: closeError } = await supabaseAdmin
+      .from('country_legal_value_versions')
+      .update({ effective_to: closeTo })
+      .eq('id', prev.id);
+    if (closeError) throw closeError;
+    closed.push(String(prev.id));
+  }
+  return closed;
+}
+
+async function handleScheduleTaxRateChange(
+  ctx: RequestContext,
+  payload: Record<string, unknown>,
+): Promise<CountryPackCommandResponse> {
+  const countryCode = asString(payload.country_code, 'country_code').toUpperCase();
+  const valueKey = asString(payload.value_key, 'value_key');
+  const effectiveFrom = asDate(payload.effective_from, 'effective_from');
+  const legalValue = await assertLegalValueExists(countryCode, valueKey);
+  if (!isOwnerTaxCategory(legalValue.category)) {
+    throw badRequest('Unsupported tax type');
+  }
+  const assembled = assembleTaxRatePayload(payload);
+  if (!assembled) throw badRequest('Invalid tax rate or unsupported conditions');
+  const rulesetId = await resolveRulesetIdForCreateLegalValueVersion(payload, countryCode, effectiveFrom);
+  const ruleset = await assertRulesetExists(rulesetId);
+  const pack = await getCountryPack(ruleset.country_pack_id);
+  if (!pack || pack.country_code !== countryCode) {
+    throw conflict('legal_value_version must match country/ruleset scope');
+  }
+  const closedPrevious = await closeOverlappingActiveTaxVersions({
+    legalValueId: legalValue.id,
+    effectiveFrom,
+  });
+  await assertNoOverlapLegalValueVersions({ legalValueId: legalValue.id, effectiveFrom, effectiveTo: null });
+  const { data, error } = await supabaseAdmin
+    .from('country_legal_value_versions')
+    .insert({
+      legal_value_id: legalValue.id,
+      country_pack_ruleset_id: rulesetId,
+      value_payload_json: assembled,
+      effective_from: effectiveFrom,
+      effective_to: asOptionalString(payload.effective_to),
+      status: 'active',
+    })
+    .select('*')
+    .single();
+  if (error) throw error;
+  await audit(ctx, AUDIT_ACTIONS.LEGAL_VALUE_VERSION_CREATED, 'country_legal_value_version', data.id, {
+    legal_value_id: legalValue.id,
+    ruleset_id: rulesetId,
+    scheduled_from: effectiveFrom,
+    closed_previous: closedPrevious,
+  });
+  return {
+    ok: true,
+    command: 'schedule_tax_rate_change',
+    refreshed: await refreshedAfterLegalWrite(ctx, { ...payload, owner_surface: 'taxes' }),
   };
 }
 
@@ -1008,8 +1132,12 @@ async function handleUpdateLegalValueVersion(ctx: RequestContext, payload: Recor
   if (
     lvRow &&
     (payload.value_payload_json !== undefined ||
+      payload.rate != null ||
       ownerEditorInputPresent(String(lvRow.value_key), String(lvRow.value_type), payload))
   ) {
+    if (isOwnerTaxCategory(lvRow.category) && String(current.status) === 'active') {
+      throw conflict('Active tax rates are immutable. Create a new version from a date.');
+    }
     assertOperationalCommunicationLegalValueMetadata({
       category: String(lvRow.category),
       module_scope: String(lvRow.module_scope),
@@ -1017,11 +1145,17 @@ async function handleUpdateLegalValueVersion(ctx: RequestContext, payload: Recor
       value_key: String(lvRow.value_key),
       value_payload_json: payload.value_payload_json,
     });
-    patch.value_payload_json = await resolveLegalValueVersionPayloadForCommand(
-      String(lvRow.value_key),
-      String(lvRow.value_type),
-      payload,
-    );
+    if (isOwnerTaxCategory(lvRow.category) && payload.rate != null) {
+      const assembled = assembleTaxRatePayload(payload);
+      if (!assembled) throw badRequest('Invalid tax rate or unsupported conditions');
+      patch.value_payload_json = assembled;
+    } else {
+      patch.value_payload_json = await resolveLegalValueVersionPayloadForCommand(
+        String(lvRow.value_key),
+        String(lvRow.value_type),
+        payload,
+      );
+    }
   }
   if (payload.effective_from !== undefined) patch.effective_from = effectiveFrom;
   if (payload.effective_to !== undefined) patch.effective_to = effectiveTo;
@@ -1037,7 +1171,7 @@ async function handleUpdateLegalValueVersion(ctx: RequestContext, payload: Recor
   return {
     ok: true,
     command: 'update_legal_value_version',
-    refreshed: await refreshedOwnerLegalControlPanel(ctx),
+    refreshed: await refreshedAfterLegalWrite(ctx, payload),
   };
 }
 
@@ -1057,6 +1191,18 @@ async function handleActivateDeactivateLegalValueVersion(
   if (currentError) throw currentError;
   if (!current) throw notFound('Legal value version not found');
   if (status === 'active') {
+    const { data: lvRow } = await supabaseAdmin
+      .from('country_legal_values')
+      .select('category')
+      .eq('id', current.legal_value_id)
+      .maybeSingle();
+    if (lvRow && isOwnerTaxCategory(lvRow.category)) {
+      await closeOverlappingActiveTaxVersions({
+        legalValueId: String(current.legal_value_id),
+        effectiveFrom: String(current.effective_from),
+        excludeVersionId: versionId,
+      });
+    }
     await assertNoOverlapLegalValueVersions({
       legalValueId: current.legal_value_id,
       effectiveFrom: current.effective_from,
@@ -1070,7 +1216,7 @@ async function handleActivateDeactivateLegalValueVersion(
   return {
     ok: true,
     command,
-    refreshed: await refreshedOwnerLegalControlPanel(ctx),
+    refreshed: await refreshedAfterLegalWrite(ctx, payload),
   };
 }
 
@@ -1719,6 +1865,8 @@ export async function executeCountryPackCommand(
       return handleUpdateLegalValueMetadata(ctx, command.payload);
     case 'create_legal_value_version':
       return handleCreateLegalValueVersion(ctx, command.payload);
+    case 'schedule_tax_rate_change':
+      return handleScheduleTaxRateChange(ctx, command.payload);
     case 'update_legal_value_version':
       return handleUpdateLegalValueVersion(ctx, command.payload);
     case 'activate_legal_value_version':

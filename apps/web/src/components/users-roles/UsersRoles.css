@@ -46,6 +46,13 @@
   flex-wrap: wrap;
 }
 
+.nx-ur-page__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .nx-ur-page__title {
   margin: 0 0 2px;
   color: #ffffff;
