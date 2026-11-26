@@ -1,0 +1,218 @@
+/* Platform Owner Taxes — Organization Settings glass. Scoped extras only. */
+
+.nx-owner-shell:has(.nx-owner-taxes) {
+  background: #102d49;
+}
+
+.nx-owner-shell:has(.nx-owner-taxes) .nx-owner-shell__main {
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.32), transparent 52%),
+    linear-gradient(180deg, #102d49 0%, #0c243c 100%);
+  color: #ffffff;
+}
+
+.nx-owner-taxes.nx-glass-page {
+  padding: 0 4px 24px;
+}
+
+.nx-owner-taxes__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px 16px;
+  margin: 0 0 16px;
+}
+
+.nx-owner-taxes__toolbar .nx-glass-title {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 8rem;
+}
+
+.nx-owner-taxes__toolbar .nx-glass-label {
+  min-width: 160px;
+}
+
+.nx-owner-taxes__toolbar .nx-glass-btn {
+  flex: 0 0 auto;
+}
+
+.nx-owner-taxes__lead {
+  margin: 0 0 16px;
+}
+
+.nx-owner-taxes__list {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 16px;
+}
+
+.nx-owner-taxes__card.nx-glass-card {
+  margin-bottom: 0;
+  padding: 14px 18px;
+}
+
+.nx-owner-taxes__card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+
+.nx-owner-taxes__card-main {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.nx-owner-taxes__card-main h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.nx-owner-taxes__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.nx-owner-taxes__detail {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(210, 238, 255, 0.22);
+}
+
+.nx-owner-taxes__detail .nx-settings-grid {
+  margin-bottom: 12px;
+}
+
+.nx-owner-taxes__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.nx-owner-taxes__history {
+  margin-top: 12px;
+}
+
+.nx-owner-taxes__history h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.nx-owner-taxes__history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.nx-owner-taxes__history-list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.nx-owner-taxes__audit.nx-glass-card {
+  padding: 12px 18px;
+}
+
+.nx-owner-taxes__audit summary {
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.nx-owner-taxes__audit summary::-webkit-details-marker {
+  display: none;
+}
+
+.nx-owner-taxes__audit-list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.nx-owner-taxes__audit-list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(210, 238, 255, 0.18);
+}
+
+.nx-owner-taxes__audit-list li:last-child {
+  border-bottom: none;
+}
+
+.nx-owner-taxes__modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(8, 24, 46, 0.55);
+}
+
+.nx-owner-taxes__modal {
+  width: 420px;
+  max-width: 100%;
+  max-height: 90vh;
+  overflow: auto;
+  padding: 18px 20px 16px;
+}
+
+.nx-owner-taxes__modal--wide {
+  width: 520px;
+}
+
+.nx-owner-taxes__modal h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.nx-owner-taxes__modal-body {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  gap: 10px;
+}
+
+.nx-owner-taxes__modal-footer {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.nx-owner-taxes__modal-footer .nx-glass-btn {
+  min-width: 96px;
+  padding: 8px 20px;
+  border-radius: 6px;
+}
+
+@media (max-width: 720px) {
+  .nx-owner-taxes__toolbar .nx-glass-label,
+  .nx-owner-taxes__card-head .nx-glass-btn {
+    width: 100%;
+  }
+}
