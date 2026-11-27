@@ -14,6 +14,7 @@ import { searchClients, searchClientsWithData } from './search-index.service.js'
 import * as clientCardService from './client-card.service.js';
 import * as clientImportExport from './client-import-export.service.js';
 import * as clientsCommands from './clients-commands.service.js';
+import { resolvePersistedUiLanguage } from '../platform-localization/platform-localization.pure.js';
 
 const router = Router();
 const ENTITY_TYPE_CLIENT = 'client';
@@ -103,23 +104,63 @@ router.get('/:id/clients/search', authMiddleware, requireOrg, requirePermission(
   }
 });
 
+function importPayload(body: unknown): clientImportExport.ImportFileInput {
+  const rec = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+  const columnMap =
+    rec.column_map && typeof rec.column_map === 'object' ? (rec.column_map as clientImportExport.ImportFileInput['column_map']) : undefined;
+  return {
+    csv: typeof rec.csv === 'string' ? rec.csv : undefined,
+    filename: typeof rec.filename === 'string' ? rec.filename : undefined,
+    file_base64: typeof rec.file_base64 === 'string' ? rec.file_base64 : undefined,
+    column_map: columnMap,
+  };
+}
+
 router.post('/:id/clients/import/preview', authMiddleware, requireOrg, requirePermission('clients:write'), requireOfficeAdministration, async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
-    const csv = typeof req.body?.csv === 'string' ? req.body.csv : '';
-    const preview = await clientImportExport.previewImport(req.context!, req.params.id, csv);
+    const preview = await clientImportExport.previewImport(req.context!, req.params.id, importPayload(req.body));
     return res.json(preview);
   } catch (e) {
     next(e);
   }
 });
 
-router.post('/:id/clients/import', authMiddleware, requireOrg, requirePermission('clients:write'), requireOfficeAdministration, async (req, res, next) => {
+router.post('/:id/clients/commands/import_clients', authMiddleware, requireOrg, requirePermission('clients:write'), requireOfficeAdministration, async (req, res, next) => {
   try {
     if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
-    const csv = typeof req.body?.csv === 'string' ? req.body.csv : '';
-    const result = await clientImportExport.executeImport(req.context!, req.params.id, csv);
+    const result = await clientImportExport.executeImport(req.context!, req.params.id, importPayload(req.body));
     return res.json(result);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/:id/clients/import/template.csv', authMiddleware, requireOrg, requirePermission('clients:write'), requireOfficeAdministration, async (req, res, next) => {
+  try {
+    if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+    const locale = resolvePersistedUiLanguage(
+      typeof req.query.locale === 'string' ? req.query.locale : req.context!.user.uiLanguage,
+    );
+    const file = clientImportExport.buildImportTemplate(locale, 'csv');
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    return res.send(file.body);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.get('/:id/clients/import/template.xlsx', authMiddleware, requireOrg, requirePermission('clients:write'), requireOfficeAdministration, async (req, res, next) => {
+  try {
+    if (req.params.id !== req.context!.organizationId) return res.status(403).json({ code: 'FORBIDDEN', message: 'Organization context required' });
+    const locale = resolvePersistedUiLanguage(
+      typeof req.query.locale === 'string' ? req.query.locale : req.context!.user.uiLanguage,
+    );
+    const file = clientImportExport.buildImportTemplate(locale, 'xlsx');
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    return res.send(file.body);
   } catch (e) {
     next(e);
   }

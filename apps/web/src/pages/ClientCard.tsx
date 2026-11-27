@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { apiJson } from '../api/client';
+import { apiJson, userFacingApiMessage } from '../api/client';
 import {
   orgClient,
   orgClientFull,
@@ -201,7 +201,7 @@ export function ClientCard() {
         applyClientCard(data);
       })
       .catch((e) => {
-        if (!cancelled && (e as Error)?.name !== 'AbortError') setError(e instanceof Error ? e.message : 'Failed to load');
+        if (!cancelled && (e as Error)?.name !== 'AbortError') setError(userFacingApiMessage(e) || t('clients.errors.loadFailed'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -265,7 +265,7 @@ export function ClientCard() {
 
       cancelContactForm();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save contact');
+      setError(userFacingApiMessage(e) || t('clients.errors.addContactFailed'));
     }
   };
 
@@ -278,7 +278,7 @@ export function ClientCard() {
         body: JSON.stringify({}),
       }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to delete contact');
+      setError(userFacingApiMessage(e) || t('clients.errors.addContactFailed'));
     }
   };
 
@@ -293,7 +293,7 @@ export function ClientCard() {
       }));
       setNewNoteText('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add note');
+      setError(userFacingApiMessage(e) || t('clients.errors.addNoteFailed'));
     }
   };
 
@@ -307,7 +307,7 @@ export function ClientCard() {
       const nextTags = await apiJson<Tag[]>(orgClientTags(orgId, clientId));
       setTags(Array.isArray(nextTags) ? nextTags : []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to add tag');
+      setError(userFacingApiMessage(e) || t('clients.errors.addTagFailed'));
     }
   };
 
@@ -354,7 +354,7 @@ export function ClientCard() {
       }));
       setEditing(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to update');
+      setError(userFacingApiMessage(e) || t('clients.errors.updateFailed'));
     } finally {
       setSaving(false);
     }
@@ -367,7 +367,7 @@ export function ClientCard() {
       await apiJson(orgClient(orgId, clientId) + '/archive', { method: 'POST', body: '{}' });
       navigate('/clients');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to archive');
+      setError(userFacingApiMessage(e) || t('clients.errors.archiveFailed'));
     }
   };
 
@@ -379,7 +379,7 @@ export function ClientCard() {
       const updated = await apiJson<Client>(orgClientRestore(orgId, clientId), { method: 'POST', body: '{}' });
       setClient(updated);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to restore');
+      setError(userFacingApiMessage(e) || t('clients.errors.archiveFailed'));
     } finally {
       setRestoring(false);
     }
@@ -406,7 +406,7 @@ export function ClientCard() {
         body: JSON.stringify({}),
       }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to delete note');
+      setError(userFacingApiMessage(e) || t('clients.errors.addNoteFailed'));
     } finally {
       setDeletingNoteId(null);
     }
@@ -425,7 +425,7 @@ export function ClientCard() {
       setEditingNoteId(null);
       setEditingNoteText('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to update note');
+      setError(userFacingApiMessage(e) || t('clients.errors.addNoteFailed'));
     } finally {
       setSavingNote(false);
     }
@@ -441,7 +441,7 @@ export function ClientCard() {
       const next = await apiJson<FileLink[]>(orgClientFiles(orgId, clientId));
       setFiles(Array.isArray(next) ? next : []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to remove file');
+      setError(userFacingApiMessage(e) || t('clients.errors.attachFileFailed'));
     } finally {
       setRemovingFileId(null);
     }
@@ -454,7 +454,7 @@ export function ClientCard() {
       await apiJson<void>(`${orgClientTags(orgId, clientId)}/${tagId}`, { method: 'DELETE' });
       setTags((prev) => prev.filter((tag) => tag.id !== tagId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to remove tag');
+      setError(userFacingApiMessage(e) || t('clients.errors.addTagFailed'));
     }
   };
 
@@ -467,7 +467,7 @@ export function ClientCard() {
       setNewTagName('');
       setRefreshTagOptionsTrigger((prev) => prev + 1);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create tag');
+      setError(userFacingApiMessage(e) || t('clients.errors.createTagFailed'));
     }
   };
 
@@ -507,7 +507,7 @@ export function ClientCard() {
       const next = await apiJson<FileLink[]>(orgClientFiles(orgId, clientId));
       setFiles(Array.isArray(next) ? next : []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to attach file');
+      setError(userFacingApiMessage(e) || t('clients.errors.attachFileFailed'));
     } finally {
       setAttaching(false);
     }

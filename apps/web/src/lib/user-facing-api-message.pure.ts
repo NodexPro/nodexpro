@@ -27,7 +27,20 @@ export const USER_FACING_API_MESSAGE_KEYS = {
   moduleNotEntitled: 'clientOperations.errors.moduleNotEntitled',
   organizationContextRequired: 'clientOperations.errors.organizationContextRequired',
   emailNotConfirmed: 'auth.emailNotConfirmed',
+  importUnsupportedFileFormat: 'clients.import.issues.UNSUPPORTED_FILE_FORMAT',
+  importFileTooLarge: 'clients.import.issues.FILE_TOO_LARGE',
+  importTooManyRows: 'clients.import.issues.TOO_MANY_ROWS',
+  importColumnMappingRequired: 'clients.import.issues.COLUMN_MAPPING_REQUIRED',
+  importSheetStructureInvalid: 'clients.import.issues.SHEET_STRUCTURE_INVALID',
 } as const;
+
+const CLIENT_IMPORT_API_CODES: Record<string, string> = {
+  UNSUPPORTED_FILE_FORMAT: USER_FACING_API_MESSAGE_KEYS.importUnsupportedFileFormat,
+  FILE_TOO_LARGE: USER_FACING_API_MESSAGE_KEYS.importFileTooLarge,
+  TOO_MANY_ROWS: USER_FACING_API_MESSAGE_KEYS.importTooManyRows,
+  COLUMN_MAPPING_REQUIRED: USER_FACING_API_MESSAGE_KEYS.importColumnMappingRequired,
+  SHEET_STRUCTURE_INVALID: USER_FACING_API_MESSAGE_KEYS.importSheetStructureInvalid,
+};
 
 type ApiErrorLike = {
   code?: string;
@@ -105,6 +118,7 @@ export function userFacingApiMessageKey(e: unknown): string {
       return USER_FACING_API_MESSAGE_KEYS.organizationContextRequired;
     }
     if (c === 'EMAIL_NOT_CONFIRMED') return USER_FACING_API_MESSAGE_KEYS.emailNotConfirmed;
+    if (CLIENT_IMPORT_API_CODES[c]) return CLIENT_IMPORT_API_CODES[c];
     if (c === 'FORBIDDEN' || status === 403) return USER_FACING_API_MESSAGE_KEYS.forbidden;
     if (c === 'PORTAL_SESSION_EXPIRED') return USER_FACING_API_MESSAGE_KEYS.portalSessionExpired;
     if (c === 'PORTAL_SESSION_REVOKED' || c === 'PORTAL_SESSION_INVALID') {

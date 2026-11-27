@@ -84,7 +84,7 @@ test('1-12 Owner and Admin receive client-admin actions; Staff and Viewer do not
   }
   assert.match(imports.slice(imports.indexOf('function previewImport') === -1 ? imports.indexOf('export async function previewImport') : 0, imports.indexOf('export async function executeImport') + 400), /assertOfficeAdministration/);
   assert.match(imports, /export async function executeImport[\s\S]{0,220}assertOfficeAdministration/);
-  for (const path of ['clients/import/preview', 'clients/import', "clients/:clientId/archive", "clients/:clientId/restore", 'bulk/archive', 'bulk/restore', 'bulk/mark-inactive']) {
+  for (const path of ['clients/import/preview', 'commands/import_clients', "clients/:clientId/archive", "clients/:clientId/restore", 'bulk/archive', 'bulk/restore', 'bulk/mark-inactive']) {
     assert.match(routes, new RegExp(path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "[\\s\\S]{0,180}requireOfficeAdministration"));
   }
 });

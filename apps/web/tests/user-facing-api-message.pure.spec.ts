@@ -152,6 +152,26 @@ test('tax period 409 is not the client-card versionConflict copy', () => {
   assert.equal(taxPeriod, 'Legal value version effective dates overlap an existing active version');
 });
 
+test('client import API codes translate through i18n instead of English server text', () => {
+  assert.equal(
+    userFacingApiMessageKey(api(400, 'UNSUPPORTED_FILE_FORMAT', 'Unsupported file format')),
+    USER_FACING_API_MESSAGE_KEYS.importUnsupportedFileFormat,
+  );
+  const heMsg = resolveUserFacingApiMessage(
+    api(400, 'UNSUPPORTED_FILE_FORMAT', 'Unsupported file format'),
+    'he',
+    lookup,
+  );
+  const enMsg = resolveUserFacingApiMessage(
+    api(400, 'UNSUPPORTED_FILE_FORMAT', 'Unsupported file format'),
+    'en',
+    lookup,
+  );
+  assert.equal(heMsg, 'פורמט הקובץ אינו נתמך');
+  assert.equal(enMsg, 'Unsupported file format');
+  assert.doesNotMatch(heMsg, /[A-Za-z]{3,}/);
+});
+
 test('office API helper uses existing i18n lookup and no longer hardcodes Hebrew 401 copy', () => {
   const client = readFileSync(join(root, 'src/api/client.ts'), 'utf8');
   assert.match(client, /resolveUserFacingApiMessage/);

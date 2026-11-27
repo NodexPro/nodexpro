@@ -1,11 +1,13 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { apiJson, apiFetch } from '../api/client';
+import { apiJson, apiFetch, userFacingApiMessage } from '../api/client';
 import {
   orgClients,
   orgClientsImportPreview,
-  orgClientsImport,
+  orgClientsImportCommand,
+  orgClientsImportTemplateCsv,
+  orgClientsImportTemplateXlsx,
   orgClientsExport,
   orgClientsBulkMarkActive,
   orgClientsBulkMarkInactive,
@@ -152,13 +154,20 @@ export function Clients() {
   const createEmailRef = useRef<HTMLInputElement>(null);
   const createTypeRef = useRef<HTMLSelectElement>(null);
   const [showImport, setShowImport] = useState(false);
-  const [importCsv, setImportCsv] = useState('');
+  const [importFile, setImportFile] = useState<{ csv?: string; file_base64?: string; filename?: string } | null>(null);
+  const [importColumnMap, setImportColumnMap] = useState<{ name?: string; tax_id?: string }>({});
   const [importPreview, setImportPreview] = useState<{
-    valid_rows: Array<{ row_index: number; name: string; email: string; phone: string; company_name: string; tax_id: string; address: string; city: string; country: string; notes: string }>;
-    duplicates: Array<{ row_index: number; name: string; reason?: string }>;
-    invalid_rows: Array<{ row_index: number; errors: string[]; raw: Record<string, string> }>;
+    valid_rows: Array<{ row_index: number; name: string; email?: string; company_name?: string; tax_id: string }>;
+    duplicates: Array<{ row_index: number; name: string; tax_id: string; reason_code?: string }>;
+    invalid_rows: Array<{ row_index: number; codes: string[]; name: string; tax_id: string }>;
+    needs_column_mapping: boolean;
+    headers: string[];
+    suggested_map: { name?: string; tax_id?: string };
+    new_count: number;
+    duplicate_count: number;
+    invalid_count: number;
   } | null>(null);
-  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: Array<{ row_index: number; message: string }> } | null>(null);
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: Array<{ row_index: number; code?: string }> } | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -212,7 +221,7 @@ export function Clients() {
         }
       })
       .catch((e) => {
-        if (!cancelled && (e as Error)?.name !== 'AbortError') setError(e instanceof Error ? e.message : 'Failed to load');
+        if (!cancelled && (e as Error)?.name !== 'AbortError') setError(userFacingApiMessage(e) || t('clients.errors.loadFailed'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -264,7 +273,7 @@ export function Clients() {
         clearSelection();
         setRefreshTrigger((t) => t + 1);
       } catch (e) {
-        setError(e instanceof Error ? e.message : t('clients.errors.bulkFailed'));
+        setError(userFacingApiMessage(e) || t('clients.errors.bulkFailed'));
       } finally {
         setBulkLoading(false);
       }
@@ -281,7 +290,7 @@ export function Clients() {
         method: 'POST',
         body: JSON.stringify({ clientIds: Array.from(selectedIds) }),
       });
-      if (!res.ok) throw new Error(res.statusText);
+      if (!res.ok) throw new Error(t('clients.errors.exportFailed'));
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -291,7 +300,7 @@ export function Clients() {
       URL.revokeObjectURL(url);
       clearSelection();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Export failed');
+      setError(userFacingApiMessage(e) || t('clients.errors.exportFailed'));
     } finally {
       setBulkLoading(false);
     }
@@ -380,48 +389,120 @@ export function Clients() {
     }
   };
 
+  const importIssueLabel = (code: string | undefined) => {
+    if (!code) return t('clients.import.issues.GENERIC');
+    const key = `clients.import.issues.${code}`;
+    const label = t(key);
+    return label === key ? t('clients.import.issues.GENERIC') : label;
+  };
+
+  const importRequestBody = (columnMap?: { name?: string; tax_id?: string }) => {
+    const map = columnMap?.name && columnMap?.tax_id ? columnMap : undefined;
+    return {
+      csv: importFile?.csv,
+      filename: importFile?.filename,
+      file_base64: importFile?.file_base64,
+      column_map: map,
+    };
+  };
+
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = String(reader.result ?? '');
-      setImportCsv(text);
-      setImportPreview(null);
-      setImportResult(null);
-    };
-    reader.readAsText(file, 'utf-8');
+    const name = file.name.toLowerCase();
+    setImportPreview(null);
+    setImportResult(null);
+    setImportColumnMap({});
+    setError('');
+    if (name.endsWith('.xlsx')) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = String(reader.result ?? '');
+        const comma = result.indexOf(',');
+        setImportFile({ filename: file.name, file_base64: comma >= 0 ? result.slice(comma + 1) : result });
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+    if (name.endsWith('.csv') || file.type === 'text/csv') {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setImportFile({ filename: file.name, csv: String(reader.result ?? '') });
+      };
+      reader.readAsText(file, 'utf-8');
+      return;
+    }
+    setImportFile(null);
+    setError(t('clients.import.issues.UNSUPPORTED_FILE_FORMAT'));
   };
 
-  const loadImportPreview = () => {
-    if (!orgId || !importCsv.trim() || !canWrite) return;
+  const loadImportPreview = (columnMap = importColumnMap) => {
+    if (!orgId || !importFile || !canImport) return;
     setImportLoading(true);
     setError('');
-    apiJson<typeof importPreview>(orgClientsImportPreview(orgId), {
+    apiJson<NonNullable<typeof importPreview>>(orgClientsImportPreview(orgId), {
       method: 'POST',
-      body: JSON.stringify({ csv: importCsv }),
+      body: JSON.stringify(importRequestBody(columnMap)),
     })
-      .then(setImportPreview)
-      .catch((e) => setError(e instanceof Error ? e.message : t('clients.errors.previewFailed')))
+      .then((preview) => {
+        setImportPreview(preview);
+        if (preview.needs_column_mapping) {
+          setImportColumnMap({
+            name: columnMap.name || preview.suggested_map.name,
+            tax_id: columnMap.tax_id || preview.suggested_map.tax_id,
+          });
+        }
+      })
+      .catch((e) => setError(userFacingApiMessage(e) || t('clients.errors.previewFailed')))
       .finally(() => setImportLoading(false));
   };
 
   const confirmImport = () => {
-    if (!orgId || !importCsv.trim() || !canWrite) return;
+    if (!orgId || !importFile || !canImport) return;
     setImportLoading(true);
     setError('');
-    apiJson<{ imported: number; skipped: number; errors: Array<{ row_index: number; message: string }> }>(orgClientsImport(orgId), {
-      method: 'POST',
-      body: JSON.stringify({ csv: importCsv }),
-    })
+    apiJson<{ imported: number; skipped: number; errors: Array<{ row_index: number; code?: string }>; clients_list?: { items?: ClientRow[]; total?: number; has_more?: boolean } }>(
+      orgClientsImportCommand(orgId),
+      {
+        method: 'POST',
+        body: JSON.stringify(importRequestBody(importColumnMap)),
+      },
+    )
       .then((res) => {
         setImportResult(res);
         setImportPreview(null);
-        setImportCsv('');
-        setRefreshTrigger((t) => t + 1);
+        setImportFile(null);
+        setImportColumnMap({});
+        if (res.clients_list && Array.isArray(res.clients_list.items)) {
+          setList(res.clients_list.items);
+          if (typeof res.clients_list.total === 'number') setTotal(res.clients_list.total);
+          setHasMore(Boolean(res.clients_list.has_more));
+        }
+        setRefreshTrigger((n) => n + 1);
       })
-      .catch((e) => setError(e instanceof Error ? e.message : 'Import failed'))
+      .catch((e) => setError(userFacingApiMessage(e) || t('clients.errors.importFailed')))
       .finally(() => setImportLoading(false));
+  };
+
+  const downloadImportTemplate = async (format: 'csv' | 'xlsx') => {
+    if (!orgId || !canImport) return;
+    setError('');
+    try {
+      const path = format === 'csv' ? orgClientsImportTemplateCsv(orgId, lang) : orgClientsImportTemplateXlsx(orgId, lang);
+      const res = await apiFetch(path);
+      if (!res.ok) throw new Error(t('clients.errors.exportFailed'));
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = format === 'csv'
+        ? (lang === 'he' ? 'clients-import-template-he.csv' : 'clients-import-template.csv')
+        : (lang === 'he' ? 'clients-import-template-he.xlsx' : 'clients-import-template.xlsx');
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(userFacingApiMessage(e) || t('clients.errors.exportFailed'));
+    }
   };
 
   const downloadExport = async () => {
@@ -430,7 +511,7 @@ export function Clients() {
     setError('');
     try {
       const res = await apiFetch(orgClientsExport(orgId));
-      if (!res.ok) throw new Error(res.statusText);
+      if (!res.ok) throw new Error(t('clients.errors.exportFailed'));
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -439,7 +520,7 @@ export function Clients() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Export failed');
+      setError(userFacingApiMessage(e) || t('clients.errors.exportFailed'));
     } finally {
       setExportLoading(false);
     }
@@ -553,30 +634,78 @@ export function Clients() {
           <h3>{t('clients.import.title')}</h3>
           <p>{t('clients.import.hint')}</p>
           <div className="nx-clients-toolbar__row" style={{ marginBottom: 16 }}>
-            <input type="file" accept=".csv" onChange={handleImportFile} className="nx-glass-input nx-glass-input--inline nx-clients-import__file" />
-            <button type="button" onClick={loadImportPreview} disabled={!importCsv.trim() || importLoading} className="nx-glass-btn nx-glass-btn--secondary">
+            <button type="button" onClick={() => void downloadImportTemplate('csv')} className="nx-glass-btn nx-glass-btn--secondary">
+              {t('clients.import.downloadCsvTemplate')}
+            </button>
+            <button type="button" onClick={() => void downloadImportTemplate('xlsx')} className="nx-glass-btn nx-glass-btn--secondary">
+              {t('clients.import.downloadXlsxTemplate')}
+            </button>
+            <input type="file" accept=".csv,.xlsx" onChange={handleImportFile} className="nx-glass-input nx-glass-input--inline nx-clients-import__file" />
+            <button type="button" onClick={() => loadImportPreview()} disabled={!importFile || importLoading} className="nx-glass-btn nx-glass-btn--secondary">
               {importLoading ? t('common.loading') : t('clients.import.preview')}
             </button>
-            <button type="button" onClick={() => { setShowImport(false); setImportCsv(''); setImportPreview(null); setImportResult(null); setError(''); }} className="nx-glass-btn nx-glass-btn--secondary">
+            <button type="button" onClick={() => { setShowImport(false); setImportFile(null); setImportColumnMap({}); setImportPreview(null); setImportResult(null); setError(''); }} className="nx-glass-btn nx-glass-btn--secondary">
               {t('common.cancel')}
             </button>
           </div>
-          {importPreview && (
+          {importPreview?.needs_column_mapping && (
+            <div style={{ marginBottom: 16 }}>
+              <strong>{t('clients.import.mapColumns')}</strong>
+              <p className="nx-clients-hint">{t('clients.import.mapHint')}</p>
+              <div className="nx-clients-toolbar__row" style={{ marginTop: 8 }}>
+                <label className="nx-clients-label">
+                  {t('clients.import.mapName')}
+                  <select
+                    value={importColumnMap.name ?? ''}
+                    onChange={(e) => setImportColumnMap((prev) => ({ ...prev, name: e.target.value || undefined }))}
+                    className="nx-glass-input nx-glass-input--inline"
+                  >
+                    <option value="">{t('clients.import.chooseColumn')}</option>
+                    {importPreview.headers.map((header) => (
+                      <option key={`name-${header}`} value={header}>{header}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="nx-clients-label">
+                  {t('clients.import.mapTaxId')}
+                  <select
+                    value={importColumnMap.tax_id ?? ''}
+                    onChange={(e) => setImportColumnMap((prev) => ({ ...prev, tax_id: e.target.value || undefined }))}
+                    className="nx-glass-input nx-glass-input--inline"
+                  >
+                    <option value="">{t('clients.import.chooseColumn')}</option>
+                    {importPreview.headers.map((header) => (
+                      <option key={`tax-${header}`} value={header}>{header}</option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => loadImportPreview(importColumnMap)}
+                  disabled={!importColumnMap.name || !importColumnMap.tax_id || importLoading}
+                  className="nx-glass-btn nx-glass-btn--secondary"
+                >
+                  {t('clients.import.preview')}
+                </button>
+              </div>
+            </div>
+          )}
+          {importPreview && !importPreview.needs_column_mapping && (
             <>
               <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-                <span>{t('clients.import.valid').replace('{{count}}', String(importPreview.valid_rows.length))}</span>
-                <span>{t('clients.import.duplicates').replace('{{count}}', String(importPreview.duplicates.length))}</span>
-                <span>{t('clients.import.invalid').replace('{{count}}', String(importPreview.invalid_rows.length))}</span>
+                <span>{t('clients.import.valid').replace('{{count}}', String(importPreview.new_count))}</span>
+                <span>{t('clients.import.duplicates').replace('{{count}}', String(importPreview.duplicate_count))}</span>
+                <span>{t('clients.import.invalid').replace('{{count}}', String(importPreview.invalid_count))}</span>
               </div>
               {importPreview.valid_rows.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
                   <strong>{t('clients.import.validRows')}</strong>
                   <div className="nx-clients-preview">
                     <table>
-                      <thead><tr><th>#</th><th>{t('clients.import.colName')}</th><th>{t('clients.import.colEmail')}</th><th>{t('clients.import.colCompany')}</th></tr></thead>
+                      <thead><tr><th>#</th><th>{t('clients.import.colName')}</th><th>{t('clients.import.colTaxId')}</th></tr></thead>
                       <tbody>
                         {importPreview.valid_rows.slice(0, 20).map((r) => (
-                          <tr key={r.row_index}><td>{r.row_index}</td><td>{r.name}</td><td className="nx-ltr">{r.email}</td><td>{r.company_name}</td></tr>
+                          <tr key={r.row_index}><td>{r.row_index}</td><td>{r.name}</td><td className="nx-ltr">{r.tax_id}</td></tr>
                         ))}
                       </tbody>
                     </table>
@@ -589,10 +718,10 @@ export function Clients() {
                   <strong>{t('clients.import.duplicateRows')}</strong>
                   <div className="nx-clients-preview">
                     <table>
-                      <thead><tr><th>#</th><th>{t('clients.import.colName')}</th><th>{t('clients.import.colReason')}</th></tr></thead>
+                      <thead><tr><th>#</th><th>{t('clients.import.colName')}</th><th>{t('clients.import.colTaxId')}</th><th>{t('clients.import.colReason')}</th></tr></thead>
                       <tbody>
                         {importPreview.duplicates.slice(0, 10).map((r) => (
-                          <tr key={r.row_index}><td>{r.row_index}</td><td>{r.name}</td><td>{r.reason ?? '—'}</td></tr>
+                          <tr key={r.row_index}><td>{r.row_index}</td><td>{r.name}</td><td className="nx-ltr">{r.tax_id}</td><td>{importIssueLabel(r.reason_code)}</td></tr>
                         ))}
                       </tbody>
                     </table>
@@ -605,10 +734,10 @@ export function Clients() {
                   <strong>{t('clients.import.invalidRows')}</strong>
                   <div className="nx-clients-preview">
                     <table>
-                      <thead><tr><th>#</th><th>{t('clients.import.colErrors')}</th></tr></thead>
+                      <thead><tr><th>#</th><th>{t('clients.import.colName')}</th><th>{t('clients.import.colTaxId')}</th><th>{t('clients.import.colErrors')}</th></tr></thead>
                       <tbody>
                         {importPreview.invalid_rows.slice(0, 10).map((r) => (
-                          <tr key={r.row_index}><td>{r.row_index}</td><td>{r.errors.join('; ')}</td></tr>
+                          <tr key={r.row_index}><td>{r.row_index}</td><td>{r.name}</td><td className="nx-ltr">{r.tax_id}</td><td>{r.codes.map((code) => importIssueLabel(code)).join('; ')}</td></tr>
                         ))}
                       </tbody>
                     </table>

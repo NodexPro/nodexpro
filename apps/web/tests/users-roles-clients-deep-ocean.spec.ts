@@ -59,9 +59,9 @@ test('Users & Roles invite controls reuse Create Client Deep Ocean V3 tokens', (
 test('Clients toolbar applies Deep Ocean V3 without rewriting the table or CSV flow', () => {
   assert.match(clientsSrc, /nx-clients--deep-ocean/);
   assert.match(clientsSrc, /orgClientsImportPreview/);
-  assert.match(clientsSrc, /orgClientsImport/);
+  assert.match(clientsSrc, /orgClientsImportCommand/);
   assert.match(clientsSrc, /orgClientsExport/);
-  assert.match(clientsSrc, /accept="\.csv"/);
+  assert.match(clientsSrc, /accept="\.csv,\.xlsx"/);
   assert.match(clientsSrc, /a\.download = 'clients-export\.csv'/);
   assert.match(clientsSrc, /setRefreshTrigger/);
   assert.doesNotMatch(clientsSrc, /method: 'PATCH'/);

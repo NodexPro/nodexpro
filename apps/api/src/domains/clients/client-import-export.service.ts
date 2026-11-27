@@ -1,8 +1,9 @@
 /**
- * Client CSV import/export. Backend authoritative: validation, duplicate detection, audit.
+ * Client CSV/Excel import/export. Backend authoritative: validation, duplicate detection, audit.
  * Tenant-safe: all operations scoped to organization_id from context.
  */
 
+import crypto from 'node:crypto';
 import { supabaseAdmin } from '../../db/client.js';
 import { forbidden, badRequest } from '../../shared/errors.js';
 import { writeAudit, AUDIT_ACTIONS } from '../../shared/audit-events.js';
@@ -10,6 +11,22 @@ import type { RequestContext } from '../../shared/context.js';
 import { addTimelineEvent, TIMELINE_SOURCE, TIMELINE_EVENTS } from './timeline.service.js';
 import { buildClientSearchText, upsertClientSearchIndex } from './search-index.service.js';
 import { assertOfficeAdministration } from '../../shared/office-administration.js';
+import {
+  applyColumnMap,
+  csvFromGrid,
+  detectColumnMap,
+  fileDuplicateTaxIdIndices,
+  israeliIdentifierDigits,
+  parseCsvGrid,
+  preserveIdentifierText,
+  taxIdDuplicateKey,
+  templateHeaders,
+  validateImportRow,
+  type ClientImportColumnMap,
+  type ClientImportIssueCode,
+} from './client-import-mapping.pure.js';
+import { buildXlsxTwoColumnTemplate, parseXlsxFirstSheet } from './client-import-xlsx.pure.js';
+import { invalidateClientOperationsRegistryMaterializationCache } from '../client-operations/client-operations-registry-materialization-cache.js';
 
 const ENTITY_TYPE_CLIENT = 'client';
 const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2MB
@@ -28,118 +45,63 @@ function assertClientsWrite(ctx: RequestContext): void {
 
 const BULK_EXPORT_MAX_IDS = 2000;
 
-/**
- * Parse CSV string into rows of key-value objects. First row = headers (normalized to lowercase).
- * Handles quoted fields and limits rows.
- */
+export type ImportFileInput = {
+  csv?: string;
+  filename?: string;
+  file_base64?: string;
+  column_map?: ClientImportColumnMap;
+};
+
+function fileKind(filename: string | undefined, csv: string | undefined): 'csv' | 'xlsx' {
+  const name = String(filename ?? '').toLowerCase();
+  if (name.endsWith('.xlsx')) return 'xlsx';
+  if (name.endsWith('.csv') || csv) return 'csv';
+  if (name) throw badRequest('Unsupported file format', 'UNSUPPORTED_FILE_FORMAT');
+  return 'csv';
+}
+
+function decodeBase64File(fileBase64: string): Buffer {
+  const buf = Buffer.from(fileBase64, 'base64');
+  if (!buf.length) throw badRequest('Unsupported file format', 'UNSUPPORTED_FILE_FORMAT');
+  if (buf.length > MAX_FILE_BYTES) throw badRequest('File too large', 'FILE_TOO_LARGE');
+  return buf;
+}
+
+function parseImportGrid(input: ImportFileInput): { headers: string[]; rows: string[][] } {
+  const kind = fileKind(input.filename, input.csv);
+  if (kind === 'xlsx') {
+    if (!input.file_base64) throw badRequest('Unsupported file format', 'UNSUPPORTED_FILE_FORMAT');
+    const buf = decodeBase64File(input.file_base64);
+    try {
+      return parseXlsxFirstSheet(buf);
+    } catch {
+      throw badRequest('Excel sheet structure is invalid', 'SHEET_STRUCTURE_INVALID');
+    }
+  }
+  const csv = input.csv ?? (input.file_base64 ? decodeBase64File(input.file_base64).toString('utf8') : '');
+  if (Buffer.byteLength(csv, 'utf8') > MAX_FILE_BYTES) throw badRequest('File too large', 'FILE_TOO_LARGE');
+  return parseCsvGrid(csv);
+}
+
+/** Kept for existing CSV callers/tests: auto-mapped rows from a CSV string. */
 export function parseCsv(csv: string): CsvRow[] {
-  const lines: string[] = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < csv.length; i++) {
-    const c = csv[i];
-    if (c === '"') {
-      inQuotes = !inQuotes;
-      continue;
-    }
-    if (!inQuotes && (c === '\n' || c === '\r')) {
-      if (c === '\r' && csv[i + 1] === '\n') i++;
-      lines.push(current);
-      current = '';
-      continue;
-    }
-    current += c;
-  }
-  if (current.length) lines.push(current);
-
-  const rows: CsvRow[] = [];
-  const rawHeaders = lines[0]?.split(',').map((h) => h.replace(/^"|"$/g, '').trim().toLowerCase()) ?? [];
-  const headerMap = rawHeaders.map((h) => h.replace(/\s+/g, '_')); // "company name" -> company_name
-  for (let i = 1; i < lines.length && rows.length < MAX_ROWS; i++) {
-    const values = parseCsvLine(lines[i]);
-    const row: CsvRow = {};
-    headerMap.forEach((key, j) => {
-      row[key] = values[j]?.trim() ?? '';
-    });
-    if (Object.keys(row).length) rows.push(row);
-  }
-  return rows;
+  const grid = parseCsvGrid(csv);
+  const detected = detectColumnMap(grid.headers);
+  return applyColumnMap(grid.headers, grid.rows.slice(0, MAX_ROWS), detected.map);
 }
 
-function parseCsvLine(line: string): string[] {
-  const out: string[] = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-    if (c === '"') {
-      inQuotes = !inQuotes;
-      continue;
-    }
-    if (!inQuotes && c === ',') {
-      out.push(current.trim());
-      current = '';
-      continue;
-    }
-    current += c;
+async function findOrgDuplicateTaxIds(orgId: string, rows: CsvRow[]): Promise<Set<string>> {
+  const lookup = new Set<string>();
+  for (const row of rows) {
+    const tax = preserveIdentifierText(row.tax_id ?? '');
+    if (!tax) continue;
+    lookup.add(tax);
+    const digits = israeliIdentifierDigits(tax);
+    if (digits) lookup.add(digits);
   }
-  out.push(current.trim());
-  return out;
-}
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function validateRow(row: CsvRow, index: number): { valid: boolean; errors: string[] } {
-  const errors: string[] = [];
-  const name = (row.name ?? row.display_name ?? '').trim();
-  if (!name) errors.push('name is required');
-  const email = (row.email ?? '').trim();
-  if (email && !EMAIL_REGEX.test(email)) errors.push('invalid email format');
-  return { valid: errors.length === 0, errors };
-}
-
-/**
- * Find existing clients in org that match any of the given rows by (email OR phone OR tax_id).
- * Returns Set of row indices (0-based) that are duplicates.
- */
-async function findDuplicateRowIndices(
-  orgId: string,
-  rows: CsvRow[]
-): Promise<Set<number>> {
-  const emails = new Set<string>();
-  const phones = new Set<string>();
-  const taxIds = new Set<string>();
-  rows.forEach((r, i) => {
-    const e = (r.email ?? '').trim();
-    const p = (r.phone ?? '').trim();
-    const t = (r.tax_id ?? '').trim();
-    if (e) emails.add(e);
-    if (p) phones.add(p);
-    if (t) taxIds.add(t);
-  });
-
-  const existingByEmail = emails.size
-    ? await supabaseAdmin.from('clients').select('email').eq('organization_id', orgId).eq('is_archived', false).in('email', [...emails])
-    : { data: [] };
-  const existingByPhone = phones.size
-    ? await supabaseAdmin.from('clients').select('phone').eq('organization_id', orgId).eq('is_archived', false).in('phone', [...phones])
-    : { data: [] };
-  const existingByTaxId = taxIds.size
-    ? await supabaseAdmin.from('clients').select('tax_id').eq('organization_id', orgId).in('tax_id', [...taxIds])
-    : { data: [] };
-
-  const existingEmails = new Set((existingByEmail.data ?? []).map((x: { email: string | null }) => x.email).filter(Boolean));
-  const existingPhones = new Set((existingByPhone.data ?? []).map((x: { phone: string | null }) => x.phone).filter(Boolean));
-  const existingTaxIds = new Set((existingByTaxId.data ?? []).map((x: { tax_id: string }) => x.tax_id));
-
-  const duplicateIndices = new Set<number>();
-  rows.forEach((r, i) => {
-    const e = (r.email ?? '').trim();
-    const p = (r.phone ?? '').trim();
-    const t = (r.tax_id ?? '').trim();
-    if ((e && existingEmails.has(e)) || (p && existingPhones.has(p)) || (t && existingTaxIds.has(t))) duplicateIndices.add(i);
-  });
-  return duplicateIndices;
+  if (!lookup.size) return new Set();
+  const { data } = await supabaseAdmin.from('clients').select('tax_id').eq('organization_id', orgId).in('tax_id', [...lookup]);
+  return new Set((data ?? []).map((row: { tax_id: string }) => taxIdDuplicateKey(row.tax_id)));
 }
 
 export interface PreviewRow {
@@ -153,131 +115,142 @@ export interface PreviewRow {
   city: string;
   country: string;
   notes: string;
-  reason?: string;
+  reason_code?: ClientImportIssueCode;
 }
 
 export interface ImportPreviewResult {
   valid_rows: PreviewRow[];
   duplicates: PreviewRow[];
-  invalid_rows: { row_index: number; errors: string[]; raw: CsvRow }[];
+  invalid_rows: { row_index: number; codes: ClientImportIssueCode[]; name: string; tax_id: string }[];
+  needs_column_mapping: boolean;
+  headers: string[];
+  suggested_map: ClientImportColumnMap;
+  new_count: number;
+  duplicate_count: number;
+  invalid_count: number;
 }
 
-export async function previewImport(ctx: RequestContext, orgId: string, csv: string): Promise<ImportPreviewResult> {
-  assertOrg(ctx, orgId);
-  assertClientsWrite(ctx);
-  assertOfficeAdministration(ctx);
-
-  if (Buffer.byteLength(csv, 'utf8') > MAX_FILE_BYTES) throw badRequest(`CSV too large. Max ${MAX_FILE_BYTES / 1024}KB`);
-
-  const rows = parseCsv(csv);
-  if (rows.length > MAX_ROWS) throw badRequest(`Too many rows. Max ${MAX_ROWS}`);
-
-  const valid_rows: PreviewRow[] = [];
-  const invalid_rows: { row_index: number; errors: string[]; raw: CsvRow }[] = [];
-
-  rows.forEach((row, i) => {
-    const { valid, errors } = validateRow(row, i);
-    const previewRow = toPreviewRow(row, i);
-    if (valid) valid_rows.push(previewRow);
-    else invalid_rows.push({ row_index: i + 1, errors, raw: row });
-  });
-
-  const duplicateIndices = await findDuplicateRowIndices(orgId, rows);
-  const duplicates: PreviewRow[] = [];
-  const validNonDup: PreviewRow[] = [];
-  valid_rows.forEach((r) => {
-    const idx = r.row_index;
-    if (duplicateIndices.has(idx)) {
-      duplicates.push({ ...r, reason: 'Duplicate (email, phone, or tax_id exists)' });
-    } else {
-      validNonDup.push(r);
-    }
-  });
-
-  return {
-    valid_rows: validNonDup,
-    duplicates,
-    invalid_rows,
-  };
-}
-
-function toPreviewRow(row: CsvRow, rowIndex: number): PreviewRow {
+function toPreviewRow(row: CsvRow, rowIndex: number, reason_code?: ClientImportIssueCode): PreviewRow {
   return {
     row_index: rowIndex + 1,
-    name: (row.name ?? row.display_name ?? '').trim(),
+    name: preserveIdentifierText(row.name ?? ''),
     email: (row.email ?? '').trim(),
     phone: (row.phone ?? '').trim(),
-    company_name: (row.company_name ?? row.legal_name ?? '').trim(),
-    tax_id: (row.tax_id ?? '').trim(),
+    company_name: (row.company_name ?? '').trim(),
+    tax_id: preserveIdentifierText(row.tax_id ?? ''),
     address: (row.address ?? '').trim(),
     city: (row.city ?? '').trim(),
     country: (row.country ?? '').trim(),
     notes: (row.notes ?? '').trim(),
+    reason_code,
+  };
+}
+
+function classifyRows(rows: CsvRow[], orgTaxIds: Set<string>, fileDup: Set<number>) {
+  const valid_rows: PreviewRow[] = [];
+  const duplicates: PreviewRow[] = [];
+  const invalid_rows: ImportPreviewResult['invalid_rows'] = [];
+  rows.forEach((row, index) => {
+    const issues = validateImportRow(row);
+    const preview = toPreviewRow(row, index);
+    if (issues.length) {
+      invalid_rows.push({ row_index: index + 1, codes: issues, name: preview.name, tax_id: preview.tax_id });
+      return;
+    }
+    if (fileDup.has(index)) {
+      duplicates.push({ ...preview, reason_code: 'DUPLICATE_IN_FILE' });
+      return;
+    }
+    if (orgTaxIds.has(taxIdDuplicateKey(preview.tax_id))) {
+      duplicates.push({ ...preview, reason_code: 'DUPLICATE_IN_ORGANIZATION' });
+      return;
+    }
+    valid_rows.push(preview);
+  });
+  return { valid_rows, duplicates, invalid_rows };
+}
+
+export async function previewImport(ctx: RequestContext, orgId: string, input: ImportFileInput | string): Promise<ImportPreviewResult> {
+  assertOrg(ctx, orgId);
+  assertClientsWrite(ctx);
+  assertOfficeAdministration(ctx);
+
+  const source: ImportFileInput = typeof input === 'string' ? { csv: input } : input;
+  const grid = parseImportGrid(source);
+  if (grid.rows.length > MAX_ROWS) throw badRequest('Too many rows', 'TOO_MANY_ROWS');
+  const detected = detectColumnMap(grid.headers);
+  const userMap = source.column_map?.name && source.column_map?.tax_id ? source.column_map : null;
+  const requiredCollision = detected.collisions.some((field) => field === 'name' || field === 'tax_id');
+  if (!userMap && (detected.missingRequired || requiredCollision)) {
+    return {
+      valid_rows: [],
+      duplicates: [],
+      invalid_rows: [],
+      needs_column_mapping: true,
+      headers: grid.headers,
+      suggested_map: detected.map,
+      new_count: 0,
+      duplicate_count: 0,
+      invalid_count: 0,
+    };
+  }
+  const columnMap = userMap ?? detected.map;
+  const rows = applyColumnMap(grid.headers, grid.rows, columnMap);
+  const fileDup = fileDuplicateTaxIdIndices(rows);
+  const orgTaxIds = await findOrgDuplicateTaxIds(orgId, rows);
+  const classified = classifyRows(rows, orgTaxIds, fileDup);
+  return {
+    ...classified,
+    needs_column_mapping: false,
+    headers: grid.headers,
+    suggested_map: columnMap,
+    new_count: classified.valid_rows.length,
+    duplicate_count: classified.duplicates.length,
+    invalid_count: classified.invalid_rows.length,
   };
 }
 
 export interface ImportResult {
   imported: number;
   skipped: number;
-  errors: { row_index: number; message: string }[];
+  errors: { row_index: number; code: ClientImportIssueCode }[];
+  clients_list?: unknown;
 }
 
-export async function executeImport(ctx: RequestContext, orgId: string, csv: string): Promise<ImportResult> {
+export async function executeImport(ctx: RequestContext, orgId: string, input: ImportFileInput | string): Promise<ImportResult> {
   assertOrg(ctx, orgId);
   assertClientsWrite(ctx);
   assertOfficeAdministration(ctx);
 
-  if (Buffer.byteLength(csv, 'utf8') > MAX_FILE_BYTES) throw badRequest(`CSV too large. Max ${MAX_FILE_BYTES / 1024}KB`);
+  const source: ImportFileInput = typeof input === 'string' ? { csv: input } : input;
+  const preview = await previewImport(ctx, orgId, source);
+  if (preview.needs_column_mapping) throw badRequest('Column mapping required', 'COLUMN_MAPPING_REQUIRED');
 
-  const rows = parseCsv(csv);
-  if (rows.length > MAX_ROWS) throw badRequest(`Too many rows. Max ${MAX_ROWS}`);
-
-  const duplicateIndices = await findDuplicateRowIndices(orgId, rows);
+  const grid = parseImportGrid(source);
+  const columnMap = source.column_map?.name && source.column_map?.tax_id ? source.column_map : detectColumnMap(grid.headers).map;
+  const rows = applyColumnMap(grid.headers, grid.rows, columnMap);
+  const allowed = new Set(preview.valid_rows.map((row) => row.row_index));
   let imported = 0;
-  const errors: { row_index: number; message: string }[] = [];
+  const errors: ImportResult['errors'] = preview.invalid_rows.map((row) => ({
+    row_index: row.row_index,
+    code: row.codes[0] ?? 'NAME_MISSING',
+  }));
 
   for (let i = 0; i < rows.length; i++) {
+    if (!allowed.has(i + 1)) continue;
     const row = rows[i];
-    const { valid, errors: errs } = validateRow(row, i);
-    if (!valid) {
-      errors.push({ row_index: i + 1, message: errs.join('; ') });
-      continue;
-    }
-    if (duplicateIndices.has(i)) continue; // skip duplicate
-
-    const name = (row.name ?? row.display_name ?? '').trim();
-    const taxIdRaw = (row.tax_id ?? '').trim();
-    const taxId = taxIdRaw || `IMP-${Date.now()}-${i}`;
+    const name = preserveIdentifierText(row.name ?? '');
+    const taxId = preserveIdentifierText(row.tax_id ?? '');
     const countryCode = (row.country ?? '').trim().slice(0, 2) || null;
-
-    const { data: existing } = await supabaseAdmin
-      .from('clients')
-      .select('id')
-      .eq('organization_id', orgId)
-      .eq('tax_id', taxId)
-      .maybeSingle();
-    if (existing) {
-      errors.push({ row_index: i + 1, message: 'Duplicate tax_id' });
-      continue;
-    }
-
-    const emailVal = (row.email ?? '').trim();
-    const phoneVal = (row.phone ?? '').trim();
-    if (!emailVal && !phoneVal) {
-      errors.push({ row_index: i + 1, message: 'Client must have at least one contact method: phone or email.' });
-      continue;
-    }
-
     const { data: client, error } = await supabaseAdmin
       .from('clients')
       .insert({
         organization_id: orgId,
         tax_id: taxId,
-        client_type: 'business_customer',
         display_name: name,
-        legal_name: (row.company_name ?? row.legal_name ?? '').trim() || null,
-        email: emailVal || null,
-        phone: phoneVal || null,
+        legal_name: (row.company_name ?? '').trim() || null,
+        email: (row.email ?? '').trim() || null,
+        phone: (row.phone ?? '').trim() || null,
         country_code: countryCode,
         address: (row.address ?? '').trim() || null,
         city: (row.city ?? '').trim() || null,
@@ -290,7 +263,8 @@ export async function executeImport(ctx: RequestContext, orgId: string, csv: str
       .single();
 
     if (error || !client) {
-      errors.push({ row_index: i + 1, message: error?.message ?? 'Insert failed' });
+      const duplicate = error?.code === '23505' || /duplicate|unique/i.test(error?.message ?? '');
+      errors.push({ row_index: i + 1, code: duplicate ? 'DUPLICATE_IN_ORGANIZATION' : 'GENERIC' });
       continue;
     }
 
@@ -308,7 +282,13 @@ export async function executeImport(ctx: RequestContext, orgId: string, csv: str
     imported++;
   }
 
-  const skipped = duplicateIndices.size;
+  if (imported > 0) invalidateClientOperationsRegistryMaterializationCache(orgId);
+
+  const skipped = preview.duplicate_count;
+  const idempotencyKey = crypto
+    .createHash('sha256')
+    .update(JSON.stringify({ orgId, tax_ids: preview.valid_rows.map((row) => row.tax_id) }))
+    .digest('hex');
 
   await writeAudit({
     organizationId: orgId,
@@ -319,13 +299,32 @@ export async function executeImport(ctx: RequestContext, orgId: string, csv: str
     payload: {
       imported_count: imported,
       skipped_count: skipped,
-      invalid_count: errors.length,
+      invalid_count: preview.invalid_count,
       total_rows: rows.length,
+      idempotency_key: idempotencyKey,
       timestamp: new Date().toISOString(),
     },
   });
 
-  return { imported, skipped, errors };
+  const { listClients } = await import('./clients.service.js');
+  const clients_list = await listClients(ctx, orgId, { view: 'all', limit: 20, offset: 0 });
+  return { imported, skipped, errors, clients_list };
+}
+
+export function buildImportTemplate(locale: string, format: 'csv' | 'xlsx'): { body: Buffer; contentType: string; filename: string } {
+  const headers = templateHeaders(locale === 'he' ? 'he' : 'en');
+  if (format === 'xlsx') {
+    return {
+      body: Buffer.from(buildXlsxTwoColumnTemplate([headers.name, headers.tax_id])),
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      filename: locale === 'he' ? 'clients-import-template-he.xlsx' : 'clients-import-template.xlsx',
+    };
+  }
+  return {
+    body: Buffer.from(csvFromGrid([headers.name, headers.tax_id], []), 'utf8'),
+    contentType: 'text/csv; charset=utf-8',
+    filename: locale === 'he' ? 'clients-import-template-he.csv' : 'clients-import-template.csv',
+  };
 }
 
 /**

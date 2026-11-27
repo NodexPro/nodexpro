@@ -74,7 +74,7 @@ test('11. email, phone, URL, and identifiers stay LTR', () => {
   assert.match(clients, /className="nx-glass-input nx-ltr"/);
   assert.match(clients, /nx-clients-table__tax nx-clients-table__mono/);
   assert.match(clients, /className="nx-ltr"/);
-  assert.match(clients, /<td className="nx-ltr">\{r\.email\}<\/td>/);
+  assert.match(clients, /<td className="nx-ltr">\{r\.tax_id\}<\/td>/);
   assert.match(users, /type="email"[\s\S]*dir="ltr"/);
 });
 
@@ -118,7 +118,7 @@ test('15. invite and CSV command contracts are unchanged', () => {
   assert.match(users, /fetchUsersRolesAggregate/);
   assert.doesNotMatch(users, /method: 'PATCH'/);
   assert.match(clients, /orgClientsImportPreview/);
-  assert.match(clients, /orgClientsImport/);
+  assert.match(clients, /orgClientsImportCommand/);
   assert.match(clients, /orgClientsExport/);
   assert.doesNotMatch(clients, /method: 'PATCH'/);
 });

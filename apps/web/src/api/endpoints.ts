@@ -92,7 +92,11 @@ export const orgAudit = (id: string) => `/organizations/${id}/audit`;
 export const orgClients = (orgId: string) => `/organizations/${orgId}/clients`;
 export const orgClientsSearch = (orgId: string) => `/organizations/${orgId}/clients/search`;
 export const orgClientsImportPreview = (orgId: string) => `/organizations/${orgId}/clients/import/preview`;
-export const orgClientsImport = (orgId: string) => `/organizations/${orgId}/clients/import`;
+export const orgClientsImportCommand = (orgId: string) => `/organizations/${orgId}/clients/commands/import_clients`;
+export const orgClientsImportTemplateCsv = (orgId: string, locale: string) =>
+  `/organizations/${orgId}/clients/import/template.csv?locale=${encodeURIComponent(locale)}`;
+export const orgClientsImportTemplateXlsx = (orgId: string, locale: string) =>
+  `/organizations/${orgId}/clients/import/template.xlsx?locale=${encodeURIComponent(locale)}`;
 export const orgClientsExport = (orgId: string) => `/organizations/${orgId}/clients/export`;
 export const orgClientsBulkMarkActive = (orgId: string) => `/organizations/${orgId}/clients/bulk/mark-active`;
 export const orgClientsBulkMarkInactive = (orgId: string) => `/organizations/${orgId}/clients/bulk/mark-inactive`;
