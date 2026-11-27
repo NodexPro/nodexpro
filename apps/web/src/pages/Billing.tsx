@@ -128,6 +128,7 @@ type ClientAggregate = {
       disconnect: { action_key: string; enabled: boolean; label: string };
       enter_api_keys: { enabled: boolean };
     };
+    primary_action?: { action_key: string; enabled: boolean; label: string };
   }>;
 };
 
@@ -256,6 +257,7 @@ export function Billing() {
       className="nx-glass-page nx-glass-page--wide nx-settings nx-settings-deep-ocean nx-office-ocean nx-billing"
       data-testid="nx-billing"
       dir={workspace?.ui.direction ?? 'ltr'}
+      lang={workspace?.ui.locale ?? 'en'}
     >
       <h1 className="nx-glass-title">{text.title || 'Billing'}</h1>
       <p className="nx-glass-subtitle">{text.lead}</p>
@@ -482,7 +484,7 @@ export function Billing() {
         <section data-testid="office-payments">
           {tabLoading ? <p className="nx-settings-muted">{text.loading}</p> : null}
           {tabError ? <p className="nx-settings-warning" role="alert">{tabError}</p> : null}
-          <div className="nx-settings-pair">
+          <div className="nx-billing-connect">
             {(client?.cards ?? []).map((card) => {
               const form = clientForm[card.scenario] ?? {
                 provider: card.provider_choices[0]?.code ?? '',
@@ -492,13 +494,18 @@ export function Billing() {
               const selected = card.provider_choices.find((row) => row.code === form.provider) ?? card.provider_choices[0];
               const setForm = (next: Partial<typeof form>) =>
                 setClientForm((prev) => ({ ...prev, [card.scenario]: { ...form, ...next } }));
+              const primary = card.primary_action ?? card.available_actions.start;
+              const extras = [
+                card.available_actions.save_credentials,
+                card.available_actions.verify,
+                card.available_actions.activate,
+                card.available_actions.disconnect.enabled ? card.available_actions.disconnect : null,
+              ].filter((action): action is { action_key: string; enabled: boolean; label: string } => Boolean(action?.enabled));
               return (
-                <article className="nx-glass-card nx-settings-pair-card" key={card.scenario}>
-                  <div className="nx-settings-pair__col">
+                <article className="nx-glass-card nx-billing-connect__card" key={card.scenario}>
                   <h2>{card.title}</h2>
                   <p className="nx-settings-muted">{card.body}</p>
-                  <p className="nx-settings-muted">{card.status_label}</p>
-                  {card.application_status ? <p className="nx-settings-muted">{card.application_status}</p> : null}
+                  <p className="nx-billing-connect__status">{card.status_label}</p>
                   <label className="nx-glass-label">
                     {card.provider_choices_label}
                     <select className="nx-glass-input" value={form.provider} onChange={(e) => setForm({ provider: e.target.value })}>
@@ -507,41 +514,47 @@ export function Billing() {
                       ))}
                     </select>
                   </label>
-                  {selected?.description ? <p className="nx-settings-muted">{selected.description}</p> : null}
-                  {selected?.commercial ? (
-                    <p className="nx-settings-muted">
-                      {selected.commercial.commission_label} · {selected.commercial.connection_fee_label} · {selected.commercial.monthly_fee_label}
-                    </p>
-                  ) : null}
-                  {selected?.commercial?.payout_terms ? <p className="nx-settings-muted">{selected.commercial.payout_terms}</p> : null}
-                  {selected?.commercial?.terms_url ? <a className="nx-glass-link" href={selected.commercial.terms_url} target="_blank" rel="noreferrer">{selected.commercial.terms_url}</a> : null}
-                  {(selected?.credential_fields ?? []).map((field) => (
-                    <label className="nx-glass-label" key={field.key}>
-                      {field.label}
-                      <input
-                        className="nx-glass-input"
-                        type={field.secret ? 'password' : 'text'}
-                        autoComplete="off"
-                        value={field.key === 'api_key' ? form.api_key : form.merchant_id}
-                        onChange={(e) => setForm(field.key === 'api_key' ? { api_key: e.target.value } : { merchant_id: e.target.value })}
-                        disabled={!card.available_actions.enter_api_keys.enabled}
-                      />
-                    </label>
-                  ))}
+                  {card.available_actions.enter_api_keys.enabled
+                    ? (selected?.credential_fields ?? []).map((field) => (
+                        <label className="nx-glass-label" key={field.key}>
+                          {field.label}
+                          <input
+                            className="nx-glass-input"
+                            type={field.secret ? 'password' : 'text'}
+                            autoComplete="off"
+                            value={field.key === 'api_key' ? form.api_key : form.merchant_id}
+                            onChange={(e) => setForm(field.key === 'api_key' ? { api_key: e.target.value } : { merchant_id: e.target.value })}
+                          />
+                        </label>
+                      ))
+                    : null}
                   {card.blocked_reason ? <p className="nx-settings-warning">{card.blocked_reason}</p> : null}
-                  <div className="nx-billing__actions">
-                    <button type="button" className="nx-glass-btn nx-glass-btn--purple" disabled={busy || !card.available_actions.start.enabled} onClick={() => void run(card.available_actions.start.action_key, { provider_code: form.provider }, 'client')}>{card.available_actions.start.label}</button>
-                    {card.available_actions.save_credentials ? (
-                      <button type="button" className="nx-glass-btn nx-glass-btn--secondary" disabled={busy || !card.available_actions.save_credentials.enabled} onClick={() => void run(card.available_actions.save_credentials!.action_key, { provider_code: form.provider, merchant_id: form.merchant_id, api_key: form.api_key }, 'client')}>{card.available_actions.save_credentials.label}</button>
-                    ) : null}
-                    {card.available_actions.verify ? (
-                      <button type="button" className="nx-glass-btn nx-glass-btn--secondary" disabled={busy || !card.available_actions.verify.enabled} onClick={() => void run(card.available_actions.verify!.action_key, { scenario: card.scenario }, 'client')}>{card.available_actions.verify.label}</button>
-                    ) : null}
-                    {card.available_actions.activate ? (
-                      <button type="button" className="nx-glass-btn nx-glass-btn--secondary" disabled={busy || !card.available_actions.activate.enabled} onClick={() => void run(card.available_actions.activate!.action_key, { scenario: card.scenario }, 'client')}>{card.available_actions.activate.label}</button>
-                    ) : null}
-                    <button type="button" className="nx-glass-btn nx-glass-btn--secondary" disabled={busy || !card.available_actions.disconnect.enabled} onClick={() => void run(card.available_actions.disconnect.action_key, { scenario: card.scenario }, 'client')}>{card.available_actions.disconnect.label}</button>
-                  </div>
+                  <div className="nx-billing__actions nx-billing__actions--tight">
+                    <button
+                      type="button"
+                      className="nx-glass-btn nx-glass-btn--purple"
+                      disabled={busy || !primary.enabled}
+                      onClick={() => void run(primary.action_key, { provider_code: form.provider, merchant_id: form.merchant_id, api_key: form.api_key, scenario: card.scenario }, 'client')}
+                    >
+                      {primary.label}
+                    </button>
+                    {extras.map((action) => (
+                      <button
+                        key={action.action_key}
+                        type="button"
+                        className="nx-glass-btn nx-glass-btn--secondary"
+                        disabled={busy}
+                        onClick={() =>
+                          void run(
+                            action.action_key,
+                            { provider_code: form.provider, merchant_id: form.merchant_id, api_key: form.api_key, scenario: card.scenario },
+                            'client',
+                          )
+                        }
+                      >
+                        {action.label}
+                      </button>
+                    ))}
                   </div>
                 </article>
               );

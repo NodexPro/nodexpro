@@ -243,6 +243,15 @@ textarea.nx-glass-input {
 
 .nx-glass-table-wrap {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+.nx-glass-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #102d49;
 }
 
 .nx-glass-table {

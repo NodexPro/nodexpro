@@ -153,6 +153,107 @@ export function dayBeforeYmd(ymd: string): string | null {
   return dt.toISOString().slice(0, 10);
 }
 
+export const TAX_RATE_PERIOD_CONFLICT = 'TAX_RATE_PERIOD_CONFLICT';
+
+export type ActiveTaxVersionSlice = {
+  id: string;
+  effective_from: string;
+  effective_to: string | null;
+};
+
+export type TaxRateSchedulePlan =
+  | {
+      ok: true;
+      close: Array<{ id: string; effective_to: string }>;
+      supersede: string[];
+      effective_from: string;
+      effective_to: string | null;
+      backdated: boolean;
+    }
+  | { ok: false; code: typeof TAX_RATE_PERIOD_CONFLICT; message: string };
+
+function asYmd(raw: string): string {
+  return String(raw ?? '').trim().slice(0, 10);
+}
+
+function rangesOverlap(fromA: string, toA: string, fromB: string, toB: string): boolean {
+  return fromA <= toB && fromB <= toA;
+}
+
+/**
+ * Same-day 18→19→18 is allowed: the active version that starts on the new date
+ * is superseded (disabled, history kept). Later-starting versions stay and cap
+ * the new open-ended window. Earlier overlapping versions close the day before.
+ */
+export function planActiveTaxRateScheduleChange(input: {
+  asOfDate: string;
+  effectiveFrom: string;
+  requestedEffectiveTo?: string | null;
+  activeVersions: ActiveTaxVersionSlice[];
+}): TaxRateSchedulePlan {
+  const from = asYmd(input.effectiveFrom);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) {
+    return { ok: false, code: TAX_RATE_PERIOD_CONFLICT, message: 'effective_from is required' };
+  }
+  let to = input.requestedEffectiveTo ? asYmd(input.requestedEffectiveTo) : null;
+  if (to && to < from) {
+    return {
+      ok: false,
+      code: TAX_RATE_PERIOD_CONFLICT,
+      message: 'effective_to must be >= effective_from',
+    };
+  }
+
+  const close: Array<{ id: string; effective_to: string }> = [];
+  const supersede: string[] = [];
+  const openEnd = '9999-12-31';
+
+  for (const version of input.activeVersions) {
+    const versionFrom = asYmd(version.effective_from);
+    const versionTo = version.effective_to == null || version.effective_to === '' ? null : asYmd(version.effective_to);
+    const versionEnd = versionTo ?? openEnd;
+    const nextEnd = to ?? openEnd;
+    if (!rangesOverlap(from, nextEnd, versionFrom, versionEnd)) continue;
+
+    if (versionFrom === from) {
+      supersede.push(String(version.id));
+      continue;
+    }
+
+    if (versionFrom < from) {
+      const closeTo = dayBeforeYmd(from);
+      if (!closeTo || closeTo < versionFrom) {
+        return {
+          ok: false,
+          code: TAX_RATE_PERIOD_CONFLICT,
+          message: 'Legal value version effective dates overlap an existing active version',
+        };
+      }
+      close.push({ id: String(version.id), effective_to: closeTo });
+      continue;
+    }
+
+    const cap = dayBeforeYmd(versionFrom);
+    if (!cap || cap < from) {
+      return {
+        ok: false,
+        code: TAX_RATE_PERIOD_CONFLICT,
+        message: 'Cannot change a tax rate before an existing version start date. Historical rates are immutable.',
+      };
+    }
+    if (!to || cap < to) to = cap;
+  }
+
+  return {
+    ok: true,
+    close,
+    supersede,
+    effective_from: from,
+    effective_to: to,
+    backdated: from < asYmd(input.asOfDate),
+  };
+}
+
 export type OwnerTaxVersionRow = {
   version_id: string;
   ruleset_id: string;

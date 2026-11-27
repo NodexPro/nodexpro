@@ -137,6 +137,21 @@ test('Israeli ID checksum and duplicate codes map to locale copy, not English ba
   assert.doesNotMatch(duplicateEn, /email|owner|belongs to/i);
 });
 
+test('tax period 409 is not the client-card versionConflict copy', () => {
+  assert.equal(userFacingApiMessageKey(api(409, 'VERSION_CONFLICT')), USER_FACING_API_MESSAGE_KEYS.versionConflict);
+  assert.equal(userFacingApiMessageKey(api(409, 'CONFLICT')), USER_FACING_API_MESSAGE_KEYS.conflict);
+  assert.equal(userFacingApiMessageKey(api(409, 'TAX_RATE_PERIOD_CONFLICT')), USER_FACING_API_MESSAGE_KEYS.failed);
+  const generic = resolveUserFacingApiMessage(api(409, 'CONFLICT'), 'en', lookup);
+  assert.equal(generic, 'A version conflict or concurrent update occurred. Refresh the data and try again.');
+  assert.doesNotMatch(generic, /Close and reopen the client card/);
+  const taxPeriod = resolveUserFacingApiMessage(
+    api(409, 'TAX_RATE_PERIOD_CONFLICT', 'Legal value version effective dates overlap an existing active version'),
+    'en',
+    lookup,
+  );
+  assert.equal(taxPeriod, 'Legal value version effective dates overlap an existing active version');
+});
+
 test('office API helper uses existing i18n lookup and no longer hardcodes Hebrew 401 copy', () => {
   const client = readFileSync(join(root, 'src/api/client.ts'), 'utf8');
   assert.match(client, /resolveUserFacingApiMessage/);

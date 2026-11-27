@@ -38,6 +38,9 @@ test('toolbar is a single nowrap row; page does not wrap controls', () => {
 test('pagination lives in a compact footer under the table', () => {
   assert.match(css, /\.nx-clients-pager \{/);
   assert.match(css, /\.nx-clients-table-wrap \{[\s\S]*max-height:/);
+  assert.match(src, /nx-clients-cards/);
+  assert.match(src, /clients\.layoutTable/);
+  assert.match(css, /inset-inline-start:\s*44px/);
 });
 
 test('client name is plain text — no card navigation from the list', () => {

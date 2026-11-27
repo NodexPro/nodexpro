@@ -27,7 +27,9 @@ test('Billing workspace lazy-loads tabs, keeps pay disabled, and does not stitch
   assert.match(page, /provider_choices/);
   assert.doesNotMatch(page, /adapter_status|catalog_only|load_ms/);
   assert.match(css, /overflow-x: auto/);
-  assert.match(css, /border-radius: 6px 6px 0 0/);
+  assert.match(css, /grid-template-columns: repeat\(6, minmax\(0, 1fr\)\)/);
+  assert.match(page, /nx-billing-connect/);
+  assert.match(page, /primary_action/);
   assert.match(css, /position: sticky/);
   assert.match(page, /nx-billing-staff-kpis/);
   assert.match(page, /nx-billing-staff-pay/);

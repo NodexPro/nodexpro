@@ -734,6 +734,8 @@
   /* Explicit axes: this is the only spreadsheet scroll container. */
   overflow-x: auto;
   overflow-y: auto;
+  touch-action: pan-x pan-y;
+  overscroll-behavior: contain;
   width: 100%;
   max-width: 100%;
   max-height: none;

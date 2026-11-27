@@ -9,38 +9,48 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0;
   margin: 0 0 16px;
-  padding: 4px 0 10px;
-  background: transparent;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(210, 238, 255, 0.28);
+  border-radius: 8px;
+  background: rgba(8, 38, 82, 0.42);
 }
 
 .nx-billing__tab {
   appearance: none;
   height: auto;
-  min-height: 34px;
-  padding: 8px 16px;
-  border-radius: 6px 6px 0 0;
+  min-height: 44px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 0;
   font-family: Arial, sans-serif;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
   color: #8edfff;
   cursor: pointer;
-  border: 1px solid rgba(210, 238, 255, 0.22);
-  background: linear-gradient(180deg, rgba(10, 42, 78, 0.55) 0%, rgba(5, 22, 46, 0.72) 100%);
+  border: 0;
+  border-inline-end: 1px solid rgba(210, 238, 255, 0.18);
+  background: transparent;
   box-shadow: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.nx-billing__tab:last-child {
+  border-inline-end: 0;
 }
 
 .nx-billing__tab.is-active {
   color: #eef6ff;
-  border-color: rgba(125, 236, 247, 0.55);
   background: linear-gradient(180deg, rgba(19, 191, 208, 0.34) 0%, rgba(8, 38, 82, 0.55) 100%);
-  box-shadow:
-    0 0 0 1px rgba(125, 236, 247, 0.22),
-    0 8px 22px rgba(19, 191, 208, 0.16);
+  box-shadow: inset 0 -2px 0 rgba(125, 236, 247, 0.85);
 }
 
 .nx-billing__tab:focus-visible {
@@ -103,9 +113,61 @@
   font-variant-numeric: tabular-nums;
 }
 
+.nx-billing-connect {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.nx-billing-connect__card {
+  margin: 0;
+  padding: 12px 14px;
+}
+
+.nx-billing-connect__card h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+}
+
+.nx-billing-connect__status {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #eef6ff;
+}
+
+@media (max-width: 1024px) {
+  .nx-billing__tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .nx-billing__tab:nth-child(3n) {
+    border-inline-end: 0;
+  }
+}
+
 @media (max-width: 720px) {
   .nx-billing-staff-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nx-billing__tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .nx-billing__tab {
+    min-height: 48px;
+    white-space: normal;
+    border-inline-end: 1px solid rgba(210, 238, 255, 0.18);
+  }
+
+  .nx-billing__tab:nth-child(2n) {
+    border-inline-end: 0;
+  }
+
+  .nx-billing-connect {
+    grid-template-columns: 1fr;
   }
 }
 

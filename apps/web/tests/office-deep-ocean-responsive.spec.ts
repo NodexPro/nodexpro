@@ -27,6 +27,7 @@ const modulesSrc = read('../src/pages/Modules.tsx');
 const shellCss = read('../src/styles/nx-client-operations-shell.css');
 const sidebarSrc = read('../src/templates/template-1/components/AppSidebar.tsx');
 const sidebarCss = read('../src/templates/template-1/t1-sidebar-account.css');
+const tokensCss = read('../src/templates/template-1/tokens.css');
 
 test('shared office Deep Ocean V3 reuses Create Client tokens and stays scoped', () => {
   assert.match(oceanCss, /\.nx-office-ocean/);
@@ -97,10 +98,13 @@ test('responsive office shell keeps tables scrollable and avoids page overflow',
   assert.match(dashboardCss, /@media \(max-width: 430px\)/);
   assert.match(shellCss, /height:\s*100dvh/);
   assert.match(shellCss, /overflow-x:\s*hidden/);
-  assert.match(shellCss, /@media \(max-width: 768px\)[\s\S]*padding:\s*0 12px 18px/);
+  assert.match(shellCss, /@media \(max-width: 768px\)[\s\S]*padding-inline:\s*56px 12px/);
   assert.match(sidebarCss, /height:\s*100dvh/);
   assert.match(sidebarSrc, /coarsePointer/);
+  assert.match(sidebarSrc, /mobileNav/);
+  assert.match(sidebarSrc, /t1-mobile-nav-toggle/);
   assert.match(sidebarSrc, /t1-sidebar__brand-toggle/);
+  assert.match(tokensCss, /t1-sidebar--mobile/);
   assert.match(usersRolesCss, /\.nx-ur-page__head \{[\s\S]*flex-wrap:\s*wrap/);
   assert.match(usersRolesCss, /\.nx-ur-table-scroll/);
 });

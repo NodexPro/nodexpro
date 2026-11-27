@@ -29,6 +29,19 @@
   color: #0f172a;
 }
 
+@media (max-width: 768px) {
+  .nx-modal-overlay {
+    padding: 8px;
+    align-items: flex-end;
+  }
+
+  .nx-modal {
+    width: 100%;
+    max-height: min(92dvh, 880px);
+    border-radius: 12px 12px 0 0;
+  }
+}
+
 .nx-modal-header {
   display: flex;
   align-items: center;

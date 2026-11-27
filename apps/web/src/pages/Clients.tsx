@@ -167,6 +167,12 @@ export function Clients() {
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
+  const [listLayout, setListLayout] = useState<'table' | 'cards'>('table');
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    if (window.matchMedia('(max-width: 768px)').matches) setListLayout('cards');
+  }, []);
 
   const orgId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
   const officeActions = auth.status === 'authenticated' && Array.isArray(auth.me.available_actions)
@@ -780,6 +786,50 @@ export function Clients() {
         <p className="nx-clients-empty">{t('common.loading')}</p>
       ) : (
         <section className="nx-glass-card nx-clients-table-card">
+          <div className="nx-clients-layout" role="group" aria-label={t('clients.views.label')}>
+            <button
+              type="button"
+              className={`nx-glass-btn nx-glass-btn--secondary${listLayout === 'table' ? ' is-active' : ''}`}
+              aria-pressed={listLayout === 'table'}
+              onClick={() => setListLayout('table')}
+            >
+              {t('clients.layoutTable')}
+            </button>
+            <button
+              type="button"
+              className={`nx-glass-btn nx-glass-btn--secondary${listLayout === 'cards' ? ' is-active' : ''}`}
+              aria-pressed={listLayout === 'cards'}
+              onClick={() => setListLayout('cards')}
+            >
+              {t('clients.layoutCards')}
+            </button>
+          </div>
+          {listLayout === 'cards' ? (
+            <div className="nx-clients-cards">
+              {list.map((c) => (
+                <div className="nx-clients-card-item" key={c.id}>
+                  <label className="nx-clients-table__check">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(c.id)}
+                      onChange={() => toggleSelect(c.id)}
+                      aria-label={t('clients.selectRow').replace('{{name}}', c.display_name)}
+                    />
+                  </label>
+                  <div className="nx-clients-card-item__body">
+                    <strong>{c.display_name}</strong>
+                    <p className="nx-clients-table__mono"><span className="nx-ltr">{c.tax_id ?? '—'}</span></p>
+                    <p>{c.business_type_display_he}</p>
+                    <p>{lookupLabel(t, `clients.statusValue.${c.status}`, c.status)}</p>
+                    <p className="nx-clients-table__muted">
+                      {c.updated_at ? new Date(c.updated_at).toLocaleDateString() : '—'}
+                      {c.is_archived ? ` · ${t('common.archived')}` : ''}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
           <div className="nx-clients-table-wrap">
           <table className="nx-clients-table">
             <thead>
@@ -826,6 +876,7 @@ export function Clients() {
             </tbody>
           </table>
           </div>
+          )}
           {list.length === 0 && (
             <p className="nx-clients-empty">
               {searchApplied ? t('clients.noResultsSearch') : t('clients.empty')}

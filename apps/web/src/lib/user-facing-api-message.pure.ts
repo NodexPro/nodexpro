@@ -73,8 +73,14 @@ export function userFacingApiMessageKey(e: unknown): string {
     if (c === 'WORK_ITEM_VERSION_CONFLICT' || c === 'version_conflict_on_update') {
       return USER_FACING_API_MESSAGE_KEYS.workItemVersionConflict;
     }
-    if (c === 'VERSION_CONFLICT' || c === 'CONFLICT') {
+    if (c === 'VERSION_CONFLICT') {
       return USER_FACING_API_MESSAGE_KEYS.versionConflict;
+    }
+    if (c === 'TAX_RATE_PERIOD_CONFLICT') {
+      return USER_FACING_API_MESSAGE_KEYS.failed;
+    }
+    if (c === 'CONFLICT') {
+      return USER_FACING_API_MESSAGE_KEYS.conflict;
     }
     if (c === 'INVITATION_EXPIRED') return USER_FACING_API_MESSAGE_KEYS.invitationExpired;
     if (c === 'INVITATION_REVOKED') return USER_FACING_API_MESSAGE_KEYS.invitationRevoked;

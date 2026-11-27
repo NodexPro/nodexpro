@@ -15,6 +15,7 @@ test('Platform Owner Taxes is a dedicated aggregate screen on Country Pack legal
   const endpoints = read('../src/api/endpoints.ts');
   const routes = read('../../api/src/routes/owner-country-pack.routes.ts');
   const commands = read('../../api/src/domains/country-pack/country-pack-commands.service.ts');
+  const taxesService = read('../../api/src/domains/country-pack/owner-taxes.service.ts');
   const migration = read('../../../supabase/migrations/226_platform_seller_vat_legal_value.sql');
   const copy = read('../../api/src/domains/country-pack/owner-taxes-copy.pure.ts');
   assert.match(shell, /\/platform-owner\/taxes/);
@@ -32,6 +33,9 @@ test('Platform Owner Taxes is a dedicated aggregate screen on Country Pack legal
   assert.match(page, /nx-office-ocean/);
   assert.match(page, /dir=\{direction\}/);
   assert.match(page, /nx-owner-taxes-add/);
+  assert.match(page, /nx-owner-taxes-skeleton/);
+  assert.match(page, /default_country_code/);
+  assert.match(page, /AbortController/);
   assert.match(page, /nx-owner-taxes-settings/);
   assert.match(page, /nx-owner-taxes-country/);
   assert.match(page, /nx-owner-taxes-audit/);
@@ -50,10 +54,13 @@ test('Platform Owner Taxes is a dedicated aggregate screen on Country Pack legal
   assert.match(copy, /add_tax_type: 'Add tax'/);
   assert.match(copy, /add_tax_type: 'הוספת מס'/);
   assert.match(copy, /settings: 'הגדרות'/);
+  assert.match(commands, /planActiveTaxRateScheduleChange/);
   assert.match(commands, /schedule_tax_rate_change/);
+  assert.match(taxesService, /loadOwnerTaxesLegalSource/);
+  assert.doesNotMatch(taxesService, /buildOwnerLegalValuesAggregate/);
   assert.match(commands, /status: 'active'/);
   assert.match(commands, /activate_legal_value_version/);
-  assert.match(commands, /closeOverlappingActiveTaxVersions/);
+  assert.match(commands, /applyTaxRateSchedulePlan/);
   assert.match(commands, /Active tax rates are immutable/);
   assert.doesNotMatch(
     commands.slice(commands.indexOf('handleScheduleTaxRateChange'), commands.indexOf('handleUpdateLegalValueVersion')),
@@ -81,6 +88,7 @@ test('Platform Owner Taxes UI follows Settings glass and RTL from aggregate', ()
   assert.match(css, /border-radius: 6px/);
   assert.match(css, /min-width: 96px/);
   assert.match(css, /-webkit-text-fill-color: #ffffff/);
+  assert.match(css, /nx-owner-taxes__skeleton/);
   assert.match(css, /\.nx-glass-btn:disabled/);
   assert.doesNotMatch(page, /overflow-x:\s*auto/);
   assert.doesNotMatch(css, /overflow-x:\s*auto/);

@@ -35,6 +35,8 @@
     "showing": "Showing",
     "of": "of",
     "perPage": "Per page",
+    "layoutTable": "Table",
+    "layoutCards": "Cards",
     "previous": "Previous",
     "next": "Next",
     "sort": {

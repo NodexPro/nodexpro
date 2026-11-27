@@ -2,7 +2,7 @@ import { supabaseAdmin } from '../../db/client.js';
 import type { RequestContext } from '../../shared/context.js';
 import { AUDIT_ACTIONS, writeAudit } from '../../shared/audit-events.js';
 import { assertPlatformOwner } from '../../shared/platform-owner.js';
-import { badRequest, conflict, notFound } from '../../shared/errors.js';
+import { AppError, badRequest, conflict, notFound } from '../../shared/errors.js';
 import { assertCountryExists } from './country.service.js';
 import { getCountryPack } from './country-pack.service.js';
 import { assertNoOverlapRuleset, assertRulesetExists, resolveActiveRulesetByDate } from './ruleset.service.js';
@@ -14,9 +14,10 @@ import {
 import {
   OWNER_TAX_VALUE_TYPES,
   OWNER_TAXES_AGGREGATE_KEY,
+  TAX_RATE_PERIOD_CONFLICT,
   assembleTaxRatePayload,
-  dayBeforeYmd,
   isOwnerTaxCategory,
+  planActiveTaxRateScheduleChange,
 } from './owner-legal-taxes.pure.js';
 import {
   assertOperationalCommunicationLegalValueMetadata,
@@ -1020,40 +1021,67 @@ async function handleCreateLegalValueVersion(ctx: RequestContext, payload: Recor
   };
 }
 
-async function closeOverlappingActiveTaxVersions(input: {
+async function applyTaxRateSchedulePlan(input: {
   legalValueId: string;
   effectiveFrom: string;
+  requestedEffectiveTo?: string | null;
   excludeVersionId?: string;
-}): Promise<string[]> {
+}): Promise<{ closed: string[]; superseded: string[]; effectiveTo: string | null; backdated: boolean }> {
   const { data: previousRows, error: previousError } = await supabaseAdmin
     .from('country_legal_value_versions')
     .select('id, effective_from, effective_to, status')
     .eq('legal_value_id', input.legalValueId)
     .eq('status', 'active');
   if (previousError) throw previousError;
-  const closed: string[] = [];
-  const overlapping = (previousRows ?? []).filter((row) => {
-    if (input.excludeVersionId && row.id === input.excludeVersionId) return false;
-    const start = String(row.effective_from);
-    const end = row.effective_to ? String(row.effective_to) : '9999-12-31';
-    return input.effectiveFrom <= end && start <= '9999-12-31';
+  const activeVersions = (previousRows ?? [])
+    .filter((row) => !input.excludeVersionId || row.id !== input.excludeVersionId)
+    .map((row) => ({
+      id: String(row.id),
+      effective_from: String(row.effective_from),
+      effective_to: row.effective_to == null ? null : String(row.effective_to),
+    }));
+  const plan = planActiveTaxRateScheduleChange({
+    asOfDate: new Date().toISOString().slice(0, 10),
+    effectiveFrom: input.effectiveFrom,
+    requestedEffectiveTo: input.requestedEffectiveTo,
+    activeVersions,
   });
-  for (const prev of overlapping) {
-    if (String(prev.effective_from) >= input.effectiveFrom) {
-      throw conflict('Cannot change a tax rate before an existing version start date. Historical rates are immutable.');
-    }
-    const closeTo = dayBeforeYmd(input.effectiveFrom);
-    if (!closeTo || closeTo < String(prev.effective_from)) {
-      throw conflict('Legal value version effective dates overlap an existing active version');
-    }
-    const { error: closeError } = await supabaseAdmin
+  if (!plan.ok) throw conflict(plan.message, plan.code);
+  for (const id of plan.supersede) {
+    const { error } = await supabaseAdmin
       .from('country_legal_value_versions')
-      .update({ effective_to: closeTo })
-      .eq('id', prev.id);
-    if (closeError) throw closeError;
-    closed.push(String(prev.id));
+      .update({ status: 'disabled' })
+      .eq('id', id)
+      .eq('status', 'active');
+    if (error) throw error;
   }
-  return closed;
+  for (const row of plan.close) {
+    const { error } = await supabaseAdmin
+      .from('country_legal_value_versions')
+      .update({ effective_to: row.effective_to })
+      .eq('id', row.id)
+      .eq('status', 'active');
+    if (error) throw error;
+  }
+  try {
+    await assertNoOverlapLegalValueVersions({
+      legalValueId: input.legalValueId,
+      effectiveFrom: plan.effective_from,
+      effectiveTo: plan.effective_to,
+      excludeVersionId: input.excludeVersionId,
+    });
+  } catch (err) {
+    if (err instanceof AppError && err.statusCode === 409) {
+      throw conflict(err.message, TAX_RATE_PERIOD_CONFLICT);
+    }
+    throw err;
+  }
+  return {
+    closed: plan.close.map((row) => row.id),
+    superseded: plan.supersede,
+    effectiveTo: plan.effective_to,
+    backdated: plan.backdated,
+  };
 }
 
 async function handleScheduleTaxRateChange(
@@ -1075,11 +1103,11 @@ async function handleScheduleTaxRateChange(
   if (!pack || pack.country_code !== countryCode) {
     throw conflict('legal_value_version must match country/ruleset scope');
   }
-  const closedPrevious = await closeOverlappingActiveTaxVersions({
+  const scheduled = await applyTaxRateSchedulePlan({
     legalValueId: legalValue.id,
     effectiveFrom,
+    requestedEffectiveTo: asOptionalString(payload.effective_to),
   });
-  await assertNoOverlapLegalValueVersions({ legalValueId: legalValue.id, effectiveFrom, effectiveTo: null });
   const { data, error } = await supabaseAdmin
     .from('country_legal_value_versions')
     .insert({
@@ -1087,17 +1115,24 @@ async function handleScheduleTaxRateChange(
       country_pack_ruleset_id: rulesetId,
       value_payload_json: assembled,
       effective_from: effectiveFrom,
-      effective_to: asOptionalString(payload.effective_to),
+      effective_to: scheduled.effectiveTo,
       status: 'active',
     })
     .select('*')
     .single();
-  if (error) throw error;
+  if (error) {
+    if (String(error.code ?? '') === '23P01') {
+      throw conflict('Legal value version effective dates overlap an existing active version', TAX_RATE_PERIOD_CONFLICT);
+    }
+    throw error;
+  }
   await audit(ctx, AUDIT_ACTIONS.LEGAL_VALUE_VERSION_CREATED, 'country_legal_value_version', data.id, {
     legal_value_id: legalValue.id,
     ruleset_id: rulesetId,
     scheduled_from: effectiveFrom,
-    closed_previous: closedPrevious,
+    closed_previous: scheduled.closed,
+    superseded_previous: scheduled.superseded,
+    backdated: scheduled.backdated,
   });
   return {
     ok: true,
@@ -1197,9 +1232,10 @@ async function handleActivateDeactivateLegalValueVersion(
       .eq('id', current.legal_value_id)
       .maybeSingle();
     if (lvRow && isOwnerTaxCategory(lvRow.category)) {
-      await closeOverlappingActiveTaxVersions({
+      await applyTaxRateSchedulePlan({
         legalValueId: String(current.legal_value_id),
         effectiveFrom: String(current.effective_from),
+        requestedEffectiveTo: current.effective_to == null ? null : String(current.effective_to),
         excludeVersionId: versionId,
       });
     }

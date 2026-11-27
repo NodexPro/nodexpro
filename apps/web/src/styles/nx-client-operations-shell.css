@@ -544,8 +544,13 @@ body:has(.t1-appShell--client-operations .nx-co-sheet) {
 }
 
 @media (max-width: 768px) {
+  .t1-appShell--client-operations .t1-pageMain {
+    padding-inline-start: 56px;
+  }
+
   .t1-appShell--client-operations:not(.t1-appShell--general) .t1-pageMain {
-    padding: 0 12px 18px;
+    padding-block: 0 18px;
+    padding-inline: 56px 12px;
   }
 
   .t1-appShell--client-operations:has(.nx-co-sheet) .t1-pageMain {

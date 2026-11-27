@@ -250,6 +250,21 @@ export async function buildOfficePaymentsAggregate(ctx: RequestContext, orgId: s
         disconnect: { action_key: 'disconnect_office_payment_provider', enabled: Boolean(connection) && canConnect, label: copy.disconnect },
         enter_api_keys: { enabled: collectSecrets },
       },
+      primary_action: (() => {
+        const startEnabled = canConnect && (scenario === 'OFFICE_EMBEDDED' ? canStartNew : collectSecrets);
+        if (startEnabled) {
+          return {
+            action_key: scenario === 'OFFICE_EXTERNAL' ? 'start_office_external_onboarding' : 'start_office_embedded_onboarding',
+            enabled: true,
+            label: scenario === 'OFFICE_EXTERNAL' ? copy.start_external : copy.start_embedded,
+          };
+        }
+        return {
+          action_key: scenario === 'OFFICE_EXTERNAL' ? 'start_office_external_onboarding' : 'start_office_embedded_onboarding',
+          enabled: false,
+          label: scenario === 'OFFICE_EXTERNAL' ? copy.start_external : copy.start_embedded,
+        };
+      })(),
     };
   }
 

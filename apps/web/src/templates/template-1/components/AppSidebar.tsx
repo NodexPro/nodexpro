@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import type { Template1SidebarItem } from '../TemplateLayout';
 import type { SidebarAccountBlockModel } from '../../../types/session';
 import { SidebarAccountBlock } from './SidebarAccountBlock';
@@ -177,35 +177,67 @@ export function AppSidebar({
 }) {
   const [expanded, setExpanded] = useState(false);
   const { t } = useI18n();
+  const location = useLocation();
   const labelFor = (item: { label: string; labelKey?: string }) =>
     item.labelKey ? t(item.labelKey) : item.label;
   const [coarsePointer, setCoarsePointer] = useState(false);
+  const [mobileNav, setMobileNav] = useState(false);
   const coGlass = appearance === 'co-navy-glass';
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const mq = window.matchMedia('(hover: none), (pointer: coarse)');
-    const apply = () => setCoarsePointer(mq.matches);
+    const coarse = window.matchMedia('(hover: none), (pointer: coarse)');
+    const mobile = window.matchMedia('(max-width: 768px)');
+    const apply = () => {
+      setCoarsePointer(coarse.matches);
+      setMobileNav(mobile.matches);
+    };
     apply();
-    mq.addEventListener('change', apply);
-    return () => mq.removeEventListener('change', apply);
+    coarse.addEventListener('change', apply);
+    mobile.addEventListener('change', apply);
+    return () => {
+      coarse.removeEventListener('change', apply);
+      mobile.removeEventListener('change', apply);
+    };
   }, []);
 
-  const showExpanded = mode !== 'collapsedHover' ? true : expanded;
-  const width = mode === 'collapsedHover' ? (showExpanded ? 240 : 64) : 240;
+  useEffect(() => {
+    if (mobileNav) setExpanded(false);
+  }, [location.pathname, mobileNav]);
+
+  const overlayNav = mobileNav;
+  const showExpanded = overlayNav ? expanded : mode !== 'collapsedHover' ? true : expanded;
+  const width = overlayNav ? (showExpanded ? 280 : 0) : mode === 'collapsedHover' ? (showExpanded ? 240 : 64) : 240;
 
   const itemsWithIcons = useMemo(() => {
     return items.map((i) => ({ ...i, icon: iconForNavItem(i.to, i.label) }));
   }, [items]);
 
   return (
+    <>
+    {overlayNav ? (
+      <button
+        type="button"
+        className="t1-mobile-nav-toggle"
+        aria-expanded={showExpanded}
+        aria-controls="t1-sidebar"
+        aria-label={showExpanded ? t('nav.collapse') : t('nav.expand')}
+        onClick={() => setExpanded((open) => !open)}
+      >
+        <span aria-hidden="true">{showExpanded ? '×' : '☰'}</span>
+      </button>
+    ) : null}
+    {overlayNav && showExpanded ? (
+      <button type="button" className="t1-mobile-nav-backdrop" aria-label={t('nav.collapse')} onClick={() => setExpanded(false)} />
+    ) : null}
     <aside
-      className="t1-sidebar"
-      onMouseEnter={() => mode === 'collapsedHover' && !coarsePointer && setExpanded(true)}
-      onMouseLeave={() => mode === 'collapsedHover' && !coarsePointer && setExpanded(false)}
+      id="t1-sidebar"
+      className={`t1-sidebar${overlayNav ? ' t1-sidebar--mobile' : ''}${overlayNav && showExpanded ? ' is-open' : ''}`}
+      onMouseEnter={() => !overlayNav && mode === 'collapsedHover' && !coarsePointer && setExpanded(true)}
+      onMouseLeave={() => !overlayNav && mode === 'collapsedHover' && !coarsePointer && setExpanded(false)}
       style={{
         width,
-        padding: showExpanded ? 16 : 10,
+        padding: overlayNav ? (showExpanded ? 16 : 0) : showExpanded ? 16 : 10,
         transition: 'width 160ms ease, padding 160ms ease',
       }}
     >
@@ -224,8 +256,8 @@ export function AppSidebar({
           className="t1-sidebar__brand-toggle"
           aria-expanded={showExpanded}
           aria-label={showExpanded ? t('nav.collapse') : t('nav.expand')}
-          onClick={() => mode === 'collapsedHover' && coarsePointer && setExpanded((open) => !open)}
-          disabled={mode !== 'collapsedHover' || !coarsePointer}
+          onClick={() => (overlayNav || (mode === 'collapsedHover' && coarsePointer)) && setExpanded((open) => !open)}
+          disabled={!overlayNav && (mode !== 'collapsedHover' || !coarsePointer)}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -353,5 +385,6 @@ export function AppSidebar({
         onLogout={onLogout}
       />
     </aside>
+    </>
   );
 }

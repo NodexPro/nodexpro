@@ -47,6 +47,20 @@
   margin: 0 0 16px;
 }
 
+.nx-owner-taxes__skeleton {
+  min-height: 88px;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(210, 238, 255, 0.08) 0%, rgba(210, 238, 255, 0.2) 50%, rgba(210, 238, 255, 0.08) 100%);
+  background-size: 200% 100%;
+  animation: nx-owner-taxes-skeleton 1.2s ease-in-out infinite;
+}
+
+@keyframes nx-owner-taxes-skeleton {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
 .nx-owner-taxes__card.nx-glass-card {
   margin-bottom: 0;
   padding: 14px 18px;

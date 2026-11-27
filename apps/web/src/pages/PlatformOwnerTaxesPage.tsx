@@ -57,6 +57,7 @@ type TaxesAggregate = {
   ui?: { locale?: string; direction?: 'ltr' | 'rtl'; text?: Record<string, string> };
   platform_seller_vat?: { authoritative?: boolean; message?: string; unresolved_reason?: string | null };
   rules?: TaxRule[];
+  default_country_code?: string;
   empty?: boolean;
   audit?: Array<{ id?: string; action?: string; entity_type?: string; created_at?: string }>;
   available_actions?: TaxAction[];
@@ -249,7 +250,12 @@ function TaxesCommandModal({
               </label>
             );
           })}
-          {command === 'schedule_tax_rate_change' ? <p className="nx-settings-muted">{text.rate_hint}</p> : null}
+          {command === 'schedule_tax_rate_change' ? (
+            <>
+              <p className="nx-settings-muted">{text.rate_hint}</p>
+              {text.immutable_note ? <p className="nx-settings-muted">{text.immutable_note}</p> : null}
+            </>
+          ) : null}
         </div>
         <div className="nx-owner-taxes__modal-footer">
           <button type="button" className="nx-glass-btn nx-glass-btn--secondary" disabled={busy} onClick={onClose}>
@@ -270,21 +276,30 @@ export function PlatformOwnerTaxesPage() {
   const [aggregate, setAggregate] = useState<TaxesAggregate | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [countryFilter, setCountryFilter] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [countryFilter, setCountryFilter] = useState('');
   const [openRule, setOpenRule] = useState<string | null>(null);
   const [modal, setModal] = useState<CommandModalState | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     setError('');
+    setLoading(true);
     try {
-      setAggregate(await apiJson<TaxesAggregate>(OWNER.taxes));
+      const next = await apiJson<TaxesAggregate>(OWNER.taxes, signal ? { signal } : undefined);
+      if (signal?.aborted) return;
+      setAggregate(next);
     } catch (e) {
+      if (signal?.aborted || (e instanceof DOMException && e.name === 'AbortError')) return;
       setError(userFacingApiMessage(e));
+    } finally {
+      if (!signal?.aborted) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void load();
+    const ac = new AbortController();
+    void load(ac.signal);
+    return () => ac.abort();
   }, [load]);
 
   async function run(command: string, payload: Record<string, unknown>) {
@@ -296,8 +311,12 @@ export function PlatformOwnerTaxesPage() {
         body: JSON.stringify({ command, payload: { ...payload, owner_surface: 'taxes' } }),
       })) as OwnerCommandResponse;
       const next = asTaxesAggregate(out.refreshed?.aggregate) ?? asTaxesAggregate(out.refreshed);
-      if (next?.rules) setAggregate(next);
-      else await load();
+      if (next?.rules) {
+        setAggregate(next);
+        setLoading(false);
+      } else {
+        await load();
+      }
       setModal(null);
     } catch (e) {
       if (e instanceof ApiError) throw e;
@@ -321,10 +340,12 @@ export function PlatformOwnerTaxesPage() {
     return [...map.entries()].map(([code, name]) => ({ code, name }));
   }, [rules]);
 
+  const defaultCountry = String(aggregate?.default_country_code ?? '').trim();
+  const selectedCountry = countryFilter || defaultCountry || (countries.length === 1 ? countries[0].code : 'all');
   const visibleRules = useMemo(() => {
-    if (countryFilter === 'all') return rules;
-    return rules.filter((row) => row.country_code === countryFilter);
-  }, [rules, countryFilter]);
+    if (selectedCountry === 'all' || !selectedCountry) return rules;
+    return rules.filter((row) => row.country_code === selectedCountry);
+  }, [rules, selectedCountry]);
 
   const addAction = (aggregate?.available_actions ?? []).find((item) => item.action_key === 'create_legal_value');
   const countryOptions =
@@ -333,7 +354,7 @@ export function PlatformOwnerTaxesPage() {
       : addAction?.prefill?.country_code
         ? [{ code: String(addAction.prefill.country_code), name: String(addAction.prefill.country_code) }]
         : [];
-  const countrySelectValue = countryOptions.length === 1 ? countryOptions[0].code : countryFilter;
+  const countrySelectValue = selectedCountry;
 
   function pickName(row: TaxRule): string {
     return lang === 'he' ? row.name_he || row.name_en || '' : row.name_en || row.name_he || '';
@@ -405,7 +426,7 @@ export function PlatformOwnerTaxesPage() {
             onClick={() =>
               openAction(
                 addAction,
-                countryFilter !== 'all' ? { country_code: countryFilter } : {},
+                selectedCountry !== 'all' ? { country_code: selectedCountry } : {},
                 'wide',
               )
             }
@@ -416,6 +437,13 @@ export function PlatformOwnerTaxesPage() {
       </div>
 
       {text.lead ? <p className="nx-glass-subtitle nx-owner-taxes__lead">{text.lead}</p> : null}
+
+      {loading && !aggregate ? (
+        <div className="nx-owner-taxes__list" data-testid="nx-owner-taxes-skeleton" aria-busy="true">
+          <section className="nx-glass-card nx-owner-taxes__card nx-owner-taxes__skeleton" />
+          <section className="nx-glass-card nx-owner-taxes__card nx-owner-taxes__skeleton" />
+        </div>
+      ) : null}
 
       {error ? (
         <div className="nx-glass-alert nx-glass-alert--error" role="alert">
@@ -604,19 +632,23 @@ export function PlatformOwnerTaxesPage() {
         })}
       </div>
 
-      {aggregate?.empty || !visibleRules.length ? <p className="nx-settings-muted">{text.empty}</p> : null}
+      {!loading && (aggregate?.empty || !visibleRules.length) ? (
+        <p className="nx-settings-muted">{text.empty || chromeLabel(text, 'empty', lang, 'אין עדיין כללי מס.', 'No tax rules yet.')}</p>
+      ) : null}
 
-      <details className="nx-glass-card nx-owner-taxes__audit" data-testid="nx-owner-taxes-audit">
-        <summary>{chromeLabel(text, 'change_history', lang, 'היסטוריית שינויים', 'Change history')}</summary>
-        <ul className="nx-owner-taxes__audit-list">
-          {(aggregate?.audit ?? []).map((row, index) => (
-            <li key={row.id ?? String(index)}>
-              <span>{row.action}</span>
-              <span>{displayDate(row.created_at)}</span>
-            </li>
-          ))}
-        </ul>
-      </details>
+      {aggregate ? (
+        <details className="nx-glass-card nx-owner-taxes__audit" data-testid="nx-owner-taxes-audit">
+          <summary>{chromeLabel(text, 'change_history', lang, 'היסטוריית שינויים', 'Change history')}</summary>
+          <ul className="nx-owner-taxes__audit-list">
+            {(aggregate.audit ?? []).map((row, index) => (
+              <li key={row.id ?? String(index)}>
+                <span>{row.action}</span>
+                <span>{displayDate(row.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
 
       <TaxesCommandModal
         open={Boolean(modal)}

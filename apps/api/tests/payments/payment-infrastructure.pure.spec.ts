@@ -171,6 +171,7 @@ test('migration and services keep checkout off and reuse existing seat entitleme
   assert.match(commercial, /'hyp'/);
   assert.match(commercial, /'max'/);
   assert.match(infra, /PAYMENT_ADAPTER_NOT_READY/);
+  assert.match(infra, /primary_action/);
   assert.match(infra, /API keys are not accepted until an adapter is ready/);
   assert.match(infra, /upsert_payment_provider_catalog/);
   assert.doesNotMatch(infra, /adapter_status: payload/);
