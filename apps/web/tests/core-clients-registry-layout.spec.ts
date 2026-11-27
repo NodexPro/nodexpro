@@ -39,7 +39,9 @@ test('pagination lives in a compact footer under the table', () => {
   assert.match(css, /\.nx-clients-pager \{/);
   assert.match(css, /\.nx-clients-table-wrap \{[\s\S]*max-height:/);
   assert.match(src, /nx-clients-cards/);
-  assert.match(src, /clients\.layoutTable/);
+  assert.doesNotMatch(src, /clients\.layoutTable/);
+  assert.doesNotMatch(src, /clients\.layoutCards/);
+  assert.doesNotMatch(src, /nx-clients-layout/);
   assert.match(css, /inset-inline-start:\s*44px/);
 });
 

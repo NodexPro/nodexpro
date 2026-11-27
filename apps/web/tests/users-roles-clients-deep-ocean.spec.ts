@@ -61,9 +61,15 @@ test('Clients toolbar applies Deep Ocean V3 without rewriting the table or CSV f
   assert.match(clientsSrc, /orgClientsImportPreview/);
   assert.match(clientsSrc, /orgClientsImportCommand/);
   assert.match(clientsSrc, /orgClientsExport/);
+  assert.match(clientsSrc, /GlassFilePicker/);
   assert.match(clientsSrc, /accept="\.csv,\.xlsx"/);
   assert.match(clientsSrc, /a\.download = 'clients-export\.csv'/);
   assert.match(clientsSrc, /setRefreshTrigger/);
+  assert.match(clientsSrc, /closeImportPanel/);
+  assert.match(clientsSrc, /res\.clients_list/);
+  assert.doesNotMatch(clientsSrc, /clients\.import\.hint/);
+  assert.doesNotMatch(clientsSrc, /downloadCsvTemplate/);
+  assert.doesNotMatch(clientsSrc, /clients\.layoutTable/);
   assert.doesNotMatch(clientsSrc, /method: 'PATCH'/);
   assert.match(clientsCss, /\.nx-clients-table/);
   assert.match(clientsCss, /\.nx-clients--deep-ocean \.nx-clients-toolbar \.nx-glass-btn--purple[\s\S]*#ffffff/);

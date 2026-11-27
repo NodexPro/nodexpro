@@ -124,7 +124,7 @@ test('network and 5xx map to retryable without exposing internals', () => {
   assert.equal(server.messageKey, 'clients.errors.retryable');
   const createFn = clientsSrc.slice(
     clientsSrc.indexOf('const createClient'),
-    clientsSrc.indexOf('const handleImportFile'),
+    clientsSrc.indexOf('const importIssueLabel'),
   );
   assert.doesNotMatch(createFn, /err\.message|e\.message/);
   assert.match(createFn, /setCreateError\(t\(mapped\.messageKey\)\)/);

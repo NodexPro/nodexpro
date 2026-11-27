@@ -165,7 +165,7 @@
       "inactive": "Inactive"
     },
     "importCsv": "Import clients",
-    "exportCsv": "Export clients",
+    "exportCsv": "Export CSV",
     "selectOrganization": "Select an organization.",
     "selectAll": "Select all",
     "selectRow": "Select {{name}}",

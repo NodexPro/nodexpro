@@ -6,8 +6,6 @@ import {
   orgClients,
   orgClientsImportPreview,
   orgClientsImportCommand,
-  orgClientsImportTemplateCsv,
-  orgClientsImportTemplateXlsx,
   orgClientsExport,
   orgClientsBulkMarkActive,
   orgClientsBulkMarkInactive,
@@ -16,6 +14,7 @@ import {
   orgClientsBulkExport,
 } from '../api/endpoints';
 import { useI18n } from '../i18n/I18nProvider';
+import { GlassFilePicker } from '../components/glass/GlassFilePicker';
 import {
   canonicalCreatedClientId,
   createdClientDestination,
@@ -154,6 +153,7 @@ export function Clients() {
   const createEmailRef = useRef<HTMLInputElement>(null);
   const createTypeRef = useRef<HTMLSelectElement>(null);
   const [showImport, setShowImport] = useState(false);
+  const [importPickedFile, setImportPickedFile] = useState<File | null>(null);
   const [importFile, setImportFile] = useState<{ csv?: string; file_base64?: string; filename?: string } | null>(null);
   const [importColumnMap, setImportColumnMap] = useState<{ name?: string; tax_id?: string }>({});
   const [importPreview, setImportPreview] = useState<{
@@ -167,7 +167,6 @@ export function Clients() {
     duplicate_count: number;
     invalid_count: number;
   } | null>(null);
-  const [importResult, setImportResult] = useState<{ imported: number; skipped: number; errors: Array<{ row_index: number; code?: string }> } | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -406,14 +405,25 @@ export function Clients() {
     };
   };
 
-  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const name = file.name.toLowerCase();
+  const closeImportPanel = () => {
+    setShowImport(false);
+    setImportPickedFile(null);
+    setImportFile(null);
+    setImportColumnMap({});
     setImportPreview(null);
-    setImportResult(null);
+    setError('');
+  };
+
+  const handleImportPickedFile = (file: File | null) => {
+    setImportPickedFile(file);
+    setImportPreview(null);
     setImportColumnMap({});
     setError('');
+    if (!file) {
+      setImportFile(null);
+      return;
+    }
+    const name = file.name.toLowerCase();
     if (name.endsWith('.xlsx')) {
       const reader = new FileReader();
       reader.onload = () => {
@@ -469,40 +479,18 @@ export function Clients() {
       },
     )
       .then((res) => {
-        setImportResult(res);
-        setImportPreview(null);
-        setImportFile(null);
-        setImportColumnMap({});
         if (res.clients_list && Array.isArray(res.clients_list.items)) {
           setList(res.clients_list.items);
           if (typeof res.clients_list.total === 'number') setTotal(res.clients_list.total);
           setHasMore(Boolean(res.clients_list.has_more));
+          setOffset(0);
+        } else {
+          setRefreshTrigger((n) => n + 1);
         }
-        setRefreshTrigger((n) => n + 1);
+        closeImportPanel();
       })
       .catch((e) => setError(userFacingApiMessage(e) || t('clients.errors.importFailed')))
       .finally(() => setImportLoading(false));
-  };
-
-  const downloadImportTemplate = async (format: 'csv' | 'xlsx') => {
-    if (!orgId || !canImport) return;
-    setError('');
-    try {
-      const path = format === 'csv' ? orgClientsImportTemplateCsv(orgId, lang) : orgClientsImportTemplateXlsx(orgId, lang);
-      const res = await apiFetch(path);
-      if (!res.ok) throw new Error(t('clients.errors.exportFailed'));
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = format === 'csv'
-        ? (lang === 'he' ? 'clients-import-template-he.csv' : 'clients-import-template.csv')
-        : (lang === 'he' ? 'clients-import-template-he.xlsx' : 'clients-import-template.xlsx');
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      setError(userFacingApiMessage(e) || t('clients.errors.exportFailed'));
-    }
   };
 
   const downloadExport = async () => {
@@ -530,6 +518,23 @@ export function Clients() {
   if (!orgId) return <p className="nx-clients-empty">{t('clients.selectOrganization')}</p>;
 
   const dir = lang === 'he' ? 'rtl' : 'ltr';
+  const importPreviewRows = importPreview && !importPreview.needs_column_mapping
+    ? [
+        ...importPreview.valid_rows.map((r) => ({ row_index: r.row_index, name: r.name, tax_id: r.tax_id, remark: '' })),
+        ...importPreview.duplicates.map((r) => ({
+          row_index: r.row_index,
+          name: r.name,
+          tax_id: r.tax_id,
+          remark: importIssueLabel(r.reason_code),
+        })),
+        ...importPreview.invalid_rows.map((r) => ({
+          row_index: r.row_index,
+          name: r.name,
+          tax_id: r.tax_id,
+          remark: r.codes.map((code) => importIssueLabel(code)).join('; '),
+        })),
+      ].sort((a, b) => a.row_index - b.row_index)
+    : [];
 
   return (
     <div className="nx-glass-page nx-glass-page--wide nx-clients nx-clients--deep-ocean nx-office-ocean" dir={dir} lang={lang}>
@@ -545,7 +550,7 @@ export function Clients() {
             </button>
           )}
           {canWrite && canImport && (
-            <button type="button" onClick={() => setShowImport(true)} className="nx-glass-btn nx-glass-btn--secondary">
+            <button type="button" onClick={() => { setShowImport(true); setImportPickedFile(null); setImportFile(null); setImportColumnMap({}); setImportPreview(null); setError(''); }} className="nx-glass-btn nx-glass-btn--secondary">
               {t('clients.importCsv')}
             </button>
           )}
@@ -632,131 +637,96 @@ export function Clients() {
       {showImport && canImport && (
         <div className="nx-glass-card nx-clients-import">
           <h3>{t('clients.import.title')}</h3>
-          <p>{t('clients.import.hint')}</p>
-          <div className="nx-clients-toolbar__row" style={{ marginBottom: 16 }}>
-            <button type="button" onClick={() => void downloadImportTemplate('csv')} className="nx-glass-btn nx-glass-btn--secondary">
-              {t('clients.import.downloadCsvTemplate')}
-            </button>
-            <button type="button" onClick={() => void downloadImportTemplate('xlsx')} className="nx-glass-btn nx-glass-btn--secondary">
-              {t('clients.import.downloadXlsxTemplate')}
-            </button>
-            <input type="file" accept=".csv,.xlsx" onChange={handleImportFile} className="nx-glass-input nx-glass-input--inline nx-clients-import__file" />
+          <div className="nx-clients-toolbar__row">
+            <GlassFilePicker
+              accept=".csv,.xlsx"
+              file={importPickedFile}
+              disabled={importLoading}
+              onChange={handleImportPickedFile}
+            />
             <button type="button" onClick={() => loadImportPreview()} disabled={!importFile || importLoading} className="nx-glass-btn nx-glass-btn--secondary">
               {importLoading ? t('common.loading') : t('clients.import.preview')}
             </button>
-            <button type="button" onClick={() => { setShowImport(false); setImportFile(null); setImportColumnMap({}); setImportPreview(null); setImportResult(null); setError(''); }} className="nx-glass-btn nx-glass-btn--secondary">
+            <button type="button" onClick={closeImportPanel} className="nx-glass-btn nx-glass-btn--secondary">
               {t('common.cancel')}
             </button>
           </div>
           {importPreview?.needs_column_mapping && (
-            <div style={{ marginBottom: 16 }}>
-              <strong>{t('clients.import.mapColumns')}</strong>
-              <p className="nx-clients-hint">{t('clients.import.mapHint')}</p>
-              <div className="nx-clients-toolbar__row" style={{ marginTop: 8 }}>
-                <label className="nx-clients-label">
-                  {t('clients.import.mapName')}
-                  <select
-                    value={importColumnMap.name ?? ''}
-                    onChange={(e) => setImportColumnMap((prev) => ({ ...prev, name: e.target.value || undefined }))}
-                    className="nx-glass-input nx-glass-input--inline"
-                  >
-                    <option value="">{t('clients.import.chooseColumn')}</option>
-                    {importPreview.headers.map((header) => (
-                      <option key={`name-${header}`} value={header}>{header}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="nx-clients-label">
-                  {t('clients.import.mapTaxId')}
-                  <select
-                    value={importColumnMap.tax_id ?? ''}
-                    onChange={(e) => setImportColumnMap((prev) => ({ ...prev, tax_id: e.target.value || undefined }))}
-                    className="nx-glass-input nx-glass-input--inline"
-                  >
-                    <option value="">{t('clients.import.chooseColumn')}</option>
-                    {importPreview.headers.map((header) => (
-                      <option key={`tax-${header}`} value={header}>{header}</option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => loadImportPreview(importColumnMap)}
-                  disabled={!importColumnMap.name || !importColumnMap.tax_id || importLoading}
-                  className="nx-glass-btn nx-glass-btn--secondary"
+            <div className="nx-clients-toolbar__row">
+              <label className="nx-clients-label">
+                {t('clients.import.mapName')}
+                <select
+                  value={importColumnMap.name ?? ''}
+                  onChange={(e) => setImportColumnMap((prev) => ({ ...prev, name: e.target.value || undefined }))}
+                  className="nx-glass-input nx-glass-input--inline"
                 >
-                  {t('clients.import.preview')}
-                </button>
-              </div>
+                  <option value="">{t('clients.import.chooseColumn')}</option>
+                  {importPreview.headers.map((header) => (
+                    <option key={`name-${header}`} value={header}>{header}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="nx-clients-label">
+                {t('clients.import.mapTaxId')}
+                <select
+                  value={importColumnMap.tax_id ?? ''}
+                  onChange={(e) => setImportColumnMap((prev) => ({ ...prev, tax_id: e.target.value || undefined }))}
+                  className="nx-glass-input nx-glass-input--inline"
+                >
+                  <option value="">{t('clients.import.chooseColumn')}</option>
+                  {importPreview.headers.map((header) => (
+                    <option key={`tax-${header}`} value={header}>{header}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => loadImportPreview(importColumnMap)}
+                disabled={!importColumnMap.name || !importColumnMap.tax_id || importLoading}
+                className="nx-glass-btn nx-glass-btn--secondary"
+              >
+                {t('clients.import.preview')}
+              </button>
             </div>
           )}
           {importPreview && !importPreview.needs_column_mapping && (
             <>
-              <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+              <div className="nx-clients-toolbar__row">
                 <span>{t('clients.import.valid').replace('{{count}}', String(importPreview.new_count))}</span>
                 <span>{t('clients.import.duplicates').replace('{{count}}', String(importPreview.duplicate_count))}</span>
                 <span>{t('clients.import.invalid').replace('{{count}}', String(importPreview.invalid_count))}</span>
               </div>
-              {importPreview.valid_rows.length > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                  <strong>{t('clients.import.validRows')}</strong>
-                  <div className="nx-clients-preview">
-                    <table>
-                      <thead><tr><th>#</th><th>{t('clients.import.colName')}</th><th>{t('clients.import.colTaxId')}</th></tr></thead>
-                      <tbody>
-                        {importPreview.valid_rows.slice(0, 20).map((r) => (
-                          <tr key={r.row_index}><td>{r.row_index}</td><td>{r.name}</td><td className="nx-ltr">{r.tax_id}</td></tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {importPreview.valid_rows.length > 20 && <p className="nx-clients-hint" style={{ padding: 8 }}>{t('clients.import.andMore').replace('{{count}}', String(importPreview.valid_rows.length - 20))}</p>}
-                  </div>
-                </div>
-              )}
-              {importPreview.duplicates.length > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                  <strong>{t('clients.import.duplicateRows')}</strong>
-                  <div className="nx-clients-preview">
-                    <table>
-                      <thead><tr><th>#</th><th>{t('clients.import.colName')}</th><th>{t('clients.import.colTaxId')}</th><th>{t('clients.import.colReason')}</th></tr></thead>
-                      <tbody>
-                        {importPreview.duplicates.slice(0, 10).map((r) => (
-                          <tr key={r.row_index}><td>{r.row_index}</td><td>{r.name}</td><td className="nx-ltr">{r.tax_id}</td><td>{importIssueLabel(r.reason_code)}</td></tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {importPreview.duplicates.length > 10 && <p className="nx-clients-hint" style={{ padding: 8 }}>{t('clients.import.andMore').replace('{{count}}', String(importPreview.duplicates.length - 10))}</p>}
-                  </div>
-                </div>
-              )}
-              {importPreview.invalid_rows.length > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                  <strong>{t('clients.import.invalidRows')}</strong>
-                  <div className="nx-clients-preview">
-                    <table>
-                      <thead><tr><th>#</th><th>{t('clients.import.colName')}</th><th>{t('clients.import.colTaxId')}</th><th>{t('clients.import.colErrors')}</th></tr></thead>
-                      <tbody>
-                        {importPreview.invalid_rows.slice(0, 10).map((r) => (
-                          <tr key={r.row_index}><td>{r.row_index}</td><td>{r.name}</td><td className="nx-ltr">{r.tax_id}</td><td>{r.codes.map((code) => importIssueLabel(code)).join('; ')}</td></tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {importPreview.invalid_rows.length > 10 && <p className="nx-clients-hint" style={{ padding: 8 }}>{t('clients.import.andMore').replace('{{count}}', String(importPreview.invalid_rows.length - 10))}</p>}
-                  </div>
+              {importPreviewRows.length > 0 && (
+                <div className="nx-clients-preview">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>{t('clients.import.colName')}</th>
+                        <th>{t('clients.import.colTaxId')}</th>
+                        <th>{t('clients.import.colReason')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importPreviewRows.slice(0, 20).map((r) => (
+                        <tr key={r.row_index}>
+                          <td>{r.row_index}</td>
+                          <td>{r.name}</td>
+                          <td className="nx-ltr">{r.tax_id}</td>
+                          <td>{r.remark || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {importPreviewRows.length > 20 && (
+                    <p className="nx-clients-hint">{t('clients.import.andMore').replace('{{count}}', String(importPreviewRows.length - 20))}</p>
+                  )}
                 </div>
               )}
               <button type="button" onClick={confirmImport} disabled={importLoading || importPreview.valid_rows.length === 0} className="nx-glass-btn nx-glass-btn--purple">
                 {importLoading ? t('common.loading') : t('clients.import.confirm')}
               </button>
             </>
-          )}
-          {importResult && (
-            <div className="nx-glass-alert" style={{ marginTop: 12 }}>
-              {t('clients.import.complete')
-                .replace('{{imported}}', String(importResult.imported))
-                .replace('{{skipped}}', String(importResult.skipped))
-                .replace('{{errors}}', String(importResult.errors.length))}
-            </div>
           )}
         </div>
       )}
@@ -915,24 +885,6 @@ export function Clients() {
         <p className="nx-clients-empty">{t('common.loading')}</p>
       ) : (
         <section className="nx-glass-card nx-clients-table-card">
-          <div className="nx-clients-layout" role="group" aria-label={t('clients.views.label')}>
-            <button
-              type="button"
-              className={`nx-glass-btn nx-glass-btn--secondary${listLayout === 'table' ? ' is-active' : ''}`}
-              aria-pressed={listLayout === 'table'}
-              onClick={() => setListLayout('table')}
-            >
-              {t('clients.layoutTable')}
-            </button>
-            <button
-              type="button"
-              className={`nx-glass-btn nx-glass-btn--secondary${listLayout === 'cards' ? ' is-active' : ''}`}
-              aria-pressed={listLayout === 'cards'}
-              onClick={() => setListLayout('cards')}
-            >
-              {t('clients.layoutCards')}
-            </button>
-          </div>
           {listLayout === 'cards' ? (
             <div className="nx-clients-cards">
               {list.map((c) => (

@@ -27,7 +27,8 @@ test('Import is a file → preview → named command path, not a second mechanis
   assert.doesNotMatch(endpoints, /orgClientsImport = /);
   assert.doesNotMatch(endpoints, /clients\/import`/);
   assert.match(clientsPage, /accept="\.csv,\.xlsx"/);
-  assert.match(clientsPage, /handleImportFile/);
+  assert.match(clientsPage, /GlassFilePicker/);
+  assert.match(clientsPage, /handleImportPickedFile/);
   assert.match(clientsPage, /readAsText\(file, 'utf-8'\)/);
   assert.match(clientsPage, /orgClientsImportPreview\(orgId\)/);
   assert.match(clientsPage, /orgClientsImportCommand\(orgId\)/);

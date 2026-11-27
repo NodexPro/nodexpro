@@ -165,7 +165,7 @@
       "inactive": "לא פעיל"
     },
     "importCsv": "ייבוא לקוחות",
-    "exportCsv": "ייצוא לקוחות",
+    "exportCsv": "ייצוא CSV",
     "selectOrganization": "בחרו ארגון.",
     "selectAll": "בחירת הכל",
     "selectRow": "בחירת {{name}}",
