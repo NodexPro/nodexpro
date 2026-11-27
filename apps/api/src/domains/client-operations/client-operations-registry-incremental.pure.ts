@@ -12,6 +12,7 @@ export type RegistryMaterializationSlice<TRow extends { client_id: string }> = {
   built_rows: TRow[];
   stage_timings?: Record<string, number>;
   materialized_at_ms?: number;
+  clients_needing_setup?: Array<{ client_id: string }>;
 };
 
 export function spliceClientRowIntoRegistryMaterialization<
@@ -27,9 +28,14 @@ export function spliceClientRowIntoRegistryMaterialization<
   if (rebuiltRow) {
     nextRows.splice(existingIndex >= 0 ? existingIndex : nextRows.length, 0, rebuiltRow);
   }
+  const cachedGaps = Array.isArray(cached.clients_needing_setup) ? cached.clients_needing_setup : [];
+  const nextGaps = cachedGaps.filter((client) => client.client_id !== id);
+  const rebuiltGap = (rebuilt.clients_needing_setup ?? []).find((client) => client.client_id === id);
+  if (rebuiltGap) nextGaps.push(rebuiltGap);
   return {
     ...cached,
     built_rows: nextRows,
+    clients_needing_setup: nextGaps,
     materialized_at_ms: rebuilt.materialized_at_ms ?? Date.now(),
     stage_timings: {
       ...(cached.stage_timings ?? {}),

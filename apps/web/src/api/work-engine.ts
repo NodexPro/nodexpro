@@ -368,6 +368,66 @@ export type AccountantWorkspaceTab = {
   hidden: boolean;
 };
 
+export type QueueAttentionCardTone = 'warning' | 'danger' | 'neutral';
+
+export type QueueAttentionCard = {
+  key: string;
+  label: string;
+  count: number;
+  tone: QueueAttentionCardTone;
+  description: string;
+  clickable: boolean;
+  modal_key?: string | null;
+  filter: {
+    queue_bucket: string;
+    module_key: string | null;
+    state: string | null;
+    assigned_user_id: string | null;
+    reviewer_user_id: string | null;
+    client_id: string | null;
+    period_key: string | null;
+  };
+};
+
+export type FailedOperationActionDescriptor = {
+  action_key: string;
+  label: string;
+  enabled: boolean;
+  reason: string | null;
+  kind: 'disabled' | 'navigate';
+};
+
+export type FailedOperationRow = {
+  id: string;
+  client_id: string | null;
+  client_label: string;
+  module_key: string;
+  module_label: string;
+  source_key: string;
+  source_label: string;
+  error_key: string;
+  error_label: string;
+  how_to_fix: string;
+  occurred_at: string;
+  occurred_at_label: string;
+  severity: string;
+  severity_label: string;
+  status: string;
+  status_label: string;
+  reference_label: string;
+  available_actions: FailedOperationActionDescriptor[];
+};
+
+export type FailedOperationsSummary = {
+  total_count: number;
+  sources: Array<{ source_key: string; label: string; count: number }>;
+  last_seen_at: string | null;
+  severity_label: string;
+  card: QueueAttentionCard;
+  rows: FailedOperationRow[];
+  notes: string[];
+};
+
 export type WorkEngineQueueAggregate = {
   aggregate_key: 'work_engine_queue_aggregate';
   org_id: string;
@@ -395,7 +455,10 @@ export type WorkEngineQueueAggregate = {
     escalated: number;
     pending_mapping: number;
     pending_reminders?: number;
+    errors?: number;
   };
+  attention_cards?: QueueAttentionCard[];
+  failed_operations_summary?: FailedOperationsSummary;
   filters: {
     states: QueueStateOption[];
     modules: QueueLabeledOption[];

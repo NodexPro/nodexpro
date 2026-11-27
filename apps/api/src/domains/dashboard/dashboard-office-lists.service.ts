@@ -10,6 +10,15 @@ import {
 } from '../country-pack/reporting-calendar.pure.js';
 import { officeCopy, parseDashboardLocale, type DashboardLocale } from './dashboard-office-copy.pure.js';
 import { parseDashboardPeriodKey, resolveDashboardPeriodWindow, jerusalemDayWindow } from './dashboard-office-period.pure.js';
+import { clientScopeOrFilter } from '../work-engine/work-engine-client-scope.js';
+import {
+  officeTaskAttentionOrFilter,
+  officeTaskDescription,
+  officeWorkTypeLabel,
+  parseOfficeTaskListKey,
+  sanitizeOfficeTaskSearchToken,
+  type OfficeTaskListKey,
+} from './dashboard-office-tasks.pure.js';
 import {
   paginateNamedRows,
   parseOfficeClientListKey,
@@ -358,9 +367,87 @@ function taskStateLabel(state: string, copy: ReturnType<typeof officeCopy>): str
   if (state === 'review_pending') return copy.task_state_review_pending;
   if (state === 'assigned') return copy.task_state_assigned;
   if (state === 'waiting_client') return copy.task_state_waiting_client;
+  if (state === 'waiting_human') return copy.task_state_waiting_human;
   if (state === 'new') return copy.task_state_new;
   if (state === 'done') return copy.task_state_done;
+  if (state === 'escalated') return copy.task_state_escalated;
+  if (state === 'approved') return copy.task_state_approved;
+  if (state === 'rejected') return copy.task_state_rejected;
+  if (state === 'client_replied') return copy.task_state_client_replied;
   return state;
+}
+
+type OfficeWorkItemQuery = {
+  eq: (col: string, val: string) => OfficeWorkItemQuery;
+  gte: (col: string, val: string) => OfficeWorkItemQuery;
+  lt: (col: string, val: string) => OfficeWorkItemQuery;
+  not: (col: string, op: string, val: string) => OfficeWorkItemQuery;
+  or: (filters: string) => OfficeWorkItemQuery;
+  order: (col: string, opts: { ascending: boolean; nullsFirst: boolean }) => OfficeWorkItemQuery;
+  range: (from: number, to: number) => OfficeWorkItemQuery;
+  then: (
+    onfulfilled?: (value: {
+      data: unknown;
+      error: { message: string } | null;
+      count: number | null;
+    }) => unknown,
+    onrejected?: (reason: unknown) => unknown,
+  ) => Promise<unknown>;
+};
+
+function applyOfficeTaskAttentionBase(
+  query: OfficeWorkItemQuery,
+  params: {
+    listKey: OfficeTaskListKey;
+    today: { start_iso: string; end_exclusive_iso: string };
+    allowIds: string[] | null;
+    searchOr: string | null;
+  },
+): OfficeWorkItemQuery {
+  const spec = officeTaskAttentionOrFilter(params.listKey, params.today);
+  let next = query;
+  if (spec.workStateEq) next = next.eq('work_state', spec.workStateEq);
+  if (spec.dueGte) next = next.gte('due_at', spec.dueGte);
+  if (spec.dueLt) next = next.lt('due_at', spec.dueLt);
+  if (spec.excludeTerminal) next = next.not('work_state', 'in', '(done,archived)');
+  const ors = [
+    spec.or,
+    params.searchOr,
+    params.allowIds ? clientScopeOrFilter(params.allowIds) : null,
+  ].filter((clause): clause is string => Boolean(clause));
+  if (ors.length === 1) return next.or(ors[0]);
+  if (ors.length > 1) return next.or(`and(${ors.map((clause) => `or(${clause})`).join(',')})`);
+  return next;
+}
+
+function asWorkItemQuery(query: unknown): OfficeWorkItemQuery {
+  return query as OfficeWorkItemQuery;
+}
+
+function parseOfficeListPage(query: DashboardOfficeListQuery | undefined): { page: number; page_size: number } {
+  const page_sizeRaw = Math.floor(Number(query?.page_size));
+  const page_size = page_sizeRaw === 50 ? 50 : 25;
+  const pageRaw = Math.floor(Number(query?.page));
+  const page = Number.isFinite(pageRaw) && pageRaw > 0 ? pageRaw : 1;
+  return { page, page_size };
+}
+
+export async function countOfficeAttentionWorkItems(params: {
+  orgId: string;
+  allowIds: string[] | null;
+  listKey: OfficeTaskListKey;
+  today: { start_iso: string; end_exclusive_iso: string };
+}): Promise<number> {
+  if (params.allowIds && params.allowIds.length === 0) return 0;
+  const q = applyOfficeTaskAttentionBase(
+    asWorkItemQuery(
+      supabaseAdmin.from('work_items').select('id', { count: 'exact', head: true }).eq('org_id', params.orgId),
+    ),
+    { listKey: params.listKey, today: params.today, allowIds: params.allowIds, searchOr: null },
+  );
+  const { count, error } = await q;
+  if (error) throw new Error(error.message);
+  return count ?? 0;
 }
 
 export async function getOfficeTaskListAggregate(
@@ -372,7 +459,7 @@ export async function getOfficeTaskListAggregate(
   if (!orgId || !membership) throw forbidden('Active organization required');
   const locale = parseDashboardLocale(query?.locale);
   const copy = officeCopy(locale);
-  const listKey = String(query?.list_key ?? '').trim();
+  const listKey = parseOfficeTaskListKey(query?.list_key);
   const columns = [
     { key: 'title', label_he: copy.col_title },
     { key: 'name', label_he: copy.col_name },
@@ -387,102 +474,148 @@ export async function getOfficeTaskListAggregate(
         : listKey === 'review_pending'
           ? copy.attention_approval
           : copy.attention_title;
-  if (listKey !== 'overdue' && listKey !== 'due_today' && listKey !== 'review_pending') {
-    return emptyList(title, copy.list_empty, listKey, copy, columns);
-  }
+  const emptyTaskList = (key: string): OfficeDashboardListAggregate => ({
+    title_he: title,
+    total_he: copy.list_total_tasks(0),
+    search_placeholder_he: copy.list_search_tasks,
+    empty_he: copy.list_empty,
+    page_label_he: copy.list_page(1, 1, 0),
+    open_label_he: copy.list_open_task,
+    back_label_he: copy.task_back,
+    description_label_he: copy.task_description,
+    columns,
+    rows: [],
+    pagination: { page: 1, page_size: 25, total: 0, total_pages: 1, q: '', list_key: key },
+  });
+  if (!listKey) return emptyTaskList(String(query?.list_key ?? '').trim());
 
   const accessScope = await resolveOrganizationClientAccessScopeFromContext(ctx);
   const allowIds = accessScope.authorized_client_ids;
-  if (allowIds && allowIds.length === 0) return emptyList(title, copy.list_empty, listKey, copy, columns);
+  if (allowIds && allowIds.length === 0) return emptyTaskList(listKey);
 
   const today = jerusalemDayWindow(new Date());
-  const q = String(query?.q ?? '').trim().toLowerCase();
-  const chunks: Array<string[] | null> = allowIds == null ? [null] : chunkIds(allowIds, 80);
+  const rawQ = String(query?.q ?? '').trim();
+  const token = sanitizeOfficeTaskSearchToken(rawQ);
+  const { page: requestedPage, page_size } = parseOfficeListPage(query);
+
   type WorkItemRow = {
     id: string;
     client_id: string | null;
+    module_key: string | null;
     work_type: string | null;
     period_key: string | null;
     work_state: string;
+    sla_status: string | null;
     due_at: string | null;
   };
-  const items: WorkItemRow[] = [];
-  const seen = new Set<string>();
-  for (const chunk of chunks) {
-    let from = 0;
-    for (;;) {
-      let workQuery = supabaseAdmin
-        .from('work_items')
-        .select('id, client_id, work_type, period_key, work_state, due_at')
-        .eq('org_id', orgId)
-        .order('due_at', { ascending: true, nullsFirst: false })
-        .range(from, from + PAGE - 1);
-      if (listKey === 'overdue') workQuery = workQuery.eq('work_state', 'overdue');
-      if (listKey === 'review_pending') workQuery = workQuery.eq('work_state', 'review_pending');
-      if (listKey === 'due_today') {
-        workQuery = workQuery
-          .gte('due_at', today.start_iso)
-          .lt('due_at', today.end_exclusive_iso)
-          .not('work_state', 'eq', 'done')
-          .not('work_state', 'eq', 'archived');
-      }
-      if (chunk) workQuery = workQuery.in('client_id', chunk);
-      const { data, error } = await workQuery;
-      if (error) throw new Error(error.message);
-      const rows = (data ?? []) as WorkItemRow[];
-      for (const row of rows) {
-        if (seen.has(row.id)) continue;
-        seen.add(row.id);
-        items.push(row);
-      }
-      if (rows.length < PAGE) break;
-      from += PAGE;
-    }
+
+  let matchingClientIds: string[] = [];
+  if (token) {
+    let nameQuery = supabaseAdmin
+      .from('clients')
+      .select('id')
+      .eq('organization_id', orgId)
+      .ilike('display_name', `%${token}%`)
+      .limit(80);
+    if (allowIds) nameQuery = nameQuery.in('id', allowIds);
+    const { data: nameRows, error: nameError } = await nameQuery;
+    if (nameError) throw new Error(nameError.message);
+    matchingClientIds = ((nameRows ?? []) as Array<{ id: string }>).map((row) => String(row.id));
   }
+
+  const searchParts = token
+    ? [
+        `work_type.ilike.%${token}%`,
+        `module_key.ilike.%${token}%`,
+        ...(matchingClientIds.length > 0 ? [`client_id.in.(${matchingClientIds.join(',')})`] : []),
+      ]
+    : [];
+  const searchOr = searchParts.length > 0 ? searchParts.join(',') : null;
+  const scopedAttention = {
+    listKey,
+    today,
+    allowIds,
+    searchOr,
+  };
+
+  const countQuery = applyOfficeTaskAttentionBase(
+    asWorkItemQuery(
+      supabaseAdmin.from('work_items').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+    ),
+    scopedAttention,
+  );
+  const { count, error: countError } = await countQuery;
+  if (countError) throw new Error(countError.message);
+  const total = count ?? 0;
+  const total_pages = Math.max(1, Math.ceil(total / page_size) || 1);
+  const page = Math.min(requestedPage, total_pages);
+  const from = (page - 1) * page_size;
+  const to = from + page_size - 1;
+
+  const dataQuery = applyOfficeTaskAttentionBase(
+    asWorkItemQuery(
+      supabaseAdmin
+        .from('work_items')
+        .select('id, client_id, module_key, work_type, period_key, work_state, sla_status, due_at')
+        .eq('org_id', orgId),
+    ),
+    scopedAttention,
+  );
+  const { data, error } = await dataQuery
+    .order('due_at', { ascending: true, nullsFirst: false })
+    .range(from, to);
+  if (error) throw new Error(error.message);
+  const items = (data ?? []) as WorkItemRow[];
   const nameById = await clientNamesByIds(
     orgId,
     items.map((item) => item.client_id).filter((id): id is string => Boolean(id)),
   );
-  const named = items
-    .map((item) => {
-      const clientName = item.client_id ? nameById.get(item.client_id) ?? item.client_id : '—';
-      const titleText = [item.work_type, item.period_key].filter(Boolean).join(' · ') || item.id;
-      return {
-        id: item.id,
-        display_name: `${titleText} ${clientName}`,
-        clientName,
-        titleText,
-        due: formatDisplayDate(item.due_at, locale),
-        status: taskStateLabel(item.work_state, copy),
-      };
-    })
-    .filter((row) => (q ? row.display_name.toLowerCase().includes(q) : true));
-  const paged = paginateNamedRows(named, query ?? {});
+
   return {
     title_he: title,
-    total_he: copy.list_total_tasks(paged.total),
+    total_he: copy.list_total_tasks(total),
     search_placeholder_he: copy.list_search_tasks,
     empty_he: copy.list_empty,
-    page_label_he: copy.list_page(paged.page, paged.total_pages, paged.total),
+    page_label_he: copy.list_page(page, total_pages, total),
     open_label_he: copy.list_open_task,
+    back_label_he: copy.task_back,
+    description_label_he: copy.task_description,
     columns,
-    rows: paged.rows.map((row) => ({
-      id: row.id,
-      href: `/work-engine/queue?work_item_id=${encodeURIComponent(row.id)}`,
-      open_label_he: copy.list_open_task,
-      cells: {
-        title: row.titleText,
-        name: row.clientName,
-        due: row.due,
-        status: row.status,
-      },
-    })),
+    rows: items.map((item) => {
+      const clientName = item.client_id ? nameById.get(item.client_id) ?? item.client_id : '—';
+      const titleText = officeWorkTypeLabel(item.work_type, locale) || copy.col_title;
+      const description = officeTaskDescription({
+        moduleKey: item.module_key,
+        periodKey: item.period_key,
+        locale,
+      });
+      const due = formatDisplayDate(item.due_at, locale);
+      const status = taskStateLabel(item.work_state, copy);
+      return {
+        id: item.id,
+        href: null,
+        open_label_he: copy.list_open_task,
+        cells: {
+          title: titleText,
+          name: clientName,
+          due,
+          status,
+        },
+        detail: {
+          title: titleText,
+          client: clientName,
+          description: description || '—',
+          due,
+          status,
+        },
+      };
+    }),
     pagination: {
-      page: paged.page,
-      page_size: paged.page_size,
-      total: paged.total,
-      total_pages: paged.total_pages,
-      q: paged.q,
+      page,
+      page_size,
+      total,
+      total_pages,
+      q: rawQ,
       list_key: listKey,
     },
   };

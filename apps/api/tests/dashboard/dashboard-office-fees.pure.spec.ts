@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   canReconstructMonthlyExpectedFromFeeHistory,
+  feeScheduleBasisForMonth,
   feeScheduleBasisForPeriod,
   monthlyEquivalentBeforeVat,
   parseCountryPackVatRate,
   projectClientExpectedFee,
   projectOfficeExpectedFees,
   splitDashboardFeeLineVat,
+  sumEstablishedRecurringMonthly,
   type DashboardFeeAgreementInput,
   type DashboardFeeClientInput,
   type DashboardFeeLineInput,
@@ -231,6 +233,18 @@ test('historical months require agreement dates; undated agreements are not extr
 test('past periods must not use the current fee schedule', () => {
   assert.equal(feeScheduleBasisForPeriod(true), 'current_configuration');
   assert.equal(feeScheduleBasisForPeriod(false), 'historical_unavailable');
+  assert.equal(
+    feeScheduleBasisForMonth({ periodStart: '2026-10-01', periodEnd: '2026-10-31', today: '2026-11-15' }),
+    'historical_unavailable',
+  );
+  assert.equal(
+    feeScheduleBasisForMonth({ periodStart: '2026-11-01', periodEnd: '2026-11-30', today: '2026-11-15' }),
+    'current_configuration',
+  );
+  assert.equal(
+    feeScheduleBasisForMonth({ periodStart: '2026-12-01', periodEnd: '2026-12-31', today: '2026-11-15' }),
+    'current_configuration',
+  );
 });
 
 test('fee price history cannot reconstruct monthly expected amounts', () => {
@@ -510,4 +524,56 @@ test('missing Country Pack VAT rate makes the office total unavailable, not a si
   assert.equal(office.completeness, 'unavailable');
   assert.equal(office.vat_rate_blocked, true);
   assert.equal(office.total_monthly_before_vat, 0);
+});
+
+test('monthly forecast follows in-force agreements and excludes clients without a fee', () => {
+  const clients = [client({ id: 'c1' }), client({ id: 'c2', display_name: 'חדש' })];
+  const agreementsByClient = new Map([
+    [
+      'c1',
+      [
+        agreement({
+          id: 'a1',
+          client_id: 'c1',
+          agreement_start_date: '2026-01-01',
+          agreement_end_date: null,
+        }),
+      ],
+    ],
+    [
+      'c2',
+      [
+        agreement({
+          id: 'a2',
+          client_id: 'c2',
+          agreement_start_date: '2026-12-01',
+          agreement_end_date: null,
+        }),
+      ],
+    ],
+  ]);
+  const linesByClient = new Map([
+    ['c1', [line({ client_id: 'c1', agreement_id: 'a1', price_ils: 20000 })]],
+    ['c2', [line({ client_id: 'c2', agreement_id: 'a2', price_ils: 5000 })]],
+  ]);
+  const nov = projectOfficeExpectedFees({
+    clients,
+    agreementsByClient,
+    linesByClient,
+    periodStart: '2026-11-01',
+    periodEnd: '2026-11-30',
+    allowUndatedHistorical: true,
+    vatRate: 0.18,
+  });
+  const dec = projectOfficeExpectedFees({
+    clients,
+    agreementsByClient,
+    linesByClient,
+    periodStart: '2026-12-01',
+    periodEnd: '2026-12-31',
+    allowUndatedHistorical: true,
+    vatRate: 0.18,
+  });
+  assert.equal(sumEstablishedRecurringMonthly(nov.client_results), 20000);
+  assert.equal(sumEstablishedRecurringMonthly(dec.client_results), 25000);
 });

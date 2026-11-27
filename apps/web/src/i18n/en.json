@@ -164,7 +164,8 @@
       "active": "Active",
       "inactive": "Inactive"
     },
-    "importCsv": "Import clients",
+    "importCsv": "Import CSV",
+    "importExcel": "Import Excel",
     "exportCsv": "Export CSV",
     "selectOrganization": "Select an organization.",
     "selectAll": "Select all",
@@ -181,7 +182,7 @@
     },
     "import": {
       "title": "Import clients",
-      "hint": "Required: full name and identification number. Other fields are optional. Import a CSV or Excel file, up to 10,000 rows.",
+      "hint": "Client name and ID / company / business number are required. Files without these details cannot be imported.",
       "preview": "Preview",
       "confirm": "Confirm import",
       "valid": "New clients: {{count}}",
@@ -1124,6 +1125,18 @@
     "tabsAria": "Workspace tabs",
     "loadFailed": "Failed to load",
     "openModuleCatalog": "Open module catalog",
+    "setupWarning": {
+      "title": "Client settings need to be completed",
+      "explanation": "Without these settings the program cannot correctly determine reporting filing obligations.",
+      "count": "{{count}} clients need setup",
+      "openSettings": "Open client settings",
+      "blocked": {
+        "reportingScope": "Reporting obligation scope cannot be determined",
+        "vatObligation": "VAT reporting obligation cannot be determined",
+        "vatPeriodicity": "VAT reporting periodicity cannot be determined",
+        "vatDue": "VAT reporting due day cannot be determined"
+      }
+    },
     "errors": {
       "moduleNotActive": "This module is not active for this organization. Open the module catalog to review plans and activation.",
       "moduleNotEntitled": "This organization has no subscription or trial for this module. Open the module catalog to review entitlement.",

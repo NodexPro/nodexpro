@@ -218,6 +218,19 @@ export function feeScheduleBasisForPeriod(periodIncludesToday: boolean): 'curren
 }
 
 /**
+ * Current and future months may use the in-force agreement schedule.
+ * Past months cannot replay today's prices.
+ */
+export function feeScheduleBasisForMonth(input: {
+  periodStart: string;
+  periodEnd: string;
+  today: string;
+}): 'current_configuration' | 'historical_unavailable' {
+  if (String(input.periodEnd ?? '') < String(input.today ?? '')) return 'historical_unavailable';
+  return 'current_configuration';
+}
+
+/**
  * `client_fee_price_history` is an audit/chart log, not a reconstructable monthly schedule.
  * totals_change stores un-normalized agreement totals (including one-time).
  * Line rows store price_ils without charging_type, vat_mode, quantity, currency, or closed effective_to.
@@ -284,6 +297,15 @@ export type ClientExpectedFeeResult = {
   billing_frequencies: string[];
   lines: ClientFeeLineContribution[];
 };
+
+/** Sum only clients with an established recurring fee. Missing-fee clients are excluded, not invented. */
+export function sumEstablishedRecurringMonthly(results: readonly ClientExpectedFeeResult[]): number {
+  let total = 0;
+  for (const result of results) {
+    if (result.included_in_complete_total) total += result.monthly_before_vat;
+  }
+  return Math.round(total * 100) / 100;
+}
 
 function emptyClientResult(
   client: DashboardFeeClientInput,

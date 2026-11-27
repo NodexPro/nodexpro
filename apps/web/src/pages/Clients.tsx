@@ -153,6 +153,7 @@ export function Clients() {
   const createEmailRef = useRef<HTMLInputElement>(null);
   const createTypeRef = useRef<HTMLSelectElement>(null);
   const [showImport, setShowImport] = useState(false);
+  const [importAccept, setImportAccept] = useState<'.csv' | '.xlsx'>('.csv');
   const [importPickedFile, setImportPickedFile] = useState<File | null>(null);
   const [importFile, setImportFile] = useState<{ csv?: string; file_base64?: string; filename?: string } | null>(null);
   const [importColumnMap, setImportColumnMap] = useState<{ name?: string; tax_id?: string }>({});
@@ -414,6 +415,16 @@ export function Clients() {
     setError('');
   };
 
+  const openImportPanel = (accept: '.csv' | '.xlsx') => {
+    setImportAccept(accept);
+    setShowImport(true);
+    setImportPickedFile(null);
+    setImportFile(null);
+    setImportColumnMap({});
+    setImportPreview(null);
+    setError('');
+  };
+
   const handleImportPickedFile = (file: File | null) => {
     setImportPickedFile(file);
     setImportPreview(null);
@@ -424,6 +435,16 @@ export function Clients() {
       return;
     }
     const name = file.name.toLowerCase();
+    if (importAccept === '.csv' && !name.endsWith('.csv') && file.type !== 'text/csv') {
+      setImportFile(null);
+      setError(t('clients.import.issues.UNSUPPORTED_FILE_FORMAT'));
+      return;
+    }
+    if (importAccept === '.xlsx' && !name.endsWith('.xlsx')) {
+      setImportFile(null);
+      setError(t('clients.import.issues.UNSUPPORTED_FILE_FORMAT'));
+      return;
+    }
     if (name.endsWith('.xlsx')) {
       const reader = new FileReader();
       reader.onload = () => {
@@ -550,9 +571,14 @@ export function Clients() {
             </button>
           )}
           {canWrite && canImport && (
-            <button type="button" onClick={() => { setShowImport(true); setImportPickedFile(null); setImportFile(null); setImportColumnMap({}); setImportPreview(null); setError(''); }} className="nx-glass-btn nx-glass-btn--secondary">
-              {t('clients.importCsv')}
-            </button>
+            <>
+              <button type="button" onClick={() => openImportPanel('.csv')} className="nx-glass-btn nx-glass-btn--secondary">
+                {t('clients.importCsv')}
+              </button>
+              <button type="button" onClick={() => openImportPanel('.xlsx')} className="nx-glass-btn nx-glass-btn--secondary">
+                {t('clients.importExcel')}
+              </button>
+            </>
           )}
           {canWrite && (
             <button type="button" onClick={downloadExport} disabled={exportLoading} className="nx-glass-btn nx-glass-btn--secondary">
@@ -637,9 +663,10 @@ export function Clients() {
       {showImport && canImport && (
         <div className="nx-glass-card nx-clients-import">
           <h3>{t('clients.import.title')}</h3>
+          <p className="nx-clients-hint">{t('clients.import.hint')}</p>
           <div className="nx-clients-toolbar__row">
             <GlassFilePicker
-              accept=".csv,.xlsx"
+              accept={importAccept}
               file={importPickedFile}
               disabled={importLoading}
               onChange={handleImportPickedFile}

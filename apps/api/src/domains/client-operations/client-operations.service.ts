@@ -38,6 +38,13 @@ import {
   getClientTasksTabReadModel,
 } from './client-obligations-tasks-core.service.js';
 import { formatNationalInsuranceRegistryDisplayHe } from './national-insurance-registry.js';
+import {
+  buildClientNeedingSetup,
+  buildClientsNeedingSetupAggregate,
+  clientReportingSetupGaps,
+  type ClientOperationsClientNeedingSetup,
+  type ClientOperationsClientsNeedingSetup,
+} from './client-operations-reporting-setup-gaps.pure.js';
 import { computeVatRegistryColumnDisplayHe } from './vat-divuach.js';
 import { resolveVatDueDisplayByClientForRegistry } from './client-operations-reporting-due.service.js';
 import {
@@ -389,6 +396,11 @@ export type ClientOperationsRegistryResponse = {
   allowed_actions: string[];
   /** Backend-owned reporting KPI / previous-period / sort contract. */
   reporting_dashboard?: ClientOperationsReportingDashboard;
+  /**
+   * TEMPORARY_COUNTRY_PACK_PENDING — clients missing required tax/reporting
+   * setup for fail-closed obligation determination. Not optional empty fields.
+   */
+  clients_needing_setup?: ClientOperationsClientsNeedingSetup;
 };
 
 export type { ClientOperationsRegistryColumn, ClientOperationsToolbarCapability, RegistryQueryInput };
@@ -574,6 +586,7 @@ export type ClientOperationsRegistryPreSearchMaterialization = {
   visible_custom_columns?: Awaited<ReturnType<typeof loadActiveCustomColumnsExtended>>;
   stage_timings: Record<string, number>;
   materialized_at_ms: number;
+  clients_needing_setup?: ClientOperationsClientNeedingSetup[];
 };
 
 export type ClientOperationsRegistryReadOptions = {
@@ -836,6 +849,9 @@ export async function listClientOperationsRegistry(
     user_cell_formatting,
     user_hidden_column_keys: userSheetLayout.hidden_column_keys,
     user_system_column_widths: userSheetLayout.system_column_widths,
+    clients_needing_setup: buildClientsNeedingSetupAggregate(
+      materialization.clients_needing_setup ?? [],
+    ),
   };
   const reusedMaterialization =
     materializationSource === 'hit' || materializationSource === 'coalesced';
@@ -1114,6 +1130,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     builtRows: ClientOperationsRegistryRow[],
     reportingPreviousPeriods: ClientOperationsReportingPreviousPeriods = emptyPreviousPeriods,
     reportingOutstandingPaymentPeriods: PaymentsOutstandingPeriodFact[] = [],
+    clientsNeedingSetup: ClientOperationsClientNeedingSetup[] = [],
   ): ClientOperationsRegistryPreSearchMaterialization => ({
     period: shared.period,
     user_period_data_copy_source_periods: shared.userPeriodDataCopySourcePeriods,
@@ -1133,6 +1150,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     visible_custom_columns: shared.visibleCustomColumns,
     stage_timings: stageTimings,
     materialized_at_ms: Date.now(),
+    clients_needing_setup: clientsNeedingSetup,
   });
 
   if (emptyAssignedScope) {
@@ -1405,7 +1423,25 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     obligation: RegistryObligationSemantics;
   };
   const facetSeeds: FacetSeed[] = [];
+  const clientsNeedingSetup: ClientOperationsClientNeedingSetup[] = [];
   for (const c of safeClients) {
+    const setupProfile = profilesByClientId.get(c.id);
+    const setupTax = taxByClient.get(c.id);
+    const setupGap = clientReportingSetupGaps({
+      business_type: (setupProfile?.business_type as string | null) ?? null,
+      vat_type: setupTax?.vat_type ?? null,
+      vat_frequency: setupTax?.vat_frequency ?? null,
+      vat_due_type: setupTax?.vat_due_type ?? null,
+    });
+    if (setupGap.missing.length > 0) {
+      clientsNeedingSetup.push(
+        buildClientNeedingSetup({
+          client_id: c.id,
+          display_name: c.display_name,
+          gap: setupGap,
+        }),
+      );
+    }
     const snapshot = snapshots.get(c.id);
     const hasMaterialMembership = materialFacts.has(c.id);
     if (
@@ -2053,6 +2089,7 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
     builtRows,
     reportingPreviousPeriods,
     outstandingPaymentPeriodFactsFromLoad(reportingDashboardLoad as ReportingDashboardLoad),
+    clientsNeedingSetup,
   );
 }
 

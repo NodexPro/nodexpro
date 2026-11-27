@@ -4,6 +4,7 @@ import {
   parseDashboardPeriodKey,
   resolveDashboardPeriodWindow,
   lastNJerusalemMonths,
+  nextNJerusalemMonthsIncludingCurrent,
 } from '../../src/domains/dashboard/dashboard-office-period.pure.js';
 
 test('parseDashboardPeriodKey defaults unknown values to current_month', () => {
@@ -45,5 +46,13 @@ test('lastNJerusalemMonths returns chronological keys including current month', 
   assert.deepEqual(
     months.map((m) => m.month_key),
     ['2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10'],
+  );
+});
+
+test('nextNJerusalemMonthsIncludingCurrent starts at the current month and moves forward', () => {
+  const months = nextNJerusalemMonthsIncludingCurrent(new Date('2026-11-17T12:00:00.000Z'), 6);
+  assert.deepEqual(
+    months.map((m) => m.month_key),
+    ['2026-11', '2026-12', '2027-01', '2027-02', '2027-03', '2027-04'],
   );
 });

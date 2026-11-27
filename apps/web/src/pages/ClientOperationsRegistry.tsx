@@ -42,6 +42,12 @@ import {
   resolveRegistryCommandRequestedPeriod,
 } from '../lib/client-operations-registry-command-apply.pure';
 import { isIgnorableClientOperationsRegistryLoadFailure } from '../lib/client-operations-registry-load-error.pure';
+import '../styles/nx-clients.css';
+import '../styles/nx-client-create-deep-ocean-glass.css';
+import {
+  setupWarningStorageKey,
+  shouldShowSetupWarning,
+} from '../lib/client-operations-setup-warning-session.pure';
 
 type ClientOperationsReportingDashboard = {
   kpi_cards: Array<{
@@ -169,11 +175,28 @@ type RegistryAggregate = {
     any_business_filter_active: boolean;
     clear_action: { id: string; label_he: string; available: boolean };
   };
+  clients_needing_setup?: {
+    source: string;
+    count: number;
+    fingerprint: string;
+    title_key: string;
+    explanation_key: string;
+    count_key: string;
+    open_settings_key: string;
+    close_key: string;
+    clients: Array<{
+      client_id: string;
+      display_name: string;
+      settings_href: string;
+      missing_settings: Array<{ key: string; label_key: string }>;
+      blocked_functions: Array<{ key: string; label_key: string }>;
+    }>;
+  };
 };
 
 export function ClientOperationsRegistry() {
   const auth = useAuth();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const location = useLocation();
   const navigate = useNavigate();
   const pendingOpen = parseCreatedClientOpenLocationState(location.state);
@@ -271,6 +294,10 @@ export function ClientOperationsRegistry() {
   const periodSetupKeyRef = useRef<string | null>(null);
   const manualRowsSetupRef = useRef<'idle' | 'pending' | 'done'>('idle');
   const manualRowsSetupKeyRef = useRef<string | null>(null);
+  const [clientsNeedingSetup, setClientsNeedingSetup] = useState<
+    NonNullable<RegistryAggregate['clients_needing_setup']> | null
+  >(null);
+  const [setupWarningOpen, setSetupWarningOpen] = useState(false);
 
   const activeOrganizationId =
     auth.status === 'authenticated' ? (auth.me.activeOrganizationId ?? null) : null;
@@ -289,6 +316,8 @@ export function ClientOperationsRegistry() {
     setWorkspace(null);
     setError('');
     setModuleCatalogHint(false);
+    setClientsNeedingSetup(null);
+    setSetupWarningOpen(false);
     setLoading(true);
     loadAbortRef.current?.abort();
     loadSeqRef.current += 1;
@@ -477,8 +506,26 @@ export function ClientOperationsRegistry() {
       }
     }
     setError('');
+    const setup = data.clients_needing_setup ?? null;
+    setClientsNeedingSetup(setup);
+    const dismissed =
+      typeof sessionStorage !== 'undefined' && activeOrganizationId
+        ? sessionStorage.getItem(setupWarningStorageKey(activeOrganizationId))
+        : null;
+    if (
+      setup &&
+      shouldShowSetupWarning({
+        count: setup.count,
+        fingerprint: setup.fingerprint,
+        dismissedFingerprint: dismissed,
+      })
+    ) {
+      setSetupWarningOpen(true);
+    } else if (!setup || setup.count <= 0) {
+      setSetupWarningOpen(false);
+    }
     return true;
-  }, [toCacheQuery]);
+  }, [toCacheQuery, activeOrganizationId]);
 
   const prefetchPeriods = useCallback(
     (
@@ -1017,6 +1064,90 @@ export function ClientOperationsRegistry() {
         organizationId: auth.me.activeOrganizationId ?? '',
       }}
     />
+    {setupWarningOpen && clientsNeedingSetup && clientsNeedingSetup.count > 0 ? (
+      <div className="nx-clients-overlay nx-client-create nx-client-create--deep-ocean-glass">
+        <div
+          className="nx-glass-card nx-clients-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="nx-co-setup-warning-title"
+          dir={lang === 'he' ? 'rtl' : 'ltr'}
+          data-testid="client-operations-setup-warning"
+        >
+          <div className="nx-clients-modal__head">
+            <h3 id="nx-co-setup-warning-title">{t(clientsNeedingSetup.title_key)}</h3>
+            <button
+              type="button"
+              onClick={() => {
+                if (activeOrganizationId) {
+                  sessionStorage.setItem(
+                    setupWarningStorageKey(activeOrganizationId),
+                    clientsNeedingSetup.fingerprint,
+                  );
+                }
+                setSetupWarningOpen(false);
+              }}
+              className="nx-clients-modal__close"
+              aria-label={t(clientsNeedingSetup.close_key)}
+            >
+              ×
+            </button>
+          </div>
+          <div className="nx-clients-form">
+            <div className="nx-clients-form__body">
+              <p>{t(clientsNeedingSetup.count_key).replace('{{count}}', String(clientsNeedingSetup.count))}</p>
+              <p>{t(clientsNeedingSetup.explanation_key)}</p>
+              <ul className="nx-clients-setup-warning-list">
+                {clientsNeedingSetup.clients.map((client) => (
+                  <li key={client.client_id}>
+                    <strong>{client.display_name}</strong>
+                    <p>
+                      {client.missing_settings.map((item) => t(item.label_key)).join(', ')}
+                    </p>
+                    <p>
+                      {client.blocked_functions.map((item) => t(item.label_key)).join(', ')}
+                    </p>
+                    <button
+                      type="button"
+                      className="nx-glass-btn nx-glass-btn--purple"
+                      onClick={() => {
+                        if (activeOrganizationId) {
+                          sessionStorage.setItem(
+                            setupWarningStorageKey(activeOrganizationId),
+                            clientsNeedingSetup.fingerprint,
+                          );
+                        }
+                        setSetupWarningOpen(false);
+                        navigate(client.settings_href);
+                      }}
+                    >
+                      {t(clientsNeedingSetup.open_settings_key)}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="nx-clients-form__footer">
+              <button
+                type="button"
+                className="nx-glass-btn nx-glass-btn--secondary"
+                onClick={() => {
+                  if (activeOrganizationId) {
+                    sessionStorage.setItem(
+                      setupWarningStorageKey(activeOrganizationId),
+                      clientsNeedingSetup.fingerprint,
+                    );
+                  }
+                  setSetupWarningOpen(false);
+                }}
+              >
+                {t(clientsNeedingSetup.close_key)}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    ) : null}
     </>
   );
 }

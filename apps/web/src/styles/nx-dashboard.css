@@ -727,6 +727,10 @@ button.nx-dashboard-card--kpi:hover,
   overflow-x: auto;
 }
 
+.nx-dashboard-breakdown__table-wrap > .nx-dashboard-breakdown__link {
+  margin-bottom: 12px;
+}
+
 .nx-dashboard-btn--purple,
 .nx-dashboard-chip--purple {
   border: 1px solid rgba(196, 184, 255, 0.55);

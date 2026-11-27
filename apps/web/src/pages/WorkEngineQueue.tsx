@@ -128,6 +128,8 @@ export function WorkEngineQueueMain(props: {
     ...INITIAL_FILTERS,
     state: searchParams.get('state') ?? '',
   }));
+  const workItemIdFromUrl = String(searchParams.get('work_item_id') ?? '').trim();
+  const openedWorkItemIdRef = useRef<string | null>(null);
   const [aggregate, setAggregate] = useState<WorkEngineQueueAggregate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -135,6 +137,7 @@ export function WorkEngineQueueMain(props: {
   const [detailRow, setDetailRow] = useState<WorkEngineQueueRow | null>(null);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [reminderReviewOpen, setReminderReviewOpen] = useState(false);
+  const [failedOperationsModalOpen, setFailedOperationsModalOpen] = useState(false);
   const [escalationModal, setEscalationModal] = useState<EscalationModalState | null>(null);
 
   const loadAggregate = useCallback(async (f: FilterState) => {
@@ -155,6 +158,16 @@ export function WorkEngineQueueMain(props: {
     void loadAggregate(filters);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!aggregate || !workItemIdFromUrl) return;
+    if (openedWorkItemIdRef.current === workItemIdFromUrl) return;
+    const row = aggregate.rows.find((item) => item.work_item_id === workItemIdFromUrl);
+    if (row) {
+      openedWorkItemIdRef.current = workItemIdFromUrl;
+      setDetailRow(row);
+    }
+  }, [aggregate, workItemIdFromUrl]);
 
   const applyFilters = useCallback(() => {
     const next = { ...filters, offset: 0 };
@@ -347,7 +360,12 @@ export function WorkEngineQueueMain(props: {
         />
       ) : null}
 
-      <SummaryCards cards={cards} onOpenReminderReview={openReminderReviewModal} />
+      <SummaryCards
+        cards={cards}
+        attentionCards={aggregate.attention_cards}
+        onOpenReminderReview={openReminderReviewModal}
+        onOpenFailedOperationsModal={() => setFailedOperationsModalOpen(true)}
+      />
 
       <FiltersBar
         filters={filters}
@@ -408,6 +426,13 @@ export function WorkEngineQueueMain(props: {
         />
       ) : null}
 
+      {failedOperationsModalOpen ? (
+        <FailedOperationsModal
+          summary={aggregate.failed_operations_summary}
+          onClose={() => setFailedOperationsModalOpen(false)}
+        />
+      ) : null}
+
       {reminderReviewOpen ? (
         <ReminderReviewWorkspaceModal
           aggregate={aggregate}
@@ -451,9 +476,11 @@ function buildModalForAction(row: WorkEngineQueueRow, cmd: QueueAllowedActionCom
 
 function SummaryCards(props: {
   cards: WorkEngineQueueAggregate['summary_cards'];
+  attentionCards?: WorkEngineQueueAggregate['attention_cards'];
   onOpenReminderReview?: () => void;
+  onOpenFailedOperationsModal?: () => void;
 }) {
-  const { cards, onOpenReminderReview } = props;
+  const { cards, attentionCards, onOpenReminderReview, onOpenFailedOperationsModal } = props;
   const items: Array<{ key: keyof WorkEngineQueueAggregate['summary_cards']; label: string; tone?: 'alert' | 'warn' }> = [
     { key: 'total_active', label: 'Active' },
     { key: 'assigned_to_me', label: 'Assigned to me' },
@@ -496,6 +523,101 @@ function SummaryCards(props: {
           </div>
         );
       })}
+      {(attentionCards ?? []).map((card) => {
+        const isFailedOps = card.modal_key === 'failed_operations' && card.clickable;
+        const toneClass =
+          card.tone === 'danger' ? ' nx-we-card--alert' : card.tone === 'warning' ? ' nx-we-card--warn' : '';
+        return (
+          <div
+            key={card.key}
+            className={`nx-we-card${toneClass}${isFailedOps ? ' nx-we-card--clickable' : ''}`}
+            role={isFailedOps ? 'button' : undefined}
+            tabIndex={isFailedOps ? 0 : undefined}
+            title={card.description}
+            onClick={isFailedOps ? onOpenFailedOperationsModal : undefined}
+            onKeyDown={
+              isFailedOps
+                ? (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onOpenFailedOperationsModal?.();
+                    }
+                  }
+                : undefined
+            }
+          >
+            <div className="nx-we-card__label">{card.label}</div>
+            <div className="nx-we-card__value">{card.count}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FailedOperationsModal(props: {
+  summary: WorkEngineQueueAggregate['failed_operations_summary'];
+  onClose: () => void;
+}) {
+  const summary = props.summary;
+  const rows = summary?.rows ?? [];
+  return (
+    <div className="nx-we-modal-overlay" role="dialog" aria-modal="true">
+      <div className="nx-we-modal nx-we-modal--failed-operations">
+        <div className="nx-we-modal__header-row">
+          <h3 className="nx-we-modal__title">{summary?.card?.label ?? 'Errors'}</h3>
+          <button type="button" className="nx-we-btn" onClick={props.onClose}>
+            Close
+          </button>
+        </div>
+        <div className="nx-we-modal__body">
+          {summary?.severity_label ? <p className="nx-we-modal__hint">{summary.severity_label}</p> : null}
+          {rows.length === 0 ? (
+            <div className="nx-we-empty">No operational errors detected</div>
+          ) : (
+            <div className="nx-we-table-wrap nx-we-failed-ops-table-wrap">
+              <table className="nx-we-table nx-we-table--failed-ops">
+                <thead>
+                  <tr>
+                    <th className="nx-we-th">Client</th>
+                    <th className="nx-we-th">Module</th>
+                    <th className="nx-we-th">Error</th>
+                    <th className="nx-we-th">How to fix</th>
+                    <th className="nx-we-th">Date</th>
+                    <th className="nx-we-th nx-we-th--actions"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row.id}>
+                      <td className="nx-we-td">{row.client_label}</td>
+                      <td className="nx-we-td">{row.module_label}</td>
+                      <td className="nx-we-td">{row.error_label}</td>
+                      <td className="nx-we-td">{row.how_to_fix}</td>
+                      <td className="nx-we-td">{row.occurred_at_label}</td>
+                      <td className="nx-we-td nx-we-td--actions">
+                        <div className="nx-we-failed-ops-actions">
+                          {row.available_actions.map((action) => (
+                            <button
+                              key={action.action_key}
+                              type="button"
+                              className="nx-we-btn"
+                              disabled={!action.enabled}
+                              title={action.reason ?? ''}
+                            >
+                              {action.label}
+                            </button>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

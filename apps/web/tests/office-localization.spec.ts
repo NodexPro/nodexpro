@@ -95,6 +95,7 @@ test('14. EN/HE translation keys match for office Clients chrome', () => {
   for (const required of [
     'title',
     'importCsv',
+    'importExcel',
     'exportCsv',
     'selectOrganization',
     'statusValue.active',

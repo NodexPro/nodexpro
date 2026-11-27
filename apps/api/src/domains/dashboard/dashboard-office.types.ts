@@ -27,11 +27,20 @@ export type DashboardOfficeListQuery = DashboardOverviewQuery & {
 
 export type OfficeDashboardListColumn = { key: string; label_he: string };
 
+export type OfficeDashboardTaskDetail = {
+  title: string;
+  client: string;
+  description: string;
+  due: string;
+  status: string;
+};
+
 export type OfficeDashboardListRow = {
   id: string;
   href: string | null;
   open_label_he: string;
   cells: Record<string, string>;
+  detail?: OfficeDashboardTaskDetail | null;
 };
 
 export type OfficeDashboardListAggregate = {
@@ -41,6 +50,8 @@ export type OfficeDashboardListAggregate = {
   empty_he: string;
   page_label_he: string;
   open_label_he: string;
+  back_label_he?: string;
+  description_label_he?: string;
   columns: OfficeDashboardListColumn[];
   rows: OfficeDashboardListRow[];
   pagination: {

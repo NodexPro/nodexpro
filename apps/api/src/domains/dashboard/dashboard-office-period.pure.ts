@@ -136,6 +136,31 @@ export function lastNJerusalemMonths(now: Date, n: number): Array<{ month_key: s
   return out.reverse();
 }
 
+/** Current Jerusalem month plus the next n-1 months — fee forecast window, not history. */
+export function nextNJerusalemMonthsIncludingCurrent(
+  now: Date,
+  n: number,
+): Array<{ month_key: string; start_date: string; end_date: string }> {
+  const { y, m } = jerusalemYmd(now);
+  const out: Array<{ month_key: string; start_date: string; end_date: string }> = [];
+  let cy = y;
+  let cm = m;
+  for (let i = 0; i < n; i += 1) {
+    out.push({
+      month_key: `${cy}-${String(cm).padStart(2, '0')}`,
+      start_date: ymdToIsoDate(cy, cm, 1),
+      end_date: ymdToIsoDate(cy, cm, lastDayOfMonth(cy, cm)),
+    });
+    if (cm === 12) {
+      cm = 1;
+      cy += 1;
+    } else {
+      cm += 1;
+    }
+  }
+  return out;
+}
+
 export function jerusalemTodayDate(now: Date): string {
   const { y, m, day } = jerusalemYmd(now);
   return ymdToIsoDate(y, m, day);

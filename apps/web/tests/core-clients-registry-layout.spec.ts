@@ -17,6 +17,7 @@ test('toolbar is a single nowrap row; page does not wrap controls', () => {
   assert.doesNotMatch(src, /nx-clients-toolbar__row--split/);
   assert.match(src, /clients\.newClient/);
   assert.match(src, /clients\.importCsv/);
+  assert.match(src, /clients\.importExcel/);
   assert.match(src, /clients\.exportCsv/);
   assert.match(src, /clients\.searchPlaceholder/);
   assert.match(src, /clients\.views\.label/);

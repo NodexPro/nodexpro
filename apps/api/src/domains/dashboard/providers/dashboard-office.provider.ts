@@ -17,6 +17,7 @@ import {
   isoToJerusalemDate,
   jerusalemDayWindow,
   lastNJerusalemMonths,
+  nextNJerusalemMonthsIncludingCurrent,
   parseDashboardPeriodKey,
   resolveDashboardPeriodWindow,
   type DashboardPeriodKey,
@@ -25,9 +26,11 @@ import { officeCopy, parseDashboardLocale, type DashboardLocale } from '../dashb
 import {
   COUNTRY_PACK_STANDARD_VAT_KEY,
   canReconstructMonthlyExpectedFromFeeHistory,
+  feeScheduleBasisForMonth,
   feeScheduleBasisForPeriod,
   parseCountryPackVatRate,
   projectOfficeExpectedFees,
+  sumEstablishedRecurringMonthly,
   type DashboardFeeAgreementInput,
   type DashboardFeeClientInput,
   type DashboardFeeLineInput,
@@ -44,7 +47,7 @@ import {
   paginateFeeBreakdown,
   selectFeeAttentionClients,
 } from '../dashboard-office-fee-breakdown.pure.js';
-import { loadOfficeUpcomingDeadlines } from '../dashboard-office-lists.service.js';
+import { countOfficeAttentionWorkItems, loadOfficeUpcomingDeadlines } from '../dashboard-office-lists.service.js';
 import type {
   DashboardFeeBreakdownQuery,
   DashboardOverviewQuery,
@@ -250,28 +253,10 @@ async function fetchAllOrgRows<T>(table: string, columns: string, orgCol: string
 async function countWorkItems(params: {
   orgId: string;
   allowIds: string[] | null;
-  workState?: string;
-  dueGte?: string;
-  dueLt?: string;
+  listKey: 'overdue' | 'due_today' | 'review_pending';
+  today: { start_iso: string; end_exclusive_iso: string };
 }): Promise<number> {
-  if (params.allowIds && params.allowIds.length === 0) return 0;
-  const chunks: Array<string[] | null> =
-    params.allowIds == null ? [null] : chunkIds(params.allowIds, 80);
-  let total = 0;
-  for (const chunk of chunks) {
-    let q = supabaseAdmin.from('work_items').select('id', { count: 'exact', head: true }).eq('org_id', params.orgId);
-    if (params.workState) q = q.eq('work_state', params.workState);
-    if (params.dueGte) q = q.gte('due_at', params.dueGte);
-    if (params.dueLt) q = q.lt('due_at', params.dueLt);
-    if (params.dueGte || params.dueLt) {
-      q = q.not('work_state', 'eq', 'done').not('work_state', 'eq', 'archived');
-    }
-    if (chunk) q = q.in('client_id', chunk);
-    const { count, error } = await q;
-    if (error) throw new Error(error.message);
-    total += count ?? 0;
-  }
-  return total;
+  return countOfficeAttentionWorkItems(params);
 }
 
 function chunkIds(ids: string[], size: number): string[][] {
@@ -495,9 +480,14 @@ export const dashboardOfficeProvider: DashboardProvider = {
         }
       }
 
-      for (const m of months) {
-        const isCurrentMonth = m.start_date <= today.date && m.end_date >= today.date;
-        if (!isCurrentMonth || expectedStatus !== 'ready') {
+      const feeMonths = nextNJerusalemMonthsIncludingCurrent(now, 6);
+      for (const m of feeMonths) {
+        const monthBasis = feeScheduleBasisForMonth({
+          periodStart: m.start_date,
+          periodEnd: m.end_date,
+          today: today.date,
+        });
+        if (monthBasis === 'historical_unavailable') {
           feeChartPoints.push({
             month: m.month_key,
             label_he: monthLabel(m.month_key, locale),
@@ -518,7 +508,7 @@ export const dashboardOfficeProvider: DashboardProvider = {
         feeChartPoints.push({
           month: m.month_key,
           label_he: monthLabel(m.month_key, locale),
-          value: monthProj.vat_rate_blocked ? null : monthProj.total_monthly_before_vat,
+          value: monthProj.vat_rate_blocked ? null : sumEstablishedRecurringMonthly(monthProj.client_results),
           established: !monthProj.vat_rate_blocked,
         });
       }
@@ -539,14 +529,9 @@ export const dashboardOfficeProvider: DashboardProvider = {
     let weUnavailable: string | null = null;
     try {
       const [o, d, r] = await Promise.all([
-        countWorkItems({ orgId, allowIds, workState: 'overdue' }),
-        countWorkItems({
-          orgId,
-          allowIds,
-          dueGte: today.start_iso,
-          dueLt: today.end_exclusive_iso,
-        }),
-        countWorkItems({ orgId, allowIds, workState: 'review_pending' }),
+        countWorkItems({ orgId, allowIds, listKey: 'overdue', today }),
+        countWorkItems({ orgId, allowIds, listKey: 'due_today', today }),
+        countWorkItems({ orgId, allowIds, listKey: 'review_pending', today }),
       ]);
       overdue = o;
       dueToday = d;

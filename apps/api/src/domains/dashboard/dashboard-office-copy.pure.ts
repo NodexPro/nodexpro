@@ -139,8 +139,15 @@ type OfficeCopy = {
   task_state_review_pending: string;
   task_state_assigned: string;
   task_state_waiting_client: string;
+  task_state_waiting_human: string;
   task_state_new: string;
   task_state_done: string;
+  task_state_escalated: string;
+  task_state_approved: string;
+  task_state_rejected: string;
+  task_state_client_replied: string;
+  task_back: string;
+  task_description: string;
 };
 
 const HE: OfficeCopy = {
@@ -278,8 +285,15 @@ const HE: OfficeCopy = {
   task_state_review_pending: 'ממתין לאישור',
   task_state_assigned: 'משויך',
   task_state_waiting_client: 'ממתין ללקוח',
+  task_state_waiting_human: 'ממתין למשרד',
   task_state_new: 'חדש',
   task_state_done: 'הושלם',
+  task_state_escalated: 'הועלה',
+  task_state_approved: 'אושר',
+  task_state_rejected: 'נדחה',
+  task_state_client_replied: 'הלקוח השיב',
+  task_back: 'חזרה לרשימה',
+  task_description: 'תיאור',
 };
 
 const EN: OfficeCopy = {
@@ -421,8 +435,15 @@ const EN: OfficeCopy = {
   task_state_review_pending: 'Awaiting approval',
   task_state_assigned: 'Assigned',
   task_state_waiting_client: 'Waiting on client',
+  task_state_waiting_human: 'Waiting on office',
   task_state_new: 'New',
   task_state_done: 'Done',
+  task_state_escalated: 'Escalated',
+  task_state_approved: 'Approved',
+  task_state_rejected: 'Rejected',
+  task_state_client_replied: 'Client replied',
+  task_back: 'Back to list',
+  task_description: 'Description',
 };
 
 export function officeCopy(locale: DashboardLocale): OfficeCopy {

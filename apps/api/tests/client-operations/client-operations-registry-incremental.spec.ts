@@ -48,6 +48,25 @@ test('splice removes a row that the rebuilt aggregate filtered out', () => {
   );
 });
 
+test('splice refreshes clients_needing_setup for the mutated client only', () => {
+  const cached = {
+    ...mat([
+      { client_id: 'a', mark: 0 },
+      { client_id: 'b', mark: 0 },
+    ]),
+    clients_needing_setup: [{ client_id: 'a' }, { client_id: 'b' }],
+  };
+  const rebuilt = {
+    ...mat([{ client_id: 'b', mark: 1 }]),
+    clients_needing_setup: [] as Array<{ client_id: string }>,
+  };
+  const next = spliceClientRowIntoRegistryMaterialization(cached, rebuilt, 'b');
+  assert.deepEqual(
+    next.clients_needing_setup?.map((row) => row.client_id),
+    ['a'],
+  );
+});
+
 test('splice inserts a newly matching client at the end', () => {
   const cached = mat([{ client_id: 'a', mark: 0 }]);
   const rebuilt = mat([{ client_id: 'z', mark: 1 }]);

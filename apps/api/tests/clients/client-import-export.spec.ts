@@ -16,8 +16,12 @@ const svc = readRepo('apps/api/src/domains/clients/client-import-export.service.
 const routes = readRepo('apps/api/src/domains/clients/clients.routes.ts');
 const clientsPage = readRepo('apps/web/src/pages/Clients.tsx');
 const endpoints = readRepo('apps/web/src/api/endpoints.ts');
-const en = JSON.parse(readRepo('apps/web/src/i18n/en.json')) as { clients: { import: { issues: Record<string, string> } } };
-const he = JSON.parse(readRepo('apps/web/src/i18n/he.json')) as { clients: { import: { issues: Record<string, string> } } };
+const en = JSON.parse(readRepo('apps/web/src/i18n/en.json')) as {
+  clients: { importCsv: string; importExcel: string; import: { title: string; hint: string; issues: Record<string, string> } };
+};
+const he = JSON.parse(readRepo('apps/web/src/i18n/he.json')) as {
+  clients: { importCsv: string; importExcel: string; import: { title: string; hint: string; issues: Record<string, string> } };
+};
 
 test('Import is a file → preview → named command path, not a second mechanism', () => {
   assert.match(endpoints, /orgClientsImportPreview/);
@@ -26,7 +30,12 @@ test('Import is a file → preview → named command path, not a second mechanis
   assert.match(endpoints, /orgClientsImportTemplateXlsx/);
   assert.doesNotMatch(endpoints, /orgClientsImport = /);
   assert.doesNotMatch(endpoints, /clients\/import`/);
-  assert.match(clientsPage, /accept="\.csv,\.xlsx"/);
+  assert.match(clientsPage, /accept=\{importAccept\}/);
+  assert.match(clientsPage, /openImportPanel\('\.csv'\)/);
+  assert.match(clientsPage, /openImportPanel\('\.xlsx'\)/);
+  assert.match(clientsPage, /clients\.importCsv/);
+  assert.match(clientsPage, /clients\.importExcel/);
+  assert.match(clientsPage, /clients\.import\.hint/);
   assert.match(clientsPage, /GlassFilePicker/);
   assert.match(clientsPage, /handleImportPickedFile/);
   assert.match(clientsPage, /readAsText\(file, 'utf-8'\)/);
@@ -95,6 +104,23 @@ test('CSV maps Hebrew and English headers without inventing values', () => {
   assert.equal(enRows[0].name, 'Dana');
   assert.equal(enRows[0].tax_id, '000000018');
   assert.equal(enRows[0].email, '');
+});
+
+test('Import buttons and required-fields note stay HE/EN and share one importer', () => {
+  assert.equal(en.clients.importCsv, 'Import CSV');
+  assert.equal(en.clients.importExcel, 'Import Excel');
+  assert.equal(en.clients.import.title, 'Import clients');
+  assert.equal(
+    en.clients.import.hint,
+    'Client name and ID / company / business number are required. Files without these details cannot be imported.',
+  );
+  assert.equal(he.clients.importCsv, 'ייבוא CSV');
+  assert.equal(he.clients.importExcel, 'ייבוא Excel');
+  assert.equal(he.clients.import.title, 'ייבוא לקוחות');
+  assert.equal(
+    he.clients.import.hint,
+    'חובה למלא שם לקוח ומספר זהות / ח.פ. / מספר עוסק. ללא נתונים אלה לא ניתן לייבא את הקובץ.',
+  );
 });
 
 test('Import issue codes are localized in EN and HE without mixing alphabets', () => {

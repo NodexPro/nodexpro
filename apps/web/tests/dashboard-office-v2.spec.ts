@@ -49,7 +49,7 @@ test('Dashboard V2 renders aggregate labels and follows application language dir
 
 test('Dashboard V2 keeps global header/language off the dashboard surface only', () => {
   assert.match(layoutSrc, /const isDashboard = location\.pathname === '\/dashboard'/);
-  assert.match(layoutSrc, /isUsersRolesWorkspace \|\| isDashboard \|\| isSettings \|\| isOfficeClients \? null/);
+  assert.match(layoutSrc, /isUsersRolesWorkspace \|\| isDashboard \|\| isSettings \|\| isOfficeGlassSurface \? null/);
   assert.match(layoutSrc, /<AppHeader/);
 });
 
@@ -77,6 +77,9 @@ test('Expected fees stay before VAT, exclude one-time, and do not invent cash co
 test('Dashboard office queries stay org-scoped and do not use current prices as historical truth', () => {
   assert.match(officeProvider, /\.eq\(orgCol, orgId\)/);
   assert.match(officeProvider, /feeScheduleBasisForPeriod/);
+  assert.match(officeProvider, /feeScheduleBasisForMonth/);
+  assert.match(officeProvider, /nextNJerusalemMonthsIncludingCurrent/);
+  assert.match(officeProvider, /sumEstablishedRecurringMonthly/);
   assert.match(officeProvider, /canReconstructMonthlyExpectedFromFeeHistory/);
   assert.doesNotMatch(officeProvider, /fallback_il/);
 });

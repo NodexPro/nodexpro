@@ -11,12 +11,21 @@ export type OfficeDashboardListAggregate = {
   empty_he: string;
   page_label_he: string;
   open_label_he: string;
+  back_label_he?: string;
+  description_label_he?: string;
   columns: Array<{ key: string; label_he: string }>;
   rows: Array<{
     id: string;
     href: string | null;
     open_label_he: string;
     cells: Record<string, string>;
+    detail?: {
+      title: string;
+      client: string;
+      description: string;
+      due: string;
+      status: string;
+    } | null;
   }>;
   pagination: {
     page: number;
@@ -44,6 +53,7 @@ export function DashboardDrilldownModal(props: {
   const [q, setQ] = useState('');
   const [qDebounced, setQDebounced] = useState('');
   const [page, setPage] = useState(1);
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setQDebounced(q), 300);
@@ -64,6 +74,7 @@ export function DashboardDrilldownModal(props: {
       setQ('');
       setQDebounced('');
       setPage(1);
+      setSelectedRowId(null);
       setData(null);
       return;
     }
@@ -90,11 +101,21 @@ export function DashboardDrilldownModal(props: {
         if (!ac.signal.aborted) setLoading(false);
       });
     return () => ac.abort();
-  }, [open, url, locale, page, qDebounced, t]);
+  }, [open, url, locale, page, qDebounced]);
 
   if (!open) return null;
   const pg = data?.pagination;
   const columns = data?.columns ?? [];
+  const selectedRow = selectedRowId ? data?.rows.find((row) => row.id === selectedRowId) ?? null : null;
+  const selectedDetail = selectedRow?.detail ?? null;
+  const columnLabel = (key: string) => columns.find((c) => c.key === key)?.label_he ?? '';
+  const openRow = (row: OfficeDashboardListAggregate['rows'][number]) => {
+    if (row.detail) {
+      setSelectedRowId(row.id);
+      return;
+    }
+    if (row.href) onOpenHref(row.href);
+  };
 
   return createPortal(
     <div
@@ -122,25 +143,62 @@ export function DashboardDrilldownModal(props: {
             ×
           </button>
         </div>
-        <div className="nx-dashboard-breakdown__toolbar">
-          <input
-            className="nx-dashboard-breakdown__search"
-            value={q}
-            onChange={(e) => {
-              setPage(1);
-              setQ(e.target.value);
-            }}
-            placeholder={data?.search_placeholder_he ?? ''}
-            aria-label={data?.search_placeholder_he ?? ''}
-          />
-        </div>
+        {selectedDetail ? null : (
+          <div className="nx-dashboard-breakdown__toolbar">
+            <input
+              className="nx-dashboard-breakdown__search"
+              value={q}
+              onChange={(e) => {
+                setPage(1);
+                setQ(e.target.value);
+              }}
+              placeholder={data?.search_placeholder_he ?? ''}
+              aria-label={data?.search_placeholder_he ?? ''}
+            />
+          </div>
+        )}
         <div className="nx-dashboard-breakdown__body">
           {loading ? <div className="nx-dashboard-empty__subtitle">{t('common.loading')}</div> : null}
           {error ? <div className="nx-dashboard__status--error" role="alert">{error}</div> : null}
-          {!loading && data && data.rows.length === 0 ? (
+          {!loading && selectedDetail ? (
+            <div className="nx-dashboard-breakdown__table-wrap">
+              <button
+                type="button"
+                className="nx-dashboard-breakdown__link"
+                onClick={() => setSelectedRowId(null)}
+              >
+                {data?.back_label_he ?? ''}
+              </button>
+              <table className="nx-dashboard-breakdown__table">
+                <tbody>
+                  <tr>
+                    <th>{columnLabel('title')}</th>
+                    <td>{selectedDetail.title}</td>
+                  </tr>
+                  <tr>
+                    <th>{columnLabel('name')}</th>
+                    <td>{selectedDetail.client}</td>
+                  </tr>
+                  <tr>
+                    <th>{data?.description_label_he ?? ''}</th>
+                    <td>{selectedDetail.description}</td>
+                  </tr>
+                  <tr>
+                    <th>{columnLabel('due')}</th>
+                    <td>{selectedDetail.due}</td>
+                  </tr>
+                  <tr>
+                    <th>{columnLabel('status')}</th>
+                    <td>{selectedDetail.status}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+          {!loading && !selectedDetail && data && data.rows.length === 0 ? (
             <div className="nx-dashboard-breakdown__empty">{data.empty_he}</div>
           ) : null}
-          {!loading && data && data.rows.length > 0 ? (
+          {!loading && !selectedDetail && data && data.rows.length > 0 ? (
             <div className="nx-dashboard-breakdown__table-wrap">
               <table className="nx-dashboard-breakdown__table">
                 <thead>
@@ -158,11 +216,11 @@ export function DashboardDrilldownModal(props: {
                         <td key={c.key}>{row.cells[c.key] ?? '—'}</td>
                       ))}
                       <td>
-                        {row.href ? (
+                        {row.detail || row.href ? (
                           <button
                             type="button"
                             className="nx-dashboard-breakdown__link"
-                            onClick={() => onOpenHref(row.href!)}
+                            onClick={() => openRow(row)}
                           >
                             {row.open_label_he}
                           </button>
@@ -175,7 +233,7 @@ export function DashboardDrilldownModal(props: {
             </div>
           ) : null}
         </div>
-        {pg ? (
+        {pg && !selectedDetail ? (
           <div className="nx-dashboard-breakdown__footer">
             <span className="nx-dashboard-card__note">{data?.page_label_he}</span>
             <div className="nx-dashboard-actions">

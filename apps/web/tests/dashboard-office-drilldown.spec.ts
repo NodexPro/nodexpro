@@ -68,10 +68,16 @@ test('task counters open Dashboard task lists from Work Engine states and do not
   assert.match(providerSrc, /list_key: weStatus === 'ready' \? 'review_pending'/);
   assert.match(providerSrc, /key: 'missing_documents'/);
   assert.match(providerSrc, /status: 'unavailable'/);
-  assert.match(listsSrc, /work_state', 'overdue'/);
-  assert.match(listsSrc, /work_item_id=/);
+  assert.match(listsSrc, /countOfficeAttentionWorkItems/);
+  assert.match(listsSrc, /officeWorkTypeLabel/);
+  assert.match(listsSrc, /detail:\s*\{/);
+  assert.doesNotMatch(listsSrc, /work_type, item.period_key/);
+  assert.doesNotMatch(listsSrc, /work_item_id=/);
+  assert.doesNotMatch(dashSrc, /navigate\(\`\/work-engine/);
+  assert.match(modalSrc, /row\.detail/);
+  assert.match(modalSrc, /selectedDetail/);
   assert.doesNotMatch(listsSrc, /\.limit\(500\)/);
-  assert.match(listsSrc, /\.range\(from, from \+ PAGE - 1\)/);
+  assert.match(listsSrc, /\.range\(from, to\)/);
   assert.match(endpoints, /dashboard\/office-tasks/);
 });
 
