@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiJson, userFacingApiMessage } from '../api/client';
 import { OWNER } from '../api/endpoints';
 import '../styles/nx-glass-surface.css';
-import '../components/users-roles/UsersRoles.css';
+import '../styles/nx-settings-deep-ocean.css';
 import '../styles/nx-office-deep-ocean.css';
+import '../styles/nx-owner-taxes.css';
 import '../styles/nx-billing.css';
+import './owner-modules/nx-owner-modules.css';
 
 type ProviderRow = {
   code?: string;
@@ -159,19 +161,25 @@ export function PlatformOwnerPaymentsPage() {
   }, [editing, text.no_fee_published]);
 
   return (
-    <div className="nx-ur-page nx-office-ocean nx-owner-payments nx-billing" data-testid="owner-payments" dir={aggregate?.ui?.direction ?? 'ltr'}>
-      <div className="nx-ur-page__head">
-        <div>
-          <h1 className="nx-ur-page__title">{text.owner_title ?? 'Payments'}</h1>
-          <p className="nx-ur-page__lead">{text.owner_subtitle}</p>
-        </div>
+    <div
+      className="nx-glass-page nx-glass-page--wide nx-settings nx-settings-deep-ocean nx-office-ocean nx-owner-taxes nx-owner-payments nx-billing"
+      data-testid="owner-payments"
+      dir={aggregate?.ui?.direction ?? 'ltr'}
+    >
+      <div className="nx-owner-taxes__toolbar">
+        <h1 className="nx-glass-title">{text.owner_title ?? 'Payments'}</h1>
         {tab === 'providers' ? (
-          <button type="button" className="nx-ur-btn nx-ur-btn--primary" onClick={openNew}>
+          <button type="button" className="nx-glass-btn nx-glass-btn--purple nx-btn-taxes-compact" onClick={openNew}>
             {text.add_provider}
           </button>
         ) : null}
       </div>
-      {error ? <p className="nx-ur-error" role="alert">{error}</p> : null}
+      {text.owner_subtitle ? <p className="nx-glass-subtitle nx-owner-taxes__lead">{text.owner_subtitle}</p> : null}
+      {error ? (
+        <div className="nx-glass-alert nx-glass-alert--error" role="alert">
+          {error}
+        </div>
+      ) : null}
       <div className="nx-billing__tabs" role="tablist">
         {tabs.map((item) => (
           <button
@@ -186,11 +194,11 @@ export function PlatformOwnerPaymentsPage() {
           </button>
         ))}
       </div>
-      <div className="nx-ur-sheet nx-billing__sheet">
+      <section className="nx-glass-card nx-settings-pair-card nx-owner-payments__sheet">
         {tab === 'providers' ? (
           <>
-            <div className="nx-ur-table-scroll">
-              <table className="nx-ur-table">
+            <div className="nx-glass-table-wrap">
+              <table className="nx-glass-table">
                 <thead>
                   <tr>
                     <th>{text.col_provider}</th>
@@ -215,7 +223,7 @@ export function PlatformOwnerPaymentsPage() {
                         {row.office_preview?.shown_in_billing ? '' : ` · ${text.show_in_billing}`}
                       </td>
                       <td>
-                        <button type="button" className="nx-ur-btn nx-ur-btn--sm nx-ur-btn--secondary" onClick={() => openEdit(row)}>
+                        <button type="button" className="nx-glass-btn nx-glass-btn--secondary nx-btn-taxes-compact" onClick={() => openEdit(row)}>
                           {text.edit_provider}
                         </button>
                       </td>
@@ -226,39 +234,39 @@ export function PlatformOwnerPaymentsPage() {
             </div>
             {editing ? (
               <form
-                className="nx-billing__editor"
+                className="nx-owner-payments__editor"
                 onSubmit={(e) => {
                   e.preventDefault();
                   void save();
                 }}
               >
-                <div className="nx-billing__kpis">
-                  <label className="nx-ur-field">
-                    <span>{text.choose_provider}</span>
+                <div className="nx-owner-payments__fields">
+                  <label className="nx-glass-label">
+                    {text.choose_provider}
                     <input className="nx-glass-input" value={editing.code} onChange={(e) => setEditing({ ...editing, code: e.target.value })} required />
                   </label>
-                  <label className="nx-ur-field">
-                    <span>{text.name_en}</span>
+                  <label className="nx-glass-label">
+                    {text.name_en}
                     <input className="nx-glass-input" value={editing.display_name} onChange={(e) => setEditing({ ...editing, display_name: e.target.value })} required />
                   </label>
-                  <label className="nx-ur-field">
-                    <span>{text.name_he}</span>
+                  <label className="nx-glass-label">
+                    {text.name_he}
                     <input className="nx-glass-input" value={editing.display_name_he} onChange={(e) => setEditing({ ...editing, display_name_he: e.target.value })} />
                   </label>
-                  <label className="nx-ur-field">
-                    <span>{text.logo_url}</span>
+                  <label className="nx-glass-label">
+                    {text.logo_url}
                     <input className="nx-glass-input" value={editing.logo_url} onChange={(e) => setEditing({ ...editing, logo_url: e.target.value })} />
                   </label>
                 </div>
-                <label className="nx-ur-field">
-                  <span>{text.description_en}</span>
+                <label className="nx-glass-label">
+                  {text.description_en}
                   <textarea className="nx-glass-input" value={editing.description_en} onChange={(e) => setEditing({ ...editing, description_en: e.target.value })} />
                 </label>
-                <label className="nx-ur-field">
-                  <span>{text.description_he}</span>
+                <label className="nx-glass-label">
+                  {text.description_he}
                   <textarea className="nx-glass-input" value={editing.description_he} onChange={(e) => setEditing({ ...editing, description_he: e.target.value })} />
                 </label>
-                <fieldset className="nx-billing__checks">
+                <fieldset className="nx-owner-payments__checks">
                   {['PLATFORM_BILLING', 'OFFICE_EXTERNAL', 'OFFICE_EMBEDDED'].map((code) => (
                     <label key={code}>
                       <input
@@ -277,43 +285,43 @@ export function PlatformOwnerPaymentsPage() {
                     </label>
                   ))}
                 </fieldset>
-                <label>
+                <label className="nx-owner-payments__check">
                   <input type="checkbox" checked={editing.show_in_billing} onChange={(e) => setEditing({ ...editing, show_in_billing: e.target.checked })} />
                   {text.show_in_billing}
                 </label>
-                <label>
+                <label className="nx-owner-payments__check">
                   <input type="checkbox" checked={editing.allow_new_connections} onChange={(e) => setEditing({ ...editing, allow_new_connections: e.target.checked })} />
                   {text.allow_new_connections}
                 </label>
-                <p className="nx-billing__note">{text.adapter_toggle_blocked}</p>
-                <p className="nx-billing__note">{text.hidden_keeps_connection}</p>
-                <div className="nx-billing__kpis">
-                  <label className="nx-ur-field">
-                    <span>{text.commission}</span>
+                <p className="nx-owner-payments__note">{text.adapter_toggle_blocked}</p>
+                <p className="nx-owner-payments__note">{text.hidden_keeps_connection}</p>
+                <div className="nx-owner-payments__fields">
+                  <label className="nx-glass-label">
+                    {text.commission}
                     <input className="nx-glass-input" value={editing.commission_percent} onChange={(e) => setEditing({ ...editing, commission_percent: e.target.value })} />
                   </label>
-                  <label className="nx-ur-field">
-                    <span>{text.connection_fee}</span>
+                  <label className="nx-glass-label">
+                    {text.connection_fee}
                     <input className="nx-glass-input" value={editing.connection_fee_amount} onChange={(e) => setEditing({ ...editing, connection_fee_amount: e.target.value })} />
                   </label>
-                  <label className="nx-ur-field">
-                    <span>{text.monthly_fee}</span>
+                  <label className="nx-glass-label">
+                    {text.monthly_fee}
                     <input className="nx-glass-input" value={editing.monthly_fee_amount} onChange={(e) => setEditing({ ...editing, monthly_fee_amount: e.target.value })} />
                   </label>
                 </div>
-                <label className="nx-ur-field">
-                  <span>{text.payout_terms_en}</span>
+                <label className="nx-glass-label">
+                  {text.payout_terms_en}
                   <textarea className="nx-glass-input" value={editing.payout_terms_en} onChange={(e) => setEditing({ ...editing, payout_terms_en: e.target.value })} />
                 </label>
-                <label className="nx-ur-field">
-                  <span>{text.payout_terms_he}</span>
+                <label className="nx-glass-label">
+                  {text.payout_terms_he}
                   <textarea className="nx-glass-input" value={editing.payout_terms_he} onChange={(e) => setEditing({ ...editing, payout_terms_he: e.target.value })} />
                 </label>
-                <label className="nx-ur-field">
-                  <span>{text.terms_url}</span>
+                <label className="nx-glass-label">
+                  {text.terms_url}
                   <input className="nx-glass-input" value={editing.terms_url} onChange={(e) => setEditing({ ...editing, terms_url: e.target.value })} />
                 </label>
-                <aside className="nx-billing__preview">
+                <aside className="nx-owner-payments__preview">
                   <h2>{text.office_preview}</h2>
                   <p>{preview?.name}</p>
                   <p>{preview?.description}</p>
@@ -321,26 +329,26 @@ export function PlatformOwnerPaymentsPage() {
                   <p>{preview?.shown ? text.show_in_billing : ''}</p>
                 </aside>
                 <div className="nx-billing__actions">
-                  <button type="submit" className="nx-ur-btn nx-ur-btn--primary" disabled={busy}>{text.save_provider}</button>
-                  <button type="button" className="nx-ur-btn nx-ur-btn--secondary" onClick={() => setEditing(null)}>{text.cancel}</button>
+                  <button type="submit" className="nx-glass-btn nx-glass-btn--purple nx-btn-taxes-compact" disabled={busy}>{text.save_provider}</button>
+                  <button type="button" className="nx-glass-btn nx-glass-btn--secondary nx-btn-taxes-compact" onClick={() => setEditing(null)}>{text.cancel}</button>
                 </div>
               </form>
             ) : null}
           </>
         ) : null}
-        {tab === 'platform_billing' ? <p className="nx-billing__note">{text.platform_seller}</p> : null}
-        {tab === 'office_providers' ? <p className="nx-billing__note">{text.office_seller}</p> : null}
-        {tab === 'transactions' ? <p className="nx-billing__muted">{text.empty_transactions}</p> : null}
-        {tab === 'subscriptions' ? <p className="nx-billing__muted">{text.empty_subscriptions}</p> : null}
+        {tab === 'platform_billing' ? <p className="nx-owner-payments__note">{text.platform_seller}</p> : null}
+        {tab === 'office_providers' ? <p className="nx-owner-payments__note">{text.office_seller}</p> : null}
+        {tab === 'transactions' ? <p className="nx-owner-payments__note">{text.empty_transactions}</p> : null}
+        {tab === 'subscriptions' ? <p className="nx-owner-payments__note">{text.empty_subscriptions}</p> : null}
         {tab === 'diagnostics' ? (
-          <p className="nx-billing__note">
+          <p className="nx-owner-payments__note">
             {text.diagnostics_note} {text.checkout_blocked} {aggregate?.diagnostics?.hidden_keeps_connection}
           </p>
         ) : null}
         {aggregate?.available_actions?.save_platform_payment_provider_credentials ? null : (
-          <p className="nx-billing__muted">{aggregate?.available_actions?.reason}</p>
+          <p className="nx-owner-payments__note">{aggregate?.available_actions?.reason}</p>
         )}
-      </div>
+      </section>
     </div>
   );
 }

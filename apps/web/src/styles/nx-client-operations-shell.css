@@ -544,6 +544,22 @@ body:has(.t1-appShell--client-operations .nx-co-sheet) {
 }
 
 @media (max-width: 768px) {
+  .nx-co-app-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+    padding: 4px 8px;
+  }
+
+  .nx-co-app-header__title {
+    font-size: 15px;
+  }
+
+  .nx-co-app-header__search-slot {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-width: 0;
+  }
+
   .t1-appShell--client-operations .t1-pageMain {
     padding-inline-start: 56px;
   }

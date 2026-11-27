@@ -179,7 +179,8 @@ test('10 header styles: KPI slot in the approved navy header — scoped to CO on
   assert.match(shellCss, /\.nx-co-app-header\s*\{[^}]*linear-gradient\(\s*90deg,\s*#082447/);
   assert.match(shellCss, /\.nx-co-app-header\s*\{[^}]*grid-template-columns:\s*auto minmax\(0,\s*1fr\) auto/);
   assert.doesNotMatch(shellCss, /\.nx-co-sheet__search--header/);
-  assert.match(sheetCss, /grid-template-columns:\s*repeat\(8,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(sheetCss, /grid-template-columns:\s*repeat\(7,\s*minmax\(0,\s*1fr\)\)/);
+  assert.doesNotMatch(sheetCss, /grid-template-columns:\s*repeat\(8,\s*minmax\(0,\s*1fr\)\)/);
   assert.match(shellCss, /--nx-navy-950: #061a33/);
   assert.match(shellCss, /--nx-navy-900: #082447/);
   assert.match(shellCss, /--nx-navy-850: #0a2d55/);
@@ -190,7 +191,7 @@ test('10 header styles: KPI slot in the approved navy header — scoped to CO on
   assert.match(shellCss, /--nx-cyan-300: #7decf7/);
   assert.match(shellCss, /--nx-violet-500: #6657e8/);
   assert.match(shellCss, /--nx-violet-400: #8074f2/);
-  assert.doesNotMatch(sheetCss, /border:\s*1px solid rgba\(54, 169, 198, 0\.62\)/);
+  assert.match(sheetCss, /border:\s*1px solid rgba\(54, 169, 198, 0\.62\)/);
   assert.match(sheetCss, /\.nx-co-sheet__canvas \{[\s\S]*?max-height:\s*none/);
   assert.match(sheetCss, /\.nx-co-sheet__canvas \{[\s\S]*?overflow-y:\s*auto/);
   assert.match(sheetCss, /\.nx-co-sheet__table thead th \{[\s\S]*?position:\s*sticky/);
@@ -211,6 +212,9 @@ test('10 header styles: KPI slot in the approved navy header — scoped to CO on
     assert.ok(
       /^\.t1-appShell--client-operations/.test(sel) ||
         /^\.nx-co-app-header/.test(sel) ||
+        /^\.nx-co-route-error/.test(sel) ||
+        /^html:has\(\.t1-appShell--client-operations/.test(sel) ||
+        /^body:has\(\.t1-appShell--client-operations/.test(sel) ||
         /^@media\b/.test(sel) ||
         /^@keyframes\b/.test(sel),
       `unscoped selector in CO shell css: ${sel}`,

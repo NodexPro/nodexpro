@@ -1,4 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { useLocation } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import { useI18n } from '../../i18n/I18nProvider';
 
 function ClientOperationsRouteErrorFallback({
@@ -17,13 +19,13 @@ function ClientOperationsRouteErrorFallback({
   );
 }
 
-type Props = { children: ReactNode };
-type State = { error: Error | null; resetKey: number };
+type HostProps = { children: ReactNode };
+type HostState = { error: Error | null; resetKey: number };
 
-export class ClientOperationsRouteErrorBoundary extends Component<Props, State> {
-  state: State = { error: null, resetKey: 0 };
+class ClientOperationsRouteErrorBoundaryHost extends Component<HostProps, HostState> {
+  state: HostState = { error: null, resetKey: 0 };
 
-  static getDerivedStateFromError(error: Error): Partial<State> {
+  static getDerivedStateFromError(error: Error): Partial<HostState> {
     return { error };
   }
 
@@ -45,4 +47,14 @@ export class ClientOperationsRouteErrorBoundary extends Component<Props, State> 
       </div>
     );
   }
+}
+
+export function ClientOperationsRouteErrorBoundary({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const { identityEpoch } = useAuth();
+  return (
+    <ClientOperationsRouteErrorBoundaryHost key={`${location.key}:${identityEpoch}`}>
+      {children}
+    </ClientOperationsRouteErrorBoundaryHost>
+  );
 }

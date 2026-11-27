@@ -23,11 +23,16 @@ test('CO sheet reuses Deep Ocean tokens from Create Client and Dashboard', () =>
   assert.match(sheetCss, /--nx-ocean-base: #123756/);
   assert.match(sheetCss, /--nx-ocean-border: #36a9c6/);
   assert.match(sheetCss, /--nx-ocean-accent: #13bfd0/);
+  assert.match(sheetCss, /\.nx-co-sheet \{[\s\S]*?background:\s*transparent;/);
   assert.match(
     sheetCss,
-    /\.nx-co-sheet \{[\s\S]*?linear-gradient\(180deg, rgba\(18, 55, 86, 0\.46\) 0%, rgba\(16, 45, 73, 0\.52\) 100%\)/,
+    /\.nx-co-sheet__toolbar \{[\s\S]*?linear-gradient\(180deg, rgba\(51, 116, 147, 0\.32\) 0%, rgba\(18, 55, 86, 0\.28\) 100%\)/,
   );
-  assert.match(sheetCss, /backdrop-filter: blur\(22px\) saturate\(1\.25\)/);
+  assert.match(
+    sheetCss,
+    /\.nx-co-sheet__filter-bar \{[\s\S]*?linear-gradient\(180deg, rgba\(51, 116, 147, 0\.32\) 0%, rgba\(18, 55, 86, 0\.28\) 100%\)/,
+  );
+  assert.match(sheetCss, /\.nx-co-sheet__toolbar \{[\s\S]*?backdrop-filter: blur\(12px\)/);
 });
 
 test('data cells stay white with dark text; headers are blue-cyan glass', () => {
@@ -68,6 +73,7 @@ test('Hebrew module label is ניהול לקוחות; English stays Client Manag
   assert.equal(he.nav.clientOperations, 'ניהול לקוחות');
   assert.equal(en.nav.clientOperations, 'Client Management');
   const view = read('../src/components/client-operations/ClientOperationsRegistryView.tsx');
-  assert.match(view, /ניהול לקוחות — \$\{periodHeading\}/);
+  assert.match(view, /t\('clientOperations\.moduleTitle'\)\} — \$\{periodHeading\}/);
+  assert.doesNotMatch(view, /ניהול לקוחות — \$\{periodHeading\}/);
   assert.doesNotMatch(view, /תפעול לקוחות/);
 });

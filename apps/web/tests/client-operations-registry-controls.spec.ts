@@ -41,5 +41,6 @@ test('reusable premium checkbox styles cover registry and workspace native check
   assert.match(sheetCss, /nx-premium-check\.css/);
   assert.match(workspaceSrc, /nx-premium-check\.css/);
   assert.match(viewSrc, /className="nx-co-sheet__checkbox"/);
-  assert.match(viewSrc, /disabled=\{!active \|\| !canEdit/);
+  assert.match(viewSrc, /disabled=\{!editable \|\| !canEdit \|\| !col\.editable \|\| !onRegistryCommand/);
+  assert.doesNotMatch(viewSrc, /disabled=\{!active \|\| !canEdit/);
 });

@@ -1074,6 +1074,9 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const headerSearchSlot = useClientOperationsHeaderSearchSlot();
   const headerWorkspaceSlot = useClientOperationsHeaderWorkspaceSlot();
   const [todoBoardOpen, setTodoBoardOpen] = useState(false);
+  const [mobileWorkspace, setMobileWorkspace] = useState(false);
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
@@ -1261,6 +1264,21 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   useEffect(() => {
     setSearchDraft(query?.q ?? '');
   }, [query?.q]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(max-width: 768px)');
+    const apply = () => {
+      setMobileWorkspace(mq.matches);
+      if (!mq.matches) {
+        setMobileToolsOpen(false);
+        setMobileFiltersOpen(false);
+      }
+    };
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
 
   const viewedCheckboxPeriodKey = query?.operational_period_key ?? period?.selected_period_key ?? '';
 
@@ -3488,7 +3506,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const editCustomCell = async (row: ClientOperationsRegistryRow, column: ClientOperationsRegistryColumn) => {
     if (!canEdit || !column.editable || !column.custom_column_id || !onRegistryCommand) return;
     const current = displayForColumn(row, column, t);
-    const value = window.prompt(column.label.trim() || t('clientOperations.value'), current);
+    const value = window.prompt((column.label ?? '').trim() || t('clientOperations.value'), current);
     if (value === null) return;
     setCommandError('');
     try {
@@ -4547,8 +4565,20 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
 
     return (
       <div className="nx-co-sheet__toolbar" role="toolbar" aria-label={t('clientOperations.sheetTools')}>
+        <div className="nx-co-sheet__toolbar-group nx-co-sheet__toolbar-group--mobile-toggle">
+          <button
+            type="button"
+            className={`nx-co-sheet__btn${mobileToolsOpen ? ' is-active' : ''}`}
+            data-testid="client-operations-mobile-tools"
+            aria-expanded={mobileToolsOpen}
+            aria-controls="client-operations-sheet-tools"
+            onClick={() => setMobileToolsOpen((open) => !open)}
+          >
+            {t('clientOperations.mobileTools')}
+          </button>
+        </div>
         {/* ── Undo ── */}
-        <div className="nx-co-sheet__toolbar-group">
+        <div className="nx-co-sheet__toolbar-group" id="client-operations-sheet-tools">
           <button
             type="button"
             className="nx-co-sheet__btn nx-co-sheet__btn--icon"
@@ -4977,7 +5007,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   };
 
   const renderReportingKpis = () => {
-    if (!reportingDashboard) return null;
+    if (!reportingDashboard?.kpi_cards) return null;
     const activeKpi = query?.filter_reporting_kpi ?? reportingDashboard.active_kpi_filter ?? null;
     return (
       <section className="nx-co-registry__kpis" data-testid="client-operations-reporting-dashboard" aria-label={t('clientOperations.registry.reporting.filterAll')}>
@@ -5025,6 +5055,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const renderPreviousPeriods = () => {
     if (!reportingDashboard) return null;
     const previous = reportingDashboard.previous_periods;
+    if (!previous) return null;
     return (
       <div className="nx-co-registry__previous nx-co-sheet__reporting-previous" data-testid="client-operations-previous-periods-section">
         <button
@@ -5134,6 +5165,15 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         aria-label={t('clientOperations.filterAria')}
         data-testid="client-operations-filter-bar"
       >
+        <button
+          type="button"
+          className={`nx-co-sheet__btn nx-co-sheet__mobile-filters-toggle${mobileFiltersOpen ? ' is-active' : ''}`}
+          data-testid="client-operations-mobile-filters"
+          aria-expanded={mobileFiltersOpen}
+          onClick={() => setMobileFiltersOpen((open) => !open)}
+        >
+          {t('clientOperations.mobileFilters')}
+        </button>
         <div className="nx-co-sheet__filter-bar-scroll">
           {filters.definitions
             .filter((def) => showHandler || def.id !== 'handler')
@@ -5942,10 +5982,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                   ) : (
                     <button
                       type="button"
-                      className={`nx-co-sheet__header-label${column.label.trim() ? '' : ' is-blank'}`}
+                      className={`nx-co-sheet__header-label${(column.label ?? '').trim() ? '' : ' is-blank'}`}
                       disabled={!canEdit || !column.custom_column_id}
                       title={
-                        column.label.trim() ||
+                        (column.label ?? '').trim() ||
                         (canEdit ? t('clientOperations.doubleClickToRenameColumn') : undefined)
                       }
                       onClick={(event) => event.stopPropagation()}
@@ -5954,10 +5994,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                         event.preventDefault();
                         if (!canEdit || !column.custom_column_id) return;
                         setEditingHeaderColumnId(column.custom_column_id);
-                        setHeaderDraft(column.label.trim());
+                        setHeaderDraft((column.label ?? '').trim());
                       }}
                     >
-                      {column.label.trim() || '\u00A0'}
+                      {(column.label ?? '').trim() || '\u00A0'}
                     </button>
                   )}
                   {canEdit && column.settings_available !== false ? (
@@ -6011,7 +6051,10 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
               ].filter(Boolean).join(' ') || undefined}
               title={row.reporting?.row_tone_label_key ? t(row.reporting.row_tone_label_key) : undefined}
               aria-label={row.reporting?.row_tone_label_key ? `${row.client_name ?? row.client_id} — ${t(row.reporting.row_tone_label_key)}` : undefined}
-              onClick={() => setSelectedRowId(row.client_id)}
+              onClick={() => {
+                setSelectedRowId(row.client_id);
+                if (mobileWorkspace) openClientModal(row);
+              }}
             >
               {visibleColumns.map((column) => {
                 const pk = cellKey(row.client_id, column.key);
@@ -6142,7 +6185,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                               className="nx-co-sheet__custom-cell-input"
                               value={cellDraft}
                               autoFocus
-                              aria-label={column.label.trim() || t('clientOperations.columnValue')}
+                              aria-label={(column.label ?? '').trim() || t('clientOperations.columnValue')}
                               onChange={(event) => {
                                 const next = event.target.value;
                                 setCellDraft(next);
@@ -6308,7 +6351,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
                           className="nx-co-sheet__custom-cell-input nx-co-sheet__manual-cell-input"
                           value={cellDraft}
                           autoFocus
-                          aria-label={column.label.trim() || t('clientOperations.manualValue')}
+                          aria-label={(column.label ?? '').trim() || t('clientOperations.manualValue')}
                           data-testid={`co-manual-cell-input-${row.manual_row_slot}-${column.key}`}
                           onChange={(event) => {
                             const next = event.target.value;
@@ -7352,7 +7395,13 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         {headerSearchSlot && !fullscreenOpen
           ? createPortal(renderReportingKpis(), headerSearchSlot)
           : null}
-        <div className={`nx-co-sheet${fullscreenOpen ? ' nx-co-sheet--app-fullscreen' : ''}`}>
+        <div
+          className={`nx-co-sheet${fullscreenOpen ? ' nx-co-sheet--app-fullscreen' : ''}${
+            mobileToolsOpen ? ' is-mobile-tools-open' : ''
+          }${mobileFiltersOpen ? ' is-mobile-filters-open' : ''}${
+            mobileWorkspace ? ' is-mobile-workspace' : ''
+          }`}
+        >
         {/* Inner sheet title removed — module title renders once in the route header. */}
         {headerSearchSlot && !fullscreenOpen ? null : renderReportingKpis()}
         {renderRegistrySort()}

@@ -41,6 +41,7 @@ import {
   resolveRegistryCommandApplyDecision,
   resolveRegistryCommandRequestedPeriod,
 } from '../lib/client-operations-registry-command-apply.pure';
+import { isIgnorableClientOperationsRegistryLoadFailure } from '../lib/client-operations-registry-load-error.pure';
 
 type ClientOperationsReportingDashboard = {
   kpi_cards: Array<{
@@ -475,6 +476,7 @@ export function ClientOperationsRegistry() {
         backendAvailablePeriodsRef.current = data.period.available_periods;
       }
     }
+    setError('');
     return true;
   }, [toCacheQuery]);
 
@@ -557,6 +559,7 @@ export function ClientOperationsRegistry() {
       options?: { quiet?: boolean; preferCache?: boolean },
     ) => {
       const periodKey = nextQuery.operational_period_key ?? null;
+      let paintedFromCache = false;
       const cacheQuery = toCacheQuery(nextQuery);
       if (periodKey) {
         viewedPeriodKeyRef.current = periodKey;
@@ -596,6 +599,7 @@ export function ClientOperationsRegistry() {
           const cached = getPeriodAggregateCache(periodCacheRef.current, periodKey, cacheQuery);
           if (cached) {
             applyAggregate(cached, { forcePeriodKey: periodKey });
+            paintedFromCache = true;
             // Quiet refresh after instant paint.
             options = { ...options, quiet: true };
           } else {
@@ -679,7 +683,16 @@ export function ClientOperationsRegistry() {
           }, 2500);
         })
         .catch((e) => {
-          if (e instanceof Error && e.name === 'AbortError') return;
+          if (
+            isIgnorableClientOperationsRegistryLoadFailure({
+              error: e,
+              signalAborted: ac.signal.aborted,
+              quiet: options?.quiet,
+              paintedFromCache,
+            })
+          ) {
+            return;
+          }
           if (seq !== loadSeqRef.current) return;
           const apiLike = e instanceof ApiError
             ? { code: e.code, status: e.status, message: e.message }
@@ -738,10 +751,11 @@ export function ClientOperationsRegistry() {
     void loadRegistry(query);
     return () => {
       loadAbortRef.current?.abort();
+      loadSeqRef.current += 1;
     };
-    // Mount-only initial load; subsequent loads use loadRegistry via handlers.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only
-  }, [auth.status]);
+    // Identity / org reload only. Query changes go through onQueryChange handlers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- identity reload, not query
+  }, [auth.status, identityEpoch, activeOrganizationId]);
 
   const onQueryChange = useCallback(
     (

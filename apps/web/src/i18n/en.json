@@ -924,6 +924,8 @@
     "searchSuggestions": "Matching clients",
     "searchNoMatches": "No matches found",
     "sheetTools": "Spreadsheet tools",
+    "mobileTools": "Tools",
+    "mobileFilters": "Filters",
     "undo": "Undo",
     "redo": "Redo",
     "alignRight": "Align right",

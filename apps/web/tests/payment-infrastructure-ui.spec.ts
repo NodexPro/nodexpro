@@ -30,6 +30,11 @@ test('Platform Owner Payments and office Payments & Processing are dedicated agg
   assert.match(owner, /save_platform_payment_provider_credentials/);
   assert.match(owner, /upsert_payment_provider_catalog/);
   assert.doesNotMatch(owner, /type="password"/);
+  assert.match(owner, /nx-glass-page/);
+  assert.match(owner, /nx-owner-taxes/);
+  assert.match(owner, /nx-glass-table/);
+  assert.doesNotMatch(owner, /nx-ur-table/);
+  assert.doesNotMatch(owner, /nx-ur-sheet/);
   assert.match(office, /Navigate to="\/billing\?tab=client_processing"/);
   assert.match(billing, /orgBillingClientProcessing/);
   assert.match(billing, /enter_api_keys/);
