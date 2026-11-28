@@ -7,6 +7,8 @@ export const CLIENT_OPERATIONS_USER_HIDDEN_COLUMNS_COMMAND =
   'set_client_operations_user_hidden_columns';
 export const CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_COMMAND =
   'set_client_operations_user_system_column_width';
+export const CLIENT_OPERATIONS_SETUP_WARNING_DISMISSED_COMMAND =
+  'set_client_operations_setup_warning_dismissed';
 
 export const CLIENT_OPERATIONS_USER_HIDDEN_COLUMNS_MAX = 40;
 export const CLIENT_OPERATIONS_SYSTEM_COLUMN_WIDTH_MIN = 48;
@@ -92,4 +94,10 @@ export function userSheetLayoutStorageIdentity(input: {
   userId: string;
 }): string {
   return `${input.organizationId}\u001f${input.userId}`;
+}
+
+export function parseSetupWarningDismissedFlag(raw: unknown): boolean {
+  if (raw === true) return true;
+  if (raw === false) return false;
+  throw new Error('dismissed must be a boolean');
 }

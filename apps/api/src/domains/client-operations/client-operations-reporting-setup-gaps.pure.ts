@@ -3,7 +3,8 @@
  *
  * Country Pack has no required-settings catalog for Client Operations tax/reporting
  * setup. This helper only flags fields the existing fail-closed registry already
- * needs before it can determine VAT reporting obligation, periodicity, or due day.
+ * needs before it can determine VAT reporting obligation or periodicity.
+ * Legal VAT due day lives in Country Pack / Reporting Calendar — not a client-setup gap.
  * Optional choose-fields (advances, NI, payroll) are never treated as errors.
  */
 
@@ -12,14 +13,12 @@ export const REPORTING_SETUP_WARNING_SOURCE = 'TEMPORARY_COUNTRY_PACK_PENDING' a
 export type ReportingSetupGapKey =
   | 'business_type'
   | 'vat_applicability'
-  | 'vat_frequency'
-  | 'vat_due_type';
+  | 'vat_frequency';
 
 export type ReportingBlockedFunctionKey =
   | 'reporting_obligation_scope'
   | 'vat_reporting_obligation'
-  | 'vat_reporting_periodicity'
-  | 'vat_reporting_due';
+  | 'vat_reporting_periodicity';
 
 export type ClientReportingSetupGap = {
   missing: ReportingSetupGapKey[];
@@ -38,11 +37,21 @@ export type ClientOperationsClientsNeedingSetup = {
   source: typeof REPORTING_SETUP_WARNING_SOURCE;
   count: number;
   fingerprint: string;
+  /**
+   * Decimal string of organizations.clients_added_generation (Core INSERT counter).
+   * Not derived from live client rows. Not a legal filing date. Not period-scoped.
+   */
+  clients_added_token: string;
+  dismissed: boolean;
+  visible: boolean;
   title_key: string;
   explanation_key: string;
   count_key: string;
   open_settings_key: string;
   close_key: string;
+  dont_show_again_key: string;
+  client_column_key: string;
+  missing_column_key: string;
   clients: ClientOperationsClientNeedingSetup[];
 };
 
@@ -50,14 +59,12 @@ const GAP_LABEL_KEY: Record<ReportingSetupGapKey, string> = {
   business_type: 'clientOperations.fields.businessType',
   vat_applicability: 'clientOperations.taxes.fields.vat',
   vat_frequency: 'clientOperations.taxes.fields.vatFrequency',
-  vat_due_type: 'clientOperations.taxes.fields.vatDueDay',
 };
 
 const BLOCKED_LABEL_KEY: Record<ReportingBlockedFunctionKey, string> = {
   reporting_obligation_scope: 'clientOperations.setupWarning.blocked.reportingScope',
   vat_reporting_obligation: 'clientOperations.setupWarning.blocked.vatObligation',
   vat_reporting_periodicity: 'clientOperations.setupWarning.blocked.vatPeriodicity',
-  vat_reporting_due: 'clientOperations.setupWarning.blocked.vatDue',
 };
 
 const APPLICABLE_VAT_TYPES = new Set(['yes', 'multiple', 'mixed']);
@@ -115,10 +122,7 @@ export function clientReportingSetupGaps(input: {
       missing.push('vat_frequency');
       blocked.push('vat_reporting_periodicity');
     }
-    if (blank(input.vat_due_type)) {
-      missing.push('vat_due_type');
-      blocked.push('vat_reporting_due');
-    }
+    void input.vat_due_type;
   }
 
   return { missing, blocked };
@@ -148,19 +152,65 @@ export function reportingSetupFingerprint(
     .join('|');
 }
 
+/** Decimal string of the Core org clients-added generation. Empty when missing/invalid. */
+export function formatClientsAddedGeneration(generation: unknown): string {
+  if (generation == null || generation === '') return '';
+  const raw =
+    typeof generation === 'bigint'
+      ? generation.toString()
+      : typeof generation === 'number'
+        ? Number.isFinite(generation)
+          ? String(Math.trunc(generation))
+          : ''
+        : String(generation).trim();
+  if (!/^\d+$/.test(raw)) return '';
+  return raw;
+}
+
+/** True when a stored dismiss marker still covers the current clients-added generation. */
+export function setupWarningIsDismissed(
+  currentToken: string | null | undefined,
+  dismissedToken: string | null | undefined,
+): boolean {
+  const dismissed = formatClientsAddedGeneration(dismissedToken);
+  if (!dismissed) return false;
+  const current = formatClientsAddedGeneration(currentToken);
+  if (!current) return false;
+  return BigInt(current) <= BigInt(dismissed);
+}
+
+export function setupWarningVisible(input: {
+  count: number;
+  clientsAddedToken: string;
+  dismissedClientsAddedToken: string | null | undefined;
+}): boolean {
+  if (!Number.isFinite(input.count) || input.count <= 0) return false;
+  return !setupWarningIsDismissed(input.clientsAddedToken, input.dismissedClientsAddedToken);
+}
+
 export function buildClientsNeedingSetupAggregate(
   clients: readonly ClientOperationsClientNeedingSetup[],
+  addedToken = '',
+  dismissedToken = '',
 ): ClientOperationsClientsNeedingSetup {
   const list = [...clients].sort((a, b) => a.display_name.localeCompare(b.display_name, 'he'));
+  const clients_added_token = formatClientsAddedGeneration(addedToken);
+  const dismissed = setupWarningIsDismissed(clients_added_token, dismissedToken);
   return {
     source: REPORTING_SETUP_WARNING_SOURCE,
     count: list.length,
     fingerprint: reportingSetupFingerprint(list),
+    clients_added_token,
+    dismissed,
+    visible: list.length > 0 && !dismissed,
     title_key: 'clientOperations.setupWarning.title',
     explanation_key: 'clientOperations.setupWarning.explanation',
     count_key: 'clientOperations.setupWarning.count',
     open_settings_key: 'clientOperations.setupWarning.openSettings',
     close_key: 'clientOperations.close',
+    dont_show_again_key: 'clientOperations.setupWarning.dontShowUntilNewClient',
+    client_column_key: 'clientOperations.setupWarning.clientColumn',
+    missing_column_key: 'clientOperations.setupWarning.missingColumn',
     clients: list,
   };
 }

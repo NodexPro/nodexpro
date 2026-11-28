@@ -1130,6 +1130,9 @@
       "explanation": "Without these settings the program cannot correctly determine reporting filing obligations.",
       "count": "{{count}} clients need setup",
       "openSettings": "Open client settings",
+      "dontShowUntilNewClient": "Don't show again until a new client is added",
+      "clientColumn": "Client",
+      "missingColumn": "Missing settings",
       "blocked": {
         "reportingScope": "Reporting obligation scope cannot be determined",
         "vatObligation": "VAT reporting obligation cannot be determined",

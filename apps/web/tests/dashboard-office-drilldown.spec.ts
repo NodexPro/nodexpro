@@ -69,6 +69,8 @@ test('task counters open Dashboard task lists from Work Engine states and do not
   assert.match(providerSrc, /key: 'missing_documents'/);
   assert.match(providerSrc, /status: 'unavailable'/);
   assert.match(listsSrc, /countOfficeAttentionWorkItems/);
+  assert.match(listsSrc, /officeAttentionExcludedWorkTypesPostgrestIn/);
+  assert.match(listsSrc, /not\('work_type'/);
   assert.match(listsSrc, /officeWorkTypeLabel/);
   assert.match(listsSrc, /detail:\s*\{/);
   assert.doesNotMatch(listsSrc, /work_type, item.period_key/);

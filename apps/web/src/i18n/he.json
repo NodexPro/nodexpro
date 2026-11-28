@@ -1130,6 +1130,9 @@
       "explanation": "ללא הגדרות אלה התוכנית לא תוכל לקבוע נכון את חובות הדיווח.",
       "count": "{{count}} לקוחות דורשים השלמת הגדרות",
       "openSettings": "מעבר להגדרות הלקוח",
+      "dontShowUntilNewClient": "אל תציג שוב עד להוספת לקוח חדש",
+      "clientColumn": "לקוח",
+      "missingColumn": "הגדרות חסרות",
       "blocked": {
         "reportingScope": "לא ניתן לקבוע את היקף חובות הדיווח",
         "vatObligation": "לא ניתן לקבוע את חובת דיווח המע״מ",

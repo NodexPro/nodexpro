@@ -8,6 +8,7 @@ import {
   moduleEntitlementErrorKey,
 } from '../modules/module-catalog-copy.pure';
 import { useI18n } from '../i18n/I18nProvider';
+import logoSrc from '../templates/template-1/assets/nodexpro-logo.png';
 import { moduleClientOperationsRegistry, moduleClientOperationsRegistryCommands } from '../api/endpoints';
 import {
   appendClientOperationsWorkspaceQuery,
@@ -44,10 +45,7 @@ import {
 import { isIgnorableClientOperationsRegistryLoadFailure } from '../lib/client-operations-registry-load-error.pure';
 import '../styles/nx-clients.css';
 import '../styles/nx-client-create-deep-ocean-glass.css';
-import {
-  setupWarningStorageKey,
-  shouldShowSetupWarning,
-} from '../lib/client-operations-setup-warning-session.pure';
+import { CLIENT_OPERATIONS_SETUP_WARNING_DISMISSED_COMMAND } from '../lib/client-operations-setup-warning-session.pure';
 
 type ClientOperationsReportingDashboard = {
   kpi_cards: Array<{
@@ -179,11 +177,17 @@ type RegistryAggregate = {
     source: string;
     count: number;
     fingerprint: string;
+    clients_added_token: string;
+    dismissed: boolean;
+    visible: boolean;
     title_key: string;
     explanation_key: string;
     count_key: string;
     open_settings_key: string;
     close_key: string;
+    dont_show_again_key: string;
+    client_column_key: string;
+    missing_column_key: string;
     clients: Array<{
       client_id: string;
       display_name: string;
@@ -298,6 +302,11 @@ export function ClientOperationsRegistry() {
     NonNullable<RegistryAggregate['clients_needing_setup']> | null
   >(null);
   const [setupWarningOpen, setSetupWarningOpen] = useState(false);
+  const [setupWarningCommandPending, setSetupWarningCommandPending] = useState(false);
+  const [setupFolderRequest, setSetupFolderRequest] = useState<{ clientId: string; tab: string } | null>(
+    null,
+  );
+  const setupWarningClosedTokenRef = useRef<string | null>(null);
 
   const activeOrganizationId =
     auth.status === 'authenticated' ? (auth.me.activeOrganizationId ?? null) : null;
@@ -318,6 +327,9 @@ export function ClientOperationsRegistry() {
     setModuleCatalogHint(false);
     setClientsNeedingSetup(null);
     setSetupWarningOpen(false);
+    setSetupWarningCommandPending(false);
+    setSetupFolderRequest(null);
+    setupWarningClosedTokenRef.current = null;
     setLoading(true);
     loadAbortRef.current?.abort();
     loadSeqRef.current += 1;
@@ -508,24 +520,17 @@ export function ClientOperationsRegistry() {
     setError('');
     const setup = data.clients_needing_setup ?? null;
     setClientsNeedingSetup(setup);
-    const dismissed =
-      typeof sessionStorage !== 'undefined' && activeOrganizationId
-        ? sessionStorage.getItem(setupWarningStorageKey(activeOrganizationId))
-        : null;
-    if (
-      setup &&
-      shouldShowSetupWarning({
-        count: setup.count,
-        fingerprint: setup.fingerprint,
-        dismissedFingerprint: dismissed,
-      })
-    ) {
+    const token = String(setup?.clients_added_token ?? '').trim();
+    if (setupWarningClosedTokenRef.current && token && setupWarningClosedTokenRef.current !== token) {
+      setupWarningClosedTokenRef.current = null;
+    }
+    if (setup?.visible && setupWarningClosedTokenRef.current !== token) {
       setSetupWarningOpen(true);
-    } else if (!setup || setup.count <= 0) {
+    } else if (!setup?.visible) {
       setSetupWarningOpen(false);
     }
     return true;
-  }, [toCacheQuery, activeOrganizationId]);
+  }, [toCacheQuery]);
 
   const prefetchPeriods = useCallback(
     (
@@ -920,6 +925,24 @@ export function ClientOperationsRegistry() {
     [applyAggregate, query],
   );
 
+  const persistSetupWarningDismissed = useCallback(
+    (dismissed: boolean) => {
+      setSetupWarningCommandPending(true);
+      return onRegistryCommand({
+        command: CLIENT_OPERATIONS_SETUP_WARNING_DISMISSED_COMMAND,
+        dismissed,
+      }).finally(() => {
+        setSetupWarningCommandPending(false);
+      });
+    },
+    [onRegistryCommand],
+  );
+
+  const closeSetupWarningForVisit = useCallback((token: string) => {
+    setupWarningClosedTokenRef.current = token;
+    setSetupWarningOpen(false);
+  }, []);
+
   useEffect(() => {
     if (loading) return;
     if (!canEdit) return;
@@ -1022,7 +1045,8 @@ export function ClientOperationsRegistry() {
       error={moduleCatalogHint ? '' : error}
       canEdit={canEdit}
       canCreateCoreClient={allowedActions.includes('create_core_client')}
-      pendingOpenClientId={pendingOpenClientId}
+      pendingOpenClientId={pendingOpenClientId ?? setupFolderRequest?.clientId ?? null}
+      pendingOpenTab={setupFolderRequest?.tab ?? null}
       pendingOpenClientSnapshot={
         pendingOpen
           ? {
@@ -1033,7 +1057,10 @@ export function ClientOperationsRegistry() {
             }
           : null
       }
-      onPendingOpenConsumed={() => navigate('.', { replace: true, state: {} })}
+      onPendingOpenConsumed={() => {
+        if (pendingOpenClientId) navigate('.', { replace: true, state: {} });
+        setSetupFolderRequest(null);
+      }}
       showPageHeader={false}
       onReloadRegistry={(options) => void reloadRegistry(options)}
       variant="spreadsheet"
@@ -1064,10 +1091,10 @@ export function ClientOperationsRegistry() {
         organizationId: auth.me.activeOrganizationId ?? '',
       }}
     />
-    {setupWarningOpen && clientsNeedingSetup && clientsNeedingSetup.count > 0 ? (
-      <div className="nx-clients-overlay nx-client-create nx-client-create--deep-ocean-glass">
+    {setupWarningOpen && clientsNeedingSetup && clientsNeedingSetup.visible ? (
+      <div className="nx-clients-overlay nx-client-create nx-client-create--deep-ocean-glass nx-co-setup-warning-overlay">
         <div
-          className="nx-glass-card nx-clients-modal"
+          className="nx-glass-card nx-clients-modal nx-co-setup-warning-modal"
           role="dialog"
           aria-modal="true"
           aria-labelledby="nx-co-setup-warning-title"
@@ -1075,18 +1102,13 @@ export function ClientOperationsRegistry() {
           data-testid="client-operations-setup-warning"
         >
           <div className="nx-clients-modal__head">
-            <h3 id="nx-co-setup-warning-title">{t(clientsNeedingSetup.title_key)}</h3>
+            <div className="nx-co-setup-warning-brand">
+              <img className="nx-co-setup-warning-logo" src={logoSrc} alt="" />
+              <h3 id="nx-co-setup-warning-title">{t(clientsNeedingSetup.title_key)}</h3>
+            </div>
             <button
               type="button"
-              onClick={() => {
-                if (activeOrganizationId) {
-                  sessionStorage.setItem(
-                    setupWarningStorageKey(activeOrganizationId),
-                    clientsNeedingSetup.fingerprint,
-                  );
-                }
-                setSetupWarningOpen(false);
-              }}
+              onClick={() => closeSetupWarningForVisit(String(clientsNeedingSetup.clients_added_token ?? '').trim())}
               className="nx-clients-modal__close"
               aria-label={t(clientsNeedingSetup.close_key)}
             >
@@ -1097,49 +1119,58 @@ export function ClientOperationsRegistry() {
             <div className="nx-clients-form__body">
               <p>{t(clientsNeedingSetup.count_key).replace('{{count}}', String(clientsNeedingSetup.count))}</p>
               <p>{t(clientsNeedingSetup.explanation_key)}</p>
-              <ul className="nx-clients-setup-warning-list">
-                {clientsNeedingSetup.clients.map((client) => (
-                  <li key={client.client_id}>
-                    <strong>{client.display_name}</strong>
-                    <p>
-                      {client.missing_settings.map((item) => t(item.label_key)).join(', ')}
-                    </p>
-                    <p>
-                      {client.blocked_functions.map((item) => t(item.label_key)).join(', ')}
-                    </p>
-                    <button
-                      type="button"
-                      className="nx-glass-btn nx-glass-btn--purple"
-                      onClick={() => {
-                        if (activeOrganizationId) {
-                          sessionStorage.setItem(
-                            setupWarningStorageKey(activeOrganizationId),
-                            clientsNeedingSetup.fingerprint,
-                          );
-                        }
-                        setSetupWarningOpen(false);
-                        navigate(client.settings_href);
-                      }}
-                    >
-                      {t(clientsNeedingSetup.open_settings_key)}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <div className="nx-co-setup-warning-scroll">
+                <table className="nx-co-setup-warning-table">
+                  <thead>
+                    <tr>
+                      <th>{t(clientsNeedingSetup.client_column_key)}</th>
+                      <th>{t(clientsNeedingSetup.missing_column_key)}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clientsNeedingSetup.clients.map((client) => (
+                      <tr key={client.client_id}>
+                        <td>
+                          <button
+                            type="button"
+                            className="nx-co-setup-warning-name"
+                            onClick={() => {
+                              closeSetupWarningForVisit(
+                                String(clientsNeedingSetup.clients_added_token ?? '').trim(),
+                              );
+                              setSetupFolderRequest({ clientId: client.client_id, tab: 'taxes' });
+                            }}
+                          >
+                            {client.display_name}
+                          </button>
+                        </td>
+                        <td>
+                          {client.missing_settings.map((item) => t(item.label_key)).join(', ')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div className="nx-clients-form__footer">
+            <div className="nx-clients-form__footer nx-co-setup-warning-footer">
+              <label className="nx-co-setup-warning-checkbox">
+                <input
+                  type="checkbox"
+                  checked={Boolean(clientsNeedingSetup.dismissed)}
+                  disabled={setupWarningCommandPending}
+                  onChange={(event) => {
+                    void persistSetupWarningDismissed(event.target.checked);
+                  }}
+                />
+                <span>{t(clientsNeedingSetup.dont_show_again_key)}</span>
+              </label>
               <button
                 type="button"
                 className="nx-glass-btn nx-glass-btn--secondary"
-                onClick={() => {
-                  if (activeOrganizationId) {
-                    sessionStorage.setItem(
-                      setupWarningStorageKey(activeOrganizationId),
-                      clientsNeedingSetup.fingerprint,
-                    );
-                  }
-                  setSetupWarningOpen(false);
-                }}
+                onClick={() =>
+                  closeSetupWarningForVisit(String(clientsNeedingSetup.clients_added_token ?? '').trim())
+                }
               >
                 {t(clientsNeedingSetup.close_key)}
               </button>

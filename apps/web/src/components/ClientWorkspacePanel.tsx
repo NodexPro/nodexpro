@@ -435,7 +435,9 @@ export function ClientWorkspacePanel({
     const cid = workspace.client.id;
     const clientChanged = workspaceClientIdRef.current !== null && workspaceClientIdRef.current !== cid;
     if (clientChanged) {
-      setActiveTab('client');
+      setActiveTab(
+        TAB_ORDER.some((tab) => tab.key === initialTab) ? (initialTab as WorkspaceTabKey) : 'client',
+      );
     }
     workspaceClientIdRef.current = cid;
     setLocalWorkspace((prev) => {
@@ -480,7 +482,7 @@ export function ClientWorkspacePanel({
         saver?.resetFromServer(incoming);
       }
     }
-  }, [workspace]);
+  }, [workspace, initialTab]);
 
   useEffect(() => {
     const previous = autosaverRef.current;
@@ -1244,6 +1246,7 @@ export function ClientWorkspaceModal({
   workspace,
   loading,
   error,
+  initialTab,
   onClose,
   onClientProfileSaved,
   onTaxSettingsSaved,
@@ -1252,6 +1255,7 @@ export function ClientWorkspaceModal({
   workspace: ClientOperationsCaseResponse | null;
   loading: boolean;
   error: string;
+  initialTab?: string;
   onClose: () => void;
   onClientProfileSaved?: () => void;
   /** After מיסים save — e.g. refresh registry without closing modal. */
@@ -1286,6 +1290,7 @@ export function ClientWorkspaceModal({
             workspace={workspace!}
             showClose
             folderModal
+            initialTab={initialTab}
             onClose={onClose}
             onClientProfileSaved={onClientProfileSaved}
             onTaxSettingsSaved={onTaxSettingsSaved}

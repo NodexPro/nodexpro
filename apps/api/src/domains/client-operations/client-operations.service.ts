@@ -77,7 +77,10 @@ import {
 } from './client-operations-cell-manual-status.service.js';
 import { mergeSelectedPeriodIntoAvailablePeriods, isClientOperationsManualStatusPaintableColumnKey } from './client-operations-cell-manual-status.pure.js';
 import { loadClientOperationsCellPresentationsForUser } from './client-operations-cell-presentation.service.js';
-import { loadClientOperationsUserSheetLayoutForUser } from './client-operations-user-sheet-layout.service.js';
+import {
+  loadClientOperationsUserSheetLayoutForUser,
+  loadOrganizationClientsAddedGeneration,
+} from './client-operations-user-sheet-layout.service.js';
 import {
   ensurePeriodApplicabilitySnapshots,
   listKnownOperationalPeriodKeys,
@@ -803,7 +806,7 @@ export async function listClientOperationsRegistry(
 
   // Personal formatting is request-scoped (user + period). Never store it in the
   // shared pre-search materialization cache — that cache is not user-keyed.
-  const [user_cell_formatting, userSheetLayout] = await Promise.all([
+  const [user_cell_formatting, userSheetLayout, clientsAddedGeneration] = await Promise.all([
     loadClientOperationsCellPresentationsForUser({
       organizationId: orgId,
       userId: ctx.user.id,
@@ -813,6 +816,7 @@ export async function listClientOperationsRegistry(
       organizationId: orgId,
       userId: ctx.user.id,
     }),
+    loadOrganizationClientsAddedGeneration(orgId),
   ]);
 
   const response: ClientOperationsRegistryResponse = {
@@ -851,6 +855,8 @@ export async function listClientOperationsRegistry(
     user_system_column_widths: userSheetLayout.system_column_widths,
     clients_needing_setup: buildClientsNeedingSetupAggregate(
       materialization.clients_needing_setup ?? [],
+      clientsAddedGeneration,
+      userSheetLayout.setup_warning_dismissed_clients_added_token,
     ),
   };
   const reusedMaterialization =
@@ -1243,7 +1249,13 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
   if (safeClients.length === 0) {
     // Empty-client org still exposes five backend-owned manual slots (values may be empty),
     // unless a business filter is active (manual rows cannot match client business filters).
-    return finishMaterialization(await sharedInputsPromise, []);
+    return finishMaterialization(
+      await sharedInputsPromise,
+      [],
+      emptyPreviousPeriods,
+      [],
+      [],
+    );
   }
 
   const clientIds = safeClients.map((c) => c.id);

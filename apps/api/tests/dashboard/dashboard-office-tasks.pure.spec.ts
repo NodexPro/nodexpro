@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  isOfficeAttentionExcludedWorkType,
   officePeriodLabel,
   officeTaskDescription,
   officeWorkTypeLabel,
@@ -23,8 +24,12 @@ test('parseOfficeTaskListKey accepts only dashboard attention buckets', () => {
 });
 
 test('human task titles never concatenate work_type and period_key codes', () => {
-  assert.equal(officeWorkTypeLabel('annual_report_docs', 'he'), 'מסמכי דוח שנתי');
+  assert.equal(officeWorkTypeLabel('annual_report_docs', 'he'), 'מסמכים לדוח שנתי');
   assert.equal(officeWorkTypeLabel('annual_report_docs', 'en'), 'Annual report documents');
+  assert.equal(officeWorkTypeLabel('capital_declaration_docs', 'he'), 'מסמכים להצהרת הון');
+  assert.equal(officeWorkTypeLabel('capital_declaration_docs', 'en'), 'Capital declaration documents');
+  assert.equal(officeWorkTypeLabel('vat_material', 'he'), 'חומר למע״מ');
+  assert.equal(officeWorkTypeLabel('payroll_material', 'he'), 'חומר לשכר');
   assert.equal(officePeriodLabel('client_operations:annual_report:2026'), '2026');
   assert.equal(
     officeTaskDescription({
@@ -124,4 +129,33 @@ test('due today and review pending stay Work Engine field filters', () => {
 test('search tokens cannot inject PostgREST wildcards', () => {
   assert.equal(sanitizeOfficeTaskSearchToken('Test 7'), 'Test 7');
   assert.equal(sanitizeOfficeTaskSearchToken('a%b,c(d)'), 'a b c d');
+});
+
+test('Dashboard Attention excludes VAT/Payroll material work types and keeps annual/capital docs', () => {
+  assert.equal(isOfficeAttentionExcludedWorkType('vat_material'), true);
+  assert.equal(isOfficeAttentionExcludedWorkType('payroll_material'), true);
+  assert.equal(isOfficeAttentionExcludedWorkType('annual_report_docs'), false);
+  assert.equal(isOfficeAttentionExcludedWorkType('capital_declaration_docs'), false);
+  assert.equal(
+    workItemMatchesOfficeAttention({
+      listKey: 'due_today',
+      workState: 'waiting_client',
+      slaStatus: 'on_track',
+      dueAt: '2026-11-27T08:00:00.000Z',
+      today: TODAY,
+      workType: 'vat_material',
+    }),
+    false,
+  );
+  assert.equal(
+    workItemMatchesOfficeAttention({
+      listKey: 'due_today',
+      workState: 'waiting_client',
+      slaStatus: 'on_track',
+      dueAt: '2026-11-27T08:00:00.000Z',
+      today: TODAY,
+      workType: 'capital_declaration_docs',
+    }),
+    true,
+  );
 });

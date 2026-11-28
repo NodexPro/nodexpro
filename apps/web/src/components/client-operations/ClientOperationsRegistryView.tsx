@@ -880,6 +880,7 @@ export type ClientOperationsRegistryViewProps = {
   canCreateCoreClient?: boolean;
   /** Open the existing folder modal after a create that arrived via registry navigation state. */
   pendingOpenClientId?: string | null;
+  pendingOpenTab?: string | null;
   pendingOpenClientSnapshot?: {
     client_name: string | null;
     tax_id: string | null;
@@ -1033,6 +1034,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
     canEdit,
     canCreateCoreClient = false,
     pendingOpenClientId = null,
+    pendingOpenTab = null,
     pendingOpenClientSnapshot = null,
     onPendingOpenConsumed,
     showPageHeader = true,
@@ -1082,6 +1084,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
   const [modalLoading, setModalLoading] = useState(false);
   const [modalError, setModalError] = useState('');
   const [modalData, setModalData] = useState<ClientOperationsCaseResponse | null>(null);
+  const [modalInitialTab, setModalInitialTab] = useState<string | undefined>(undefined);
   const auth = useAuth();
   const { t, lang } = useI18n();
   const orgId = auth.status === 'authenticated' ? auth.me.activeOrganizationId : null;
@@ -1681,8 +1684,13 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
       });
   };
 
-  const openClientModal = (r: ClientOperationsRegistryRow & { email?: string | null; phone?: string | null }) => {
+  const openClientModal = (
+    r: ClientOperationsRegistryRow & { email?: string | null; phone?: string | null },
+    tab?: string | null,
+  ) => {
     closeQuickProfile();
+    const nextTab = String(tab ?? '').trim();
+    setModalInitialTab(nextTab || undefined);
     setModalOpen(true);
     setModalLoading(true);
     setModalError('');
@@ -1717,6 +1725,7 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
         notes_cell_text_he: null,
         operational_notes_count: 0,
       },
+      pendingOpenTab,
     );
     onPendingOpenConsumed?.();
     // Open once per pending id. rows listed only to prefer a registry placeholder.
@@ -7199,7 +7208,11 @@ export function ClientOperationsRegistryView(props: ClientOperationsRegistryView
           workspace={modalData}
           loading={modalLoading}
           error={modalError}
-          onClose={() => setModalOpen(false)}
+          initialTab={modalInitialTab}
+          onClose={() => {
+            setModalOpen(false);
+            setModalInitialTab(undefined);
+          }}
           onClientProfileSaved={reloadRegistry}
           onTaxSettingsSaved={reloadRegistry}
         />

@@ -63,10 +63,12 @@ import {
 import { setClientOperationsCellPresentationsBulk } from './client-operations-cell-presentation.service.js';
 import { CLIENT_OPERATIONS_CELL_PRESENTATION_COMMAND } from './client-operations-cell-presentation.pure.js';
 import {
+  setClientOperationsSetupWarningDismissed,
   setClientOperationsUserHiddenColumns,
   setClientOperationsUserSystemColumnWidth,
 } from './client-operations-user-sheet-layout.service.js';
 import {
+  CLIENT_OPERATIONS_SETUP_WARNING_DISMISSED_COMMAND,
   CLIENT_OPERATIONS_USER_HIDDEN_COLUMNS_COMMAND,
   CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_COMMAND,
 } from './client-operations-user-sheet-layout.pure.js';
@@ -174,6 +176,7 @@ export type ClientOperationsRegistryCommandBody = {
   instance_id?: unknown;
   cells?: unknown;
   column_keys?: unknown;
+  dismissed?: unknown;
 };
 
 function assertOrg(ctx: RequestContext): string {
@@ -200,6 +203,7 @@ function assertRegistryView(ctx: RequestContext): void {
 const PERSONAL_SHEET_LAYOUT_COMMANDS = new Set([
   CLIENT_OPERATIONS_USER_HIDDEN_COLUMNS_COMMAND,
   CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_COMMAND,
+  CLIENT_OPERATIONS_SETUP_WARNING_DISMISSED_COMMAND,
 ]);
 
 function assertQueryError(error: { message?: string } | null, description: string): void {
@@ -859,6 +863,13 @@ export async function executeClientOperationsRegistryCommand(
       organizationId: orgId,
       columnKey: body.column_key,
       widthPx: body.width_px,
+    });
+    reuseMaterializationCache = true;
+  } else if (command === CLIENT_OPERATIONS_SETUP_WARNING_DISMISSED_COMMAND) {
+    await setClientOperationsSetupWarningDismissed({
+      ctx,
+      organizationId: orgId,
+      dismissed: body.dismissed,
     });
     reuseMaterializationCache = true;
   } else if (command === 'set_client_operations_cell_manual_status') {

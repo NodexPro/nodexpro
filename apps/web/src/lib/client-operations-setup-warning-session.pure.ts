@@ -1,16 +1,16 @@
-export const CLIENT_OPERATIONS_SETUP_WARNING_STORAGE_PREFIX = 'nx-co-setup-warning';
+export const CLIENT_OPERATIONS_SETUP_WARNING_DISMISSED_COMMAND =
+  'set_client_operations_setup_warning_dismissed';
 
-export function setupWarningStorageKey(organizationId: string): string {
-  return `${CLIENT_OPERATIONS_SETUP_WARNING_STORAGE_PREFIX}:${String(organizationId ?? '').trim()}`;
-}
-
+/** Mirrors backend setupWarningVisible — FE only uses aggregate.visible at runtime. */
 export function shouldShowSetupWarning(input: {
   count: number;
-  fingerprint: string;
-  dismissedFingerprint: string | null | undefined;
+  clientsAddedToken: string;
+  dismissedClientsAddedToken: string | null | undefined;
 }): boolean {
   if (!Number.isFinite(input.count) || input.count <= 0) return false;
-  const fingerprint = String(input.fingerprint ?? '').trim();
-  if (!fingerprint) return false;
-  return String(input.dismissedFingerprint ?? '').trim() !== fingerprint;
+  const dismissed = String(input.dismissedClientsAddedToken ?? '').trim();
+  if (!dismissed || !/^\d+$/.test(dismissed)) return true;
+  const current = String(input.clientsAddedToken ?? '').trim();
+  if (!/^\d+$/.test(current)) return true;
+  return BigInt(current) > BigInt(dismissed);
 }

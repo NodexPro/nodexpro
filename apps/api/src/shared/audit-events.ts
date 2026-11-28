@@ -173,6 +173,7 @@ export const AUDIT_ACTIONS = {
   CLIENT_OPERATIONS_CELL_PRESENTATION_SET: 'client_operations.cell_presentation.set',
   CLIENT_OPERATIONS_USER_HIDDEN_COLUMNS_SET: 'client_operations.user_hidden_columns.set',
   CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_SET: 'client_operations.user_system_column_width.set',
+  CLIENT_OPERATIONS_SETUP_WARNING_DISMISSED_SET: 'client_operations.setup_warning_dismissed.set',
   CLIENT_OPERATIONS_CUSTOM_COLUMN_PERIOD_SETTINGS: 'client_operations.custom_column.period_settings',
   CLIENT_OPERATIONS_CUSTOM_COLUMN_LEGACY_BASELINE: 'client_operations.custom_column.legacy_baseline',
   CLIENT_OPERATIONS_USER_COLUMNS_PERIOD_INITIALIZED: 'client_operations.user_columns.period_initialized',

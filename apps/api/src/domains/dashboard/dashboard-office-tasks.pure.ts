@@ -15,6 +15,25 @@ export type OfficeTaskAttentionWindow = {
 
 const TERMINAL_WORK_STATES = new Set(['done', 'archived']);
 
+/**
+ * Ordinary Client Operations material-wait work types. Dashboard Attention
+ * hides these by exact `work_items.work_type` (count and list). Work Engine
+ * items are not deleted. Annual / capital document-collection types stay.
+ *
+ * There is no `income_tax_advance_material` work_type in Work Engine mapping.
+ */
+export const OFFICE_ATTENTION_EXCLUDED_WORK_TYPES = ['vat_material', 'payroll_material'] as const;
+
+const OFFICE_ATTENTION_EXCLUDED_WORK_TYPE_SET = new Set<string>(OFFICE_ATTENTION_EXCLUDED_WORK_TYPES);
+
+export function isOfficeAttentionExcludedWorkType(workType: string | null | undefined): boolean {
+  return OFFICE_ATTENTION_EXCLUDED_WORK_TYPE_SET.has(String(workType ?? '').trim());
+}
+
+export function officeAttentionExcludedWorkTypesPostgrestIn(): string {
+  return `(${OFFICE_ATTENTION_EXCLUDED_WORK_TYPES.join(',')})`;
+}
+
 export function parseOfficeTaskListKey(raw: unknown): OfficeTaskListKey | null {
   const s = String(raw ?? '').trim();
   return (OFFICE_TASK_LIST_KEYS as readonly string[]).includes(s) ? (s as OfficeTaskListKey) : null;
@@ -42,8 +61,11 @@ function humanizeKey(key: string): string {
 
 const WORK_TYPE_LABELS: Record<DashboardLocale, Record<string, string>> = {
   he: {
-    annual_report_docs: 'מסמכי דוח שנתי',
-    annual_report_document_collection: 'מסמכי דוח שנתי',
+    annual_report_docs: 'מסמכים לדוח שנתי',
+    annual_report_document_collection: 'מסמכים לדוח שנתי',
+    capital_declaration_docs: 'מסמכים להצהרת הון',
+    vat_material: 'חומר למע״מ',
+    payroll_material: 'חומר לשכר',
     payroll_document_collection: 'מסמכי שכר',
     vat_document_collection: 'מסמכי מע״מ',
     docflow_thread_followup: 'שיחה',
@@ -55,6 +77,9 @@ const WORK_TYPE_LABELS: Record<DashboardLocale, Record<string, string>> = {
   en: {
     annual_report_docs: 'Annual report documents',
     annual_report_document_collection: 'Annual report documents',
+    capital_declaration_docs: 'Capital declaration documents',
+    vat_material: 'VAT material',
+    payroll_material: 'Payroll material',
     payroll_document_collection: 'Payroll documents',
     vat_document_collection: 'VAT documents',
     docflow_thread_followup: 'Conversation',
@@ -172,7 +197,9 @@ export function workItemMatchesOfficeAttention(params: {
   slaStatus: string | null | undefined;
   dueAt: string | null | undefined;
   today: OfficeTaskAttentionWindow;
+  workType?: string | null;
 }): boolean {
+  if (isOfficeAttentionExcludedWorkType(params.workType)) return false;
   const state = String(params.workState ?? '').trim();
   if (params.listKey === 'review_pending') return state === 'review_pending';
   if (TERMINAL_WORK_STATES.has(state)) return false;

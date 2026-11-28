@@ -213,3 +213,83 @@
     flex-wrap: wrap;
   }
 }
+
+.nx-client-create--deep-ocean-glass.nx-co-setup-warning-overlay .nx-clients-modal.nx-glass-card {
+  width: min(560px, 96vw);
+  max-height: min(72vh, 520px);
+}
+
+.nx-client-create--deep-ocean-glass.nx-co-setup-warning-overlay .nx-clients-form__body {
+  display: flex;
+  flex-direction: column;
+  grid-template-columns: none;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.nx-co-setup-warning-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.nx-co-setup-warning-logo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.nx-co-setup-warning-scroll {
+  overflow: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.nx-co-setup-warning-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.nx-co-setup-warning-table th,
+.nx-co-setup-warning-table td {
+  border: 1px solid rgba(54, 169, 198, 0.45);
+  padding: 6px 8px;
+  text-align: start;
+  vertical-align: top;
+}
+
+.nx-co-setup-warning-table th {
+  font-weight: 600;
+  background: rgba(16, 45, 73, 0.42);
+  position: sticky;
+  top: 0;
+}
+
+.nx-co-setup-warning-name {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  text-align: inherit;
+}
+
+.nx-co-setup-warning-footer {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.nx-co-setup-warning-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin-inline-end: auto;
+}

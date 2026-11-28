@@ -4,9 +4,11 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  CLIENT_OPERATIONS_SETUP_WARNING_DISMISSED_COMMAND,
   CLIENT_OPERATIONS_USER_HIDDEN_COLUMNS_COMMAND,
   CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_COMMAND,
   parseClientOperationsSystemColumnWidthWrite,
+  parseSetupWarningDismissedFlag,
   sanitizeClientOperationsHiddenColumnKeys,
   sanitizeClientOperationsSystemColumnWidths,
   userSheetLayoutStorageIdentity,
@@ -15,6 +17,10 @@ import {
 const dir = dirname(fileURLToPath(import.meta.url));
 const migration = readFileSync(
   join(dir, '../../../../supabase/migrations/219_client_operations_user_sheet_preferences.sql'),
+  'utf8',
+);
+const setupWarningMigration = readFileSync(
+  join(dir, '../../../../supabase/migrations/227_client_operations_setup_warning_preference.sql'),
   'utf8',
 );
 const serviceSource = readFileSync(
@@ -115,34 +121,59 @@ test('named commands, GET attach, view RBAC, audit, no generic PATCH, no N+1', (
     CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_COMMAND,
     'set_client_operations_user_system_column_width',
   );
+  assert.equal(
+    CLIENT_OPERATIONS_SETUP_WARNING_DISMISSED_COMMAND,
+    'set_client_operations_setup_warning_dismissed',
+  );
+  assert.equal(parseSetupWarningDismissedFlag(true), true);
+  assert.equal(parseSetupWarningDismissedFlag(false), false);
+  assert.throws(() => parseSetupWarningDismissedFlag('yes'));
   assert.match(commandSource, /CLIENT_OPERATIONS_USER_HIDDEN_COLUMNS_COMMAND/);
   assert.match(commandSource, /CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_COMMAND/);
+  assert.match(commandSource, /CLIENT_OPERATIONS_SETUP_WARNING_DISMISSED_COMMAND/);
   assert.match(commandSource, /assertRegistryView\(ctx\)/);
   assert.match(serviceSource, /AUDIT_ACTIONS\.CLIENT_OPERATIONS_USER_HIDDEN_COLUMNS_SET/);
   assert.match(serviceSource, /AUDIT_ACTIONS\.CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_SET/);
+  assert.match(serviceSource, /AUDIT_ACTIONS\.CLIENT_OPERATIONS_SETUP_WARNING_DISMISSED_SET/);
   assert.match(auditSource, /CLIENT_OPERATIONS_USER_HIDDEN_COLUMNS_SET/);
   assert.match(auditSource, /CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_SET/);
+  assert.match(auditSource, /CLIENT_OPERATIONS_SETUP_WARNING_DISMISSED_SET/);
   assert.match(aggregateSource, /user_hidden_column_keys/);
   assert.match(aggregateSource, /user_system_column_widths/);
+  assert.match(aggregateSource, /setup_warning_dismissed_clients_added_token/);
   assert.match(aggregateSource, /loadClientOperationsUserSheetLayoutForUser/);
   assert.equal((serviceSource.match(/apply_client_operations_user_hidden_columns/g) ?? []).length, 1);
   assert.equal((serviceSource.match(/apply_client_operations_user_system_column_width/g) ?? []).length, 1);
+  assert.equal((serviceSource.match(/apply_client_operations_setup_warning_dismissed/g) ?? []).length, 1);
   assert.doesNotMatch(incrementalSource, /set_client_operations_user_hidden_columns/);
   assert.doesNotMatch(incrementalSource, /set_client_operations_user_system_column_width/);
+  assert.doesNotMatch(incrementalSource, /set_client_operations_setup_warning_dismissed/);
   assert.match(commandSource, /set_client_operations_custom_column_width/);
   assert.match(routesSource, /withRegistryCommand/);
   assert.match(routesSource, /router\.post\('\/registry\/commands', \.\.\.withRegistryCommand/);
   assert.match(commandSource, /PERSONAL_SHEET_LAYOUT_COMMANDS\.has\(command\)/);
+  assert.match(setupWarningMigration, /setup_warning_dismissed_clients_added_token/);
+  assert.match(setupWarningMigration, /apply_client_operations_setup_warning_dismissed/);
+  assert.match(setupWarningMigration, /client_operations_user_sheet_preferences/);
+  assert.match(setupWarningMigration, /clients_added_generation/);
+  assert.match(setupWarningMigration, /bump_organization_clients_added_generation/);
+  assert.match(setupWarningMigration, /after insert on public.clients/);
+  assert.doesNotMatch(setupWarningMigration, /create table/);
+  assert.match(serviceSource, /loadOrganizationClientsAddedGeneration/);
+  assert.doesNotMatch(serviceSource, /loadNonArchivedClientGenerations/);
+  assert.match(aggregateSource, /loadOrganizationClientsAddedGeneration/);
 });
 
 test('frontend hydrates layout from aggregate and does not write localStorage', () => {
   assert.match(pageSource, /user_hidden_column_keys/);
   assert.match(pageSource, /user_system_column_widths/);
+  assert.match(pageSource, /CLIENT_OPERATIONS_SETUP_WARNING_DISMISSED_COMMAND/);
   assert.match(viewSource, /CLIENT_OPERATIONS_USER_HIDDEN_COLUMNS_COMMAND/);
   assert.match(viewSource, /CLIENT_OPERATIONS_USER_SYSTEM_COLUMN_WIDTH_COMMAND/);
   assert.doesNotMatch(viewSource, /loadClientOperationsHiddenColumns\(/);
   assert.doesNotMatch(viewSource, /saveClientOperationsHiddenColumns\(/);
   assert.doesNotMatch(viewSource, /loadClientOperationsColumnWidths\(/);
   assert.doesNotMatch(viewSource, /saveClientOperationsColumnWidths\(/);
+  assert.doesNotMatch(pageSource, /localStorage|sessionStorage/);
   assert.match(viewSource, /persistCustomColumnWidth/);
 });

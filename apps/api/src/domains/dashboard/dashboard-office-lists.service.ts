@@ -12,6 +12,7 @@ import { officeCopy, parseDashboardLocale, type DashboardLocale } from './dashbo
 import { parseDashboardPeriodKey, resolveDashboardPeriodWindow, jerusalemDayWindow } from './dashboard-office-period.pure.js';
 import { clientScopeOrFilter } from '../work-engine/work-engine-client-scope.js';
 import {
+  officeAttentionExcludedWorkTypesPostgrestIn,
   officeTaskAttentionOrFilter,
   officeTaskDescription,
   officeWorkTypeLabel,
@@ -410,6 +411,7 @@ function applyOfficeTaskAttentionBase(
   if (spec.dueGte) next = next.gte('due_at', spec.dueGte);
   if (spec.dueLt) next = next.lt('due_at', spec.dueLt);
   if (spec.excludeTerminal) next = next.not('work_state', 'in', '(done,archived)');
+  next = next.not('work_type', 'in', officeAttentionExcludedWorkTypesPostgrestIn());
   const ors = [
     spec.or,
     params.searchOr,
