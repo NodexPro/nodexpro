@@ -547,7 +547,10 @@ body:has(.t1-appShell--client-operations .nx-co-sheet) {
   .nx-co-app-header {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 6px;
-    padding: 4px 8px;
+    padding-top: 4px;
+    padding-right: 8px;
+    padding-bottom: 4px;
+    padding-left: 56px;
   }
 
   .nx-co-app-header__title {
@@ -561,14 +564,15 @@ body:has(.t1-appShell--client-operations .nx-co-sheet) {
   }
 
   .t1-appShell--client-operations .t1-pageMain {
-    padding-inline-start: 56px;
+    padding-top: 56px;
   }
 
   .t1-appShell--client-operations:not(.t1-appShell--general) .t1-pageMain {
-    padding-block: 0 18px;
-    padding-inline: 56px 12px;
+    padding-block: 56px 18px;
+    padding-inline: 12px;
   }
 
+  .t1-appShell--client-operations:has(.nx-co-app-header) .t1-pageMain,
   .t1-appShell--client-operations:has(.nx-co-sheet) .t1-pageMain {
     padding-top: 0;
   }
@@ -604,10 +608,13 @@ body:has(.t1-appShell--client-operations .nx-co-sheet) {
 
 @media (max-width: 430px) {
   .t1-appShell--client-operations:not(.t1-appShell--general) .t1-pageMain {
-    padding: 0 8px 16px;
+    padding: 56px 8px 16px;
   }
 
+  .t1-appShell--client-operations:has(.nx-co-app-header) .t1-pageMain,
   .t1-appShell--client-operations:has(.nx-co-sheet) .t1-pageMain {
     padding-top: 0;
+    padding-left: 8px;
+    padding-right: 8px;
   }
 }

@@ -631,7 +631,7 @@ button.nx-dashboard-card--kpi:hover,
 @media (max-width: 640px) {
   .nx-dashboard__metrics,
   .nx-dashboard-attention {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .nx-dashboard-legend {

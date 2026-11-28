@@ -36,6 +36,8 @@ test('Hebrew and English V2.1 labels cover churn, breakdown, and missing-agreeme
   assert.equal(en.reporting_type_capital, 'Capital declaration');
   assert.equal(he.reporting_office_control, 'תאריך יעד מניהול לקוחות');
   assert.equal(en.reporting_office_control, 'Office control date from Client Operations');
+  assert.equal(he.reporting_applicability, 'חייב בדיווח לפי הגדרות המס');
+  assert.equal(en.reporting_applicability, 'Must file based on tax settings');
   assert.equal(he.attention_missing_docs_unavailable, '');
   assert.doesNotMatch(he.kpi_debtors_secondary, /Accounting Base/);
   assert.equal(he.kpi_new_clients, 'לקוחות חדשים');

@@ -259,7 +259,7 @@ export function DashboardFeeBreakdownModal(props: {
                     <Fragment key={row.client_id}>
                       <tr>
                         {columns.map((c) => (
-                          <td key={c.key}>
+                          <td key={c.key} data-label={c.label_he}>
                             {cellFor(c.key, row, expanded, setExpanded, onOpenClient)}
                           </td>
                         ))}

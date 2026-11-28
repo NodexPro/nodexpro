@@ -36,6 +36,7 @@ import '../styles/nx-office-deep-ocean.css';
 import '../styles/nx-client-create-royal-glass.css';
 import '../styles/nx-client-create-navy-royal-glass.css';
 import '../styles/nx-client-create-deep-ocean-glass.css';
+import '../styles/nx-mobile-office.css';
 
 type CreateClientModalAppearance =
   | 'current'

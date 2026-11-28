@@ -18,7 +18,8 @@ test('CO mobile workspace is composition to 768px, not a shrunk Excel sheet', ()
   assert.match(css, /@media \(max-width: 768px\)/);
   assert.match(css, /is-mobile-tools-open/);
   assert.match(css, /is-mobile-filters-open/);
-  assert.match(css, /nx-co-registry__kpis \{\s*overflow-x:\s*scroll/);
+  assert.match(css, /nx-co-registry__kpis \{\s*overflow-x:\s*hidden/);
+  assert.match(css, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(css, /data-col='client_name'/);
   assert.match(view, /max-width: 768px/);
   assert.match(view, /client-operations-mobile-tools/);

@@ -98,7 +98,8 @@ test('responsive office shell keeps tables scrollable and avoids page overflow',
   assert.match(dashboardCss, /@media \(max-width: 430px\)/);
   assert.match(shellCss, /height:\s*100dvh/);
   assert.match(shellCss, /overflow-x:\s*hidden/);
-  assert.match(shellCss, /@media \(max-width: 768px\)[\s\S]*padding-inline:\s*56px 12px/);
+  assert.match(shellCss, /@media \(max-width: 768px\)[\s\S]*padding-left:\s*56px/);
+  assert.match(shellCss, /@media \(max-width: 768px\)[\s\S]*padding-top:\s*56px/);
   assert.match(sidebarCss, /height:\s*100dvh/);
   assert.match(sidebarSrc, /coarsePointer/);
   assert.match(sidebarSrc, /mobileNav/);

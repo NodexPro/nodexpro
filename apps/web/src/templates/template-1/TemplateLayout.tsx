@@ -13,6 +13,7 @@ import type { UiLanguageCode } from '../../types/session';
 import './tokens.css';
 import '../../styles/nx-client-operations-shell.css';
 import '../../styles/nx-glass-surface.css';
+import '../../styles/nx-mobile-office.css';
 
 export type Template1SidebarItem = {
   to: string;

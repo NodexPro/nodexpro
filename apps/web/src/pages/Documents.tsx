@@ -8,6 +8,7 @@ import { GlassFilePicker } from '../components/glass/GlassFilePicker';
 import '../styles/nx-glass-surface.css';
 import '../styles/nx-documents.css';
 import '../styles/nx-office-deep-ocean.css';
+import '../styles/nx-mobile-office.css';
 
 interface DocumentRow {
   id: string;
@@ -221,18 +222,20 @@ export function Documents() {
                     className="is-clickable"
                     onClick={() => navigate(`/documents/${d.id}`)}
                   >
-                    <td>{d.title ?? d.document_code ?? '—'}</td>
-                    <td>{typeLabel(d.document_type_code)}</td>
-                    <td>{d.lifecycle_state}</td>
-                    <td>
+                    <td data-label={t('documents.columns.title')}>{d.title ?? d.document_code ?? '—'}</td>
+                    <td data-label={t('documents.columns.type')}>{typeLabel(d.document_type_code)}</td>
+                    <td data-label={t('documents.columns.status')}>{d.lifecycle_state}</td>
+                    <td data-label={t('documents.columns.date')}>
                       {(d.document_date ?? d.issue_date ?? d.created_at)
                         ? new Date(d.document_date ?? d.issue_date ?? d.created_at!).toLocaleDateString()
                         : '—'}
                     </td>
-                    <td className="is-num">
+                    <td className="is-num" data-label={t('documents.columns.amount')}>
                       {d.amount_total != null ? `${d.amount_total} ${d.currency ?? ''}`.trim() : '—'}
                     </td>
-                    <td>{d.is_archived && <span className="nx-glass-badge">{t('common.archived')}</span>}</td>
+                    <td data-label="">
+                      {d.is_archived && <span className="nx-glass-badge">{t('common.archived')}</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

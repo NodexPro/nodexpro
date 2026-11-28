@@ -45,6 +45,7 @@ import {
 import { ApiError, userFacingApiMessage } from '../api/client';
 import { WorkEngineTabHost } from '../components/work-engine/WorkEngineTabHost';
 import '../styles/nx-work-engine-queue.css';
+import '../styles/nx-mobile-office.css';
 
 type FilterState = {
   state: string;
@@ -844,6 +845,7 @@ function QueueTable(props: {
                     col.kind === 'actions' ? 'nx-we-td nx-we-td--actions' : 'nx-we-td nx-we-td--data'
                   }
                   data-col-key={col.key}
+                  data-label={col.label}
                 >
                   {col.kind === 'actions' ? (
                     <QueueRowShellActions
@@ -1831,6 +1833,7 @@ function ReminderReviewTable(props: {
                   <td
                     key={`${row.reminder_candidate_id}-${col.key}`}
                     className={col.kind === 'actions' ? 'nx-we-td nx-we-td--actions' : 'nx-we-td'}
+                    data-label={col.label}
                     onClick={col.kind === 'actions' ? (e) => e.stopPropagation() : undefined}
                   >
                     {col.kind === 'actions' ? (

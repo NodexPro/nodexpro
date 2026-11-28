@@ -13,6 +13,7 @@ import { DashboardDrilldownModal } from '../components/dashboard/DashboardDrilld
 import { DashboardFeeBreakdownModal } from '../components/dashboard/DashboardFeeBreakdownModal';
 import { UiLanguageSwitch } from '../components/glass/UiLanguageSwitch';
 import '../styles/nx-dashboard.css';
+import '../styles/nx-mobile-office.css';
 
 type DashboardStatus = 'ready' | 'empty' | 'coming_soon' | 'unavailable';
 
@@ -380,7 +381,13 @@ export function Dashboard() {
   const auth = useAuth();
   const navigate = useNavigate();
   const { lang, t } = useI18n();
-  const dir = lang === 'he' ? 'rtl' : 'ltr';
+  const sessionLocale =
+    auth.status === 'authenticated' &&
+    (auth.me.sidebar_account_block.language_selector.current_value === 'he' ||
+      auth.me.sidebar_account_block.language_selector.current_value === 'en')
+      ? auth.me.sidebar_account_block.language_selector.current_value
+      : lang;
+  const dir = sessionLocale === 'he' ? 'rtl' : 'ltr';
   const [overview, setOverview] = useState<DashboardOverviewData | null>(null);
   const [period, setPeriod] = useState('current_month');
   const [loading, setLoading] = useState(true);
@@ -401,7 +408,7 @@ export function Dashboard() {
     setLoading(true);
     setError('');
     apiJson<DashboardOverviewData>(
-      `${dashboardOverview()}?period=${encodeURIComponent(period)}&locale=${encodeURIComponent(lang)}`,
+      `${dashboardOverview()}?period=${encodeURIComponent(period)}&locale=${encodeURIComponent(sessionLocale)}`,
       { signal: ac.signal },
     )
       .then((data) => {
@@ -419,7 +426,7 @@ export function Dashboard() {
       cancelled = true;
       ac.abort();
     };
-  }, [auth.status, orgId, period, lang]);
+  }, [auth.status, orgId, period, sessionLocale]);
 
   const office = overview?.office ?? null;
 
@@ -452,7 +459,7 @@ export function Dashboard() {
   if (error) return <div className="nx-dashboard__status nx-dashboard__status--error">{error}</div>;
   if (!office) {
     return (
-      <div className="nx-dashboard" data-testid="nx-dashboard" dir={dir} lang={lang}>
+      <div className="nx-dashboard" data-testid="nx-dashboard" dir={dir} lang={sessionLocale}>
         <EmptyState title={t('dashboard.unavailableTitle')} subtitle={t('dashboard.unavailableSubtitle')} />
       </div>
     );
@@ -507,7 +514,7 @@ export function Dashboard() {
   };
 
   return (
-    <div className="nx-dashboard" data-testid="nx-dashboard" dir={dir} lang={lang}>
+    <div className="nx-dashboard" data-testid="nx-dashboard" dir={dir} lang={sessionLocale}>
       <div className="nx-dashboard__inner">
         <div className="nx-dashboard__header" data-testid="nx-dashboard-toolbar">
           <div>
@@ -744,7 +751,7 @@ export function Dashboard() {
         <DashboardFeeBreakdownModal
           open
           period={period}
-          locale={lang}
+          locale={sessionLocale}
           initialFilter={breakdownFilter}
           onClose={() => setBreakdownOpen(false)}
           onOpenClient={(href) => {
@@ -758,7 +765,7 @@ export function Dashboard() {
           key={drilldownUrl}
           open
           url={drilldownUrl}
-          locale={lang}
+          locale={sessionLocale}
           onClose={() => setDrilldownUrl(null)}
           onOpenHref={(href) => {
             setDrilldownUrl(null);

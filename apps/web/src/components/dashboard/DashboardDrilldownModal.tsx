@@ -213,9 +213,11 @@ export function DashboardDrilldownModal(props: {
                   {data.rows.map((row) => (
                     <tr key={row.id}>
                       {columns.map((c) => (
-                        <td key={c.key}>{row.cells[c.key] ?? '—'}</td>
+                        <td key={c.key} data-label={c.label_he}>
+                          {row.cells[c.key] ?? '—'}
+                        </td>
                       ))}
-                      <td>
+                      <td data-label="">
                         {row.detail || row.href ? (
                           <button
                             type="button"

@@ -18,6 +18,7 @@ import { uiText } from '../components/users-roles/users-roles-selection.pure';
 import { CoNavGlyph, ROW_ACTION_GLYPH } from '../templates/template-1/components/AppSidebar';
 import '../components/users-roles/UsersRoles.css';
 import '../styles/nx-office-deep-ocean.css';
+import '../styles/nx-mobile-office.css';
 
 type ModalState =
   | { kind: 'profile' | 'clients' | 'modules' | 'close'; memberId: string }
@@ -283,8 +284,8 @@ export function UsersRoles() {
                 <tbody>
                   {data.members.map((m) => (
                     <tr key={m.member_id} className={m.membership.status.code === 'active' ? '' : 'is-closed'}>
-                      <td className="nx-ur-td--num">{m.display_number ?? ''}</td>
-                      <td className="nx-ur-td--name">
+                      <td className="nx-ur-td--num" data-label={T('number_short')}>{m.display_number ?? ''}</td>
+                      <td className="nx-ur-td--name" data-label={T('name')}>
                         <div className="nx-ur-name">
                           {m.profile.display_name}
                           {m.is_self ? <span className="nx-ur-you">{T('you')}</span> : null}
@@ -296,16 +297,16 @@ export function UsersRoles() {
                           {m.profile.phone ? <span className="nx-ur-sub nx-ur-ltr">{m.profile.phone}</span> : null}
                         </div>
                       </td>
-                      <td>{m.role.label}</td>
-                      <td>{m.client_access.summary}</td>
-                      <td>{m.module_access.summary}</td>
-                      <td className="nx-ur-ltr">{m.membership.start_date ?? '—'}</td>
-                      <td>
+                      <td data-label={T('role')}>{m.role.label}</td>
+                      <td data-label={T('clients')}>{m.client_access.summary}</td>
+                      <td data-label={T('modules')}>{m.module_access.summary}</td>
+                      <td className="nx-ur-ltr" data-label={T('start_date')}>{m.membership.start_date ?? '—'}</td>
+                      <td data-label={T('status')}>
                         <span className={`nx-ur-badge nx-ur-badge--${m.membership.status.code}`}>
                           {m.membership.status.label}
                         </span>
                       </td>
-                      <td className="nx-ur-td--actions">
+                      <td className="nx-ur-td--actions" data-label={T('actions')}>
                         <div className="nx-ur-actions">
                           {m.available_actions.edit_profile ? (
                             <RowIconAction
@@ -368,13 +369,13 @@ export function UsersRoles() {
                 <tbody>
                   {data.invitations.map((inv) => (
                     <tr key={inv.invitation_id}>
-                      <td className="nx-ur-ltr">{inv.email}</td>
-                      <td>{inv.role.label}</td>
-                      <td>
+                      <td className="nx-ur-ltr" data-label={T('email')}>{inv.email}</td>
+                      <td data-label={T('role')}>{inv.role.label}</td>
+                      <td data-label={T('status')}>
                         <span className={`nx-ur-badge nx-ur-badge--${inv.status.code}`}>{inv.status.label}</span>
                       </td>
-                      <td className="nx-ur-sub">{inv.sent_summary}</td>
-                      <td className="nx-ur-td--actions">
+                      <td className="nx-ur-sub" data-label={T('last_sent')}>{inv.sent_summary}</td>
+                      <td className="nx-ur-td--actions" data-label={T('actions')}>
                         <div className="nx-ur-actions">
                           {inv.available_actions.resend ? (
                             <button

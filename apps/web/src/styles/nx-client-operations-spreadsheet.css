@@ -4560,24 +4560,46 @@ button.nx-co-sheet__date-open {
   }
 
   .nx-co-registry__kpis {
-    overflow-x: scroll;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
+    overflow-x: hidden;
+    overflow-y: visible;
     padding-bottom: 4px;
+    width: 100%;
+    max-width: 100%;
   }
 
   .nx-co-registry__kpis .nx-co-sheet__reporting-kpis {
-    display: flex;
-    flex-wrap: nowrap;
-    width: max-content;
-    min-width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    min-width: 0;
     gap: 6px;
   }
 
   .nx-co-registry__kpis .nx-co-sheet__reporting-kpi {
-    flex: 0 0 auto;
-    min-width: 92px;
+    min-width: 0;
+    width: 100%;
     min-height: 44px;
+  }
+
+  .nx-co-sheet.is-mobile-tools-open .nx-co-sheet__toolbar-group:not(.nx-co-sheet__toolbar-group--search):not(.nx-co-sheet__toolbar-group--mobile-toggle) {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+
+  .nx-co-sheet.is-mobile-tools-open .nx-co-sheet__btn,
+  .nx-co-sheet.is-mobile-tools-open .nx-co-sheet__toolbar-group .nx-btn {
+    min-height: 36px;
+    height: 36px;
+    flex: 1 1 calc(50% - 6px);
+    min-width: 0;
+    max-width: 100%;
+    padding: 8px 12px;
+    font-size: 14px;
+    line-height: 1.2;
+    border-radius: 6px;
   }
 
   .nx-co-sheet {

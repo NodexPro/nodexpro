@@ -8,6 +8,7 @@ import { useI18n } from '../i18n/I18nProvider';
 import '../styles/nx-glass-surface.css';
 import '../styles/nx-settings-deep-ocean.css';
 import '../styles/nx-office-deep-ocean.css';
+import '../styles/nx-mobile-office.css';
 import type { SettingsAutosaveDomain, SettingsAutosaveStatus } from './settings-autosave.pure';
 import { useSettingsAutosave } from './useSettingsAutosave';
 import { AccountSecurityPanel } from '../security/AccountSecurityPanel';
