@@ -93,6 +93,8 @@ router.get('/office-reporting-clients', authMiddleware, requireOrg, requireOffic
       obligation_key: typeof req.query.obligation_key === 'string' ? req.query.obligation_key : undefined,
       filing_due_date: typeof req.query.filing_due_date === 'string' ? req.query.filing_due_date : undefined,
       reporting_period_key: typeof req.query.reporting_period_key === 'string' ? req.query.reporting_period_key : undefined,
+      category_key: typeof req.query.category_key === 'string' ? req.query.category_key : undefined,
+      bucket: typeof req.query.bucket === 'string' ? req.query.bucket : undefined,
     });
     return res.json(list);
   } catch (e) {

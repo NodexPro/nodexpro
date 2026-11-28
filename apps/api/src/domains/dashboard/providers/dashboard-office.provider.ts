@@ -122,7 +122,13 @@ function emptyOfficeSection(
     kpis: {
       active_clients: kpi('active_clients', copy.kpi_active),
       expected_fees: kpi('expected_fees', copy.kpi_expected_fees),
-      office_debtors: kpi('office_debtors', copy.kpi_debtors),
+        office_debtors: {
+          ...kpi('office_debtors', copy.kpi_debtors),
+          value_he: copy.kpi_inactive,
+          secondary_he: '',
+          status: 'coming_soon',
+          note_he: null,
+        },
       new_clients: kpi('new_clients', copy.kpi_new_clients),
       clients_left: kpi('clients_left', copy.kpi_left),
     },
@@ -194,15 +200,19 @@ function emptyOfficeSection(
     },
     deadlines: {
       title_he: copy.deadlines_title,
+      overdue_title_he: copy.deadlines_overdue_title,
       status: 'coming_soon',
       unavailable_he: copy.deadlines_unavailable,
       columns: [
-        { key: 'due', label_he: copy.reporting_col_due },
         { key: 'type', label_he: copy.reporting_col_type },
         { key: 'clients', label_he: copy.reporting_col_clients },
-        { key: 'status', label_he: copy.reporting_col_timing },
+        { key: 'due', label_he: copy.reporting_col_due },
       ],
       rows: [],
+      groups: {
+        upcoming: { title_he: copy.deadlines_title, rows: [] },
+        overdue: { title_he: copy.deadlines_overdue_title, rows: [] },
+      },
     },
     charts: {
       expected_fees_by_month: {
@@ -588,13 +598,13 @@ export const dashboardOfficeProvider: DashboardProvider = {
         office_debtors: {
           key: 'office_debtors',
           title_he: copy.kpi_debtors,
-          value_he: '—',
-          secondary_he: copy.kpi_debtors_secondary,
+          value_he: copy.kpi_inactive,
+          secondary_he: '',
           href: null,
           action_key: null,
           list_key: null,
           status: 'coming_soon',
-          note_he: copy.kpi_debtors_note,
+          note_he: null,
         },
         new_clients: {
           key: 'new_clients',

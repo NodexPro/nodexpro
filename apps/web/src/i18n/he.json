@@ -1137,7 +1137,10 @@
         "reportingScope": "לא ניתן לקבוע את היקף חובות הדיווח",
         "vatObligation": "לא ניתן לקבוע את חובת דיווח המע״מ",
         "vatPeriodicity": "לא ניתן לקבוע את תדירות דיווח המע״מ",
-        "vatDue": "לא ניתן לקבוע את מועד דיווח המע״מ"
+        "vatDue": "לא ניתן לקבוע את מועד דיווח המע״מ",
+        "incomeTaxAdvanceObligation": "לא ניתן לקבוע את חובת דיווח מקדמות מס הכנסה",
+        "incomeTaxAdvancePeriodicity": "לא ניתן לקבוע את תדירות דיווח מקדמות מס הכנסה",
+        "nationalInsuranceObligation": "לא ניתן לקבוע את חובת ביטוח לאומי"
       }
     },
     "errors": {

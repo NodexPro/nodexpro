@@ -392,6 +392,19 @@ export function ClientOperationsRegistry() {
     ) => {
     const responsePeriod = resolveRegistryAggregatePeriodKey(data);
     const viewed = options?.forcePeriodKey ?? viewedPeriodKeyRef.current;
+    const applySetupWarning = (aggregate: RegistryAggregate) => {
+      const setup = aggregate.clients_needing_setup ?? null;
+      setClientsNeedingSetup(setup);
+      const token = String(setup?.clients_added_token ?? '').trim();
+      if (setupWarningClosedTokenRef.current && token && setupWarningClosedTokenRef.current !== token) {
+        setupWarningClosedTokenRef.current = null;
+      }
+      if (setup?.visible && setupWarningClosedTokenRef.current !== token) {
+        setSetupWarningOpen(true);
+      } else if (!setup?.visible) {
+        setSetupWarningOpen(false);
+      }
+    };
     if (
       !shouldApplyPeriodAggregateResponse({
         responsePeriodKey: responsePeriod,
@@ -400,6 +413,8 @@ export function ClientOperationsRegistry() {
       })
     ) {
       // Late / wrong / missing period never paints. Cache only when identity is explicit.
+      // Setup warning is org-scoped, not period-scoped — still apply it on first entry.
+      applySetupWarning(data);
       if (responsePeriod) {
         putPeriodAggregateCache(
           periodCacheRef.current,
@@ -518,17 +533,7 @@ export function ClientOperationsRegistry() {
       }
     }
     setError('');
-    const setup = data.clients_needing_setup ?? null;
-    setClientsNeedingSetup(setup);
-    const token = String(setup?.clients_added_token ?? '').trim();
-    if (setupWarningClosedTokenRef.current && token && setupWarningClosedTokenRef.current !== token) {
-      setupWarningClosedTokenRef.current = null;
-    }
-    if (setup?.visible && setupWarningClosedTokenRef.current !== token) {
-      setSetupWarningOpen(true);
-    } else if (!setup?.visible) {
-      setSetupWarningOpen(false);
-    }
+    applySetupWarning(data);
     return true;
   }, [toCacheQuery]);
 
@@ -1094,7 +1099,7 @@ export function ClientOperationsRegistry() {
     {setupWarningOpen && clientsNeedingSetup && clientsNeedingSetup.visible ? (
       <div className="nx-clients-overlay nx-client-create nx-client-create--deep-ocean-glass nx-co-setup-warning-overlay">
         <div
-          className="nx-glass-card nx-clients-modal nx-co-setup-warning-modal"
+            className="nx-glass-card nx-clients-modal nx-co-setup-warning-modal nx-co-setup-warning-modal--taxes"
           role="dialog"
           aria-modal="true"
           aria-labelledby="nx-co-setup-warning-title"
@@ -1167,7 +1172,7 @@ export function ClientOperationsRegistry() {
               </label>
               <button
                 type="button"
-                className="nx-glass-btn nx-glass-btn--secondary"
+                className="nx-btn nx-btn-taxes-compact"
                 onClick={() =>
                   closeSetupWarningForVisit(String(clientsNeedingSetup.clients_added_token ?? '').trim())
                 }

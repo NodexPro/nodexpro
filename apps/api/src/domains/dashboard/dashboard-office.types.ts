@@ -23,6 +23,8 @@ export type DashboardOfficeListQuery = DashboardOverviewQuery & {
   obligation_key?: string | null;
   filing_due_date?: string | null;
   reporting_period_key?: string | null;
+  category_key?: string | null;
+  bucket?: string | null;
 };
 
 export type OfficeDashboardListColumn = { key: string; label_he: string };
@@ -110,6 +112,8 @@ export type OfficeDashboardDeadlineRow = {
   obligation_key: string | null;
   filing_due_date: string | null;
   reporting_period_key: string | null;
+  category_key: string | null;
+  bucket: 'upcoming' | 'overdue' | null;
   status_he: string | null;
   action_key: OfficeDashboardKpiAction;
   severity_he: string | null;
@@ -182,10 +186,15 @@ export type OfficeDashboardSection = {
   };
   deadlines: {
     title_he: string;
+    overdue_title_he: string;
     status: DashboardStatus;
     unavailable_he: string;
     columns: OfficeDashboardListColumn[];
     rows: OfficeDashboardDeadlineRow[];
+    groups: {
+      upcoming: { title_he: string; rows: OfficeDashboardDeadlineRow[] };
+      overdue: { title_he: string; rows: OfficeDashboardDeadlineRow[] };
+    };
   };
   charts: {
     expected_fees_by_month: {

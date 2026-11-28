@@ -219,6 +219,40 @@
   max-height: min(72vh, 520px);
 }
 
+.nx-client-create--deep-ocean-glass.nx-co-setup-warning-overlay .nx-clients-modal.nx-co-setup-warning-modal--taxes {
+  width: min(520px, 96vw);
+  max-height: min(68vh, 480px);
+  padding: 12px 14px 10px;
+  border-radius: 14px;
+  color: #eef6ff;
+  border: 1px solid rgba(210, 238, 255, 0.5);
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(51, 116, 147, 0.34), transparent 58%),
+    radial-gradient(ellipse at 90% 108%, rgba(19, 191, 208, 0.18), transparent 50%),
+    linear-gradient(180deg, rgba(23, 84, 122, 0.38) 0%, rgba(16, 45, 73, 0.44) 100%);
+  box-shadow:
+    0 0 0 1px rgba(70, 213, 255, 0.14),
+    0 8px 18px rgba(8, 38, 82, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+}
+
+.nx-co-setup-warning-modal--taxes .nx-clients-modal__head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #eef6ff;
+  line-height: 1.25;
+}
+
+.nx-co-setup-warning-modal--taxes .nx-clients-form__body p {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #eef6ff;
+  line-height: 1.3;
+}
+
 .nx-client-create--deep-ocean-glass.nx-co-setup-warning-overlay .nx-clients-form__body {
   display: flex;
   flex-direction: column;
@@ -250,23 +284,33 @@
 .nx-co-setup-warning-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
-  line-height: 1.25;
+  font-size: 12px;
+  line-height: 1.3;
+  font-family: Arial, sans-serif;
 }
 
 .nx-co-setup-warning-table th,
 .nx-co-setup-warning-table td {
-  border: 1px solid rgba(54, 169, 198, 0.45);
-  padding: 6px 8px;
+  border: none;
+  border-bottom: 1px solid rgba(232, 244, 255, 0.18);
+  padding: 7px 0;
   text-align: start;
   vertical-align: top;
+  color: #eef6ff;
 }
 
 .nx-co-setup-warning-table th {
   font-weight: 600;
-  background: rgba(16, 45, 73, 0.42);
+  font-size: 12px;
+  color: #eef6ff;
+  background: transparent;
   position: sticky;
   top: 0;
+}
+
+.nx-co-setup-warning-table tr:last-child td {
+  border-bottom: none;
+  padding-bottom: 2px;
 }
 
 .nx-co-setup-warning-name {
@@ -284,6 +328,18 @@
 .nx-co-setup-warning-footer {
   flex-wrap: wrap;
   justify-content: space-between;
+  gap: 8px;
+}
+
+.nx-co-setup-warning-modal--taxes .nx-btn.nx-btn-taxes-compact {
+  border-radius: 6px;
+  height: auto;
+  min-height: 0;
+  min-width: 96px;
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 .nx-co-setup-warning-checkbox {

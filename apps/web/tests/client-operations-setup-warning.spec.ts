@@ -102,6 +102,10 @@ test('Client Operations warning is aggregate-owned Deep Ocean table and opens th
   assert.match(registrySrc, /nx-co-setup-warning-table/);
   assert.match(registrySrc, /dont_show_again_key/);
   assert.match(registrySrc, /setup\?\.visible/);
+  assert.match(registrySrc, /applySetupWarning/);
+  assert.match(gapsSrc, /income_tax_advance_applicability/);
+  assert.match(gapsSrc, /national_insurance_applicability/);
+  assert.doesNotMatch(gapsSrc, /fee_agreement/);
   assert.match(registrySrc, /setSetupFolderRequest/);
   assert.match(registrySrc, /tab: 'taxes'/);
   assert.doesNotMatch(registrySrc, /navigate\(client\.settings_href\)/);

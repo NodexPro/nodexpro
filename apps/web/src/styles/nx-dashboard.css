@@ -544,6 +544,14 @@ button.nx-dashboard-card--kpi:hover,
   pointer-events: none;
 }
 
+.nx-dashboard-deadlines-group + .nx-dashboard-deadlines-group {
+  margin-top: 12px;
+}
+
+.nx-dashboard-deadlines-group .nx-dashboard-card__title {
+  margin-bottom: 6px;
+}
+
 .nx-dashboard-deadlines-table-wrap {
   overflow: auto;
   max-height: 220px;

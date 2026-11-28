@@ -1,11 +1,10 @@
 /**
  * TEMPORARY_COUNTRY_PACK_PENDING
  *
- * Country Pack has no required-settings catalog for Client Operations tax/reporting
- * setup. This helper only flags fields the existing fail-closed registry already
- * needs before it can determine VAT reporting obligation or periodicity.
- * Legal VAT due day lives in Country Pack / Reporting Calendar — not a client-setup gap.
- * Optional choose-fields (advances, NI, payroll) are never treated as errors.
+ * Country Pack has no required-settings catalog. This helper only flags fields the
+ * existing fail-closed registry already needs before it can determine reporting
+ * applicability or periodicity. Legal due day lives in Country Pack / Reporting
+ * Calendar — not a client-setup gap. Fee agreements are commercial, not a legal gap.
  */
 
 export const REPORTING_SETUP_WARNING_SOURCE = 'TEMPORARY_COUNTRY_PACK_PENDING' as const;
@@ -13,12 +12,18 @@ export const REPORTING_SETUP_WARNING_SOURCE = 'TEMPORARY_COUNTRY_PACK_PENDING' a
 export type ReportingSetupGapKey =
   | 'business_type'
   | 'vat_applicability'
-  | 'vat_frequency';
+  | 'vat_frequency'
+  | 'income_tax_advance_applicability'
+  | 'income_tax_advance_frequency'
+  | 'national_insurance_applicability';
 
 export type ReportingBlockedFunctionKey =
   | 'reporting_obligation_scope'
   | 'vat_reporting_obligation'
-  | 'vat_reporting_periodicity';
+  | 'vat_reporting_periodicity'
+  | 'income_tax_advance_obligation'
+  | 'income_tax_advance_periodicity'
+  | 'national_insurance_obligation';
 
 export type ClientReportingSetupGap = {
   missing: ReportingSetupGapKey[];
@@ -59,12 +64,18 @@ const GAP_LABEL_KEY: Record<ReportingSetupGapKey, string> = {
   business_type: 'clientOperations.fields.businessType',
   vat_applicability: 'clientOperations.taxes.fields.vat',
   vat_frequency: 'clientOperations.taxes.fields.vatFrequency',
+  income_tax_advance_applicability: 'clientOperations.taxes.cards.incomeTaxAdvances',
+  income_tax_advance_frequency: 'clientOperations.taxes.fields.reportingFrequency',
+  national_insurance_applicability: 'clientOperations.taxes.cards.nationalInsurance',
 };
 
 const BLOCKED_LABEL_KEY: Record<ReportingBlockedFunctionKey, string> = {
   reporting_obligation_scope: 'clientOperations.setupWarning.blocked.reportingScope',
   vat_reporting_obligation: 'clientOperations.setupWarning.blocked.vatObligation',
   vat_reporting_periodicity: 'clientOperations.setupWarning.blocked.vatPeriodicity',
+  income_tax_advance_obligation: 'clientOperations.setupWarning.blocked.incomeTaxAdvanceObligation',
+  income_tax_advance_periodicity: 'clientOperations.setupWarning.blocked.incomeTaxAdvancePeriodicity',
+  national_insurance_obligation: 'clientOperations.setupWarning.blocked.nationalInsuranceObligation',
 };
 
 const APPLICABLE_VAT_TYPES = new Set(['yes', 'multiple', 'mixed']);
@@ -99,11 +110,19 @@ function vatFrequencyToken(value: string | null | undefined): string {
   return raw;
 }
 
+const ADVANCE_FREQUENCIES = new Set(['monthly', 'bi_monthly', 'semi_annual']);
+const EXPLICIT_ADVANCE_NO = new Set(['לא', 'no']);
+const EXPLICIT_NI_NONE = new Set(['not_applicable', 'no']);
+
 export function clientReportingSetupGaps(input: {
   business_type: string | null | undefined;
   vat_type: string | null | undefined;
   vat_frequency: string | null | undefined;
   vat_due_type: string | null | undefined;
+  income_tax_advance_enabled?: boolean | null | undefined;
+  income_tax_advance_frequency?: string | null | undefined;
+  income_tax_advance_profile_status?: string | null | undefined;
+  national_insurance_type?: string | null | undefined;
 }): ClientReportingSetupGap {
   const missing: ReportingSetupGapKey[] = [];
   const blocked: ReportingBlockedFunctionKey[] = [];
@@ -123,6 +142,26 @@ export function clientReportingSetupGaps(input: {
       blocked.push('vat_reporting_periodicity');
     }
     void input.vat_due_type;
+  }
+
+  const advanceEnabled = input.income_tax_advance_enabled === true;
+  const advanceStatus = String(input.income_tax_advance_profile_status ?? '').trim();
+  const advanceNo = EXPLICIT_ADVANCE_NO.has(advanceStatus) || EXPLICIT_ADVANCE_NO.has(norm(advanceStatus));
+  if (advanceEnabled) {
+    const advanceFrequency = vatFrequencyToken(input.income_tax_advance_frequency);
+    if (!ADVANCE_FREQUENCIES.has(advanceFrequency)) {
+      missing.push('income_tax_advance_frequency');
+      blocked.push('income_tax_advance_periodicity');
+    }
+  } else if (!advanceNo) {
+    missing.push('income_tax_advance_applicability');
+    blocked.push('income_tax_advance_obligation');
+  }
+
+  const niType = norm(input.national_insurance_type);
+  if (niType !== 'yes' && !EXPLICIT_NI_NONE.has(niType)) {
+    missing.push('national_insurance_applicability');
+    blocked.push('national_insurance_obligation');
   }
 
   return { missing, blocked };

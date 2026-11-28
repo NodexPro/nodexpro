@@ -93,13 +93,18 @@ test('upcoming reports render backend groups and open authorized applicable-clie
   assert.match(copySrc, /Report type/);
   assert.match(listsSrc, /country_reporting_calendar_entries/);
   assert.match(listsSrc, /status', 'active'/);
-  assert.match(listsSrc, /isActiveUpcomingReportingEntry/);
-  assert.match(copySrc, /Due-date timing/);
-  assert.match(copySrc, /תזמון מועד/);
+  assert.match(listsSrc, /buildDashboardReportingSummaries/);
+  assert.match(copySrc, /דיווחים באיחור/);
+  assert.match(copySrc, /Overdue reports/);
   assert.match(reportingSrc, /clientAppliesToReportingEntry/);
-  assert.match(reportingSrc, /groupUpcomingReportingObligations/);
-  assert.match(reportingSrc, /isActiveUpcomingReportingEntry/);
-  assert.doesNotMatch(reportingSrc, /annual_report|דוח שנתי|15th|hardcode/);
+  assert.match(reportingSrc, /buildDashboardReportingSummaries/);
+  assert.match(reportingSrc, /DASHBOARD_REPORTING_UPCOMING_WINDOW_DAYS = 60/);
+  assert.match(listsSrc, /client_annual_report_year_instances/);
+  assert.match(listsSrc, /client_capital_declaration_instances/);
+  assert.match(listsSrc, /operational_target_date/);
+  assert.match(listsSrc, /officeControlDeadlines/);
+  assert.match(reportingSrc, /projectDashboardOfficeControlDeadlines/);
+  assert.doesNotMatch(reportingSrc, /15th|hardcode|work_items\.due_at/);
   assert.doesNotMatch(dashSrc, /מע\"מ רגיל|31\/5|hardcodedDue/);
   assert.match(endpoints, /dashboard\/office-reporting-clients/);
 });
@@ -115,7 +120,8 @@ test('donut is smaller without clipping and Quick actions stay hidden without de
   assert.doesNotMatch(dashSrc, /office\.quick_actions\.actions/);
   assert.match(providerSrc, /quick_actions:/);
   assert.match(copySrc, /פעולות מהירות/);
-  assert.match(dashSrc, /office\.recent_activity/);
+  assert.doesNotMatch(dashSrc, /office\.recent_activity/);
+  assert.match(providerSrc, /recent_activity:/);
   assert.match(dashSrc, /office\.kpis\.clients_left/);
 });
 

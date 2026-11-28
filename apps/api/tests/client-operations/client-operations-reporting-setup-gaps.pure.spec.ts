@@ -15,6 +15,9 @@ test('empty business type and VAT applicability are required; optional choose-fi
     vat_type: null,
     vat_frequency: null,
     vat_due_type: null,
+    income_tax_advance_enabled: false,
+    income_tax_advance_profile_status: 'לא',
+    national_insurance_type: 'not_applicable',
   });
   assert.deepEqual(empty.missing, ['business_type', 'vat_applicability']);
   assert.ok(empty.blocked.includes('reporting_obligation_scope'));
@@ -26,6 +29,9 @@ test('empty business type and VAT applicability are required; optional choose-fi
     vat_type: 'no',
     vat_frequency: null,
     vat_due_type: null,
+    income_tax_advance_enabled: false,
+    income_tax_advance_profile_status: 'לא',
+    national_insurance_type: 'not_applicable',
   });
   assert.deepEqual(configuredNoVat.missing, []);
   assert.deepEqual(configuredNoVat.blocked, []);
@@ -37,6 +43,9 @@ test('VAT yes without frequency blocks periodicity; vat_due_type is not a client
     vat_type: 'yes',
     vat_frequency: '',
     vat_due_type: null,
+    income_tax_advance_enabled: false,
+    income_tax_advance_profile_status: 'לא',
+    national_insurance_type: 'not_applicable',
   });
   assert.deepEqual(gaps.missing, ['vat_frequency']);
   assert.deepEqual(gaps.blocked, ['vat_reporting_periodicity']);
@@ -49,6 +58,9 @@ test('VAT yes with frequency does not require vat_due_type', () => {
     vat_type: 'yes',
     vat_frequency: 'monthly',
     vat_due_type: null,
+    income_tax_advance_enabled: false,
+    income_tax_advance_profile_status: 'לא',
+    national_insurance_type: 'not_applicable',
   });
   assert.deepEqual(gaps.missing, []);
   assert.deepEqual(gaps.blocked, []);
@@ -60,8 +72,41 @@ test('patur VAT does not require frequency or due type', () => {
     vat_type: 'patur',
     vat_frequency: null,
     vat_due_type: null,
+    income_tax_advance_enabled: false,
+    income_tax_advance_profile_status: 'לא',
+    national_insurance_type: 'not_applicable',
   });
   assert.deepEqual(gaps.missing, []);
+});
+
+test('unset income-tax advances and NI are required; explicit no is not; fees are never a gap', () => {
+  const choose = clientReportingSetupGaps({
+    business_type: 'osek_murshe',
+    vat_type: 'no',
+    vat_frequency: null,
+    vat_due_type: null,
+    income_tax_advance_enabled: false,
+    income_tax_advance_profile_status: null,
+    national_insurance_type: null,
+  });
+  assert.deepEqual(choose.missing, [
+    'income_tax_advance_applicability',
+    'national_insurance_applicability',
+  ]);
+
+  const enabledNoFrequency = clientReportingSetupGaps({
+    business_type: 'osek_murshe',
+    vat_type: 'no',
+    vat_frequency: null,
+    vat_due_type: null,
+    income_tax_advance_enabled: true,
+    income_tax_advance_frequency: null,
+    income_tax_advance_profile_status: 'כן',
+    national_insurance_type: 'yes',
+  });
+  assert.deepEqual(enabledNoFrequency.missing, ['income_tax_advance_frequency']);
+  assert.equal(JSON.stringify(choose).includes('fee'), false);
+  assert.equal(JSON.stringify(choose).includes('vat_due_type'), false);
 });
 
 test('aggregate fingerprint changes when a missing setting is completed', () => {

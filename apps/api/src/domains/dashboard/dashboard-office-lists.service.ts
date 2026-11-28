@@ -6,7 +6,6 @@ import { resolveOrganizationActiveRuleset } from '../country-pack/organization-c
 import {
   REPORTING_OBLIGATION_KEYS,
   formatFilingDueDateDisplay,
-  isReportingObligationKey,
 } from '../country-pack/reporting-calendar.pure.js';
 import { officeCopy, parseDashboardLocale, type DashboardLocale } from './dashboard-office-copy.pure.js';
 import { parseDashboardPeriodKey, resolveDashboardPeriodWindow, jerusalemDayWindow } from './dashboard-office-period.pure.js';
@@ -26,12 +25,21 @@ import {
   selectOfficeClientList,
 } from './dashboard-office-client-list.pure.js';
 import {
-  clientAppliesToReportingEntry,
-  groupUpcomingReportingObligations,
-  isActiveUpcomingReportingEntry,
-  reportingTimingStatus,
+  addIsoDateDays,
+  buildDashboardReportingSummaries,
+  dashboardReportingCategoryFromObligationType,
+  DASHBOARD_REPORTING_UPCOMING_WINDOW_DAYS,
+  isDashboardReportingCategory,
+  isFiledReportingObligationStatus,
+  projectDashboardOfficeControlDeadlines,
+  type DashboardOfficeControlDeadline,
+  type DashboardOfficeControlSourceRow,
+  type DashboardOfficeControlSubmission,
   type DashboardReportingCalendarEntry,
+  type DashboardReportingCategorySummary,
   type DashboardReportingClientTax,
+  type DashboardReportingFiling,
+  type DashboardReportingLiveClient,
 } from './dashboard-office-reporting.pure.js';
 import type {
   DashboardOfficeListQuery,
@@ -42,7 +50,7 @@ import type {
 import type { DashboardFeeClientInput } from './dashboard-office-fees.pure.js';
 
 const PAGE = 500;
-const UPCOMING_REPORT_LIMIT = 5;
+const DASHBOARD_CALENDAR_KEYS = [...REPORTING_OBLIGATION_KEYS] as const;
 
 function chunkIds(ids: string[], size: number): string[][] {
   const out: string[][] = [];
@@ -169,24 +177,259 @@ function emptyList(
 
 function deadlineColumns(copy: ReturnType<typeof officeCopy>): OfficeDashboardListAggregate['columns'] {
   return [
-    { key: 'due', label_he: copy.reporting_col_due },
     { key: 'type', label_he: copy.reporting_col_type },
     { key: 'clients', label_he: copy.reporting_col_clients },
-    { key: 'status', label_he: copy.reporting_col_timing },
+    { key: 'due', label_he: copy.reporting_col_due },
   ];
 }
 
-function reportingTypeLabel(key: string, copy: ReturnType<typeof officeCopy>): string {
-  if (key === 'vat_regular_income_tax_advances') return copy.reporting_type_vat_regular;
+function reportingCategoryLabel(key: string, copy: ReturnType<typeof officeCopy>): string {
+  if (key === 'vat') return copy.reporting_type_vat;
+  if (key === 'income_tax_advances') return copy.reporting_type_income_tax_advances;
   if (key === 'income_tax_deductions') return copy.reporting_type_deductions;
-  if (key === 'vat_detailed') return copy.reporting_type_vat_detailed;
+  if (key === 'annual_report') return copy.reporting_type_annual;
+  if (key === 'capital_declaration') return copy.reporting_type_capital;
   return key;
 }
 
-function timingLabel(timing: ReturnType<typeof reportingTimingStatus>, copy: ReturnType<typeof officeCopy>): string {
-  if (timing === 'due_today') return copy.reporting_timing_due_today;
-  if (timing === 'overdue') return copy.reporting_timing_overdue;
-  return copy.reporting_timing_upcoming;
+function emptyDeadlineGroups(copy: ReturnType<typeof officeCopy>): OfficeDashboardSection['deadlines'] {
+  return {
+    title_he: copy.deadlines_title,
+    overdue_title_he: copy.deadlines_overdue_title,
+    status: 'ready',
+    unavailable_he: copy.deadlines_unavailable,
+    columns: deadlineColumns(copy),
+    rows: [],
+    groups: {
+      upcoming: { title_he: copy.deadlines_title, rows: [] },
+      overdue: { title_he: copy.deadlines_overdue_title, rows: [] },
+    },
+  };
+}
+
+function mapTaxRowToReportingClient(
+  row: Record<string, unknown>,
+  client: { id: string; display_name: string | null; is_archived: boolean },
+): DashboardReportingClientTax | null {
+  if (client.is_archived) return null;
+  return {
+    client_id: client.id,
+    display_name: client.display_name ?? '',
+    vat_type: row.vat_type != null ? String(row.vat_type) : null,
+    vat_due_type: row.vat_due_type != null ? String(row.vat_due_type) : null,
+    vat_frequency: row.vat_frequency != null ? String(row.vat_frequency) : null,
+    income_tax_advance_enabled: asBool(row.income_tax_advance_enabled),
+    income_tax_advance_frequency:
+      row.income_tax_advance_frequency != null ? String(row.income_tax_advance_frequency) : null,
+    income_tax_deductions_enabled: asBool(row.income_tax_deductions_enabled),
+    income_tax_deductions_frequency:
+      row.income_tax_deductions_frequency != null ? String(row.income_tax_deductions_frequency) : null,
+  };
+}
+
+async function loadOfficeControlDeadlines(
+  orgId: string,
+  liveClientIds: string[],
+): Promise<DashboardOfficeControlDeadline[]> {
+  if (liveClientIds.length === 0) return [];
+  const instances: DashboardOfficeControlSourceRow[] = [];
+  const submissions: DashboardOfficeControlSubmission[] = [];
+  for (const chunk of chunkIds(liveClientIds, 80)) {
+    const [annualRes, capitalRes, submissionRes] = await Promise.all([
+      supabaseAdmin
+        .from('client_annual_report_year_instances')
+        .select('id, client_id, tax_year, operational_target_date, status')
+        .eq('organization_id', orgId)
+        .in('client_id', chunk)
+        .in('status', ['open', 'completed']),
+      supabaseAdmin
+        .from('client_capital_declaration_instances')
+        .select('id, client_id, tax_year, operational_target_date, status')
+        .eq('organization_id', orgId)
+        .in('client_id', chunk)
+        .in('status', ['open', 'completed']),
+      supabaseAdmin
+        .from('client_annual_submission_rows')
+        .select('client_id, tax_year, submitted_on, tab_scope, capital_declaration_instance_id')
+        .eq('organization_id', orgId)
+        .in('client_id', chunk)
+        .in('tab_scope', ['annual_report', 'capital_declaration']),
+    ]);
+    if (annualRes.error) throw new Error(annualRes.error.message);
+    if (capitalRes.error) throw new Error(capitalRes.error.message);
+    let submissionRows = submissionRes.data as Array<Record<string, unknown>> | null;
+    let submissionError = submissionRes.error;
+    if (submissionError && /capital_declaration_instance_id/i.test(submissionError.message ?? '')) {
+      const retry = await supabaseAdmin
+        .from('client_annual_submission_rows')
+        .select('client_id, tax_year, submitted_on, tab_scope')
+        .eq('organization_id', orgId)
+        .in('client_id', chunk)
+        .in('tab_scope', ['annual_report', 'capital_declaration']);
+      submissionRows = retry.data as Array<Record<string, unknown>> | null;
+      submissionError = retry.error;
+    }
+    if (submissionError) throw new Error(submissionError.message);
+    for (const row of (annualRes.data ?? []) as Array<Record<string, unknown>>) {
+      instances.push({
+        client_id: String(row.client_id),
+        category_key: 'annual_report',
+        operational_target_date: row.operational_target_date != null ? String(row.operational_target_date) : null,
+        status: row.status != null ? String(row.status) : null,
+        tax_year: row.tax_year != null ? Number(row.tax_year) : null,
+        instance_id: row.id != null ? String(row.id) : null,
+      });
+    }
+    for (const row of (capitalRes.data ?? []) as Array<Record<string, unknown>>) {
+      instances.push({
+        client_id: String(row.client_id),
+        category_key: 'capital_declaration',
+        operational_target_date: row.operational_target_date != null ? String(row.operational_target_date) : null,
+        status: row.status != null ? String(row.status) : null,
+        tax_year: row.tax_year != null ? Number(row.tax_year) : null,
+        instance_id: row.id != null ? String(row.id) : null,
+      });
+    }
+    for (const row of submissionRows ?? []) {
+      const scope = String(row.tab_scope ?? '');
+      if (scope !== 'annual_report' && scope !== 'capital_declaration') continue;
+      submissions.push({
+        client_id: String(row.client_id),
+        tab_scope: scope,
+        tax_year: row.tax_year != null ? Number(row.tax_year) : null,
+        instance_id:
+          row.capital_declaration_instance_id != null ? String(row.capital_declaration_instance_id) : null,
+        submitted_on: row.submitted_on != null ? String(row.submitted_on) : null,
+      });
+    }
+  }
+  return projectDashboardOfficeControlDeadlines({ instances, submissions });
+}
+
+async function loadDashboardReportingInputs(
+  ctx: RequestContext,
+  today: string,
+): Promise<{
+  entries: DashboardReportingCalendarEntry[];
+  taxClients: DashboardReportingClientTax[];
+  filings: DashboardReportingFiling[];
+  liveClients: DashboardReportingLiveClient[];
+  officeControlDeadlines: DashboardOfficeControlDeadline[];
+} | null> {
+  const orgId = ctx.organizationId;
+  if (!orgId) return null;
+  const empty = {
+    entries: [] as DashboardReportingCalendarEntry[],
+    taxClients: [] as DashboardReportingClientTax[],
+    filings: [] as DashboardReportingFiling[],
+    liveClients: [] as DashboardReportingLiveClient[],
+    officeControlDeadlines: [] as DashboardOfficeControlDeadline[],
+  };
+  const clients = await authorizedClients(ctx);
+  const live = clients.filter((c) => !c.is_archived);
+  const liveClients: DashboardReportingLiveClient[] = live.map((c) => ({
+    client_id: c.id,
+    display_name: c.display_name ?? '',
+  }));
+  if (live.length === 0) return empty;
+  const liveIds = live.map((c) => c.id);
+  const officeControlDeadlines = await loadOfficeControlDeadlines(orgId, liveIds);
+
+  const ruleset = await resolveOrganizationActiveRuleset(orgId, today);
+  if (!ruleset.country_code || !ruleset.ruleset_id) {
+    return { ...empty, liveClients, officeControlDeadlines };
+  }
+  const from = addIsoDateDays(today, -400);
+  const to = addIsoDateDays(today, DASHBOARD_REPORTING_UPCOMING_WINDOW_DAYS + 10);
+  let calendarQuery = supabaseAdmin
+    .from('country_reporting_calendar_entries')
+    .select('obligation_key, reporting_period_key, filing_due_date, country_pack_ruleset_id')
+    .eq('country_code', ruleset.country_code)
+    .eq('status', 'active')
+    .in('obligation_key', [...DASHBOARD_CALENDAR_KEYS])
+    .gte('filing_due_date', from || '2000-01-01')
+    .lte('filing_due_date', to || '2100-12-31')
+    .order('filing_due_date', { ascending: true })
+    .limit(400);
+  calendarQuery = calendarQuery.or(
+    `country_pack_ruleset_id.eq.${ruleset.ruleset_id},country_pack_ruleset_id.is.null`,
+  );
+  const { data: calendarRows, error: calendarError } = await calendarQuery;
+  if (calendarError) throw new Error(calendarError.message);
+  const entries: DashboardReportingCalendarEntry[] = (calendarRows ?? []).map((r) => ({
+    obligation_key: String(r.obligation_key),
+    reporting_period_key: String(r.reporting_period_key),
+    filing_due_date: String(r.filing_due_date).slice(0, 10),
+  }));
+
+  const taxRows = await fetchOrgRowsForClientIds<Record<string, unknown>>(
+    'client_tax_settings',
+    'client_id, vat_type, vat_due_type, vat_frequency, income_tax_advance_enabled, income_tax_advance_frequency, income_tax_deductions_enabled, income_tax_deductions_frequency',
+    orgId,
+    liveIds,
+  );
+  const clientById = new Map(live.map((c) => [c.id, c]));
+  const taxClients = taxRows
+    .map((r) => {
+      const client = clientById.get(String(r.client_id));
+      if (!client) return null;
+      return mapTaxRowToReportingClient(r, client);
+    })
+    .filter((c): c is DashboardReportingClientTax => c != null);
+
+  const filings: DashboardReportingFiling[] = [];
+  for (const chunk of chunkIds(liveIds, 80)) {
+    const { data, error } = await supabaseAdmin
+      .from('client_obligations')
+      .select('client_id, obligation_type, period_key, last_reported_at, status')
+      .eq('organization_id', orgId)
+      .in('client_id', chunk)
+      .in('obligation_type', ['vat_report', 'income_tax_advance', 'income_tax_deductions']);
+    if (error) throw new Error(error.message);
+    for (const row of (data ?? []) as Array<Record<string, unknown>>) {
+      if (
+        !isFiledReportingObligationStatus({
+          last_reported_at: row.last_reported_at != null ? String(row.last_reported_at) : null,
+          status: row.status != null ? String(row.status) : null,
+        })
+      ) {
+        continue;
+      }
+      const category = dashboardReportingCategoryFromObligationType(
+        row.obligation_type != null ? String(row.obligation_type) : null,
+      );
+      const period = String(row.period_key ?? '').trim();
+      if (!category || !period) continue;
+      filings.push({
+        client_id: String(row.client_id),
+        category_key: category,
+        reporting_period_key: period,
+      });
+    }
+  }
+  return { entries, taxClients, filings, liveClients, officeControlDeadlines };
+}
+
+function deadlineRowFromSummary(
+  summary: DashboardReportingCategorySummary,
+  bucket: 'upcoming' | 'overdue',
+  copy: ReturnType<typeof officeCopy>,
+  locale: DashboardLocale,
+): OfficeDashboardDeadlineRow {
+  return {
+    type_he: reportingCategoryLabel(summary.category_key, copy),
+    due_date_he: formatDisplayDate(summary.nearest_filing_due_date, locale),
+    clients_count: summary.clients_count,
+    href: null,
+    obligation_key: summary.nearest_obligation_key,
+    filing_due_date: summary.nearest_filing_due_date,
+    reporting_period_key: summary.nearest_reporting_period_key,
+    category_key: summary.category_key,
+    bucket,
+    status_he: null,
+    action_key: summary.clients_count > 0 ? 'open_reporting_clients' : null,
+    severity_he: null,
+  };
 }
 
 export async function loadOfficeUpcomingDeadlines(
@@ -195,98 +438,34 @@ export async function loadOfficeUpcomingDeadlines(
   today: string,
 ): Promise<OfficeDashboardSection['deadlines']> {
   const copy = officeCopy(locale);
-  const unavailable: OfficeDashboardSection['deadlines'] = {
-    title_he: copy.deadlines_title,
-    status: 'coming_soon',
-    unavailable_he: copy.deadlines_unavailable,
-    columns: deadlineColumns(copy),
-    rows: [],
-  };
-  const orgId = ctx.organizationId;
-  if (!orgId) return unavailable;
+  const empty = emptyDeadlineGroups(copy);
+  if (!ctx.organizationId) return empty;
   try {
-    const ruleset = await resolveOrganizationActiveRuleset(orgId, today);
-    if (!ruleset.country_code || !ruleset.ruleset_id) return unavailable;
-    let calendarQuery = supabaseAdmin
-      .from('country_reporting_calendar_entries')
-      .select('obligation_key, reporting_period_key, filing_due_date, country_pack_ruleset_id')
-      .eq('country_code', ruleset.country_code)
-      .eq('status', 'active')
-      .in('obligation_key', [...REPORTING_OBLIGATION_KEYS])
-      .gte('filing_due_date', today)
-      .order('filing_due_date', { ascending: true })
-      .limit(80);
-    calendarQuery = calendarQuery.or(
-      `country_pack_ruleset_id.eq.${ruleset.ruleset_id},country_pack_ruleset_id.is.null`,
-    );
-    const { data: calendarRows, error: calendarError } = await calendarQuery;
-    if (calendarError) throw new Error(calendarError.message);
-    const entries: DashboardReportingCalendarEntry[] = (calendarRows ?? []).map((r) => ({
-      obligation_key: String(r.obligation_key),
-      reporting_period_key: String(r.reporting_period_key),
-      filing_due_date: String(r.filing_due_date).slice(0, 10),
-    }));
-    if (entries.length === 0) return unavailable;
-
-    const clients = await authorizedClients(ctx);
-    if (clients.length === 0) return unavailable;
-    const taxRows = await fetchOrgRowsForClientIds<Record<string, unknown>>(
-      'client_tax_settings',
-      'client_id, vat_type, vat_due_type, vat_frequency, income_tax_deductions_enabled, income_tax_deductions_frequency',
-      orgId,
-      clients.map((c) => c.id),
-    );
-    const clientById = new Map(clients.map((c) => [c.id, c]));
-    const taxClients: DashboardReportingClientTax[] = taxRows
-      .map((r) => {
-        const id = String(r.client_id);
-        const client = clientById.get(id);
-        if (!client || client.is_archived) return null;
-        return {
-          client_id: id,
-          display_name: client.display_name ?? '',
-          vat_type: r.vat_type != null ? String(r.vat_type) : null,
-          vat_due_type: r.vat_due_type != null ? String(r.vat_due_type) : null,
-          vat_frequency: r.vat_frequency != null ? String(r.vat_frequency) : null,
-          income_tax_deductions_enabled: asBool(r.income_tax_deductions_enabled),
-          income_tax_deductions_frequency:
-            r.income_tax_deductions_frequency != null ? String(r.income_tax_deductions_frequency) : null,
-        };
-      })
-      .filter((c): c is DashboardReportingClientTax => c != null);
-
-    const groups = groupUpcomingReportingObligations({
-      entries,
-      clients: taxClients,
+    const loaded = await loadDashboardReportingInputs(ctx, today);
+    if (!loaded) return empty;
+    const summaries = buildDashboardReportingSummaries({
+      entries: loaded.entries,
+      clients: loaded.taxClients,
+      filings: loaded.filings,
+      officeControlDeadlines: loaded.officeControlDeadlines,
       today,
-      limit: UPCOMING_REPORT_LIMIT,
     });
-    if (groups.length === 0) return unavailable;
-
-    const rows: OfficeDashboardDeadlineRow[] = groups.map((g) => {
-      const timing = reportingTimingStatus(g.filing_due_date, today);
-      return {
-        type_he: reportingTypeLabel(g.obligation_key, copy),
-        due_date_he: formatDisplayDate(g.filing_due_date, locale),
-        clients_count: g.client_ids.length,
-        href: null,
-        obligation_key: g.obligation_key,
-        filing_due_date: g.filing_due_date,
-        reporting_period_key: g.reporting_period_key,
-        status_he: timingLabel(timing, copy),
-        action_key: 'open_reporting_clients',
-        severity_he: null,
-      };
-    });
+    const upcomingRows = summaries.upcoming.map((row) => deadlineRowFromSummary(row, 'upcoming', copy, locale));
+    const overdueRows = summaries.overdue.map((row) => deadlineRowFromSummary(row, 'overdue', copy, locale));
     return {
       title_he: copy.deadlines_title,
+      overdue_title_he: copy.deadlines_overdue_title,
       status: 'ready',
       unavailable_he: copy.deadlines_unavailable,
       columns: deadlineColumns(copy),
-      rows,
+      rows: upcomingRows,
+      groups: {
+        upcoming: { title_he: copy.deadlines_title, rows: upcomingRows },
+        overdue: { title_he: copy.deadlines_overdue_title, rows: overdueRows },
+      },
     };
   } catch {
-    return unavailable;
+    return empty;
   }
 }
 
@@ -636,90 +815,41 @@ export async function getOfficeReportingClientsAggregate(
     { key: 'name', label_he: copy.col_name },
     { key: 'status', label_he: copy.reporting_col_status },
   ];
-  const obligationKey = String(query?.obligation_key ?? '').trim();
-  const filingDueDate = String(query?.filing_due_date ?? '').slice(0, 10);
-  const periodKey = String(query?.reporting_period_key ?? '').trim();
-  if (!isReportingObligationKey(obligationKey) || !filingDueDate || !periodKey) {
-    return emptyList(copy.reporting_clients_title, copy.reporting_clients_empty, obligationKey, copy, columns);
+  const categoryKey = String(query?.category_key ?? '').trim();
+  const bucket = String(query?.bucket ?? '').trim() === 'overdue' ? 'overdue' : 'upcoming';
+  if (!isDashboardReportingCategory(categoryKey)) {
+    return emptyList(copy.reporting_clients_title, copy.reporting_clients_empty, categoryKey, copy, columns);
   }
   const today = jerusalemDayWindow(new Date()).date;
-  const ruleset = await resolveOrganizationActiveRuleset(orgId, today);
-  if (!ruleset.country_code || !ruleset.ruleset_id) {
-    return emptyList(copy.reporting_clients_title, copy.reporting_clients_empty, obligationKey, copy, columns);
+  const loaded = await loadDashboardReportingInputs(ctx, today);
+  if (!loaded) {
+    return emptyList(copy.reporting_clients_title, copy.reporting_clients_empty, categoryKey, copy, columns);
   }
-  let calendarQuery = supabaseAdmin
-    .from('country_reporting_calendar_entries')
-    .select('obligation_key, reporting_period_key, filing_due_date, status, country_pack_ruleset_id')
-    .eq('country_code', ruleset.country_code)
-    .eq('status', 'active')
-    .eq('obligation_key', obligationKey)
-    .eq('reporting_period_key', periodKey)
-    .eq('filing_due_date', filingDueDate)
-    .limit(5);
-  calendarQuery = calendarQuery.or(
-    `country_pack_ruleset_id.eq.${ruleset.ruleset_id},country_pack_ruleset_id.is.null`,
+  const summaries = buildDashboardReportingSummaries({
+    entries: loaded.entries,
+    clients: loaded.taxClients,
+    filings: loaded.filings,
+    officeControlDeadlines: loaded.officeControlDeadlines,
+    today,
+  });
+  const summary = (bucket === 'overdue' ? summaries.overdue : summaries.upcoming).find(
+    (row) => row.category_key === categoryKey,
   );
-  const { data: calendarRows, error: calendarError } = await calendarQuery;
-  if (calendarError) throw new Error(calendarError.message);
-  const calendarHit = ((calendarRows ?? []) as Array<{
-    obligation_key: string;
-    reporting_period_key: string;
-    filing_due_date: string;
-    status: string;
-  }>).find((row) =>
-    isActiveUpcomingReportingEntry(row, {
-      obligation_key: obligationKey,
-      reporting_period_key: periodKey,
-      filing_due_date: filingDueDate,
-    }, today),
-  );
-  if (!calendarHit) {
-    return emptyList(copy.reporting_clients_title, copy.reporting_clients_empty, obligationKey, copy, columns);
-  }
-  const clients = await authorizedClients(ctx);
-  if (clients.length === 0) {
-    return emptyList(copy.reporting_clients_title, copy.reporting_clients_empty, obligationKey, copy, columns);
-  }
-  const taxRows = await fetchOrgRowsForClientIds<Record<string, unknown>>(
-    'client_tax_settings',
-    'client_id, vat_type, vat_due_type, vat_frequency, income_tax_deductions_enabled, income_tax_deductions_frequency',
-    orgId,
-    clients.map((c) => c.id),
-  );
-  const clientById = new Map(clients.map((c) => [c.id, c]));
-  const applicable = taxRows
-    .map((r) => {
-      const id = String(r.client_id);
-      const client = clientById.get(id);
-      if (!client || client.is_archived) return null;
-      const tax: DashboardReportingClientTax = {
-        client_id: id,
-        display_name: client.display_name || id,
-        vat_type: r.vat_type != null ? String(r.vat_type) : null,
-        vat_due_type: r.vat_due_type != null ? String(r.vat_due_type) : null,
-        vat_frequency: r.vat_frequency != null ? String(r.vat_frequency) : null,
-        income_tax_deductions_enabled: asBool(r.income_tax_deductions_enabled),
-        income_tax_deductions_frequency:
-          r.income_tax_deductions_frequency != null ? String(r.income_tax_deductions_frequency) : null,
-      };
-      if (
-        !clientAppliesToReportingEntry(tax, {
-          obligation_key: obligationKey,
-          reporting_period_key: periodKey,
-          filing_due_date: filingDueDate,
-        })
-      ) {
-        return null;
-      }
-      return tax;
-    })
-    .filter((c): c is DashboardReportingClientTax => c != null);
+  const allowed = new Set(summary?.client_ids ?? []);
+  const officeControl = categoryKey === 'annual_report' || categoryKey === 'capital_declaration';
+  const nameById = new Map(loaded.liveClients.map((client) => [client.client_id, client.display_name]));
+  const applicable = officeControl
+    ? [...allowed].map((client_id) => ({
+        client_id,
+        display_name: nameById.get(client_id) || client_id,
+      }))
+    : loaded.taxClients.filter((client) => allowed.has(client.client_id));
   const paged = paginateNamedRows(
     applicable.map((c) => ({ ...c, id: c.client_id })),
     query ?? {},
   );
   return {
-    title_he: `${copy.reporting_clients_title} · ${reportingTypeLabel(obligationKey, copy)}`,
+    title_he: `${copy.reporting_clients_title} · ${reportingCategoryLabel(categoryKey, copy)}`,
     total_he: copy.list_total_clients(paged.total),
     search_placeholder_he: copy.list_search,
     empty_he: copy.reporting_clients_empty,
@@ -732,7 +862,7 @@ export async function getOfficeReportingClientsAggregate(
       open_label_he: copy.list_open_client,
       cells: {
         name: c.display_name,
-        status: copy.reporting_applicability,
+        status: officeControl ? copy.reporting_office_control : copy.reporting_applicability,
       },
     })),
     pagination: {
@@ -741,7 +871,7 @@ export async function getOfficeReportingClientsAggregate(
       total: paged.total,
       total_pages: paged.total_pages,
       q: paged.q,
-      list_key: obligationKey,
+      list_key: categoryKey,
     },
   };
 }

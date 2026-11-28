@@ -24,6 +24,21 @@ type OfficeKpiAction =
   | 'navigate'
   | null;
 
+type OfficeDeadlineRow = {
+  type_he: string;
+  due_date_he: string;
+  clients_count: number | null;
+  href: string | null;
+  obligation_key?: string | null;
+  filing_due_date?: string | null;
+  reporting_period_key?: string | null;
+  category_key?: string | null;
+  bucket?: 'upcoming' | 'overdue' | null;
+  status_he?: string | null;
+  action_key?: OfficeKpiAction;
+  severity_he: string | null;
+};
+
 type OfficeKpi = {
   key: string;
   title_he: string;
@@ -81,21 +96,15 @@ type OfficeSection = {
   };
   deadlines: {
     title_he: string;
+    overdue_title_he?: string;
     status: DashboardStatus;
     unavailable_he: string;
     columns?: Array<{ key: string; label_he: string }>;
-    rows: Array<{
-      type_he: string;
-      due_date_he: string;
-      clients_count: number | null;
-      href: string | null;
-      obligation_key?: string | null;
-      filing_due_date?: string | null;
-      reporting_period_key?: string | null;
-      status_he?: string | null;
-      action_key?: OfficeKpiAction;
-      severity_he: string | null;
-    }>;
+    rows: OfficeDeadlineRow[];
+    groups?: {
+      upcoming: { title_he: string; rows: OfficeDeadlineRow[] };
+      overdue: { title_he: string; rows: OfficeDeadlineRow[] };
+    };
   };
   charts: {
     expected_fees_by_month: {
@@ -124,11 +133,6 @@ type OfficeSection = {
       action_key?: OfficeKpiAction;
       list_key?: string | null;
     }>;
-  };
-  recent_activity: {
-    title_he: string;
-    status: DashboardStatus;
-    unavailable_he: string;
   };
   quick_actions: {
     title_he: string;
@@ -356,7 +360,7 @@ function KpiCard({
     <>
       <div className="nx-dashboard-card__label">{kpi.title_he}</div>
       <div className="nx-dashboard-card__value">{kpi.value_he}</div>
-      <div className="nx-dashboard-card__secondary">{kpi.secondary_he}</div>
+      {kpi.secondary_he ? <div className="nx-dashboard-card__secondary">{kpi.secondary_he}</div> : null}
       {kpi.note_he && kpi.note_he !== kpi.secondary_he ? (
         <div className="nx-dashboard-card__note">{kpi.note_he}</div>
       ) : null}
@@ -482,12 +486,11 @@ export function Dashboard() {
     setDrilldownUrl(`${next.pathname}${next.search}`);
   };
 
-  const openReportingClients = (row: OfficeSection['deadlines']['rows'][number]) => {
-    if (!row.obligation_key || !row.filing_due_date || !row.reporting_period_key) return;
+  const openReportingClients = (row: OfficeDeadlineRow) => {
+    if (!row.category_key || !row.action_key) return;
     const next = new URL(dashboardOfficeReportingClients(), window.location.origin);
-    next.searchParams.set('obligation_key', row.obligation_key);
-    next.searchParams.set('filing_due_date', row.filing_due_date);
-    next.searchParams.set('reporting_period_key', row.reporting_period_key);
+    next.searchParams.set('category_key', row.category_key);
+    next.searchParams.set('bucket', row.bucket === 'overdue' ? 'overdue' : 'upcoming');
     setDrilldownUrl(`${next.pathname}${next.search}`);
   };
 
@@ -580,7 +583,9 @@ export function Dashboard() {
                   <>
                     <div className="nx-dashboard-card__label">{item.title_he}</div>
                     <div className="nx-dashboard-attention__value">{ready && item.count != null ? item.count : '—'}</div>
-                    {!ready ? <div className="nx-dashboard-card__note">{item.unavailable_he}</div> : null}
+                    {!ready && item.unavailable_he ? (
+                      <div className="nx-dashboard-card__note">{item.unavailable_he}</div>
+                    ) : null}
                   </>
                 );
                 if (ready && item.action_key === 'open_task_list' && item.list_key) {
@@ -605,52 +610,63 @@ export function Dashboard() {
           </div>
 
           <div className="nx-dashboard-card nx-dashboard-card--compact">
-            <div className="nx-dashboard-card__title">{office.deadlines.title_he}</div>
-            {office.deadlines.status === 'ready' && office.deadlines.rows.length > 0 ? (
-              <div className="nx-dashboard-deadlines-table-wrap">
-                <table className="nx-dashboard-deadlines-table">
-                  <thead>
-                    <tr>
-                      {(office.deadlines.columns ?? []).map((col) => (
-                        <th key={col.key}>{col.label_he}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {office.deadlines.rows.map((row, i) => {
-                      const clickable = row.action_key === 'open_reporting_clients';
-                      const cells: Record<string, string> = {
-                        due: row.due_date_he,
-                        type: row.type_he,
-                        clients: row.clients_count != null ? String(row.clients_count) : '—',
-                        status: row.status_he ?? row.severity_he ?? '—',
-                      };
-                      return (
-                        <tr key={`${row.obligation_key ?? row.type_he}-${row.filing_due_date ?? i}`}>
+            {(() => {
+              const groups = office.deadlines.groups ?? {
+                upcoming: { title_he: office.deadlines.title_he, rows: office.deadlines.rows },
+                overdue: { title_he: office.deadlines.overdue_title_he ?? '', rows: [] },
+              };
+              const renderGroup = (title: string, rows: OfficeDeadlineRow[], key: string) => (
+                <div key={key} className="nx-dashboard-deadlines-group">
+                  <div className="nx-dashboard-card__title">{title}</div>
+                  <div className="nx-dashboard-deadlines-table-wrap">
+                    <table className="nx-dashboard-deadlines-table">
+                      <thead>
+                        <tr>
                           {(office.deadlines.columns ?? []).map((col) => (
-                            <td key={col.key}>
-                              {clickable ? (
-                                <button
-                                  type="button"
-                                  className="nx-dashboard-deadlines__hit"
-                                  onClick={() => openReportingClients(row)}
-                                >
-                                  {cells[col.key] ?? '—'}
-                                </button>
-                              ) : (
-                                cells[col.key] ?? '—'
-                              )}
-                            </td>
+                            <th key={col.key}>{col.label_he}</th>
                           ))}
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="nx-dashboard-empty__subtitle">{office.deadlines.unavailable_he}</div>
-            )}
+                      </thead>
+                      <tbody>
+                        {rows.map((row, i) => {
+                          const clickable = row.action_key === 'open_reporting_clients';
+                          const cells: Record<string, string> = {
+                            due: row.due_date_he || '—',
+                            type: row.type_he,
+                            clients: row.clients_count != null ? String(row.clients_count) : '—',
+                          };
+                          return (
+                            <tr key={`${row.category_key ?? row.type_he}-${key}-${i}`}>
+                              {(office.deadlines.columns ?? []).map((col) => (
+                                <td key={col.key}>
+                                  {clickable ? (
+                                    <button
+                                      type="button"
+                                      className="nx-dashboard-deadlines__hit"
+                                      onClick={() => openReportingClients(row)}
+                                    >
+                                      {cells[col.key] ?? '—'}
+                                    </button>
+                                  ) : (
+                                    cells[col.key] ?? '—'
+                                  )}
+                                </td>
+                              ))}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+              return (
+                <>
+                  {renderGroup(groups.upcoming.title_he, groups.upcoming.rows, 'upcoming')}
+                  {renderGroup(groups.overdue.title_he, groups.overdue.rows, 'overdue')}
+                </>
+              );
+            })()}
           </div>
         </div>
 
@@ -723,12 +739,6 @@ export function Dashboard() {
           </div>
         </div>
 
-        <div className="nx-dashboard__row nx-dashboard__row--compact">
-          <div className="nx-dashboard-card nx-dashboard-card--compact nx-dashboard-card--muted">
-            <div className="nx-dashboard-card__title">{office.recent_activity.title_he}</div>
-            <div className="nx-dashboard-empty__subtitle">{office.recent_activity.unavailable_he}</div>
-          </div>
-        </div>
       </div>
       {breakdownOpen ? (
         <DashboardFeeBreakdownModal

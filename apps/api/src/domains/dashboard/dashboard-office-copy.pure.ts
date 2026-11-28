@@ -26,6 +26,7 @@ type OfficeCopy = {
   kpi_debtors: string;
   kpi_debtors_secondary: string;
   kpi_debtors_note: string;
+  kpi_inactive: string;
   kpi_new_clients: string;
   kpi_new_clients_secondary: (periodLabel: string) => string;
   missing_title: string;
@@ -41,6 +42,7 @@ type OfficeCopy = {
   attention_missing_docs_unavailable: string;
   we_unavailable: string;
   deadlines_title: string;
+  deadlines_overdue_title: string;
   deadlines_unavailable: string;
   chart_fees_title: string;
   chart_growth_title: string;
@@ -130,11 +132,16 @@ type OfficeCopy = {
   reporting_timing_due_today: string;
   reporting_timing_overdue: string;
   reporting_type_vat_regular: string;
+  reporting_type_vat: string;
+  reporting_type_income_tax_advances: string;
   reporting_type_deductions: string;
   reporting_type_vat_detailed: string;
+  reporting_type_annual: string;
+  reporting_type_capital: string;
   reporting_clients_title: string;
   reporting_clients_empty: string;
   reporting_applicability: string;
+  reporting_office_control: string;
   task_state_overdue: string;
   task_state_review_pending: string;
   task_state_assigned: string;
@@ -168,8 +175,9 @@ const HE: OfficeCopy = {
   kpi_expected_secondary: 'צפי חודשי לפני מע״מ לפי תעריף נוכחי · לא כולל גבייה בפועל',
   kpi_expected_secondary_year: 'תעריף נוכחי, ממוצע חודשי לפני מע״מ, להסכמים בתוקף השנה · לא שחזור היסטורי',
   kpi_debtors: 'לקוחות עם חוב למשרד',
-  kpi_debtors_secondary: 'חוב אמיתי למשרד עדיין לא זמין מ-Accounting Base',
-  kpi_debtors_note: 'אין אגרגט של יתרות שכ״ט שנגבו מול המשרד.',
+  kpi_debtors_secondary: 'לא פעיל',
+  kpi_debtors_note: '',
+  kpi_inactive: 'לא פעיל',
   kpi_new_clients: 'לקוחות חדשים',
   kpi_new_clients_secondary: (periodLabel) => `נוספו ב${periodLabel}`,
   missing_title: 'לקוחות ללא שכ״ט מוגדר',
@@ -182,10 +190,11 @@ const HE: OfficeCopy = {
   attention_due_today: 'לביצוע היום',
   attention_approval: 'ממתינות לאישור',
   attention_missing_docs: 'מסמכי לקוח חסרים',
-  attention_missing_docs_unavailable: 'אין כרגע aggregate ארגוני של מסמכים חסרים הדורשים מעקב.',
+  attention_missing_docs_unavailable: '',
   we_unavailable: 'לא ניתן לטעון מונים מ-Work Engine כרגע.',
   deadlines_title: 'הדיווחים הקרובים',
-  deadlines_unavailable: 'מועדי דיווח סטטוטוריים עדיין לא זמינים דרך aggregate מורשה. לא נקבעו מועדים בצד הלקוח.',
+  deadlines_overdue_title: 'דיווחים באיחור',
+  deadlines_unavailable: '',
   chart_fees_title: 'הכנסה צפויה משכ״ט לפי חודשים',
   chart_growth_title: 'צמיחת לקוחות',
   chart_growth_hint: 'מצטבר לפי תאריך פתיחה במרשם',
@@ -276,11 +285,16 @@ const HE: OfficeCopy = {
   reporting_timing_due_today: 'היום',
   reporting_timing_overdue: 'באיחור',
   reporting_type_vat_regular: 'מע״מ + מקדמות מס הכנסה',
+  reporting_type_vat: 'מע״מ',
+  reporting_type_income_tax_advances: 'מקדמות מס הכנסה',
   reporting_type_deductions: 'ניכויים',
   reporting_type_vat_detailed: 'מע״מ מפורט',
+  reporting_type_annual: 'דוח שנתי',
+  reporting_type_capital: 'הצהרת הון',
   reporting_clients_title: 'לקוחות לדיווח',
   reporting_clients_empty: 'אין לקוחות ישימים לדיווח זה.',
   reporting_applicability: 'ישים לפי הגדרות המס',
+  reporting_office_control: 'תאריך יעד מניהול לקוחות',
   task_state_overdue: 'באיחור',
   task_state_review_pending: 'ממתין לאישור',
   task_state_assigned: 'משויך',
@@ -317,8 +331,9 @@ const EN: OfficeCopy = {
   kpi_expected_secondary_year:
     'Current tariff, monthly equivalent before VAT, for agreements in force this year · not historical reconstruction',
   kpi_debtors: 'Clients with office debt',
-  kpi_debtors_secondary: 'Genuine office receivables are not yet available from Accounting Base',
-  kpi_debtors_note: 'There is no aggregate of collected office fee balances.',
+  kpi_debtors_secondary: 'Inactive',
+  kpi_debtors_note: '',
+  kpi_inactive: 'Inactive',
   kpi_new_clients: 'New clients',
   kpi_new_clients_secondary: (periodLabel) => `Added in ${periodLabel}`,
   missing_title: 'Clients without configured fees',
@@ -331,11 +346,11 @@ const EN: OfficeCopy = {
   attention_due_today: 'Due today',
   attention_approval: 'Awaiting approval',
   attention_missing_docs: 'Missing client documents',
-  attention_missing_docs_unavailable: 'There is no office-wide aggregate of missing documents requiring follow-up.',
+  attention_missing_docs_unavailable: '',
   we_unavailable: 'Work Engine counts could not be loaded right now.',
   deadlines_title: 'Upcoming reports',
-  deadlines_unavailable:
-    'Statutory reporting deadlines are not yet available through an authorized aggregate. No dates were hardcoded.',
+  deadlines_overdue_title: 'Overdue reports',
+  deadlines_unavailable: '',
   chart_fees_title: 'Expected fees by month',
   chart_growth_title: 'Client growth',
   chart_growth_hint: 'Cumulative by registry created date',
@@ -426,11 +441,16 @@ const EN: OfficeCopy = {
   reporting_timing_due_today: 'Due today',
   reporting_timing_overdue: 'Overdue',
   reporting_type_vat_regular: 'VAT + income tax advances',
+  reporting_type_vat: 'VAT',
+  reporting_type_income_tax_advances: 'Income tax advances',
   reporting_type_deductions: 'Income tax deductions',
   reporting_type_vat_detailed: 'Detailed VAT',
+  reporting_type_annual: 'Annual report',
+  reporting_type_capital: 'Capital declaration',
   reporting_clients_title: 'Clients for this report',
   reporting_clients_empty: 'No applicable clients for this report.',
   reporting_applicability: 'Applicable from tax settings',
+  reporting_office_control: 'Office control date from Client Operations',
   task_state_overdue: 'Overdue',
   task_state_review_pending: 'Awaiting approval',
   task_state_assigned: 'Assigned',

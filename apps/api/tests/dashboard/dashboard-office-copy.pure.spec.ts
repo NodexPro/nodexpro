@@ -26,6 +26,18 @@ test('Hebrew and English V2.1 labels cover churn, breakdown, and missing-agreeme
   assert.equal(he.cat_no_agreement, 'לא הוגדר הסכם שכ״ט');
   assert.equal(en.cat_no_agreement, 'No fee agreement');
   assert.equal(he.kpi_debtors, 'לקוחות עם חוב למשרד');
+  assert.equal(he.kpi_inactive, 'לא פעיל');
+  assert.equal(en.kpi_inactive, 'Inactive');
+  assert.equal(he.deadlines_overdue_title, 'דיווחים באיחור');
+  assert.equal(en.deadlines_overdue_title, 'Overdue reports');
+  assert.equal(he.reporting_type_annual, 'דוח שנתי');
+  assert.equal(en.reporting_type_annual, 'Annual report');
+  assert.equal(he.reporting_type_capital, 'הצהרת הון');
+  assert.equal(en.reporting_type_capital, 'Capital declaration');
+  assert.equal(he.reporting_office_control, 'תאריך יעד מניהול לקוחות');
+  assert.equal(en.reporting_office_control, 'Office control date from Client Operations');
+  assert.equal(he.attention_missing_docs_unavailable, '');
+  assert.doesNotMatch(he.kpi_debtors_secondary, /Accounting Base/);
   assert.equal(he.kpi_new_clients, 'לקוחות חדשים');
   assert.equal(he.kpi_active, 'לקוחות פעילים');
   assert.match(he.kpi_expected_year_unavailable, /אין סכום שנתי מהימן/);

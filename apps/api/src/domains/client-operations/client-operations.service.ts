@@ -1444,6 +1444,10 @@ async function buildClientOperationsRegistryPreSearchMaterialization(input: {
       vat_type: setupTax?.vat_type ?? null,
       vat_frequency: setupTax?.vat_frequency ?? null,
       vat_due_type: setupTax?.vat_due_type ?? null,
+      income_tax_advance_enabled: setupTax?.income_tax_advance_enabled ?? null,
+      income_tax_advance_frequency: setupTax?.income_tax_advance_frequency ?? null,
+      income_tax_advance_profile_status: (setupProfile?.income_tax_advance_status as string | null) ?? null,
+      national_insurance_type: setupTax?.national_insurance_type ?? null,
     });
     if (setupGap.missing.length > 0) {
       clientsNeedingSetup.push(

@@ -1137,7 +1137,10 @@
         "reportingScope": "Reporting obligation scope cannot be determined",
         "vatObligation": "VAT reporting obligation cannot be determined",
         "vatPeriodicity": "VAT reporting periodicity cannot be determined",
-        "vatDue": "VAT reporting due day cannot be determined"
+        "vatDue": "VAT reporting due day cannot be determined",
+        "incomeTaxAdvanceObligation": "Income-tax advance reporting obligation cannot be determined",
+        "incomeTaxAdvancePeriodicity": "Income-tax advance reporting periodicity cannot be determined",
+        "nationalInsuranceObligation": "National Insurance applicability cannot be determined"
       }
     },
     "errors": {
